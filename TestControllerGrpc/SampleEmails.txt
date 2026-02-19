@@ -1,0 +1,8 @@
+# Parameter file loaded by Initialize nodes
+# Format: Key=Value (one per line, # for comments)
+
+EmailAddress=team-ci@company.com
+DropLocation=\\buildshare\drops
+TestSuite=Smoke
+Environment=Staging
+NotifyOnFailure=true

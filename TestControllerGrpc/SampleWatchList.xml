@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WatchList Vocabulary File — TestControllerGrpc
+  ================================================
+  This file defines FileSystemWatcher rules and the action pipelines
+  that execute when a watched file event (Renamed, Created, Changed) fires.
+
+  Hot-Reload: Save this file while the Controller is running and it will
+              automatically pick up the latest version within 500ms.
+
+  Tokens:     Use [BuildNumber], [EmailAddress], [DropLocation] etc. in
+              Command/Parameters/To/Body fields. They are resolved at
+              runtime from the trigger file or Initialize parameter files.
+-->
+<WatchList>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       WatchItem #1 — Consolidated Build Trigger
+       Watches for a renamed file in the ManualTrigger folder.
+       When triggered, runs a full build pipeline across agents.
+       ════════════════════════════════════════════════════════════════ -->
+  <WatchItem Tag="ConsolidatedBuild" Path="C:\ManualTrigger\" Filter="Consolidated.txt">
+    <Event Type="Renamed" ExecutionType="Sequential">
+
+      <!-- Load email addresses and build parameters -->
+      <Initialize Tag="InitializeParams" ParameterFile="C:\TestControllerService\Params\Emails.txt" />
+
+      <!-- Step 1: Parallel build on two agents -->
+      <ActionGroup Tag="ParallelBuild" ExecutionType="Parallel" FailAndContinue="false">
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI1"
+                Command="cmd"
+                Parameters="/c C:\Build\RunBuild.bat [BuildNumber]"
+                Timeout="3600"
+                PollInterval="5000" />
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI2"
+                Command="cmd"
+                Parameters="/c C:\Build\RunBuild.bat [BuildNumber]"
+                Timeout="3600"
+                PollInterval="5000" />
+      </ActionGroup>
+
+      <!-- Step 2: Sequential deployment -->
+      <ActionGroup Tag="SequentialDeploy" ExecutionType="Sequential" FailAndContinue="true">
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI3"
+                Command="powershell"
+                Parameters="-File C:\Deploy\Deploy.ps1 -Build [BuildNumber]"
+                Timeout="1800" />
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI4"
+                Command="powershell"
+                Parameters="-File C:\Deploy\Deploy.ps1 -Build [BuildNumber]"
+                Timeout="1800"
+                FailAndContinue="true" />
+      </ActionGroup>
+
+      <!-- Step 3: Run tests via template reference -->
+      <Ref TemplateID="RunSmokeTests" />
+
+      <!-- Step 4: Send notification email -->
+      <Action Type="SendMail"
+              From="ci-system@company.com"
+              To="[EmailAddress]"
+              Title="Build [BuildNumber] — Deployment Complete"
+              Body="Build [BuildNumber] has been deployed to all environments."
+              Attachment="C:\Logs\[BuildNumber]\summary.html" />
+
+    </Event>
+  </WatchItem>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       WatchItem #2 — Nightly Test Trigger
+       Watches for a Created file to start nightly test runs.
+       ════════════════════════════════════════════════════════════════ -->
+  <WatchItem Tag="NightlyTestRun" Path="C:\NightlyTrigger\" Filter="*.trigger">
+    <Event Type="Created" ExecutionType="Sequential">
+      <Initialize Tag="NightlyParams" ParameterFile="C:\TestControllerService\Params\NightlyConfig.txt" />
+
+      <ActionGroup Tag="RunAllTests" ExecutionType="Parallel">
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI5GR1"
+                Command="cmd"
+                Parameters="/c C:\Tests\RunTests.bat -suite Smoke"
+                Timeout="7200" />
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI7GR2"
+                Command="cmd"
+                Parameters="/c C:\Tests\RunTests.bat -suite Regression"
+                Timeout="14400"
+                FailAndContinue="true" />
+      </ActionGroup>
+
+      <Action Type="SendMail"
+              From="ci-system@company.com"
+              To="[EmailAddress]"
+              Title="Nightly Tests — [BuildNumber]"
+              Body="Nightly test run completed. See attached results."
+              Attachment="C:\TestResults\[BuildNumber]\results.trx" />
+    </Event>
+  </WatchItem>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       WatchItem #3 — Reboot Agent (with reboot handling)
+       ════════════════════════════════════════════════════════════════ -->
+  <WatchItem Tag="RebootAgent" Path="C:\RebootTrigger\" Filter="reboot_*.txt">
+    <Event Type="Renamed" ExecutionType="Sequential">
+      <Action Type="RunRemoteCommand"
+              AgentName="AppSerCI1"
+              Command="shutdown"
+              Parameters="/r /t 30"
+              IsReboot="true"
+              Timeout="300" />
+    </Event>
+  </WatchItem>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Templates — Reusable action sequences referenced by <Ref>
+       ════════════════════════════════════════════════════════════════ -->
+  <Templates>
+    <Template ID="RunSmokeTests">
+      <ActionGroup Tag="SmokeTests" ExecutionType="Parallel" FailAndContinue="true">
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI5GR1"
+                Command="cmd"
+                Parameters="/c C:\Tests\SmokeTest.bat [BuildNumber]"
+                Timeout="1200" />
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI6R1"
+                Command="cmd"
+                Parameters="/c C:\Tests\SmokeTest.bat [BuildNumber]"
+                Timeout="1200" />
+      </ActionGroup>
+    </Template>
+
+    <Template ID="UC152ExecuteTCS">
+      <ActionGroup Tag="UC152" ExecutionType="Sequential">
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI8GR2PRI"
+                Command="powershell"
+                Parameters="-File C:\TCS\Execute-UC152.ps1 -Build [BuildNumber]"
+                Timeout="3600" />
+        <Action Type="RunRemoteCommand"
+                AgentName="AppSerCI9GR2BAK"
+                Command="powershell"
+                Parameters="-File C:\TCS\Verify-UC152.ps1 -Build [BuildNumber]"
+                Timeout="1800"
+                FailAndContinue="true" />
+      </ActionGroup>
+    </Template>
+  </Templates>
+
+</WatchList>
