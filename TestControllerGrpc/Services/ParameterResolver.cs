@@ -50,8 +50,13 @@ public static partial class ParameterResolver
     }
 
     /// <summary>
-    /// Loads parameters from an Initialize ParameterFile (key=value per line).
-    /// Merges into the existing context parameters.
+    /// Loads parameters from an Initialize ParameterFile.
+    /// Supports two formats:
+    ///   1. Comma-delimited: <c>_Key,Value</c> or <c>Key,,val1,val2,val3</c> (multi-value joined with commas)
+    ///   2. Equals-delimited: <c>Key=Value</c>
+    /// Lines starting with '#' are treated as comments.
+    /// Keys with leading underscore are stored both with and without the underscore
+    /// so tokens like [ControllerName] and [_ControllerName] both resolve.
     /// </summary>
     public static void LoadParameterFile(PipelineExecutionContext ctx, string parameterFilePath)
     {
@@ -59,17 +64,67 @@ public static partial class ParameterResolver
 
         try
         {
-            foreach (var line in File.ReadAllLines(parameterFilePath))
+            var entries = ParseParameterFile(parameterFilePath);
+            foreach (var (key, value) in entries)
             {
-                if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#'))
-                    continue;
+                ctx.Parameters[key] = value;
 
-                var parts = line.Split(new[] { '=' }, 2);
-                if (parts.Length == 2)
-                    ctx.Parameters[parts[0].Trim()] = parts[1].Trim();
+                // Also store without leading underscore so [ControllerName] works
+                if (key.StartsWith('_'))
+                    ctx.Parameters[key[1..]] = value;
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Parses a parameter file into key-value pairs.
+    /// Supports comma-delimited (<c>_Key,Value</c>) and equals-delimited (<c>Key=Value</c>) formats.
+    /// For lines with multiple commas like <c>EmailAddress,,a@b.com,c@d.com</c>,
+    /// the value is all parts after the first comma, joined with commas (preserving empty segments).
+    /// </summary>
+    public static List<(string Key, string Value)> ParseParameterFile(string filePath)
+    {
+        var result = new List<(string Key, string Value)>();
+        if (!File.Exists(filePath)) return result;
+
+        foreach (var line in File.ReadAllLines(filePath))
+        {
+            if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#'))
+                continue;
+
+            // Try comma-delimited first (most parameter files use this format)
+            var commaIdx = line.IndexOf(',');
+            if (commaIdx > 0)
+            {
+                var key = line[..commaIdx].Trim();
+                var value = line[(commaIdx + 1)..].Trim();
+                if (!string.IsNullOrEmpty(key))
+                    result.Add((key, value));
+                continue;
+            }
+
+            // Fall back to equals-delimited
+            var eqParts = line.Split('=', 2);
+            if (eqParts.Length == 2)
+            {
+                var key = eqParts[0].Trim();
+                var value = eqParts[1].Trim();
+                if (!string.IsNullOrEmpty(key))
+                    result.Add((key, value));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Saves key-value pairs back to a parameter file in comma-delimited format.
+    /// </summary>
+    public static void SaveParameterFile(string filePath, IEnumerable<(string Key, string Value)> entries)
+    {
+        var lines = entries.Select(e => $"{e.Key},{e.Value}").ToList();
+        File.WriteAllLines(filePath, lines);
     }
 
     /// <summary>

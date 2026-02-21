@@ -1,8 +1,10 @@
 <Application x:Class="TestAgentDisplay.App"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="Views/MainWindow.xaml">
-    <Application.Resources>
+         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+         xmlns:vm="clr-namespace:TestAgentDisplay.ViewModels"
+         StartupUri="Views/MainWindow.xaml">
+<Application.Resources>
+    <vm:NonEmptyToVisibilityConverter x:Key="NonEmptyVis" />
         <Color x:Key="BgDark">#FF1A1A2E</Color>
         <Color x:Key="BgPanel">#FF16213E</Color>
         <Color x:Key="BgCard">#FF0F3460</Color>

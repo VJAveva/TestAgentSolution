@@ -1,0 +1,72 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Window -->
+    <SolidColorBrush x:Key="WindowBg"    Color="#FFF5F5F5" />
+    <SolidColorBrush x:Key="RibbonBg"    Color="#FFE8E8EC" />
+    <SolidColorBrush x:Key="RibbonTabBg" Color="#FFF0F0F4" />
+
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="BgPanel"   Color="#FFFAFAFA" />
+    <SolidColorBrush x:Key="BgCard"    Color="#FFEAEAEE" />
+    <SolidColorBrush x:Key="BgSurface" Color="#FFD0D0D8" />
+
+    <!-- Accents -->
+    <SolidColorBrush x:Key="Accent"    Color="#FF2563EB" />
+    <SolidColorBrush x:Key="AccGreen"  Color="#FF16A34A" />
+    <SolidColorBrush x:Key="AccPeach"  Color="#FFEA580C" />
+    <SolidColorBrush x:Key="AccRed"    Color="#FFDC2626" />
+    <SolidColorBrush x:Key="AccMauve"  Color="#FF9333EA" />
+    <SolidColorBrush x:Key="AccYellow" Color="#FFCA8A04" />
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="TextP"     Color="#FF1E1E2E" />
+    <SolidColorBrush x:Key="TextS"     Color="#FF64748B" />
+    <SolidColorBrush x:Key="Bdr"       Color="#FFCBD5E1" />
+
+    <!-- Controls -->
+    <SolidColorBrush x:Key="BtnBg"          Color="#11000000" />
+    <SolidColorBrush x:Key="BtnBorder"      Color="#22000000" />
+    <SolidColorBrush x:Key="BtnHoverBg"     Color="#18000000" />
+    <SolidColorBrush x:Key="BtnPressedBg"   Color="#222563EB" />
+    <SolidColorBrush x:Key="FieldBg"        Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="TabSelectedBg"  Color="#11000000" />
+    <SolidColorBrush x:Key="TabHoverBg"     Color="#08000000" />
+    <SolidColorBrush x:Key="GroupBg"        Color="#08000000" />
+    <SolidColorBrush x:Key="SelectedItemBg" Color="#222563EB" />
+    <SolidColorBrush x:Key="TreeBadgeFg"    Color="#FFFFFFFF" />
+
+    <!-- Accent button backgrounds -->
+    <SolidColorBrush x:Key="AccentBtnBg"    Color="#222563EB" />
+    <SolidColorBrush x:Key="GreenBtnBg"     Color="#2216A34A" />
+    <SolidColorBrush x:Key="DangerBtnBg"    Color="#22DC2626" />
+    <SolidColorBrush x:Key="MauveBtnBg"     Color="#229333EA" />
+    <SolidColorBrush x:Key="YellowBtnBg"    Color="#22CA8A04" />
+    <SolidColorBrush x:Key="DangerBtnBgAlt" Color="#33DC2626" />
+
+    <!-- Badge overlays -->
+    <SolidColorBrush x:Key="RunningBadgeBg" Color="#222563EB" />
+    <SolidColorBrush x:Key="SuccessBadgeBg" Color="#2216A34A" />
+    <SolidColorBrush x:Key="FailedBadgeBg"  Color="#22DC2626" />
+    <SolidColorBrush x:Key="InfoBoxBg"      Color="#0A000000" />
+    <SolidColorBrush x:Key="WatchRootBg"    Color="#2216A34A" />
+    <SolidColorBrush x:Key="TemplateRootBg" Color="#229333EA" />
+
+    <!-- Status indicator dot colors -->
+    <SolidColorBrush x:Key="StatusGreen"   Color="#FF16A34A" />
+    <SolidColorBrush x:Key="StatusRed"     Color="#FFDC2626" />
+    <SolidColorBrush x:Key="StatusYellow"  Color="#FFCA8A04" />
+    <SolidColorBrush x:Key="StatusGray"    Color="#FFCBD5E1" />
+    <SolidColorBrush x:Key="StatusBlue"    Color="#FF2563EB" />
+
+    <!-- Node icon backgrounds by kind -->
+    <SolidColorBrush x:Key="IconBgFolder"    Color="#222563EB" />
+    <SolidColorBrush x:Key="IconBgWatch"     Color="#2216A34A" />
+    <SolidColorBrush x:Key="IconBgEvent"     Color="#22CA8A04" />
+    <SolidColorBrush x:Key="IconBgTemplate"  Color="#229333EA" />
+    <SolidColorBrush x:Key="IconBgGroup"     Color="#222563EB" />
+    <SolidColorBrush x:Key="IconBgAction"    Color="#22EA580C" />
+    <SolidColorBrush x:Key="IconBgInit"      Color="#22CBD5E1" />
+    <SolidColorBrush x:Key="IconBgRef"       Color="#229333EA" />
+
+</ResourceDictionary>

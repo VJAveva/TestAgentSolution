@@ -1,3 +1,6 @@
+using System.IO;
+using System.Net.Mail;
+using System.Net.Mime;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 
@@ -195,16 +198,156 @@ public sealed class ActionPipelineExecutor
         return result.Success || action.FailAndContinue;
     }
 
-    // ── SendMail stub ──────────────────────────────────────────────────
+    // ── SendMail ───────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Sends a notification email via SMTP with support for:
+    ///   • Comma-separated attachment paths → copied to LargeFilesShare and linked in body
+    ///   • Comma-separated embed file paths → inlined as HTML body content
+    ///   • Files exceeding 500 KB are also redirected to LargeFilesShare as links
+    /// </summary>
     private ActionResult ExecuteSendMail(ActionConfig resolved)
     {
-        // In production, implement SmtpClient-based mail sending here.
-        // For now, log the intent.
-        _logger.LogInformation("SendMail: From={From}, To={To}, Title={Title}",
-            resolved.From, resolved.To, resolved.Title);
-        Log("SendMail", $"To: {resolved.To} | Subject: {resolved.Title}");
-        return new ActionResult(true, 0, "");
+        if (string.IsNullOrWhiteSpace(resolved.From) || string.IsNullOrWhiteSpace(resolved.To))
+            return new ActionResult(false, -1, "SendMail: From and To addresses are required.");
+
+        try
+        {
+            using var smtpClient = new SmtpClient("smtp")
+            {
+                UseDefaultCredentials = true
+            };
+
+            using var message = new MailMessage(resolved.From, resolved.To);
+            message.Subject = resolved.Title;
+
+            var body = resolved.Body ?? "";
+            int linkCount = 0;
+            bool isHtml = false;
+
+            // ── Attachments → copy to LargeFilesShare and add links ────
+            if (!string.IsNullOrWhiteSpace(resolved.Attachment))
+            {
+                body += Environment.NewLine + "---LINKS---:";
+
+                foreach (var att in resolved.Attachment.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (!File.Exists(att))
+                    {
+                        _logger.LogWarning("SendMail: Attachment file not found: {Path}", att);
+                        Log("SendMail", $"⚠ Attachment file not found: {att}");
+                        body += Environment.NewLine + $"Attachment file not found: {att}";
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(resolved.LargeFilesShare))
+                    {
+                        var accessibleLocation = Path.Combine(resolved.LargeFilesShare, Path.GetFileName(att));
+                        try
+                        {
+                            File.Copy(att, accessibleLocation, overwrite: true);
+                            body += Environment.NewLine + $"Link {linkCount++}: {accessibleLocation}";
+                            Log("SendMail", $"Linked attachment: {accessibleLocation}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "SendMail: Failed to copy attachment to share");
+                            body += Environment.NewLine + $"Failed to copy attachment: {att} — {ex.Message}";
+                        }
+                    }
+                    else
+                    {
+                        // No LargeFilesShare configured — attach directly
+                        message.Attachments.Add(new Attachment(att));
+                        Log("SendMail", $"Attached: {att}");
+                    }
+                }
+            }
+
+            // ── Embed files → inline content into body ─────────────────
+            if (!string.IsNullOrWhiteSpace(resolved.Embed))
+            {
+                var embeddedBody = "";
+                isHtml = true;
+
+                foreach (var em in resolved.Embed.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (!File.Exists(em))
+                    {
+                        _logger.LogWarning("SendMail: File to be embedded not found: {Path}", em);
+                        Log("SendMail", $"⚠ Embed file not found: {em}");
+                        embeddedBody += Environment.NewLine + $"File to be embedded not found: {em}";
+                        continue;
+                    }
+
+                    var fileInfo = new FileInfo(em);
+
+                    // Files over 500 KB → redirect to LargeFilesShare as link
+                    if (fileInfo.Length > 524_288 && !string.IsNullOrWhiteSpace(resolved.LargeFilesShare))
+                    {
+                        var accessibleLocation = Path.Combine(resolved.LargeFilesShare, Path.GetFileName(em));
+                        try
+                        {
+                            File.Copy(em, accessibleLocation, overwrite: true);
+                            embeddedBody += Environment.NewLine + $"Link {linkCount++}: {accessibleLocation}";
+                            Log("SendMail", $"Large embed redirected to link: {accessibleLocation}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "SendMail: Failed to copy embed to share");
+                            embeddedBody += Environment.NewLine + $"Failed to copy embed: {em} — {ex.Message}";
+                        }
+                        continue;
+                    }
+
+                    embeddedBody += Environment.NewLine + File.ReadAllText(em);
+                    Log("SendMail", $"Embedded: {em} ({fileInfo.Length:N0} bytes)");
+                }
+
+                // Merge embedded content into the body as HTML
+                if (!string.IsNullOrWhiteSpace(embeddedBody))
+                {
+                    var wrappedBody = $"<br /><div style='white-space:pre-wrap'>{body}</div>";
+
+                    // If the embedded file is HTML with a </body> tag, inject before it
+                    if (embeddedBody.Contains("</body>", StringComparison.OrdinalIgnoreCase))
+                    {
+                        body = embeddedBody
+                            .Replace("</Body>", $"{wrappedBody}</Body>")
+                            .Replace("</body>", $"{wrappedBody}</body>");
+                    }
+                    else
+                    {
+                        // Plain embedded content — wrap everything in HTML
+                        body = $"<html><body>{embeddedBody}<br /><div style='white-space:pre-wrap'>{body}</div></body></html>";
+                    }
+
+                    message.AlternateViews.Add(
+                        AlternateView.CreateAlternateViewFromString(body, null, MediaTypeNames.Text.Html));
+                }
+            }
+
+            // ── Finalize body ──────────────────────────────────────────
+            message.IsBodyHtml = isHtml;
+            message.Body = isHtml
+                ? body.Replace(Environment.NewLine, "<br />")
+                : body;
+
+            // ── Send ───────────────────────────────────────────────────
+            smtpClient.Send(message);
+
+            Log("SendMail", $"✓ Sent to {resolved.To} | Subject: {resolved.Title}");
+            _logger.LogInformation("SendMail sent: From={From}, To={To}, Subject={Subject}",
+                resolved.From, resolved.To, resolved.Title);
+
+            return new ActionResult(true, 0, "");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SendMail failed: From={From}, To={To}", resolved.From, resolved.To);
+            Log("SendMail", $"✗ Failed: {ex.Message}");
+            return new ActionResult(false, -1, $"SendMail failed: {ex.Message}");
+        }
     }
 
     // ── Logging ────────────────────────────────────────────────────────

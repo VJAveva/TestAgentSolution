@@ -40,6 +40,7 @@ service TestAgentService {
 message TestAgentRef {
   string name     = 1;
   AgentState state = 2;
+  string endpoint  = 3;  // Agent's gRPC callback address (e.g. "http://AGENT01:5200")
 }
 
 enum AgentState {

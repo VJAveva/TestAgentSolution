@@ -7,6 +7,14 @@
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgDarkBrush}">
 
+    <Window.Icon>
+        <DrawingImage>
+            <DrawingImage.Drawing>
+                <GeometryDrawing Brush="#FF00C9A7" Geometry="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 C17.52,22 22,17.52 22,12 C22,6.48 17.52,2 12,2 Z M9,16 L5.5,12.5 L6.91,11.09 L9,13.17 L15.59,6.58 L17,8 Z M19,11 L13,11 L13,13 L19,13 Z" />
+            </DrawingImage.Drawing>
+        </DrawingImage>
+    </Window.Icon>
+
     <Window.Resources>
         <Style x:Key="AgentListItem" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="10,8" />
@@ -118,12 +126,19 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse Width="12" Height="12" Fill="{Binding StateBrush}" Margin="0,0,8,0" />
-                        <TextBlock FontSize="18" FontWeight="Bold" Foreground="White">
-                            <Run Text="{Binding DisplayName, Mode=OneWay}" />
-                            <Run Text=" — " Foreground="#FF607D8B" />
-                            <Run Text="{Binding StateText, Mode=OneWay}" Foreground="{Binding StateBrush}" />
+                    <StackPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="12" Height="12" Fill="{Binding StateBrush}" Margin="0,0,8,0" />
+                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="White">
+                                <Run Text="{Binding DisplayName, Mode=OneWay}" />
+                                <Run Text=" — " Foreground="#FF607D8B" />
+                                <Run Text="{Binding StateText, Mode=OneWay}" Foreground="{Binding StateBrush}" />
+                            </TextBlock>
+                        </StackPanel>
+                        <TextBlock FontSize="10" Foreground="#FF607D8B" Margin="20,2,0,0"
+                                   Visibility="{Binding CurrentExecutionId, Converter={StaticResource NonEmptyVis}}">
+                            <Run Text="Execution ID: " />
+                            <Run Text="{Binding CurrentExecutionId, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
                         </TextBlock>
                     </StackPanel>
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="16,0"
@@ -233,7 +248,9 @@
                         </DataGrid.ColumnHeaderStyle>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="ID" Binding="{Binding ExecutionId}" Width="100" />
-                            <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="*" />
+                            <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="120" />
+                            <DataGridTextColumn Header="Command Text" Binding="{Binding CommandText}" Width="*" />
+                            <DataGridTextColumn Header="Operation" Binding="{Binding Operation}" Width="90" />
                             <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
                             <DataGridTextColumn Header="Exit" Binding="{Binding ExitCode}" Width="50" />
                             <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" Width="80" />

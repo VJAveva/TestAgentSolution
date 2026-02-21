@@ -132,16 +132,20 @@ public sealed class ExecutionMonitorForm : Form
 
         _historyGrid.Columns.Add("Id", "Execution ID");
         _historyGrid.Columns.Add("Command", "Command");
+        _historyGrid.Columns.Add("CommandText", "Command Text");
+        _historyGrid.Columns.Add("Operation", "Operation");
         _historyGrid.Columns.Add("Outcome", "Outcome");
         _historyGrid.Columns.Add("ExitCode", "Exit");
         _historyGrid.Columns.Add("Duration", "Duration");
         _historyGrid.Columns.Add("Started", "Started");
-        _historyGrid.Columns["Id"]!.FillWeight = 15;
-        _historyGrid.Columns["Command"]!.FillWeight = 35;
-        _historyGrid.Columns["Outcome"]!.FillWeight = 12;
-        _historyGrid.Columns["ExitCode"]!.FillWeight = 8;
-        _historyGrid.Columns["Duration"]!.FillWeight = 12;
-        _historyGrid.Columns["Started"]!.FillWeight = 18;
+        _historyGrid.Columns["Id"]!.FillWeight = 12;
+        _historyGrid.Columns["Command"]!.FillWeight = 18;
+        _historyGrid.Columns["CommandText"]!.FillWeight = 22;
+        _historyGrid.Columns["Operation"]!.FillWeight = 14;
+        _historyGrid.Columns["Outcome"]!.FillWeight = 10;
+        _historyGrid.Columns["ExitCode"]!.FillWeight = 6;
+        _historyGrid.Columns["Duration"]!.FillWeight = 10;
+        _historyGrid.Columns["Started"]!.FillWeight = 14;
 
         var bottomPanel = new Panel { Dock = DockStyle.Fill };
         bottomPanel.Controls.Add(_historyGrid);
@@ -214,6 +218,7 @@ public sealed class ExecutionMonitorForm : Form
 
             case ExecutionEventType.EventStarted:
                 AppendLine($"🚀 [{evt.ExecutionId}] STARTED: {evt.Command} {evt.Arguments}", Color.FromArgb(100, 200, 255));
+                AppendLine($"   Execution ID: {evt.ExecutionId}", Color.FromArgb(150, 150, 255));
                 break;
 
             case ExecutionEventType.EventStdoutLine:
@@ -305,7 +310,52 @@ public sealed class ExecutionMonitorForm : Form
                 ExecutionOutcome.OutcomeTimedOut   => "⏱ Timeout",
                 _                                  => "?",
             };
-            _historyGrid.Rows.Add(r.ExecutionId, r.Command, outcome, r.ExitCode, duration, started);
+
+            // Command Text: the full command + arguments
+            var commandText = $"{r.Command} {r.Arguments}".Trim();
+
+            // Operation: infer from command/arguments
+            var operation = InferOperation(r.Command, r.Arguments);
+
+            _historyGrid.Rows.Add(r.ExecutionId, r.Command, commandText, operation, outcome, r.ExitCode, duration, started);
         }
+    }
+
+    /// <summary>
+    /// Infers a human-readable operation description from the command and arguments.
+    /// </summary>
+    private static string InferOperation(string command, string arguments)
+    {
+        var cmd = command.Trim().Trim('"').ToLowerInvariant();
+        var args = arguments.ToLowerInvariant();
+
+        // By extension
+        var ext = "";
+        try { ext = Path.GetExtension(cmd); } catch { }
+
+        if (cmd.Contains("build") || args.Contains("build"))
+            return "Build";
+        if (cmd.Contains("deploy") || args.Contains("deploy"))
+            return "Deploy";
+        if (cmd.Contains("test") || args.Contains("test") || cmd.Contains("smoke"))
+            return "Test";
+        if (cmd.Contains("install") || args.Contains("install") || ext == ".msi")
+            return "Install";
+        if (cmd.Contains("setup") || args.Contains("setup"))
+            return "Setup";
+        if (cmd == "shutdown" || cmd == "restart" || args.Contains("/r"))
+            return "Reboot";
+        if (cmd.Contains("copy") || args.Contains("xcopy") || args.Contains("robocopy"))
+            return "FileCopy";
+        if (ext == ".ps1")
+            return "PowerShell";
+        if (ext is ".bat" or ".cmd")
+            return "Script";
+        if (cmd is "cmd" or "cmd.exe")
+            return "Command";
+        if (cmd is "powershell" or "powershell.exe" or "pwsh" or "pwsh.exe")
+            return "PowerShell";
+
+        return "Execute";
     }
 }

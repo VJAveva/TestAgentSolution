@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Text;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -35,12 +37,71 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isExecuting;
     private CancellationTokenSource? _executionCts;
 
+    // ── Initialize parameter file editor state ──────────────────────
+    public ObservableCollection<ParameterEntryViewModel> ParameterFileEntries { get; } = new();
+    [ObservableProperty] private string _parameterFileStatus = "";
+
+    // ── Theme switching ─────────────────────────────────────────────
+    public string[] AvailableThemes => ThemeService.AvailableThemes;
+
+    private string _selectedTheme = "Dark";
+    public string SelectedTheme
+    {
+        get => _selectedTheme;
+        set
+        {
+            if (SetProperty(ref _selectedTheme, value))
+                ThemeService.ApplyTheme(value);
+        }
+    }
+
+    // ── Agent status summary ────────────────────────────────────────
+    [ObservableProperty] private string _agentStatusSummary = "No agents";
+
+    // ── Execution log filtering ─────────────────────────────────────
+    private string _logFilterTag = "";
+    public string LogFilterTag
+    {
+        get => _logFilterTag;
+        set { if (SetProperty(ref _logFilterTag, value)) ApplyLogFilter(); }
+    }
+
+    private string _logFilterAgent = "";
+    public string LogFilterAgent
+    {
+        get => _logFilterAgent;
+        set { if (SetProperty(ref _logFilterAgent, value)) ApplyLogFilter(); }
+    }
+
+    private string _logLevelFilter = "All";
+    public string LogLevelFilter
+    {
+        get => _logLevelFilter;
+        set { if (SetProperty(ref _logLevelFilter, value)) ApplyLogFilter(); }
+    }
+
+    private string _logSearchText = "";
+    public string LogSearchText
+    {
+        get => _logSearchText;
+        set { if (SetProperty(ref _logSearchText, value)) ApplyLogFilter(); }
+    }
+
+    [ObservableProperty] private bool _isLogPaused;
+    [ObservableProperty] private bool _isAutoScrollEnabled = true;
+    [ObservableProperty] private bool _isLogCollapsed;
+
+    public string[] LogLevelOptions { get; } = ["All", "Info", "Success", "Warning", "Error"];
+
     /// <summary>TreeRoots[0] is the single "WatchList" root node — always present.</summary>
     public ObservableCollection<TreeNodeViewModel> TreeRoots { get; } = new();
     public ObservableCollection<TreeNodeViewModel> TemplateRoots { get; } = new();
-    public ObservableCollection<string> LogEntries { get; } = new();
+    public ObservableCollection<LogEntryViewModel> LogEntries { get; } = new();
+    public ObservableCollection<LogEntryViewModel> FilteredLogEntries { get; } = new();
     public ObservableCollection<AgentInfoViewModel> RegisteredAgents { get; } = new();
     public ObservableCollection<string> AvailableTemplateIds { get; } = new();
+    public ObservableCollection<string> AvailableWatchItemTags { get; } = new();
+    public ObservableCollection<string> AvailableAgentNames { get; } = new();
 
     private WatchListConfig _config = new();
 
@@ -55,6 +116,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // Auto-close XML editor when selection changes
             IsXmlEditorOpen = false;
             XmlEditorStatus = "";
+
+            // Auto-load parameter file entries when Initialize node is selected
+            if (value.NodeKind == "Initialize" && !string.IsNullOrWhiteSpace(value.ParameterFile))
+                LoadParameterFileEntries(value.ParameterFile);
+            else
+                ParameterFileEntries.Clear();
         }
     }
 
@@ -279,6 +346,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RegisteredAgents.Remove(SelectedAgent);
         SelectedAgent = null;
         AddLog($"Unregistered agent: {name}");
+        RefreshAgentStatusSummary();
     }
 
     private async Task TestSingleAgentAsync(AgentInfoViewModel agentVm)
@@ -327,6 +395,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             agentVm.UpdateDetailLine();
             AddLog($"✖ Agent {agentVm.Name}: {error}");
         }
+        RefreshAgentStatusSummary();
     }
 
     private async Task TestAllAgentsAsync()
@@ -336,6 +405,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         await Task.WhenAll(tasks);
         var online = RegisteredAgents.Count(a => a.ConnectionStatus == "Online");
         AddLog($"Agent check complete: {online}/{RegisteredAgents.Count} online");
+        RefreshAgentStatusSummary();
+    }
+
+    private void RefreshAgentStatusSummary()
+    {
+        if (RegisteredAgents.Count == 0)
+        {
+            AgentStatusSummary = "No agents";
+            return;
+        }
+        var online = RegisteredAgents.Count(a => a.ConnectionStatus == "Online");
+        AgentStatusSummary = $"{online}/{RegisteredAgents.Count} online";
     }
 
     // ── Periodic agent health check (runs every 30s) ──────────────────
@@ -420,6 +501,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 RegisteredAgents.Add(vm);
             }
             AddLog($"↗ Agent self-registered: {name} → {address}");
+            RefreshAgentStatusSummary();
         });
     }
 
@@ -436,6 +518,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 existing.UpdateDetailLine();
             }
             AddLog($"↘ Agent unregistered: {name}");
+            RefreshAgentStatusSummary();
         });
     }
 
@@ -499,76 +582,95 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // F2: INLINE XML EDITOR  (in WatchItem property panel)
+    // F2: RAW XML EDITOR  (opens separate modal window)
     // ═══════════════════════════════════════════════════════════════
 
     [RelayCommand]
     private void ToggleXmlEditor()
     {
         if (SelectedNode?.NodeKind != "WatchItem") return;
-        if (!IsXmlEditorOpen)
-        {
-            // Opening — serialize current WatchItem to XML
-            WriteBackAll();
-            if (SelectedNode.ModelObject is WatchItemConfig wi)
-                XmlEditorText = WatchListXmlParser.SerializeWatchItem(wi);
-            XmlEditorStatus = "";
-        }
-        IsXmlEditorOpen = !IsXmlEditorOpen;
+        OpenRawXmlEditorWindow();
     }
 
     [RelayCommand]
     private void ApplyXmlEditor()
     {
+        // Kept for backward compatibility — delegates to the window flow
         if (SelectedNode?.NodeKind != "WatchItem") return;
-        if (SelectedNode.ModelObject is not WatchItemConfig oldWi) return;
-        try
-        {
-            var parsed = WatchListXmlParser.DeserializeWatchItem(XmlEditorText);
-            if (parsed is null) { XmlEditorStatus = "Error: Root element must be <WatchItem>."; return; }
-
-            // Replace in model
-            var idx = _config.WatchItems.IndexOf(oldWi);
-            if (idx >= 0) _config.WatchItems[idx] = parsed;
-
-            // Replace in tree
-            if (WatchListRoot is not null)
-            {
-                var treeIdx = WatchListRoot.Children.IndexOf(SelectedNode);
-                if (treeIdx >= 0)
-                {
-                    var newNode = TreeNodeViewModel.FromWatchItem(parsed);
-                    newNode.Parent = WatchListRoot;
-                    WatchListRoot.Children[treeIdx] = newNode;
-                    SelectedNode = newNode;
-                }
-            }
-            WatchListRoot?.RefreshDisplayText();
-            XmlEditorStatus = "Applied successfully.";
-            IsXmlEditorOpen = false;
-            AddLog($"WatchItem updated via XML editor: {parsed.Tag}");
-        }
-        catch (Exception ex) { XmlEditorStatus = $"XML error: {ex.Message}"; }
+        OpenRawXmlEditorWindow();
     }
 
     [RelayCommand]
     private void RevertXmlEditor()
     {
-        if (SelectedNode?.ModelObject is WatchItemConfig wi)
-        {
-            WriteBackAll();
-            XmlEditorText = WatchListXmlParser.SerializeWatchItem(wi);
-            XmlEditorStatus = "Reverted to saved.";
-        }
+        // No-op: revert is now handled inside the editor window
     }
 
-    // Legacy popup editor — still available from context menu
     [RelayCommand]
     private void EditWatchItemXml()
     {
-        // Open inline editor instead of popup
         if (SelectedNode?.NodeKind != "WatchItem") return;
-        if (!IsXmlEditorOpen) ToggleXmlEditor();
+        OpenRawXmlEditorWindow();
+    }
+
+    /// <summary>Opens the standalone Raw XML Editor window for the selected WatchItem.</summary>
+    private void OpenRawXmlEditorWindow()
+    {
+        if (SelectedNode?.NodeKind != "WatchItem") return;
+        if (SelectedNode.ModelObject is not WatchItemConfig oldWi) return;
+
+        WriteBackAll();
+        var xml = WatchListXmlParser.SerializeWatchItem(oldWi);
+
+        var editorVm = new WatchItemXmlEditorViewModel(xml);
+        editorVm.WindowTitle = $"WatchItem XML Editor — {oldWi.Tag}";
+
+        var editorWindow = new Views.RawXmlEditorWindow(editorVm);
+
+        // Set owner to main window for CenterOwner positioning
+        if (Application.Current.MainWindow is { } mainWindow)
+            editorWindow.Owner = mainWindow;
+
+        var result = editorWindow.ShowDialog();
+        if (result == true && editorVm.DialogAccepted)
+        {
+            try
+            {
+                var parsed = WatchListXmlParser.DeserializeWatchItem(editorVm.ResultXml);
+                if (parsed is null)
+                {
+                    XmlEditorStatus = "Error: Root element must be <WatchItem>.";
+                    AddLog("XML editor: Root element was not <WatchItem>", LogSeverity.Error);
+                    return;
+                }
+
+                // Replace in model
+                var idx = _config.WatchItems.IndexOf(oldWi);
+                if (idx >= 0) _config.WatchItems[idx] = parsed;
+
+                // Replace in tree
+                if (WatchListRoot is not null)
+                {
+                    var treeIdx = WatchListRoot.Children.IndexOf(SelectedNode);
+                    if (treeIdx >= 0)
+                    {
+                        var newNode = TreeNodeViewModel.FromWatchItem(parsed);
+                        newNode.Parent = WatchListRoot;
+                        WatchListRoot.Children[treeIdx] = newNode;
+                        SelectedNode = newNode;
+                    }
+                }
+                WatchListRoot?.RefreshDisplayText();
+                XmlEditorStatus = "Applied successfully.";
+                IsXmlEditorOpen = false;
+                AddLog($"WatchItem updated via XML editor: {parsed.Tag}", LogSeverity.Success);
+            }
+            catch (Exception ex)
+            {
+                XmlEditorStatus = $"XML error: {ex.Message}";
+                AddLog($"XML editor apply failed: {ex.Message}", LogSeverity.Error);
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -600,23 +702,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // F4: Mark event subtree as Running
         eventNode.SetStatusRecursive("Running");
+        eventNode.PropagateStatusUp();
         AddLog($"Triggered Event: {ev.Type} on {wiConfig?.Tag ?? "?"}");
 
         try
         {
             await _executor.ExecuteEventAsync(ev, ctx, _executionCts.Token);
             eventNode.ExecutionStatus = "Success";
-            AddLog($"Event completed: {ev.Type}");
+            eventNode.PropagateStatusUp();
+            AddLog($"Event completed: {ev.Type}", LogSeverity.Success);
         }
         catch (OperationCanceledException)
         {
-            eventNode.SetStatusRecursive("Failed");
-            AddLog($"Event cancelled: {ev.Type}");
+            eventNode.SetFailed("Cancelled by user");
+            eventNode.PropagateStatusUp();
+            AddLog($"Event cancelled: {ev.Type}", LogSeverity.Warning);
         }
         catch (Exception ex)
         {
-            eventNode.ExecutionStatus = "Failed";
-            AddLog($"Event failed: {ev.Type} — {ex.Message}");
+            eventNode.SetFailed(ex.Message);
+            eventNode.PropagateStatusUp();
+            AddLog($"Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+            ScrollLogToLastError();
         }
         finally
         {
@@ -642,6 +749,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // F4: Mark entire WatchItem subtree as Running
         wiNode.SetStatusRecursive("Running");
+        wiNode.PropagateStatusUp();
         AddLog($"Triggered WatchItem: {wi.Tag} ({wi.Events.Count} events)");
 
         var allSuccess = true;
@@ -662,22 +770,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 try
                 {
                     await _executor.ExecuteEventAsync(ev, ctx, _executionCts.Token);
-                    if (evNode is not null) evNode.ExecutionStatus = "Success";
+                    if (evNode is not null)
+                    {
+                        evNode.ExecutionStatus = "Success";
+                        evNode.PropagateStatusUp();
+                    }
                 }
                 catch (Exception ex)
                 {
                     allSuccess = false;
-                    if (evNode is not null) evNode.ExecutionStatus = "Failed";
-                    AddLog($"Event failed: {ev.Type} — {ex.Message}");
+                    if (evNode is not null)
+                    {
+                        evNode.SetFailed(ex.Message);
+                        evNode.PropagateStatusUp();
+                    }
+                    AddLog($"Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
                 }
             }
             wiNode.ExecutionStatus = allSuccess ? "Success" : "Failed";
-            AddLog($"WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}");
+            wiNode.PropagateStatusUp();
+            AddLog($"WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}",
+                allSuccess ? LogSeverity.Success : LogSeverity.Error);
+            if (!allSuccess) ScrollLogToLastError();
         }
         catch (OperationCanceledException)
         {
-            wiNode.SetStatusRecursive("Failed");
-            AddLog($"WatchItem cancelled: {wi.Tag}");
+            wiNode.SetFailed("Cancelled by user");
+            wiNode.PropagateStatusUp();
+            AddLog($"WatchItem cancelled: {wi.Tag}", LogSeverity.Warning);
         }
         finally
         {
@@ -703,25 +823,137 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AddLog("Execution status reset");
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // F4: NODE PROGRESS HANDLER (maps IActionNode → TreeNodeViewModel)
-    // ═══════════════════════════════════════════════════════════════
-
-    private void OnNodeProgress(IActionNode node, string status)
+    /// <summary>Close the application.</summary>
+    [RelayCommand]
+    private void Close()
     {
-        Application.Current?.Dispatcher.InvokeAsync(() =>
+        Application.Current?.Shutdown();
+    }
+
+    /// <summary>Trigger ALL WatchItems simultaneously (parallel or sequential per config).</summary>
+    [RelayCommand]
+    private async Task TriggerAllWatchItems()
+    {
+        if (IsExecuting) { AddLog("Execution already in progress"); return; }
+        if (_config.WatchItems.Count == 0) { AddLog("No WatchItems to execute"); return; }
+
+        WriteBackAll();
+        IsExecuting = true;
+        _executionCts = new CancellationTokenSource();
+
+        WatchListRoot?.SetStatusRecursive("Running");
+        AddLog($"Triggered ALL WatchItems ({_config.WatchItems.Count} items)");
+
+        var allSuccess = true;
+        try
         {
-            // Search in WatchList tree
-            var treeNode = WatchListRoot?.FindByModel(node);
-            if (treeNode is not null)
+            foreach (var wi in _config.WatchItems)
             {
-                treeNode.ExecutionStatus = status;
-                return;
+                if (!wi.IsEnabled) continue;
+
+                var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
+                    ReferenceEquals(c.ModelObject, wi));
+                if (wiNode is not null) wiNode.SetStatusRecursive("Running");
+
+                var wiSuccess = true;
+                foreach (var ev in wi.Events)
+                {
+                    var ctx = new PipelineExecutionContext
+                    {
+                        WatchItemPath = wi.Path,
+                        TriggerFileName = $"[ManualTriggerAll:{ev.Type}]",
+                    };
+                    try
+                    {
+                        await _executor.ExecuteEventAsync(ev, ctx, _executionCts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        wiSuccess = false;
+                        AddLog($"Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
+                    }
+                }
+                if (wiNode is not null)
+                {
+                    wiNode.ExecutionStatus = wiSuccess ? "Success" : "Failed";
+                    if (!wiSuccess) wiNode.FailureMessage = "One or more events failed";
+                    wiNode.PropagateStatusUp();
+                }
+                if (!wiSuccess) allSuccess = false;
             }
-            // Search in Template tree (for Ref expansions)
-            treeNode = TemplateListRoot?.FindByModel(node);
-            treeNode?.SetStatusRecursive(status == "Running" ? status : treeNode.ExecutionStatus);
-        });
+
+            if (WatchListRoot is not null)
+                WatchListRoot.ExecutionStatus = allSuccess ? "Success" : "Failed";
+            AddLog($"All WatchItems {(allSuccess ? "completed" : "completed with errors")}",
+                allSuccess ? LogSeverity.Success : LogSeverity.Error);
+            if (!allSuccess) ScrollLogToLastError();
+        }
+        catch (OperationCanceledException)
+        {
+            WatchListRoot?.SetStatusRecursive("Failed");
+            AddLog("Execute All cancelled", LogSeverity.Warning);
+        }
+        finally
+        {
+            IsExecuting = false;
+            _executionCts?.Dispose();
+            _executionCts = null;
+        }
+    }
+
+    /// <summary>Clear log filters.</summary>
+    [RelayCommand]
+    private void ClearLogFilter()
+    {
+        LogFilterTag = "";
+        LogFilterAgent = "";
+        LogLevelFilter = "All";
+        LogSearchText = "";
+    }
+
+    /// <summary>Applies tag/agent/severity/search filters to the execution log.</summary>
+    private void ApplyLogFilter()
+    {
+        FilteredLogEntries.Clear();
+
+        var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
+        var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
+        var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
+        var hasSeverityFilter = LogLevelFilter != "All";
+
+        foreach (var entry in LogEntries)
+        {
+            if (PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter))
+                FilteredLogEntries.Add(entry);
+        }
+    }
+
+    private bool PassesFilter(LogEntryViewModel entry,
+        bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter)
+    {
+        var msg = entry.Message;
+
+        if (hasTagFilter && !msg.Contains(LogFilterTag, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (hasAgentFilter && !msg.Contains(LogFilterAgent, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (hasSearchFilter && !msg.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase)
+            && !entry.Timestamp.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (hasSeverityFilter)
+        {
+            var requiredSeverity = LogLevelFilter switch
+            {
+                "Info" => LogSeverity.Info,
+                "Success" => LogSeverity.Success,
+                "Warning" => LogSeverity.Warning,
+                "Error" => LogSeverity.Error,
+                _ => (LogSeverity?)null
+            };
+            if (requiredSeverity.HasValue && entry.Severity != requiredSeverity.Value)
+                return false;
+        }
+        return true;
     }
 
     // ── WatchList CRUD ──────────────────────────────────────────────
@@ -778,6 +1010,207 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AddChild(SelectedNode, new RefConfig { TemplateID = AvailableTemplateIds.Count > 0 ? AvailableTemplateIds[0] : "" });
     }
 
+    /// <summary>Adds an Initialize node to the selected Event or ActionGroup in the WatchList tree.</summary>
+    [RelayCommand]
+    private void AddInitializeToGroup()
+    {
+        if (SelectedNode?.NodeKind is not ("ActionGroup" or "Event")) return;
+        AddChild(SelectedNode, new InitializeConfig { Tag = "Params", ParameterFile = "" });
+        AddLog("Added Initialize node");
+    }
+
+    /// <summary>Adds an ActionGroup to the selected WatchItem, Event, or ActionGroup in the WatchList tree.</summary>
+    [RelayCommand]
+    private void AddActionGroup()
+    {
+        if (SelectedNode is null) return;
+        if (SelectedNode.NodeKind is "WatchItem")
+        {
+            // WatchItem cannot hold ActionGroup directly — it must go under an Event.
+            // If the WatchItem has no events, create one first.
+            if (SelectedNode.ModelObject is WatchItemConfig wi)
+            {
+                EventConfig targetEvent;
+                if (wi.Events.Count == 0)
+                {
+                    targetEvent = new EventConfig { Type = "Renamed", ExecutionType = ExecutionMode.Sequential };
+                    wi.Events.Add(targetEvent);
+                    var evNode = TreeNodeViewModel.FromEvent(targetEvent);
+                    evNode.Parent = SelectedNode;
+                    SelectedNode.Children.Add(evNode);
+                }
+                else
+                {
+                    targetEvent = wi.Events[0];
+                }
+                // Find the event node and add the group there
+                var eventNode = SelectedNode.Children.FirstOrDefault(c => ReferenceEquals(c.ModelObject, targetEvent));
+                if (eventNode is not null)
+                {
+                    var ag = new ActionGroupConfig { Tag = "NewActionGroup", ExecutionType = ExecutionMode.Sequential, FailAndContinue = true };
+                    AddChild(eventNode, ag);
+                    eventNode.IsExpanded = true;
+                    SelectedNode.IsExpanded = true;
+                    AddLog("Added ActionGroup under Event");
+                }
+            }
+            return;
+        }
+        if (SelectedNode.NodeKind is "Event" or "ActionGroup")
+        {
+            var ag = new ActionGroupConfig { Tag = "NewActionGroup", ExecutionType = ExecutionMode.Sequential, FailAndContinue = true };
+            AddChild(SelectedNode, ag);
+            SelectedNode.IsExpanded = true;
+            AddLog("Added ActionGroup");
+            return;
+        }
+        if (SelectedNode.NodeKind is "Template")
+        {
+            var ag = new ActionGroupConfig { Tag = "NewActionGroup", ExecutionType = ExecutionMode.Sequential, FailAndContinue = true };
+            AddChildT(SelectedNode, ag);
+            SelectedNode.IsExpanded = true;
+            AddLog("Added ActionGroup to Template");
+            return;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // INITIALIZE PARAMETER FILE MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>Browse for a parameter file and set it on the active Initialize node.</summary>
+    [RelayCommand]
+    private void BrowseParameterFile()
+    {
+        if (ActiveEditNode?.NodeKind != "Initialize") return;
+
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Text Files|*.txt|All Files|*.*",
+            Title = "Select Parameter File"
+        };
+
+        // Start in the current file's directory if possible
+        if (!string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile))
+        {
+            var dir = Path.GetDirectoryName(ActiveEditNode.ParameterFile);
+            if (dir is not null && Directory.Exists(dir))
+                dlg.InitialDirectory = dir;
+        }
+
+        if (dlg.ShowDialog() != true) return;
+
+        ActiveEditNode.ParameterFile = dlg.FileName;
+        ActiveEditNode.ApplyToModel();
+        ActiveEditNode.RefreshDisplayText();
+        LoadParameterFileEntries(dlg.FileName);
+        AddLog($"Parameter file selected: {dlg.FileName}");
+    }
+
+    /// <summary>Loads and displays all entries from a parameter file.</summary>
+    [RelayCommand]
+    private void LoadParameterFileFromNode()
+    {
+        if (ActiveEditNode?.NodeKind != "Initialize") return;
+        if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile)) return;
+        LoadParameterFileEntries(ActiveEditNode.ParameterFile);
+    }
+
+    private void LoadParameterFileEntries(string filePath)
+    {
+        ParameterFileEntries.Clear();
+        ParameterFileStatus = "";
+
+        if (!File.Exists(filePath))
+        {
+            ParameterFileStatus = $"File not found: {filePath}";
+            return;
+        }
+
+        try
+        {
+            var entries = ParameterResolver.ParseParameterFile(filePath);
+            foreach (var (key, value) in entries)
+            {
+                ParameterFileEntries.Add(new ParameterEntryViewModel { Key = key, Value = value });
+
+                // Populate the shared token dictionary for UI display resolution
+                TreeNodeViewModel.TokenValues[key] = value;
+                if (key.StartsWith('_'))
+                    TreeNodeViewModel.TokenValues[key[1..]] = value;
+            }
+
+            // Refresh resolved display text across all trees
+            WatchListRoot?.RefreshResolvedTextRecursive();
+            TemplateListRoot?.RefreshResolvedTextRecursive();
+
+            ParameterFileStatus = $"Loaded {entries.Count} parameters from {Path.GetFileName(filePath)}";
+            AddLog($"Loaded {entries.Count} parameters from {Path.GetFileName(filePath)}");
+        }
+        catch (Exception ex)
+        {
+            ParameterFileStatus = $"Error reading file: {ex.Message}";
+        }
+    }
+
+    /// <summary>Adds a new empty parameter entry row.</summary>
+    [RelayCommand]
+    private void AddParameterEntry()
+    {
+        ParameterFileEntries.Add(new ParameterEntryViewModel
+        {
+            Key = "_NewKey",
+            Value = "",
+            IsNew = true
+        });
+    }
+
+    /// <summary>Removes a parameter entry from the list.</summary>
+    [RelayCommand]
+    private void RemoveParameterEntry(ParameterEntryViewModel? entry)
+    {
+        if (entry is not null)
+            ParameterFileEntries.Remove(entry);
+    }
+
+    /// <summary>Saves all parameter entries back to the parameter file.</summary>
+    [RelayCommand]
+    private void SaveParameterFile()
+    {
+        if (ActiveEditNode?.NodeKind != "Initialize") return;
+        if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile))
+        {
+            ParameterFileStatus = "No parameter file path set. Use Browse to select a file.";
+            return;
+        }
+
+        try
+        {
+            var entries = ParameterFileEntries
+                .Where(e => !string.IsNullOrWhiteSpace(e.Key))
+                .Select(e => (e.Key, e.Value))
+                .ToList();
+
+            // Ensure directory exists
+            var dir = Path.GetDirectoryName(ActiveEditNode.ParameterFile);
+            if (dir is not null && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            ParameterResolver.SaveParameterFile(ActiveEditNode.ParameterFile, entries);
+
+            // Mark all as not new after save
+            foreach (var e in ParameterFileEntries) e.IsNew = false;
+
+            ParameterFileStatus = $"Saved {entries.Count} parameters to {Path.GetFileName(ActiveEditNode.ParameterFile)}";
+            AddLog($"Saved parameter file: {ActiveEditNode.ParameterFile}", LogSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ParameterFileStatus = $"Save error: {ex.Message}";
+            AddLog($"Failed to save parameter file: {ex.Message}", LogSeverity.Error);
+        }
+    }
+
     [RelayCommand]
     private void DeleteSelectedNode()
     {
@@ -824,6 +1257,59 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // ── Template CRUD ───────────────────────────────────────────────
 
     [RelayCommand]
+    private void EditTemplateXml()
+    {
+        OpenTemplateXmlEditorWindow();
+    }
+
+    /// <summary>Opens the standalone Template XML Editor window for all templates.</summary>
+    private void OpenTemplateXmlEditorWindow()
+    {
+        WriteBackAll();
+        var xml = WatchListXmlParser.SerializeTemplateList(_config.Templates);
+
+        var editorVm = new TemplateXmlEditorViewModel(xml);
+
+        // Build window title with template IDs
+        var ids = _config.Templates.Select(t => t.ID).Where(id => !string.IsNullOrEmpty(id));
+        editorVm.WindowTitle = $"Template XML Editor - {string.Join(", ", ids)}";
+
+        var editorWindow = new Views.TemplateXmlEditorWindow(editorVm);
+        if (Application.Current.MainWindow is { } mainWindow)
+            editorWindow.Owner = mainWindow;
+
+        var result = editorWindow.ShowDialog();
+        if (result == true && editorVm.DialogAccepted)
+        {
+            try
+            {
+                var parsed = WatchListXmlParser.DeserializeTemplateList(editorVm.ResultXml);
+                if (parsed is null)
+                {
+                    AddLog("Template XML editor: Root element was not <Templates>", LogSeverity.Error);
+                    return;
+                }
+
+                // Replace templates in model
+                _config.Templates.Clear();
+                _config.Templates.AddRange(parsed);
+
+                // Rebuild template tree
+                TemplateRoots.Clear();
+                TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                RebuildTemplateIds();
+                _executor.LoadTemplates(_config.Templates);
+
+                AddLog($"Templates updated via XML editor: {parsed.Count} template(s)", LogSeverity.Success);
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Template XML editor apply failed: {ex.Message}", LogSeverity.Error);
+            }
+        }
+    }
+
+    [RelayCommand]
     private void AddTemplate()
     {
         var t = new TemplateConfig { ID = $"NewTemplate{_config.Templates.Count + 1}" };
@@ -854,7 +1340,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 case List<TemplateConfig> tl when target.ModelObject is TemplateConfig tc: tl.Remove(tc); break;
                 case TemplateConfig tc when target.ModelObject is IActionNode a: tc.Children.Remove(a); break;
-                case ActionGroupConfig ag when target.ModelObject is IActionNode a2: ag.Children.Remove(a2); break;
+                case ActionGroupConfig ag when target.ModelObject is IActionNode a: ag.Children.Remove(a); break;
             }
             parent.RefreshDisplayText();
             SelectedTemplateNode = null;
@@ -953,9 +1439,54 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             TemplateRoots.Clear();
             TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(config.Templates));
             RebuildTemplateIds();
+            RebuildFilterOptions();
+            LoadTokensFromConfig(config);
             ActiveWatchers = _watcherManager.ActiveWatcherCount;
             StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
         });
+    }
+
+    /// <summary>
+    /// Scans all Initialize nodes in the config for parameter files and loads
+    /// their tokens into the shared TokenValues dictionary for UI display resolution.
+    /// </summary>
+    private void LoadTokensFromConfig(WatchListConfig config)
+    {
+        TreeNodeViewModel.TokenValues.Clear();
+        foreach (var wi in config.WatchItems)
+            foreach (var ev in wi.Events)
+                LoadTokensFromChildren(ev.Children);
+        foreach (var t in config.Templates)
+            LoadTokensFromChildren(t.Children);
+
+        // Refresh resolved text across all trees
+        WatchListRoot?.RefreshResolvedTextRecursive();
+        TemplateListRoot?.RefreshResolvedTextRecursive();
+    }
+
+    private void LoadTokensFromChildren(List<IActionNode> children)
+    {
+        foreach (var child in children)
+        {
+            if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
+            {
+                try
+                {
+                    var entries = ParameterResolver.ParseParameterFile(init.ParameterFile);
+                    foreach (var (key, value) in entries)
+                    {
+                        TreeNodeViewModel.TokenValues[key] = value;
+                        if (key.StartsWith('_'))
+                            TreeNodeViewModel.TokenValues[key[1..]] = value;
+                    }
+                }
+                catch { }
+            }
+            else if (child is ActionGroupConfig ag)
+            {
+                LoadTokensFromChildren(ag.Children);
+            }
+        }
     }
 
     private void RebuildTemplateIds()
@@ -963,6 +1494,49 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AvailableTemplateIds.Clear();
         foreach (var t in _config.Templates)
             if (!string.IsNullOrWhiteSpace(t.ID)) AvailableTemplateIds.Add(t.ID);
+    }
+
+    /// <summary>Rebuilds the available WatchItem tags and agent names for filter dropdowns.</summary>
+    private void RebuildFilterOptions()
+    {
+        AvailableWatchItemTags.Clear();
+        AvailableWatchItemTags.Add(""); // "All" option
+        foreach (var wi in _config.WatchItems)
+            if (!string.IsNullOrWhiteSpace(wi.Tag))
+                AvailableWatchItemTags.Add(wi.Tag);
+
+        AvailableAgentNames.Clear();
+        AvailableAgentNames.Add(""); // "All" option
+        foreach (var agent in RegisteredAgents)
+            if (!string.IsNullOrWhiteSpace(agent.Name))
+                AvailableAgentNames.Add(agent.Name);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // F4: NODE PROGRESS HANDLER (maps IActionNode → TreeNodeViewModel)
+    // ═══════════════════════════════════════════════════════════════
+
+    private void OnNodeProgress(IActionNode node, string status)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            // Search in WatchList tree
+            var treeNode = WatchListRoot?.FindByModel(node);
+            if (treeNode is not null)
+            {
+                treeNode.ExecutionStatus = status;
+                // Propagate aggregated status upward through parents
+                treeNode.PropagateStatusUp();
+                return;
+            }
+            // Search in Template tree (for Ref expansions)
+            treeNode = TemplateListRoot?.FindByModel(node);
+            if (treeNode is not null)
+            {
+                treeNode.ExecutionStatus = status;
+                treeNode.PropagateStatusUp();
+            }
+        });
     }
 
     private void WriteBackAll()
@@ -974,19 +1548,120 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private void OnConfigReloaded(WatchListConfig config) { AddLog("Hot-reloaded"); ApplyConfig(config); }
-    private void OnLogEntry(PipelineLogEntry e) => AddLog($"[{e.Category}] {e.Message}");
-    private void OnOutputReceived(string a, string l, string k) => AddLog($"[{a}:{k}] {l}");
-    private void OnStatusChanged(string a, string s) => AddLog($"[{a}] {s}");
+    private void OnLogEntry(PipelineLogEntry e)
+    {
+        var severity = e.Message.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                    || e.Message.StartsWith("✗", StringComparison.Ordinal)
+            ? LogSeverity.Error
+            : e.Message.Contains("Success", StringComparison.OrdinalIgnoreCase)
+                    || e.Message.StartsWith("✓", StringComparison.Ordinal)
+              ? LogSeverity.Success
+              : LogSeverity.Info;
+        AddLog($"[{e.Category}] {e.Message}", severity);
+    }
+
+    private void OnOutputReceived(string agent, string line, string kind)
+    {
+        var severity = kind == "stderr" ? LogSeverity.Error : LogSeverity.Info;
+        AddLog($"[{agent}:{kind}] {line}", severity);
+    }
+
+    private void OnStatusChanged(string agent, string status)
+    {
+        var severity = status.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                    || status.Contains("Unreachable", StringComparison.OrdinalIgnoreCase)
+            ? LogSeverity.Error
+            : status.Contains("Ready", StringComparison.OrdinalIgnoreCase)
+                    || status.Contains("online", StringComparison.OrdinalIgnoreCase)
+              ? LogSeverity.Success
+              : LogSeverity.Info;
+        AddLog($"[{agent}] {status}", severity);
+    }
+
     private void OnTriggerFired(string p, string f) => AddLog($"Trigger: {p} > {f}");
 
-    private void AddLog(string msg)
+    // ── Log management ──────────────────────────────────────────────
+
+    private void AddLog(string msg, LogSeverity severity = LogSeverity.Info)
     {
-        var entry = $"[{DateTime.Now:HH:mm:ss}] {msg}";
+        // Auto-detect severity from message content when using default
+        if (severity == LogSeverity.Info)
+        {
+            if (msg.Contains("error", StringComparison.OrdinalIgnoreCase)
+             || msg.Contains("failed", StringComparison.OrdinalIgnoreCase)
+             || msg.Contains("✗", StringComparison.Ordinal)
+             || msg.Contains("✖", StringComparison.Ordinal)
+             || msg.StartsWith("[Action] X", StringComparison.Ordinal))
+                severity = LogSeverity.Error;
+            else if (msg.Contains("success", StringComparison.OrdinalIgnoreCase)
+                  || msg.Contains("completed", StringComparison.OrdinalIgnoreCase)
+                  || msg.Contains("✓", StringComparison.Ordinal)
+                  || msg.Contains("✔", StringComparison.Ordinal))
+                severity = LogSeverity.Success;
+        }
+
+        var entry = new LogEntryViewModel
+        {
+            Timestamp = DateTime.Now.ToString("HH:mm:ss"),
+            Message = msg,
+            Severity = severity
+        };
+
         if (Application.Current?.Dispatcher.CheckAccess() == true)
-        { LogEntries.Add(entry); while (LogEntries.Count > 5000) LogEntries.RemoveAt(0); }
-        else Application.Current?.Dispatcher.InvokeAsync(() =>
-        { LogEntries.Add(entry); while (LogEntries.Count > 5000) LogEntries.RemoveAt(0); });
+        {
+            LogEntries.Add(entry);
+            while (LogEntries.Count > 5000) LogEntries.RemoveAt(0);
+            AddToFilteredLog(entry);
+        }
+        else
+        {
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                LogEntries.Add(entry);
+                while (LogEntries.Count > 5000) LogEntries.RemoveAt(0);
+                AddToFilteredLog(entry);
+            });
+        }
     }
+
+    private void AddToFilteredLog(LogEntryViewModel entry)
+    {
+        if (IsLogPaused) return;
+
+        var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
+        var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
+        var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
+        var hasSeverityFilter = LogLevelFilter != "All";
+
+        if (PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter))
+        {
+            FilteredLogEntries.Add(entry);
+            while (FilteredLogEntries.Count > 5000) FilteredLogEntries.RemoveAt(0);
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the execution log to the last error entry and highlights it.
+    /// Ensures the error is visible even if auto-scroll is disabled.
+    /// </summary>
+    private void ScrollLogToLastError()
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            var lastError = FilteredLogEntries.LastOrDefault(e => e.Severity == LogSeverity.Error);
+            lastError ??= LogEntries.LastOrDefault(e => e.Severity == LogSeverity.Error);
+
+            if (lastError is not null)
+            {
+                // Signal the view to scroll — uses the existing auto-scroll mechanism
+                // by temporarily ensuring the item is the last visible entry
+                ScrollToLogEntry?.Invoke(lastError);
+            }
+        });
+    }
+
+    /// <summary>Raised when the log should scroll to a specific entry.</summary>
+    public event Action<LogEntryViewModel>? ScrollToLogEntry;
 
     public void Dispose()
     {

@@ -135,10 +135,15 @@ public sealed partial class AgentNodeViewModel : ObservableObject
         History.Clear();
         foreach (var r in history.Records)
         {
+            var commandText = $"{r.Command} {r.Arguments}".Trim();
+            var operation = InferOperation(r.Command, r.Arguments);
+
             History.Add(new ExecutionHistoryItem
             {
                 ExecutionId = r.ExecutionId,
-                Command = $"{r.Command} {r.Arguments}",
+                Command = r.Command,
+                CommandText = commandText,
+                Operation = operation,
                 Outcome = r.Outcome switch
                 {
                     ExecutionOutcome.OutcomeSuccess    => "✓ Success",
@@ -156,6 +161,28 @@ public sealed partial class AgentNodeViewModel : ObservableObject
                 StderrLineCount = r.StderrLines.Count,
             });
         }
+    }
+
+    /// <summary>Infers a human-readable operation description from the command and arguments.</summary>
+    private static string InferOperation(string command, string arguments)
+    {
+        var cmd = command.Trim().Trim('"').ToLowerInvariant();
+        var args = arguments.ToLowerInvariant();
+        var ext = "";
+        try { ext = System.IO.Path.GetExtension(cmd); } catch { }
+
+        if (cmd.Contains("build") || args.Contains("build")) return "Build";
+        if (cmd.Contains("deploy") || args.Contains("deploy")) return "Deploy";
+        if (cmd.Contains("test") || args.Contains("test") || cmd.Contains("smoke")) return "Test";
+        if (cmd.Contains("install") || args.Contains("install") || ext == ".msi") return "Install";
+        if (cmd.Contains("setup") || args.Contains("setup")) return "Setup";
+        if (cmd == "shutdown" || cmd == "restart" || args.Contains("/r")) return "Reboot";
+        if (cmd.Contains("copy") || args.Contains("robocopy")) return "FileCopy";
+        if (ext == ".ps1") return "PowerShell";
+        if (ext is ".bat" or ".cmd") return "Script";
+        if (cmd is "cmd" or "cmd.exe") return "Command";
+        if (cmd is "powershell" or "powershell.exe" or "pwsh" or "pwsh.exe") return "PowerShell";
+        return "Execute";
     }
 
     private void UpdateAgentState(AgentState state)
@@ -199,6 +226,8 @@ public sealed class ExecutionHistoryItem
 {
     public string ExecutionId { get; init; } = "";
     public string Command { get; init; } = "";
+    public string CommandText { get; init; } = "";
+    public string Operation { get; init; } = "";
     public string Outcome { get; init; } = "";
     public int ExitCode { get; init; }
     public string Duration { get; init; } = "";

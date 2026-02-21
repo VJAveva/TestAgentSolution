@@ -257,6 +257,37 @@ public static class WatchListXmlParser
         return wi;
     }
 
+    // ── Template list serialization (for Template XML Editor dialog) ──
+
+    public static string SerializeTemplateList(List<TemplateConfig> templates)
+    {
+        var templatesEl = new XElement("Templates");
+        foreach (var t in templates)
+        {
+            var tEl = new XElement("Template", new XAttribute("ID", t.ID));
+            WriteChildren(tEl, t.Children);
+            templatesEl.Add(tEl);
+        }
+        return templatesEl.ToString(SaveOptions.None);
+    }
+
+    public static List<TemplateConfig>? DeserializeTemplateList(string xml)
+    {
+        var root = XElement.Parse(xml);
+        if (root.Name.LocalName != "Templates") return null;
+
+        var templates = new List<TemplateConfig>();
+        foreach (var tEl in root.Elements("Template"))
+        {
+            templates.Add(new TemplateConfig
+            {
+                ID = Attr(tEl, "ID"),
+                Children = ParseChildren(tEl),
+            });
+        }
+        return templates;
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static string Attr(XElement el, string name, string def = "")

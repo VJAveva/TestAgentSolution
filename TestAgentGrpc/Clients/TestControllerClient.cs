@@ -44,18 +44,22 @@ public sealed class TestControllerClient : IDisposable
 
     public async Task<bool> RegisterAsync(CancellationToken ct = default)
     {
-        var endpoint = _settings.GetResolvedEndpoint();
-        var retries  = _settings.RegistrationRetryCount;
-        var delay    = TimeSpan.FromSeconds(_settings.RegistrationRetryIntervalSeconds);
+        var agentName = _settings.AgentName;
+        var endpoint  = _settings.GetResolvedEndpoint();
+        var retries   = _settings.RegistrationRetryCount;
+        var delay     = TimeSpan.FromSeconds(_settings.RegistrationRetryIntervalSeconds);
 
         for (int attempt = 0; attempt <= retries; attempt++)
         {
             try
             {
-                _logger.LogInformation("Registering (attempt {N}): {Ep}", attempt + 1, endpoint);
+                _logger.LogInformation("Registering (attempt {N}): Name={Name}, Endpoint={Ep}",
+                    attempt + 1, agentName, endpoint);
                 await Client.RegisterAsync(new TestAgentRef
                 {
-                    Name = endpoint, State = AgentState.Ready,
+                    Name     = agentName,
+                    State    = AgentState.Ready,
+                    Endpoint = endpoint,
                 }, cancellationToken: ct);
                 _logger.LogInformation("Registration successful");
                 return true;
@@ -77,7 +81,9 @@ public sealed class TestControllerClient : IDisposable
         {
             await Client.UnRegisterAsync(new TestAgentRef
             {
-                Name = _settings.GetResolvedEndpoint(), State = AgentState.Inactive,
+                Name     = _settings.AgentName,
+                State    = AgentState.Inactive,
+                Endpoint = _settings.GetResolvedEndpoint(),
             }, cancellationToken: ct);
         }
         catch (Exception ex)
@@ -92,7 +98,9 @@ public sealed class TestControllerClient : IDisposable
         {
             await Client.UpdateClientStateAsync(new TestAgentRef
             {
-                Name = _settings.GetResolvedEndpoint(), State = state,
+                Name     = _settings.AgentName,
+                State    = state,
+                Endpoint = _settings.GetResolvedEndpoint(),
             }, cancellationToken: ct);
         }
         catch (Exception ex)

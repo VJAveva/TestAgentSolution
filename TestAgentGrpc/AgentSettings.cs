@@ -5,6 +5,12 @@ namespace TestAgentGrpc;
 /// </summary>
 public sealed class AgentSettings
 {
+    /// <summary>
+    /// Friendly name used to identify this agent in the Controller's
+    /// WatchList XML (e.g. "AppSerCI1").  Defaults to the machine name.
+    /// </summary>
+    public string AgentName { get; set; } = Environment.MachineName;
+
     public int GrpcPort { get; set; } = 5200;
     public string ControllerAddress { get; set; } = "http://localhost:5100";
     public string? AgentEndpoint { get; set; }

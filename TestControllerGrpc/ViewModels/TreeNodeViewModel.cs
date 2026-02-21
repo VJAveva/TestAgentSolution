@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TestControllerGrpc.Models;
 
@@ -12,6 +13,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _nodeKind = "";
     [ObservableProperty] private bool _isExpanded = true;
     [ObservableProperty] private bool _isSelected;
+
+    // ── Semantic icon glyph (Unicode) ───────────────────────────────
+    [ObservableProperty] private string _nodeIconGlyph = "\uD83D\uDCC4"; // 📄
+
+    // ── Token-resolved display text (UI-only, does not modify model) ──
+    [ObservableProperty] private string _resolvedDisplayText = "";
+    [ObservableProperty] private bool _hasUnresolvedTokens;
+    [ObservableProperty] private string _unresolvedTokenTooltip = "";
 
     [ObservableProperty] private string _tag = "";
     [ObservableProperty] private string _executionTypeText = "Sequential";
@@ -46,6 +55,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _executionStatus = "Idle";
     [ObservableProperty] private string _statusSymbol = "";
     [ObservableProperty] private string _statusColor = "Transparent";
+    [ObservableProperty] private string _statusTooltip = "";
+    [ObservableProperty] private string _failureMessage = "";
 
     partial void OnExecutionStatusChanged(string value)
     {
@@ -54,20 +65,35 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             case "Running":
                 StatusSymbol = "\u25B6";  // ▶
                 StatusColor = "#FF89B4FA"; // Accent blue
+                StatusTooltip = "Running...";
                 break;
             case "Success":
                 StatusSymbol = "\u2714";  // ✔
                 StatusColor = "#FFA6E3A1"; // Green
+                StatusTooltip = "Completed successfully";
+                FailureMessage = "";
                 break;
             case "Failed":
                 StatusSymbol = "\u2716";  // ✖
                 StatusColor = "#FFF38BA8"; // Red
+                StatusTooltip = string.IsNullOrEmpty(FailureMessage)
+                    ? "Execution failed"
+                    : $"Failed: {FailureMessage}";
                 break;
             default: // Idle
                 StatusSymbol = "";
                 StatusColor = "Transparent";
+                StatusTooltip = "";
+                FailureMessage = "";
                 break;
         }
+    }
+
+    /// <summary>Set failure status with a specific error message.</summary>
+    public void SetFailed(string message)
+    {
+        FailureMessage = message;
+        ExecutionStatus = "Failed";
     }
 
     /// <summary>Recursively set status on this node and all descendants.</summary>
@@ -80,9 +106,159 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// <summary>Reset execution status to Idle on this node and all descendants.</summary>
     public void ResetStatus() => SetStatusRecursive("Idle");
 
+    /// <summary>
+    /// Propagate aggregated status upward from this node to root.
+    /// Priority: Failed > Running > Success > Idle.
+    /// Also auto-expands parent nodes when a child fails.
+    /// </summary>
+    public void PropagateStatusUp()
+    {
+        var p = Parent;
+        while (p is not null)
+        {
+            var aggregated = ComputeAggregatedStatus(p);
+            if (p.ExecutionStatus != aggregated)
+                p.ExecutionStatus = aggregated;
+
+            // Auto-expand parents on failure so the failed node is visible
+            if (ExecutionStatus == "Failed")
+                p.IsExpanded = true;
+
+            p = p.Parent;
+        }
+    }
+
+    /// <summary>
+    /// Compute the aggregated status for a parent based on its children.
+    /// Priority: Failed > Running > Success > Idle.
+    /// </summary>
+    private static string ComputeAggregatedStatus(TreeNodeViewModel parent)
+    {
+        var hasFailed = false;
+        var hasRunning = false;
+        var hasSuccess = false;
+
+        foreach (var child in parent.Children)
+        {
+            switch (child.ExecutionStatus)
+            {
+                case "Failed": hasFailed = true; break;
+                case "Running": hasRunning = true; break;
+                case "Success": hasSuccess = true; break;
+            }
+        }
+
+        if (hasFailed) return "Failed";
+        if (hasRunning) return "Running";
+        if (hasSuccess) return "Success";
+        return "Idle";
+    }
+
     public ObservableCollection<TreeNodeViewModel> Children { get; } = new();
     public object? ModelObject { get; set; }
     public TreeNodeViewModel? Parent { get; set; }
+
+    // ── Token resolution for display ────────────────────────────────
+
+    private static readonly Regex TokenPattern = new(@"\[(\w+)\]", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Shared token dictionary. Populated from loaded parameter files and runtime context.
+    /// Keys are token names (without brackets), values are resolved values.
+    /// </summary>
+    public static Dictionary<string, string> TokenValues { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Called by source generator when DisplayText changes.</summary>
+    partial void OnDisplayTextChanged(string value)
+    {
+        UpdateResolvedText(value);
+    }
+
+    /// <summary>
+    /// Resolves [Token] placeholders in the input string using TokenValues dictionary.
+    /// Returns the resolved string. Unresolved tokens are left as-is.
+    /// </summary>
+    public static string ResolveTokens(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        if (!input.Contains('[')) return input;
+
+        return TokenPattern.Replace(input, match =>
+        {
+            var key = match.Groups[1].Value;
+            if (TokenValues.TryGetValue(key, out var val))
+                return val;
+            // Also try with leading underscore removed
+            if (key.StartsWith('_') && TokenValues.TryGetValue(key[1..], out val))
+                return val;
+            return match.Value; // leave unresolved
+        });
+    }
+
+    /// <summary>Updates ResolvedDisplayText and unresolved-token metadata.</summary>
+    private void UpdateResolvedText(string rawText)
+    {
+        var resolved = ResolveTokens(rawText);
+        ResolvedDisplayText = resolved;
+
+        // Check for remaining unresolved tokens
+        var remaining = TokenPattern.Matches(resolved);
+        if (remaining.Count > 0)
+        {
+            HasUnresolvedTokens = true;
+            var names = string.Join(", ", remaining.Select(m => m.Value).Distinct());
+            UnresolvedTokenTooltip = $"Unresolved tokens: {names}";
+        }
+        else
+        {
+            HasUnresolvedTokens = false;
+            UnresolvedTokenTooltip = "";
+        }
+    }
+
+    /// <summary>Refreshes resolved display text on this node and all descendants (e.g. after token dict changes).</summary>
+    public void RefreshResolvedTextRecursive()
+    {
+        UpdateResolvedText(DisplayText);
+        foreach (var c in Children) c.RefreshResolvedTextRecursive();
+    }
+
+    // ── Semantic icon resolution ────────────────────────────────────
+
+    /// <summary>
+    /// Resolves a Unicode glyph icon based on node kind and action type.
+    /// Node Type → Icon:
+    ///   WatchList/TemplateList → 📁 (Folder)
+    ///   WatchItem             → 👁 (Eye/Watcher)
+    ///   Event                 → ⚡ (Lightning)
+    ///   Template              → 📄 (Document)
+    ///   ActionGroup           → 🔀 (Workflow)
+    ///   Initialize            → ⚙ (Gear)
+    ///   Action:RunRemoteCommand → 💻 (Terminal)
+    ///   Action:SendMail       → ✉ (Mail)
+    ///   Action:RunCommand     → ▶ (Play)
+    ///   Ref                   → 🔗 (Link)
+    /// </summary>
+    public static string ResolveNodeIconGlyph(string nodeKind, string actionType = "")
+    {
+        return nodeKind switch
+        {
+            "WatchList" or "TemplateList" => "\uD83D\uDCC1", // 📁
+            "WatchItem" => "\uD83D\uDC41",                   // 👁
+            "Event" => "\u26A1",                               // ⚡
+            "Template" => "\uD83D\uDCC4",                     // 📄
+            "ActionGroup" => "\uD83D\uDD00",                  // 🔀
+            "Initialize" => "\u2699",                          // ⚙
+            "Action" => actionType switch
+            {
+                "RunRemoteCommand" => "\uD83D\uDCBB",         // 💻
+                "SendMail" => "\u2709",                        // ✉
+                _ => "\u25B6",                                 // ▶
+            },
+            "Ref" => "\uD83D\uDD17",                          // 🔗
+            _ => "\uD83D\uDCC4",                               // 📄
+        };
+    }
 
     // ── Root node factories ─────────────────────────────────────────
 
@@ -93,6 +269,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         var root = new TreeNodeViewModel
         {
             NodeKind = "WatchList", NodeIcon = "WL",
+            NodeIconGlyph = ResolveNodeIconGlyph("WatchList"),
             DisplayText = $"WatchList  ({name}  \u2014  {config.WatchItems.Count} items)",
             ModelObject = config, IsExpanded = true,
             ChildCount = config.WatchItems.Count,
@@ -109,6 +286,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         var root = new TreeNodeViewModel
         {
             NodeKind = "TemplateList", NodeIcon = "TL",
+            NodeIconGlyph = ResolveNodeIconGlyph("TemplateList"),
             DisplayText = $"Templates  ({templates.Count} templates)",
             ModelObject = templates, IsExpanded = true,
             ChildCount = templates.Count,
@@ -140,7 +318,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ? $"{wi.Tag}  ({wi.Path}{wi.Filter})" : $"{wi.Path}{wi.Filter}";
         var node = new TreeNodeViewModel
         {
-            NodeKind = "WatchItem", NodeIcon = "W", Tag = wi.Tag,
+            NodeKind = "WatchItem", NodeIcon = "W",
+            NodeIconGlyph = ResolveNodeIconGlyph("WatchItem"),
+            Tag = wi.Tag,
             WatchPath = wi.Path, Filter = wi.Filter, IsEnabled = wi.IsEnabled,
             DisplayText = label, ModelObject = wi,
         };
@@ -152,7 +332,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var node = new TreeNodeViewModel
         {
-            NodeKind = "Event", NodeIcon = "E", EventType = ev.Type,
+            NodeKind = "Event", NodeIcon = "E",
+            NodeIconGlyph = ResolveNodeIconGlyph("Event"),
+            EventType = ev.Type,
             ExecutionTypeText = ev.ExecutionType.ToString(),
             DisplayText = $"Event: {ev.Type} ({ev.ExecutionType})", ModelObject = ev,
         };
@@ -164,7 +346,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var node = new TreeNodeViewModel
         {
-            NodeKind = "Template", NodeIcon = "T", TemplateName = t.ID, Tag = t.ID,
+            NodeKind = "Template", NodeIcon = "T",
+            NodeIconGlyph = ResolveNodeIconGlyph("Template"),
+            TemplateName = t.ID, Tag = t.ID,
             DisplayText = $"Template: {t.ID}", ModelObject = t,
         };
         foreach (var child in t.Children) { var c = FromActionNode(child); c.Parent = node; node.Children.Add(c); }
@@ -186,6 +370,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         {
             NodeKind = "ActionGroup",
             NodeIcon = ag.ExecutionType == ExecutionMode.Parallel ? "||" : ">>",
+            NodeIconGlyph = ResolveNodeIconGlyph("ActionGroup"),
             Tag = ag.Tag, ExecutionTypeText = ag.ExecutionType.ToString(),
             FailAndContinue = ag.FailAndContinue,
             DisplayText = $"[{ag.ExecutionType}] {ag.Tag}", ModelObject = ag,
@@ -207,7 +392,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         if (label.Length > 80) label = label[..80] + "...";
         return new TreeNodeViewModel
         {
-            NodeKind = "Action", NodeIcon = icon, ActionTypeText = a.Type.ToString(),
+            NodeKind = "Action", NodeIcon = icon,
+            NodeIconGlyph = ResolveNodeIconGlyph("Action", a.Type.ToString()),
+            ActionTypeText = a.Type.ToString(),
             AgentName = a.AgentName, Command = a.Command, Parameters = a.Parameters,
             Timeout = a.Timeout, PollInterval = a.PollInterval,
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
@@ -220,14 +407,18 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     public static TreeNodeViewModel FromInitialize(InitializeConfig init) => new()
     {
-        NodeKind = "Initialize", NodeIcon = "i", Tag = init.Tag,
+        NodeKind = "Initialize", NodeIcon = "i",
+        NodeIconGlyph = ResolveNodeIconGlyph("Initialize"),
+        Tag = init.Tag,
         ParameterFile = init.ParameterFile,
         DisplayText = $"Initialize: {init.ParameterFile}", ModelObject = init,
     };
 
     public static TreeNodeViewModel FromRef(RefConfig r) => new()
     {
-        NodeKind = "Ref", NodeIcon = ">", TemplateID = r.TemplateID,
+        NodeKind = "Ref", NodeIcon = ">",
+        NodeIconGlyph = ResolveNodeIconGlyph("Ref"),
+        TemplateID = r.TemplateID,
         DisplayText = $"Ref > {r.TemplateID}", ModelObject = r,
     };
 
@@ -280,7 +471,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             _ => DisplayText,
         };
         if (NodeKind == "Action" && Enum.TryParse<ActionType>(ActionTypeText, out var t))
+        {
             NodeIcon = ResolveCommandIcon(Command, t);
+            NodeIconGlyph = ResolveNodeIconGlyph("Action", ActionTypeText);
+        }
     }
 
     // ── Helpers for finding tree nodes by model object ───────────────

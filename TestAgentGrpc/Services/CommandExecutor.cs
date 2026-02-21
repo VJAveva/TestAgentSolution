@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security;
 using System.Threading.Channels;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Options;
@@ -139,15 +140,8 @@ public sealed class CommandExecutor : IDisposable
             // Apply credentials if provided (runs process as specified user)
             if (!string.IsNullOrWhiteSpace(userName))
             {
-                psi.UserName = userName;
-                if (!string.IsNullOrEmpty(password))
-                {
-                    var securePassword = new System.Security.SecureString();
-                    foreach (char c in password) securePassword.AppendChar(c);
-                    securePassword.MakeReadOnly();
-                    psi.Password = securePassword;
-                }
-                _logger.LogInformation("Running as user: {User}", userName);
+                ApplyCredentials(psi, userName, password);
+                _logger.LogInformation("Running as user: {User}", psi.UserName);
             }
 
             _currentProcess = Process.Start(psi);
@@ -294,6 +288,69 @@ public sealed class CommandExecutor : IDisposable
             _ =>
                 (command, arguments),
         };
+    }
+
+    /// <summary>
+    /// Parses credentials and applies them to the <see cref="ProcessStartInfo"/>.
+    ///
+    /// Handles formats:
+    ///   - <c>DOMAIN\user</c>  → Domain = DOMAIN,  UserName = user
+    ///   - <c>user@domain</c>  → Domain = domain,   UserName = user
+    ///   - <c>user</c>         → Domain = ".",       UserName = user  (local machine)
+    ///
+    /// Also sets <c>WorkingDirectory</c> to a universally accessible path
+    /// when not already set — required by <c>CreateProcessWithLogonW</c>.
+    /// </summary>
+    private static void ApplyCredentials(ProcessStartInfo psi, string userName, string? password)
+    {
+        // ── Parse domain\user or user@domain ───────────────────────
+        string domain;
+        string user;
+
+        if (userName.Contains('\\'))
+        {
+            var parts = userName.Split('\\', 2);
+            domain = parts[0];
+            user = parts[1];
+        }
+        else if (userName.Contains('@'))
+        {
+            var parts = userName.Split('@', 2);
+            user = parts[0];
+            domain = parts[1];
+        }
+        else
+        {
+            // No domain specified — assume local machine
+            domain = ".";
+            user = userName;
+        }
+
+        psi.Domain = domain;
+        psi.UserName = user;
+
+        // ── Password — only set SecureString when a real password is provided ──
+        if (!string.IsNullOrEmpty(password))
+        {
+            var secure = new SecureString();
+            foreach (char c in password)
+                secure.AppendChar(c);
+            secure.MakeReadOnly();
+            psi.Password = secure;
+        }
+
+        // ── Working directory — CreateProcessWithLogonW requires an
+        //    accessible working directory for the target user.
+        //    Fall back to a well-known writable path if not already set.
+        if (string.IsNullOrEmpty(psi.WorkingDirectory))
+        {
+            // Prefer C:\Windows\Temp (accessible to all authenticated users)
+            var systemTemp = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp");
+            psi.WorkingDirectory = Directory.Exists(systemTemp)
+                ? systemTemp
+                : Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        }
     }
 
     // ── State / activity helpers ───────────────────────────────────────

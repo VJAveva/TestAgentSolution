@@ -1,8 +1,7 @@
 using System.Collections.Specialized;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.ViewModels;
 
@@ -46,158 +45,44 @@ public partial class MainWindow : Window
             }
         };
 
-        WatchListTreeView.PreviewMouseRightButtonDown += OnWatchListRightClick;
-        TemplateTreeView.PreviewMouseRightButtonDown += OnTemplateRightClick;
-
-        if (_vm.LogEntries is INotifyCollectionChanged ncc)
+        if (_vm.FilteredLogEntries is INotifyCollectionChanged ncc)
         {
             ncc.CollectionChanged += (_, e) =>
             {
-                if (e.Action == NotifyCollectionChangedAction.Add && LogListBox.Items.Count > 0)
+                if (_vm.IsAutoScrollEnabled && e.Action == NotifyCollectionChangedAction.Add && LogListBox.Items.Count > 0)
                     Dispatcher.InvokeAsync(() =>
                         LogListBox.ScrollIntoView(LogListBox.Items[LogListBox.Items.Count - 1]));
             };
         }
-    }
 
-    private void OnWatchListRightClick(object sender, MouseButtonEventArgs e)
-    {
-        var tvi = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
-        if (tvi is null) return;
-        tvi.IsSelected = true;
-        e.Handled = true;
-        var node = tvi.DataContext as TreeNodeViewModel;
-        if (node is null) return;
-
-        var menu = MakeMenu();
-
-        switch (node.NodeKind)
+        // Wire scroll-to-error: scroll log to specific entry on failure
+        _vm.ScrollToLogEntry += entry =>
         {
-            case "WatchList":
-                Add(menu, "+ WatchItem", () => _vm.AddWatchItemCommand.Execute(null));
-                break;
-
-            case "WatchItem":
-                // F3: Trigger all events
-                AddGreen(menu, "\u25B6  Trigger All Events", () => _vm.TriggerWatchItemCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                Add(menu, "Edit XML...", () => _vm.ToggleXmlEditorCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                Add(menu, "Move Up", () => _vm.MoveUpCommand.Execute(null));
-                Add(menu, "Move Down", () => _vm.MoveDownCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                Add(menu, "+ Event", () => _vm.AddChildNodeCommand.Execute(null));
-                AddDanger(menu, "Delete", () => _vm.DeleteSelectedNodeCommand.Execute(null));
-                break;
-
-            case "Event":
-                // F3: Trigger this event
-                AddGreen(menu, "\u25B6  Trigger Event", () => _vm.TriggerEventCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                Add(menu, "Move Up", () => _vm.MoveUpCommand.Execute(null));
-                Add(menu, "Move Down", () => _vm.MoveDownCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                Add(menu, "+ ActionGroup", () => _vm.AddChildNodeCommand.Execute(null));
-                Add(menu, "+ Action", () => _vm.AddActionToGroupCommand.Execute(null));
-                Add(menu, "+ Ref", () => _vm.AddRefToGroupCommand.Execute(null));
-                AddDanger(menu, "Delete", () => _vm.DeleteSelectedNodeCommand.Execute(null));
-                break;
-
-            default:
-                Add(menu, "Move Up", () => _vm.MoveUpCommand.Execute(null));
-                Add(menu, "Move Down", () => _vm.MoveDownCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                Add(menu, "+ Child", () => _vm.AddChildNodeCommand.Execute(null));
-                Add(menu, "+ Action", () => _vm.AddActionToGroupCommand.Execute(null));
-                Add(menu, "+ Ref", () => _vm.AddRefToGroupCommand.Execute(null));
-                menu.Items.Add(new Separator());
-                AddDanger(menu, "Delete", () => _vm.DeleteSelectedNodeCommand.Execute(null));
-                break;
-        }
-
-        tvi.ContextMenu = menu;
-        menu.IsOpen = true;
-    }
-
-    private void OnTemplateRightClick(object sender, MouseButtonEventArgs e)
-    {
-        var tvi = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
-        if (tvi is null) return;
-        tvi.IsSelected = true;
-        e.Handled = true;
-        var node = tvi.DataContext as TreeNodeViewModel;
-        if (node is null) return;
-
-        var menu = MakeMenu();
-
-        if (node.NodeKind == "TemplateList")
-        {
-            Add(menu, "+ Template", () => _vm.AddTemplateCommand.Execute(null));
-        }
-        else
-        {
-            Add(menu, "Move Up", () => _vm.MoveTemplateUpCommand.Execute(null));
-            Add(menu, "Move Down", () => _vm.MoveTemplateDownCommand.Execute(null));
-            menu.Items.Add(new Separator());
-            Add(menu, "+ Group", () => _vm.AddGroupToTemplateCommand.Execute(null));
-            Add(menu, "+ Action", () => _vm.AddActionToTemplateCommand.Execute(null));
-            Add(menu, "+ Ref", () => _vm.AddRefToTemplateCommand.Execute(null));
-            Add(menu, "+ Init", () => _vm.AddInitializeToTemplateCommand.Execute(null));
-            menu.Items.Add(new Separator());
-            AddDanger(menu, "Delete", () => _vm.DeleteTemplateCommand.Execute(null));
-        }
-
-        tvi.ContextMenu = menu;
-        menu.IsOpen = true;
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────
-
-    private static ContextMenu MakeMenu() => new()
-    {
-        Background = new SolidColorBrush(Color.FromRgb(0x31, 0x32, 0x44)),
-        Foreground = new SolidColorBrush(Color.FromRgb(0xCD, 0xD6, 0xF4)),
-        BorderBrush = new SolidColorBrush(Color.FromRgb(0x58, 0x5B, 0x70)),
-    };
-
-    private static void Add(ContextMenu m, string header, Action action)
-    {
-        var item = new MenuItem { Header = header };
-        item.Click += (_, _) => action();
-        m.Items.Add(item);
-    }
-
-    private static void AddGreen(ContextMenu m, string header, Action action)
-    {
-        var item = new MenuItem
-        {
-            Header = header,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1))
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (LogListBox.Items.Contains(entry))
+                {
+                    LogListBox.ScrollIntoView(entry);
+                    LogListBox.SelectedItem = entry;
+                }
+            });
         };
-        item.Click += (_, _) => action();
-        m.Items.Add(item);
     }
 
-    private static void AddDanger(ContextMenu m, string header, Action action)
+    /// <summary>Copies selected log entries to clipboard (from context menu).</summary>
+    private void OnCopySelectedLog(object sender, RoutedEventArgs e)
     {
-        var item = new MenuItem
-        {
-            Header = header,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8))
-        };
-        item.Click += (_, _) => action();
-        m.Items.Add(item);
-    }
+        var selected = LogListBox.SelectedItems;
+        if (selected.Count == 0) return;
 
-    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
-    {
-        while (current is not null)
+        var sb = new StringBuilder();
+        foreach (var item in selected)
         {
-            if (current is T match) return match;
-            current = VisualTreeHelper.GetParent(current);
+            if (item is LogEntryViewModel entry)
+                sb.AppendLine(entry.FullText);
         }
-        return null;
+        Clipboard.SetText(sb.ToString());
+        _vm.StatusMessage = $"Copied {selected.Count} selected log entries to clipboard";
     }
 
     protected override void OnClosed(EventArgs e)
