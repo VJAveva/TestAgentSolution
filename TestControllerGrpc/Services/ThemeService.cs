@@ -1,4 +1,5 @@
 using System.Windows;
+using TestControllerGrpc.Helpers;
 
 namespace TestControllerGrpc.Services;
 
@@ -16,6 +17,9 @@ public static class ThemeService
     /// </summary>
     public static void ApplyTheme(string themeName)
     {
+        var app = Application.Current;
+        if (app is null) return;
+
         var uri = themeName switch
         {
             "Light" => new Uri("Themes/LightTheme.xaml", UriKind.Relative),
@@ -24,12 +28,14 @@ public static class ThemeService
         };
 
         var newDict = new ResourceDictionary { Source = uri };
-        var appResources = Application.Current.Resources;
+        var merged = app.Resources.MergedDictionaries;
 
-        // Replace the first merged dictionary (the theme dictionary)
-        if (appResources.MergedDictionaries.Count > 0)
-            appResources.MergedDictionaries[0] = newDict;
+        if (merged.Count > 0)
+            merged[0] = newDict;
         else
-            appResources.MergedDictionaries.Insert(0, newDict);
+            merged.Insert(0, newDict);
+
+        // Flush rasterized SVG icon cache so icons re-render with new theme colors
+        SvgIconHelper.ClearCache();
     }
 }

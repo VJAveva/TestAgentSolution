@@ -14,8 +14,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isExpanded = true;
     [ObservableProperty] private bool _isSelected;
 
-    // ── Semantic icon glyph (Unicode) ───────────────────────────────
-    [ObservableProperty] private string _nodeIconGlyph = "\uD83D\uDCC4"; // 📄
+    // ── Semantic icon glyph (Segoe MDL2 Assets) ────────────────────
+    [ObservableProperty] private string _nodeIconGlyph = "\uE8A5"; // Document
 
     // ── Token-resolved display text (UI-only, does not modify model) ──
     [ObservableProperty] private string _resolvedDisplayText = "";
@@ -49,6 +49,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _templateID = "";
     [ObservableProperty] private string _templateName = "";
     [ObservableProperty] private int _childCount;
+
+    // ── Tree search/filter visibility ───────────────────────────────
+    [ObservableProperty] private bool _isFilterVisible = true;
 
     // ── Execution status ────────────────────────────────────────────
     // Values: "Idle", "Running", "Success", "Failed"
@@ -226,37 +229,37 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // ── Semantic icon resolution ────────────────────────────────────
 
     /// <summary>
-    /// Resolves a Unicode glyph icon based on node kind and action type.
+    /// Resolves a Segoe MDL2 Assets glyph based on node kind and action type.
     /// Node Type → Icon:
-    ///   WatchList/TemplateList → 📁 (Folder)
-    ///   WatchItem             → 👁 (Eye/Watcher)
-    ///   Event                 → ⚡ (Lightning)
-    ///   Template              → 📄 (Document)
-    ///   ActionGroup           → 🔀 (Workflow)
-    ///   Initialize            → ⚙ (Gear)
-    ///   Action:RunRemoteCommand → 💻 (Terminal)
-    ///   Action:SendMail       → ✉ (Mail)
-    ///   Action:RunCommand     → ▶ (Play)
-    ///   Ref                   → 🔗 (Link)
+    ///   WatchList/TemplateList → &#xE8B7; (Folder)
+    ///   WatchItem             → &#xE7B3; (View/Eye)
+    ///   Event                 → &#xEA80; (LightningBolt)
+    ///   Template              → &#xE8A5; (Document)
+    ///   ActionGroup           → &#xE8CB; (BranchFork)
+    ///   Initialize            → &#xE713; (Settings)
+    ///   Action:RunRemoteCommand → &#xE839; (Remote)
+    ///   Action:SendMail       → &#xE715; (Mail)
+    ///   Action:RunCommand     → &#xE768; (Play)
+    ///   Ref                   → &#xE71B; (Link)
     /// </summary>
     public static string ResolveNodeIconGlyph(string nodeKind, string actionType = "")
     {
         return nodeKind switch
         {
-            "WatchList" or "TemplateList" => "\uD83D\uDCC1", // 📁
-            "WatchItem" => "\uD83D\uDC41",                   // 👁
-            "Event" => "\u26A1",                               // ⚡
-            "Template" => "\uD83D\uDCC4",                     // 📄
-            "ActionGroup" => "\uD83D\uDD00",                  // 🔀
-            "Initialize" => "\u2699",                          // ⚙
+            "WatchList" or "TemplateList" => "\uE8B7", // Folder/List
+            "WatchItem" => "\uE7B3",                   // View/Eye
+            "Event" => "\uEA80",                       // LightningBolt
+            "Template" => "\uE8A5",                    // Document
+            "ActionGroup" => "\uE8CB",                 // BranchFork
+            "Initialize" => "\uE713",                  // Settings
             "Action" => actionType switch
             {
-                "RunRemoteCommand" => "\uD83D\uDCBB",         // 💻
-                "SendMail" => "\u2709",                        // ✉
-                _ => "\u25B6",                                 // ▶
+                "RunRemoteCommand" => "\uE839",        // Remote/PC
+                "SendMail" => "\uE715",                // Mail
+                _ => "\uE768",                         // Play
             },
-            "Ref" => "\uD83D\uDD17",                          // 🔗
-            _ => "\uD83D\uDCC4",                               // 📄
+            "Ref" => "\uE71B",                         // Link
+            _ => "\uE8A5",                             // Document (fallback)
         };
     }
 

@@ -69,4 +69,22 @@
     <SolidColorBrush x:Key="IconBgInit"      Color="#22CBD5E1" />
     <SolidColorBrush x:Key="IconBgRef"       Color="#229333EA" />
 
+    <!-- Expander section header -->
+    <SolidColorBrush x:Key="ExpanderHeaderBg" Color="#08000000" />
+    <SolidColorBrush x:Key="ExpanderHeaderFg" Color="#FF64748B" />
+
+    <!-- Alert/error highlight -->
+    <SolidColorBrush x:Key="AlertErrorBg"   Color="#22DC2626" />
+    <SolidColorBrush x:Key="AlertErrorBdr"  Color="#44DC2626" />
+
+    <!-- Placeholder text -->
+    <SolidColorBrush x:Key="PlaceholderFg"  Color="#44000000" />
+
+    <!-- Icon foreground (for Segoe MDL2 Assets) -->
+    <SolidColorBrush x:Key="IconFg"         Color="#FF333333" />
+    <SolidColorBrush x:Key="DisabledFg"     Color="#FFB0B0B0" />
+
+    <!-- Execution overlay -->
+    <SolidColorBrush x:Key="OverlayBg"      Color="#44FFFFFF" />
+
 </ResourceDictionary>

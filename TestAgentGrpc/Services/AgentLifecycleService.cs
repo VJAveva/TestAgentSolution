@@ -27,6 +27,7 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
     private CancellationTokenSource? _cts;
     private Task? _heartbeatTask;
     private Task? _eventPushTask;
+    private volatile bool _registeredWithController;
 
     public AgentLifecycleService(
         TestControllerClient controller,
@@ -53,13 +54,10 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         _executor.StateChanged += OnStateChanged;
 
         // Register with retries (non-blocking — agent stays Ready regardless)
-        bool registered = await _controller.RegisterAsync(ct);
-        if (!registered)
+        _registeredWithController = await _controller.RegisterAsync(ct);
+        if (!_registeredWithController)
         {
-            _logger.LogWarning("Controller registration failed — running in standalone mode (still Ready)");
-            // CRITICAL: Do NOT set Inactive. The agent can still serve commands
-            // from any controller that connects to it via TestAgentService RPCs.
-            // Inactive should only be set on graceful shutdown.
+            _logger.LogWarning("Controller registration failed — will retry during heartbeat loop");
         }
 
         // Start heartbeat loop (will silently fail if controller unreachable)
@@ -90,6 +88,7 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
     private async Task RunHeartbeatLoopAsync(CancellationToken ct)
     {
         var interval = TimeSpan.FromSeconds(_settings.HeartbeatIntervalSeconds);
+        int consecutiveFailures = 0;
 
         while (!ct.IsCancellationRequested)
         {
@@ -97,14 +96,26 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
             {
                 await Task.Delay(interval, ct);
 
+                // Re-register if previous registration failed or controller may have restarted
+                if (!_registeredWithController || consecutiveFailures >= 3)
+                {
+                    _logger.LogInformation("Attempting re-registration with controller…");
+                    _registeredWithController = await _controller.RegisterAsync(ct);
+                    if (_registeredWithController)
+                    {
+                        consecutiveFailures = 0;
+                        _logger.LogInformation("Re-registration successful");
+                    }
+                }
+
                 var sysMetrics = _metrics.Collect();
                 await _controller.SendHeartbeatAsync(_executor.CurrentState, sysMetrics, ct);
+                consecutiveFailures = 0;
 
-                // Also broadcast as a local event so subscribers see it
                 _broadcaster.Publish(new ExecutionEvent
                 {
                     ExecutionId = "",
-                    AgentName   = _settings.GetResolvedEndpoint(),
+                    AgentName   = _settings.AgentName,
                     Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
                     EventType   = ExecutionEventType.EventHeartbeat,
                     AgentState  = _executor.CurrentState,
@@ -115,7 +126,8 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Heartbeat iteration failed");
+                consecutiveFailures++;
+                _logger.LogDebug(ex, "Heartbeat iteration failed (consecutive: {Count})", consecutiveFailures);
             }
         }
     }

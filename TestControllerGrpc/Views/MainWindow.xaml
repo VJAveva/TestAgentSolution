@@ -21,6 +21,8 @@
         <vm:ActionTypeFieldVisibilityConverter x:Key="ActionVis" />
         <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis" />
         <vm:NodeKindToIconBgConverter x:Key="IconBgConv" />
+        <vm:StringEmptyToVisibilityConverter x:Key="EmptyVis" />
+        <vm:EditingContextToVisibilityConverter x:Key="CtxVis" />
         <BooleanToVisibilityConverter x:Key="BoolVis" />
 
         <x:Array x:Key="EventTypes" Type="{x:Type sys:String}">
@@ -57,6 +59,12 @@
         <Style TargetType="Button" x:Key="TriggerBtn" BasedOn="{StaticResource SmBtn}">
             <Setter Property="Background" Value="{DynamicResource AccGreen}" /><Setter Property="Foreground" Value="{DynamicResource TreeBadgeFg}" />
             <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <!-- Secondary outline trigger button -->
+        <Style TargetType="Button" x:Key="TriggerOutlineBtn" BasedOn="{StaticResource SmBtn}">
+            <Setter Property="Background" Value="{DynamicResource GreenBtnBg}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
         <Style TargetType="TextBox" x:Key="Fld">
             <Setter Property="Background" Value="{DynamicResource FieldBg}" /><Setter Property="Foreground" Value="{DynamicResource TextP}" />
@@ -97,8 +105,48 @@
         <Style x:Key="TVI" TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="Visibility" Value="{Binding IsFilterVisible, Converter={StaticResource BoolVis}}" />
             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
             <Setter Property="Padding" Value="2,3" /><Setter Property="Margin" Value="0,1" />
+        </Style>
+
+        <!-- ── Left-panel tab style ── -->
+        <Style x:Key="LeftPanelTab" TargetType="TabItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                BorderThickness="0,0,0,2" BorderBrush="Transparent"
+                                SnapsToDevicePixels="True" Cursor="Hand">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                <Setter TargetName="TabBd" Property="Background" Value="{DynamicResource TabSelectedBg}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBd" Property="Background" Value="{DynamicResource TabHoverBg}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Collapsible section (Expander) style ── -->
+        <Style x:Key="SectionExpander" TargetType="Expander">
+            <Setter Property="IsExpanded" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
         </Style>
 
         <!-- ── Ribbon button styles ── -->
@@ -113,7 +161,9 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="MinWidth" Value="52" />
+            <Setter Property="Height" Value="52" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -123,7 +173,7 @@
                                 CornerRadius="4" Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center" />
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -135,6 +185,7 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4" />
+                                <Setter Property="Foreground" Value="{DynamicResource DisabledFg}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -169,35 +220,20 @@
             <Setter Property="MinWidth" Value="56" />
         </Style>
 
-        <!-- ── Left panel tab style ── -->
-        <Style x:Key="LeftPanelTab" TargetType="TabItem">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-            <Setter Property="Padding" Value="14,7" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="LPTabBd" Background="{TemplateBinding Background}"
-                                Padding="{TemplateBinding Padding}"
-                                BorderThickness="0,0,0,2" BorderBrush="Transparent"
-                                SnapsToDevicePixels="True" Cursor="Hand">
-                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="LPTabBd" Property="BorderBrush" Value="{DynamicResource Accent}" />
-                                <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-                                <Setter TargetName="LPTabBd" Property="Background" Value="{DynamicResource TabSelectedBg}" />
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="LPTabBd" Property="Background" Value="{DynamicResource TabHoverBg}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- ── Centralized Icon TextBlock styles (Segoe MDL2 Assets) ── -->
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource IconFg}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="RibbonIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+            <Setter Property="FontSize" Value="20" />
+        </Style>
+        <Style x:Key="TreeIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+            <Setter Property="FontSize" Value="14" />
         </Style>
 
         <!-- ── Tree templates ── -->
@@ -210,8 +246,7 @@
                     <Border CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Width="22" Height="18"
                             Background="{Binding NodeKind, Converter={StaticResource IconBgConv}}">
-                        <TextBlock Text="{Binding NodeIconGlyph}" FontSize="12"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                        <TextBlock Text="{Binding NodeIconGlyph}" Style="{StaticResource TreeIconText}"
                                    Foreground="{DynamicResource TextP}" />
                     </Border>
                     <!-- Status overlay dot (bottom-right corner) -->
@@ -313,8 +348,7 @@
                     <Border CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Width="22" Height="18"
                             Background="{Binding NodeKind, Converter={StaticResource IconBgConv}}">
-                        <TextBlock Text="{Binding NodeIconGlyph}" FontSize="12"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                        <TextBlock Text="{Binding NodeIconGlyph}" Style="{StaticResource TreeIconText}"
                                    Foreground="{DynamicResource TextP}" />
                     </Border>
                     <!-- Status overlay dot -->
@@ -427,21 +461,24 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding LoadVocabularyCommand}">
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding LoadVocabularyCommand}"
+                                                    ToolTip="Open a WatchList vocabulary file">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="📂" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8E5;" />
                                                     <TextBlock Text="Open" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding SaveVocabularyCommand}">
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding SaveVocabularyCommand}"
+                                                    ToolTip="Save to current file">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="💾" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74E;" />
                                                     <TextBlock Text="Save" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding SaveVocabularyAsCommand}">
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding SaveVocabularyAsCommand}"
+                                                    ToolTip="Save to a new file">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="📄" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE792;" />
                                                     <TextBlock Text="Save As" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
@@ -452,51 +489,56 @@
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
                                 <!-- WatchList Commands -->
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2"
+                                        Visibility="{Binding ActiveEditingContext, Converter={StaticResource CtxVis}, ConverterParameter=WatchList}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddWatchItemCommand}">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddWatchItemCommand}"
+                                                    ToolTip="Add a new WatchItem to the root">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="＋" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE710;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="WatchItem" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddChildNodeCommand}"
                                                     ToolTip="Add Event to WatchItem, or ActionGroup to Event/ActionGroup">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="📋" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B7;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Event" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddActionGroupCommand}"
                                                     ToolTip="Add new ActionGroup to selected WatchItem, Event, ActionGroup, or Template">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="🔀" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8CB;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Group" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddActionToGroupCommand}">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddActionToGroupCommand}"
+                                                    ToolTip="Add Action to the selected ActionGroup">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="⚡" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Action" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddRefToGroupCommand}">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddRefToGroupCommand}"
+                                                    ToolTip="Add a template reference to the selected group">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="🔗" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE71B;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Ref" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddInitializeToGroupCommand}"
                                                     ToolTip="Add Initialize (parameter file) node">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="📝" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE70F;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Init" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding DeleteSelectedNodeCommand}">
+                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding ConfirmDeleteSelectedNodeCommand}"
+                                                    ToolTip="Delete selected node (with confirmation)">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="🗑" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74D;" Foreground="{DynamicResource AccRed}" />
                                                     <TextBlock Text="Delete" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
@@ -507,44 +549,50 @@
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
                                 <!-- Template Commands -->
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2"
+                                        Visibility="{Binding ActiveEditingContext, Converter={StaticResource CtxVis}, ConverterParameter=Templates}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddTemplateCommand}">
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddTemplateCommand}"
+                                                    ToolTip="Add a new template">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="＋" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE710;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="Template" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddGroupToTemplateCommand}">
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddGroupToTemplateCommand}"
+                                                    ToolTip="Add ActionGroup to selected template">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="📁" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B7;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="Group" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddActionToTemplateCommand}">
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddActionToTemplateCommand}"
+                                                    ToolTip="Add Action to selected template or group">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="⚡" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="Action" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddRefToTemplateCommand}">
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding AddRefToTemplateCommand}"
+                                                    ToolTip="Add template reference to selected template or group">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="🔗" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE71B;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="Ref" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding DeleteTemplateCommand}">
+                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding DeleteTemplateCommand}"
+                                                    ToolTip="Delete selected template node">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="🗑" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74D;" Foreground="{DynamicResource AccRed}" />
                                                     <TextBlock Text="Delete" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding EditTemplateXmlCommand}"
                                                     ToolTip="Open Template XML Editor">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="&#x1F4DD;" FontSize="16" HorizontalAlignment="Center" />
-                                                    <TextBlock Text="XML" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                    <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,4,0" />
+                                                    <TextBlock Text="Edit Template XML" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -558,36 +606,47 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
-                                                    ToolTip="Execute all enabled WatchItems">
+                                                    ToolTip="Execute all enabled WatchItems"
+                                                    Visibility="{Binding ShowExecuteAll}">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="▶" FontSize="16" HorizontalAlignment="Center" />
-                                                    <TextBlock Text="Execute All" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Execute All" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding ResetStatusCommand}">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerWatchItemCommand}"
+                                                    ToolTip="Trigger selected WatchItem"
+                                                    Visibility="{Binding ShowTriggerAllEvents}">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="↺" FontSize="16" HorizontalAlignment="Center" />
-                                                    <TextBlock Text="Reset" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE769;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Trigger Item" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Border Background="{DynamicResource DangerBtnBg}" CornerRadius="4" Padding="0" Margin="2"
-                                                    Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}">
-                                                <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CancelExecutionCommand}">
-                                                    <StackPanel HorizontalAlignment="Center">
-                                                        <TextBlock Text="⏹" FontSize="16" HorizontalAlignment="Center" />
-                                                        <TextBlock Text="Cancel" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
-                                                    </StackPanel>
-                                                </Button>
-                                            </Border>
-                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CloseCommand}"
-                                                    ToolTip="Close the application">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerEventCommand}"
+                                                    ToolTip="Trigger selected Event"
+                                                    Visibility="{Binding ShowTriggerEvent}">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="✕" FontSize="16" HorizontalAlignment="Center" />
-                                                    <TextBlock Text="Close" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Trigger Event" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteGroupCommand}"
+                                                    ToolTip="Execute selected ActionGroup"
+                                                    Visibility="{Binding ShowExecuteGroup}">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8CB;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Exec Group" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteSingleActionCommand}"
+                                                    ToolTip="Execute selected Action"
+                                                    Visibility="{Binding ShowExecuteAction}">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Exec Action" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="System" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
+                                        <TextBlock Text="Run" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -602,22 +661,39 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
+                                                    ToolTip="Execute all enabled WatchItems">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="▶" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Execute All" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerWatchItemCommand}">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerWatchItemCommand}"
+                                                    ToolTip="Trigger selected WatchItem">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="▷" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE769;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Trigger Item" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerEventCommand}">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerEventCommand}"
+                                                    ToolTip="Trigger selected Event">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="⚡" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Trigger Event" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteGroupCommand}"
+                                                    ToolTip="Execute selected ActionGroup">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8CB;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Exec Group" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteSingleActionCommand}"
+                                                    ToolTip="Execute selected Action">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Exec Action" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -629,17 +705,19 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding ResetStatusCommand}">
+                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding ResetStatusCommand}"
+                                                    ToolTip="Reset all execution status indicators">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="↺" FontSize="18" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE72C;" Foreground="{DynamicResource AccYellow}" />
                                                     <TextBlock Text="Reset Status" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Border Background="{DynamicResource DangerBtnBg}" CornerRadius="4" Padding="0" Margin="2"
                                                     Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}">
-                                                <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CancelExecutionCommand}">
+                                                <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CancelExecutionCommand}"
+                                                        ToolTip="Cancel the running execution">
                                                     <StackPanel HorizontalAlignment="Center">
-                                                        <TextBlock Text="⏹" FontSize="18" HorizontalAlignment="Center" />
+                                                        <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE71A;" Foreground="{DynamicResource AccRed}" />
                                                         <TextBlock Text="Cancel" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                 </Button>
@@ -653,21 +731,24 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding CopyLogCommand}">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding CopyLogCommand}"
+                                                    ToolTip="Copy all log entries to clipboard">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="📋" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8C8;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Copy Log" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CopyFailedLogCommand}">
+                                            <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CopyFailedLogCommand}"
+                                                    ToolTip="Copy only failed log entries">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="⚠" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE7BA;" Foreground="{DynamicResource AccRed}" />
                                                     <TextBlock Text="Copy Failed" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding ClearLogCommand}">
+                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding ClearLogCommand}"
+                                                    ToolTip="Clear all log entries">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="🧹" FontSize="16" HorizontalAlignment="Center" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE894;" Foreground="{DynamicResource AccYellow}" />
                                                     <TextBlock Text="Clear Log" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
@@ -694,6 +775,22 @@
                                                       Style="{StaticResource Cmb}" Width="140" Margin="0" />
                                         </StackPanel>
                                         <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding ToggleInlineXmlEditorCommand}"
+                                                    ToolTip="Toggle inline XML editor panel for the WatchList or selected WatchItem">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE70F;" Foreground="{DynamicResource Accent}" />
+                                                    <TextBlock Text="Edit XML" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="Editor" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -770,27 +867,46 @@
                     </TabControl.Resources>
 
                     <!-- WatchList Tab -->
-                    <TabItem Header="📋 WatchList">
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                <TextBlock Text="WatchList" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
                         <DockPanel>
-                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,5,6,5">
-                                <Button Content="Up" Style="{StaticResource MoveBtn}" Command="{Binding MoveUpCommand}" />
-                                <Button Content="Down" Style="{StaticResource MoveBtn}" Command="{Binding MoveDownCommand}" />
+                            <StackPanel DockPanel.Dock="Top" Margin="6,5,6,2">
+                                <!-- Search / filter box -->
+                                <Grid>
+                                    <TextBox Text="{Binding TreeSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Fld}" FontSize="11" Padding="22,4,24,4" Margin="0" />
+                                    <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="12" IsHitTestVisible="False"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource TextS}" />
+                                    <Button Content="✕" FontSize="9" Padding="4,2" Margin="0,2,2,5"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Foreground="{DynamicResource TextS}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                            Command="{Binding ClearTreeSearchCommand}" ToolTip="Clear search" />
+                                </Grid>
                             </StackPanel>
                             <TreeView x:Name="WatchListTreeView" ItemsSource="{Binding TreeRoots}"
                                       Background="Transparent" Foreground="{DynamicResource TextP}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
                                       ItemContainerStyle="{StaticResource TVI}"
-                                      ItemTemplate="{StaticResource WatchTreeTemplate}" />
+                                      ItemTemplate="{StaticResource WatchTreeTemplate}"
+                                      AllowDrop="True" />
                         </DockPanel>
                     </TabItem>
 
                     <!-- Templates Tab -->
-                    <TabItem Header="🧩 Templates">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,5,6,5">
-                                <Button Content="Up" Style="{StaticResource MoveBtn}" Command="{Binding MoveTemplateUpCommand}" />
-                                <Button Content="Down" Style="{StaticResource MoveBtn}" Command="{Binding MoveTemplateDownCommand}" />
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                <TextBlock Text="Templates" VerticalAlignment="Center" />
                             </StackPanel>
+                        </TabItem.Header>
+                        <DockPanel>
                             <TreeView x:Name="TemplateTreeView" ItemsSource="{Binding TemplateRoots}"
                                       Background="Transparent" Foreground="{DynamicResource TextP}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
@@ -880,7 +996,7 @@
                                                 Command="{Binding DataContext.EditTemplateXmlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 ToolTip="Open Template XML Editor">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#x1F4DD;" FontSize="12" Margin="0,0,4,0" />
+                                                <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,4,0" />
                                                 <TextBlock Text="Edit Template XML" />
                                             </StackPanel>
                                         </Button>
@@ -894,44 +1010,83 @@
                                 <Border Background="{DynamicResource WatchRootBg}" CornerRadius="4" Padding="8" Margin="0,0,0,8"
                                         BorderBrush="{DynamicResource AccGreen}" BorderThickness="1">
                                     <DockPanel>
-                                        <Button DockPanel.Dock="Right" Content="Trigger All Events" Style="{StaticResource TriggerBtn}"
-                                                Command="{Binding DataContext.TriggerWatchItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                        <TextBlock Text="Manually execute all events for this WatchItem" FontSize="11"
+                                        <Button DockPanel.Dock="Right" Content="▶ Trigger All Events" Style="{StaticResource TriggerOutlineBtn}"
+                                                Command="{Binding DataContext.TriggerWatchItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTip="Manually execute all events for this WatchItem" />
+                                        <TextBlock Text="Execute all events for this WatchItem" FontSize="11"
                                                    Foreground="{DynamicResource AccGreen}" VerticalAlignment="Center" />
                                     </DockPanel>
                                 </Border>
-                                <Label Content="TAG" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontSize="14" FontWeight="Bold" />
-                                <Label Content="WATCH PATH" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding WatchPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
-                                <Label Content="FILTER" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
-                                <CheckBox Content="Enabled" IsChecked="{Binding IsEnabled}" Foreground="{DynamicResource TextP}" Margin="0,6" />
-                                <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8" Margin="0,10,0,0"
-                                        BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
-                                    <DockPanel>
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource SmBtn}"
-                                                Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
-                                                Command="{Binding DataContext.ToggleXmlEditorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                ToolTip="Open WatchItem XML Editor with validation, auto-fix, and structure preview">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#x1F4DD;" FontSize="12" Margin="0,0,4,0" />
-                                                <TextBlock Text="Edit WatchItem XML" />
-                                            </StackPanel>
-                                        </Button>
-                                        <TextBlock Text="WatchItem XML Editor" FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource AccPeach}" VerticalAlignment="Center" />
-                                    </DockPanel>
-                                </Border>
+                                <!-- General section -->
+                                <Expander Style="{StaticResource SectionExpander}" IsExpanded="True">
+                                    <Expander.Header>
+                                        <TextBlock Text="GENERAL" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
+                                    </Expander.Header>
+                                    <StackPanel Margin="0,4,0,0">
+                                        <Label Content="TAG" Style="{StaticResource Lbl}" />
+                                        <Grid>
+                                            <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontSize="14" FontWeight="Bold" />
+                                            <TextBlock Text="e.g. MyWatchItem" IsHitTestVisible="False" FontSize="12.5" Padding="8,6"
+                                                       Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
+                                                       Visibility="{Binding Tag, Converter={StaticResource EmptyVis}}" />
+                                        </Grid>
+                                        <CheckBox Content="Enabled" IsChecked="{Binding IsEnabled}" Foreground="{DynamicResource TextP}" Margin="0,4" />
+                                    </StackPanel>
+                                </Expander>
+                                <!-- Source section -->
+                                <Expander Style="{StaticResource SectionExpander}" IsExpanded="True">
+                                    <Expander.Header>
+                                        <TextBlock Text="SOURCE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
+                                    </Expander.Header>
+                                    <StackPanel Margin="0,4,0,0">
+                                        <Label Content="WATCH PATH" Style="{StaticResource Lbl}" />
+                                        <Grid>
+                                            <TextBox Text="{Binding WatchPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
+                                            <TextBlock Text="e.g. C:\WatchFolder" IsHitTestVisible="False" FontSize="12.5" FontFamily="Consolas" Padding="8,6"
+                                                       Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
+                                                       Visibility="{Binding WatchPath, Converter={StaticResource EmptyVis}}" />
+                                        </Grid>
+                                        <Label Content="FILTER" Style="{StaticResource Lbl}" />
+                                        <Grid>
+                                            <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
+                                            <TextBlock Text="e.g. *.txt" IsHitTestVisible="False" FontSize="12.5" FontFamily="Consolas" Padding="8,6"
+                                                       Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
+                                                       Visibility="{Binding Filter, Converter={StaticResource EmptyVis}}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Expander>
+                                <!-- Advanced section -->
+                                <Expander Style="{StaticResource SectionExpander}" IsExpanded="False">
+                                    <Expander.Header>
+                                        <TextBlock Text="ADVANCED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
+                                    </Expander.Header>
+                                    <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8" Margin="0,4,0,0"
+                                            BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource SmBtn}"
+                                                    Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
+                                                    Command="{Binding DataContext.ToggleXmlEditorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    ToolTip="Open WatchItem XML Editor with validation, auto-fix, and structure preview">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,4,0" />
+                                                    <TextBlock Text="Edit WatchItem XML" />
+                                                </StackPanel>
+                                            </Button>
+                                            <TextBlock Text="WatchItem XML Editor" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AccPeach}" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </Border>
+                                </Expander>
                             </StackPanel>
                             <!-- ===== Event ===== -->
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Event, FallbackValue=Collapsed}">
                                 <Border Background="{DynamicResource WatchRootBg}" CornerRadius="4" Padding="8" Margin="0,0,0,8"
                                         BorderBrush="{DynamicResource AccGreen}" BorderThickness="1">
                                     <DockPanel>
-                                        <Button DockPanel.Dock="Right" Content="Trigger Event" Style="{StaticResource TriggerBtn}"
-                                                Command="{Binding DataContext.TriggerEventCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                        <TextBlock Text="Manually execute this event's action pipeline" FontSize="11"
+                                        <Button DockPanel.Dock="Right" Content="Trigger Event" Style="{StaticResource TriggerOutlineBtn}"
+                                                Command="{Binding DataContext.TriggerEventCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTip="Manually execute this event's action pipeline" />
+                                        <TextBlock Text="Execute this event's action pipeline" FontSize="11"
                                                    Foreground="{DynamicResource AccGreen}" VerticalAlignment="Center" />
                                     </DockPanel>
                                 </Border>
@@ -1016,132 +1171,73 @@
                                     <TextBox Text="{Binding Body, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
                                              TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
                                     <Label Content="ATTACHMENT" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
-                                    <Label Content="EMBED" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding Embed, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
-                                    <Label Content="LARGE FILES SHARE" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding LargeFilesShare, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
+                                    <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
+                                             TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
                                 </StackPanel>
-                            </StackPanel>
-                            <!-- ===== Initialize ===== -->
-                            <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Initialize, FallbackValue=Collapsed}">
-                                <Label Content="TAG" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
-                                <Label Content="PARAMETER FILE" Style="{StaticResource Lbl}" />
-                                <DockPanel Margin="0,2,0,5">
-                                    <Button DockPanel.Dock="Right" Content="Browse" Style="{StaticResource SmBtn}" Margin="5,0,0,0"
-                                            Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
-                                            Command="{Binding DataContext.BrowseParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                    <Button DockPanel.Dock="Right" Content="Reload" Style="{StaticResource SmBtn}" Margin="5,0,0,0"
-                                            Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                            Command="{Binding DataContext.LoadParameterFileFromNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            ToolTip="Reload entries from the parameter file" />
-                                    <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
-                                             FontFamily="Consolas" Margin="0" />
-                                </DockPanel>
-                                <TextBlock Text="{Binding DataContext.ParameterFileStatus, RelativeSource={RelativeSource AncestorType=Window}}"
-                                           FontSize="10" FontStyle="Italic" Margin="0,0,0,6" Foreground="{DynamicResource TextS}" />
-                                <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8" Margin="0,5,0,0"
-                                        BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
-                                    <StackPanel>
-                                        <DockPanel Margin="0,0,0,6">
-                                            <TextBlock Text="Parameters" FontSize="11" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
-                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                                                <Button Content="+ Add" Style="{StaticResource SmBtn}"
-                                                        Command="{Binding DataContext.AddParameterEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        ToolTip="Add a new parameter entry" />
-                                                <Button Content="Save" Style="{StaticResource SmBtn}" Margin="5,0,0,0"
-                                                        Background="{DynamicResource AccGreen}" Foreground="{DynamicResource TreeBadgeFg}"
-                                                        Command="{Binding DataContext.SaveParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        ToolTip="Save parameters back to file" />
-                                            </StackPanel>
-                                        </DockPanel>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="160" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="30" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="KEY" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
-                                            <TextBlock Grid.Column="2" Text="VALUE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
-                                        </Grid>
-                                        <ItemsControl ItemsSource="{Binding DataContext.ParameterFileEntries, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                      MaxHeight="300">
-                                            <ItemsControl.Template>
-                                                <ControlTemplate TargetType="ItemsControl">
-                                                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300">
-                                                        <ItemsPresenter />
-                                                    </ScrollViewer>
-                                                </ControlTemplate>
-                                            </ItemsControl.Template>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate DataType="{x:Type vm:ParameterEntryViewModel}">
-                                                    <Grid Margin="0,1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="160" />
-                                                            <ColumnDefinition Width="8" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="30" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBox Grid.Column="0" Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
-                                                                 Style="{StaticResource Fld}" FontFamily="Consolas" FontSize="11"
-                                                                 Margin="0,0,0,0" Padding="4,3" />
-                                                        <TextBox Grid.Column="2" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                                                 Style="{StaticResource Fld}" FontFamily="Consolas" FontSize="11"
-                                                                 Margin="0,0,0,0" Padding="4,3" />
-                                                        <Button Grid.Column="3" Content="✖" FontSize="10" Padding="2" Margin="2,0,0,0"
-                                                                Background="{DynamicResource DangerBtnBg}" Foreground="{DynamicResource AccRed}"
-                                                                BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"
-                                                                Command="{Binding DataContext.RemoveParameterEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}" ToolTip="Remove this parameter" />
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                            <!-- ===== Ref ===== -->
-                            <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Ref, FallbackValue=Collapsed}">
-                                <Label Content="TEMPLATE ID" Style="{StaticResource Lbl}" />
-                                <ComboBox ItemsSource="{Binding DataContext.AvailableTemplateIds, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          SelectedItem="{Binding TemplateID}" IsEditable="True"
-                                          Text="{Binding TemplateID, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Cmb}" />
-                            </StackPanel>
-                            <!-- ===== Template ===== -->
-                            <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Template, FallbackValue=Collapsed}">
-                                <Label Content="TEMPLATE ID" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding TemplateName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontSize="14" FontWeight="Bold" />
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
             </Border>
 
-            <!-- Vertical splitter: Center | Right -->
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <!-- INLINE XML EDITOR PANEL (Col 2, Row 0): overlays center panel -->
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
+                    BorderBrush="{DynamicResource Accent}" BorderThickness="2"
+                    Visibility="{Binding IsInlineXmlEditorVisible, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="12,8" CornerRadius="6,6,0,0">
+                        <DockPanel>
+                            <TextBlock FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Accent}">
+                                <Run Text="XML Editor" />
+                                <Run Text=" — " Foreground="{DynamicResource TextS}" />
+                                <Run Text="{Binding InlineXmlEditorScope, Mode=OneWay}" Foreground="{DynamicResource AccMauve}" />
+                            </TextBlock>
+                            <Button DockPanel.Dock="Right" Content="✕ Close" Style="{StaticResource SmBtn}" HorizontalAlignment="Right"
+                                    Background="{DynamicResource DangerBtnBg}" Foreground="{DynamicResource AccRed}"
+                                    Command="{Binding ToggleInlineXmlEditorCommand}" ToolTip="Close inline XML editor" />
+                        </DockPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource BgCard}" CornerRadius="0,0,6,6"
+                            BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
+                        <DockPanel>
+                            <Button Content="Apply XML" Style="{StaticResource Btn}" HorizontalAlignment="Left"
+                                    Command="{Binding ApplyInlineXmlCommand}" />
+                            <TextBlock Text="{Binding InlineXmlEditorStatus}" FontSize="11" FontFamily="Consolas"
+                                       Foreground="{DynamicResource AccYellow}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </Border>
+                    <!-- AvalonEdit host — instantiated in code-behind -->
+                    <Border x:Name="InlineXmlEditorHost" Background="{DynamicResource FieldBg}" Margin="4" />
+                </DockPanel>
+            </Border>
+
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <!-- VERTICAL SPLITTER: Center | Right                      -->
+            <!-- ═══════════════════════════════════════════════════════ -->
             <GridSplitter Grid.Column="3" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext" />
 
             <!-- ═══════════════════════════════════════════════════════ -->
-            <!-- RIGHT PANEL (Col 4, Row 0): Agent Registration        -->
+            <!-- RIGHT PANEL (Col 4, Row 0): Agents                    -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Border Grid.Column="4" Grid.Row="0" Background="{DynamicResource BgPanel}" MinWidth="280">
+            <Border Grid.Column="4" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
                 <DockPanel>
-                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="12,8"
-                            BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-                        <TextBlock Text="Agent Registration" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
+                        <TextBlock Text="Agents" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
                     </Border>
-                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{DynamicResource BgPanel}">
+                    <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
                         <StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="2*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <Label Content="Agent Name" Style="{StaticResource Lbl}" />
+                                    <Label Content="Name" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding NewAgentName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
@@ -1152,18 +1248,18 @@
                             <WrapPanel Orientation="Horizontal" Margin="0,5,0,5">
                                 <Button Content="Register + Test" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
-                                        Command="{Binding RegisterAgentCommand}" />
+                                        Command="{Binding RegisterAgentCommand}" ToolTip="Register new agent and test connection" />
                                 <Button Content="Test All" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                        Command="{Binding TestAllAgentsCommand}" />
+                                        Command="{Binding TestAllAgentsCommand}" ToolTip="Test connectivity to all registered agents" />
                                 <Button Content="Test" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                                        Command="{Binding TestConnectionCommand}" />
+                                        Command="{Binding TestConnectionCommand}" ToolTip="Test connectivity to selected agent" />
                                 <Button Content="Diagnose" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
-                                        Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic (DNS → TCP → HTTP → gRPC)" />
+                                        Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic" />
                                 <Button Content="Remove" Style="{StaticResource DangerBtn}"
-                                        Command="{Binding UnregisterAgentCommand}" />
+                                        Command="{Binding UnregisterAgentCommand}" ToolTip="Remove selected agent" />
                             </WrapPanel>
                         </StackPanel>
                     </Border>
@@ -1183,61 +1279,79 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8,6">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding StatusIcon}" FontSize="13" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-                                                    <Setter Property="FontWeight" Value="Normal" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Online">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                                            <Setter Property="FontWeight" Value="Bold" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Testing">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Error">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AccPeach}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextP}">
-                                                <Run Text="{Binding Name, Mode=OneWay}" />
-                                                <Run Text="  " />
-                                                <Run Text="{Binding Address, Mode=OneWay}" FontFamily="Consolas" FontSize="10" Foreground="{DynamicResource TextS}" />
-                                            </TextBlock>
-                                            <TextBlock Text="{Binding DetailLine}" FontSize="9.5" FontFamily="Consolas" Margin="0,1,0,0">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding StatusIcon}" FontSize="13" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-                                                        <Setter Property="FontWeight" Value="Normal" />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding ConnectionStatus}" Value="Online">
                                                                 <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                                <Setter Property="FontWeight" Value="Bold" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ConnectionStatus}" Value="Testing">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
                                                                 <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ConnectionStatus}" Value="Error">
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccPeach}" />
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="2" Text="{Binding LastChecked}" FontSize="9" FontFamily="Consolas"
-                                                   Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="6,0,0,0" />
-                                    </Grid>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextP}">
+                                                    <Run Text="{Binding Name, Mode=OneWay}" />
+                                                    <Run Text="  " />
+                                                    <Run Text="{Binding Address, Mode=OneWay}" FontFamily="Consolas" FontSize="10" Foreground="{DynamicResource TextS}" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding DetailLine}" FontSize="9.5" FontFamily="Consolas" Margin="0,1,0,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ConnectionStatus}" Value="Online">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2" Text="{Binding LastChecked}" FontSize="9" FontFamily="Consolas"
+                                                       Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                        </Grid>
+                                        <Border Background="{DynamicResource AlertErrorBg}" CornerRadius="3" Padding="6,4" Margin="0,4,0,0"
+                                                BorderBrush="{DynamicResource AlertErrorBdr}" BorderThickness="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Error">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding ErrorDetail}" FontSize="9" FontFamily="Consolas"
+                                                       Foreground="{DynamicResource AccRed}" TextWrapping="Wrap" />
+                                        </Border>
+                                    </StackPanel>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -1264,7 +1378,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- Row 0: Header with collapse toggle -->
+                    <!-- Row 0: Header -->
                     <Border Grid.Row="0" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1273,7 +1387,7 @@
                                 <TextBlock FontSize="11" Foreground="{DynamicResource TextS}" VerticalAlignment="Center">
                                     <Run Text="(" /><Run Text="{Binding FilteredLogEntries.Count, Mode=OneWay}" FontWeight="Bold" /><Run Text=" entries)" />
                                 </TextBlock>
-                                <TextBlock Text=" ⏸ PAUSED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
+                                <TextBlock Text=" PAUSED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
                                            VerticalAlignment="Center" Margin="8,0,0,0"
                                            Visibility="{Binding IsLogPaused, Converter={StaticResource BoolVis}}" />
                             </StackPanel>
@@ -1284,10 +1398,10 @@
                                 <TextBlock FontSize="10">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="▼ Collapse" />
+                                            <Setter Property="Text" Value="Collapse" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsLogCollapsed}" Value="True">
-                                                    <Setter Property="Text" Value="▲ Expand" />
+                                                    <Setter Property="Text" Value="Expand" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -1308,6 +1422,13 @@
                                       Text="{Binding LogFilterTag, UpdateSourceTrigger=PropertyChanged}"
                                       Style="{StaticResource Cmb}" Margin="0,0,8,0"
                                       ToolTip="Filter by WatchItem Tag" />
+                            <TextBlock Text="Agent:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
+                                       VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <ComboBox Width="120" ItemsSource="{Binding AvailableAgentNames}"
+                                      SelectedItem="{Binding LogFilterAgent}" IsEditable="True"
+                                      Text="{Binding LogFilterAgent, UpdateSourceTrigger=PropertyChanged}"
+                                      Style="{StaticResource Cmb}" Margin="0,0,8,0"
+                                      ToolTip="Filter by Agent name" />
                             <TextBlock Text="Level:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
                                        VerticalAlignment="Center" Margin="0,0,5,0" />
                             <ComboBox Width="100" ItemsSource="{Binding LogLevelOptions}"
@@ -1316,10 +1437,10 @@
                                       ToolTip="Filter by log severity level" />
                             <TextBlock Text="Search:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
                                        VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBox Width="160" Text="{Binding LogSearchText, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox Width="140" Text="{Binding LogSearchText, UpdateSourceTrigger=PropertyChanged}"
                                      Style="{StaticResource Fld}" Margin="0,0,5,0" Padding="5,3"
                                      ToolTip="Search log messages" />
-                            <Button Content="✖ Clear" Style="{StaticResource SmBtn}" Padding="6,3"
+                            <Button Content="Clear" Style="{StaticResource SmBtn}" Padding="6,3"
                                     Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
                                     Command="{Binding ClearLogFilterCommand}" ToolTip="Clear all filters" />
                             <Border Width="1" Background="{DynamicResource Bdr}" Margin="8,4" />
@@ -1389,7 +1510,7 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!-- Row 3: Command Bar (right-aligned) -->
+                    <!-- Row 3: Command Bar -->
                     <Border Grid.Row="3" Background="{DynamicResource BgCard}" Padding="8,5" CornerRadius="0,0,6,6"
                             BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0"
                             Visibility="{Binding IsLogCollapsed, Converter={StaticResource InvBoolVis}}">
@@ -1397,32 +1518,18 @@
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Style="{StaticResource SmBtn}" Command="{Binding ToggleLogPauseCommand}"
                                         ToolTip="Pause/Resume live log updates">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock VerticalAlignment="Center" Margin="0,0,4,0">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="⏸" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsLogPaused}" Value="True">
-                                                            <Setter Property="Text" Value="▶" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <TextBlock VerticalAlignment="Center">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="Pause" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsLogPaused}" Value="True">
-                                                            <Setter Property="Text" Value="Resume" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </StackPanel>
+                                    <TextBlock VerticalAlignment="Center" Margin="0,0,4,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="Pause" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsLogPaused}" Value="True">
+                                                        <Setter Property="Text" Value="Resume" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </Button>
                                 <Button Content="Clear" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource YellowBtnBg}" Foreground="{DynamicResource AccYellow}"
@@ -1436,6 +1543,32 @@
                             </StackPanel>
                             <TextBlock/>
                         </DockPanel>
+                    </Border>
+
+                    <!-- Execution overlay spinner -->
+                    <Border Grid.RowSpan="4" Background="{DynamicResource OverlayBg}" CornerRadius="6"
+                            Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}"
+                            IsHitTestVisible="False">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="28" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center"
+                                       FontWeight="Bold">
+                                <TextBlock.RenderTransform>
+                                    <RotateTransform Angle="0" CenterX="14" CenterY="14" />
+                                </TextBlock.RenderTransform>
+                                <TextBlock.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard RepeatBehavior="Forever">
+                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                 From="0" To="360" Duration="0:0:1.5" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </TextBlock.Triggers>
+                            </TextBlock>
+                            <TextBlock Text="Executing..." FontSize="11" Foreground="{DynamicResource Accent}"
+                                       FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                        </StackPanel>
                     </Border>
                 </Grid>
             </Border>

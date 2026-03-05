@@ -1,8 +1,16 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using ICSharpCode.AvalonEdit;
+using ICSharpCode.AvalonEdit.Folding;
+using ICSharpCode.AvalonEdit.Highlighting;
 using Microsoft.Extensions.DependencyInjection;
+using TestControllerGrpc.Models;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.Views;
@@ -12,61 +20,563 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm;
     private bool _initialLayoutComplete;
 
+    // ?? Inline AvalonEdit editor ????????????????????????????????????
+    private TextEditor? _inlineEditor;
+    private FoldingManager? _inlineFoldingManager;
+    private XmlFoldingStrategy? _inlineFoldingStrategy;
+
+    // ?? Drag-and-drop state ?????????????????????????????????????????
+    private Point _dragStartPoint;
+    private TreeNodeViewModel? _draggedNode;
+    private bool _isDragging;
+
     public MainWindow()
     {
         InitializeComponent();
         _vm = App.Services.GetRequiredService<MainViewModel>();
         DataContext = _vm;
 
-        Loaded += (_, _) => Dispatcher.InvokeAsync(() =>
+        Loaded += OnWindowLoaded;
+
+        WatchListTreeView.SelectedItemChanged += OnWatchListSelectionChanged;
+        TemplateTreeView.SelectedItemChanged += OnTemplateSelectionChanged;
+
+        SubscribeToLogAutoScroll();
+
+        _vm.ScrollToLogEntry += OnScrollToLogEntry;
+
+        // ?? Context menus (built in code-behind) ????????????????????
+        WatchListTreeView.ContextMenuOpening += OnWatchListContextMenuOpening;
+        TemplateTreeView.ContextMenuOpening += OnTemplateContextMenuOpening;
+
+        // ?? Drag-and-drop handlers ??????????????????????????????????
+        WatchListTreeView.PreviewMouseLeftButtonDown += OnTreePreviewMouseDown;
+        WatchListTreeView.PreviewMouseMove += OnTreePreviewMouseMove;
+        WatchListTreeView.DragOver += OnTreeDragOver;
+        WatchListTreeView.Drop += OnTreeDrop;
+
+        // ?? Inline AvalonEdit setup ?????????????????????????????????
+        SetupInlineXmlEditor();
+        _vm.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // WINDOW LIFECYCLE
+    // ???????????????????????????????????????????????????????????????
+
+    private void OnWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.InvokeAsync(() =>
         {
             _vm.SyncRegisteredAgents();
-
-            // After initial layout, the TemplateTreeView may have auto-selected its root
-            // which overwrites ActiveEditNode. Reset to WatchList root.
             _vm.EnsureWatchListSelected();
             _initialLayoutComplete = true;
         }, System.Windows.Threading.DispatcherPriority.Background);
+    }
 
-        WatchListTreeView.SelectedItemChanged += (s, e) =>
+    private void OnWatchListSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is TreeNodeViewModel node)
+            _vm.SelectedNode = node;
+    }
+
+    private void OnTemplateSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is TreeNodeViewModel node)
         {
-            if (e.NewValue is TreeNodeViewModel node) _vm.SelectedNode = node;
+            _vm.SelectedTemplateNode = node;
+            if (_initialLayoutComplete)
+                _vm.ActiveEditNode = node;
+        }
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // FEATURE 1: INLINE AVLONEDIT XML EDITOR
+    // ???????????????????????????????????????????????????????????????
+
+    private void SetupInlineXmlEditor()
+    {
+        _inlineEditor = new TextEditor
+        {
+            SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("XML"),
+            ShowLineNumbers = true,
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 12,
+            WordWrap = false,
+            Background = Brushes.Transparent,
+            Foreground = (Brush)FindResource("TextP"),
+            LineNumbersForeground = (Brush)FindResource("TextS"),
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        _inlineEditor.Options.EnableHyperlinks = false;
+        _inlineEditor.Options.ConvertTabsToSpaces = true;
+        _inlineEditor.Options.IndentationSize = 2;
+        _inlineEditor.Options.HighlightCurrentLine = true;
+
+        _inlineEditor.TextChanged += (_, _) =>
+        {
+            if (_vm.InlineXmlEditorText != _inlineEditor.Text)
+                _vm.InlineXmlEditorText = _inlineEditor.Text;
+            UpdateInlineFolding();
         };
 
-        // Guard: don't let TemplateTree overwrite ActiveEditNode during initial render
-        TemplateTreeView.SelectedItemChanged += (s, e) =>
+        InlineXmlEditorHost.Child = _inlineEditor;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsInlineXmlEditorVisible))
         {
-            if (e.NewValue is TreeNodeViewModel node)
+            if (_vm.IsInlineXmlEditorVisible && _inlineEditor is not null)
             {
-                _vm.SelectedTemplateNode = node;
-                // Only set as active edit node if user has deliberately interacted
-                if (_initialLayoutComplete)
-                    _vm.ActiveEditNode = node;
+                _inlineEditor.Text = _vm.InlineXmlEditorText;
+                SetupInlineFolding();
+                Dispatcher.InvokeAsync(() => _inlineEditor.Focus(),
+                    System.Windows.Threading.DispatcherPriority.Background);
             }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.InlineXmlEditorText))
+        {
+            if (_inlineEditor is not null && _inlineEditor.Text != _vm.InlineXmlEditorText)
+                _inlineEditor.Text = _vm.InlineXmlEditorText;
+        }
+    }
+
+    private void SetupInlineFolding()
+    {
+        if (_inlineEditor is null) return;
+        if (_inlineFoldingManager is not null)
+        {
+            FoldingManager.Uninstall(_inlineFoldingManager);
+            _inlineFoldingManager = null;
+        }
+        _inlineFoldingManager = FoldingManager.Install(_inlineEditor.TextArea);
+        _inlineFoldingStrategy = new XmlFoldingStrategy();
+        UpdateInlineFolding();
+    }
+
+    private void UpdateInlineFolding()
+    {
+        if (_inlineFoldingManager is not null && _inlineFoldingStrategy is not null && _inlineEditor is not null)
+        {
+            try { _inlineFoldingStrategy.UpdateFoldings(_inlineFoldingManager, _inlineEditor.Document); }
+            catch { /* ignore parse errors during editing */ }
+        }
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // FEATURE 2A: CONTEXT MENUS (built in code-behind)
+    // ???????????????????????????????????????????????????????????????
+
+    private void OnWatchListContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var node = WatchListTreeView.SelectedItem as TreeNodeViewModel;
+        WatchListTreeView.ContextMenu = BuildWatchListContextMenu(node);
+    }
+
+    private ContextMenu BuildWatchListContextMenu(TreeNodeViewModel? node)
+    {
+        var menu = new ContextMenu
+        {
+            Background = (Brush)FindResource("BgCard"),
+            Foreground = (Brush)FindResource("TextP"),
+            BorderBrush = (Brush)FindResource("Bdr"),
         };
 
-        if (_vm.FilteredLogEntries is INotifyCollectionChanged ncc)
+        if (node is null) return menu;
+
+        // ?? Execution commands ??????????????????????????????????????
+        if (node.NodeKind is "WatchItem")
         {
-            ncc.CollectionChanged += (_, e) =>
-            {
-                if (_vm.IsAutoScrollEnabled && e.Action == NotifyCollectionChangedAction.Add && LogListBox.Items.Count > 0)
-                    Dispatcher.InvokeAsync(() =>
-                        LogListBox.ScrollIntoView(LogListBox.Items[LogListBox.Items.Count - 1]));
-            };
+            menu.Items.Add(CreateMenuItem("? Trigger All Events", _vm.TriggerWatchItemCommand));
+            menu.Items.Add(new Separator());
+        }
+        if (node.NodeKind is "Event")
+        {
+            menu.Items.Add(CreateMenuItem("? Trigger Event", _vm.TriggerEventCommand));
+            menu.Items.Add(new Separator());
+        }
+        if (node.NodeKind is "ActionGroup")
+        {
+            menu.Items.Add(CreateMenuItem("? Execute Group", _vm.ExecuteGroupCommand));
+            menu.Items.Add(new Separator());
+        }
+        if (node.NodeKind is "Action")
+        {
+            menu.Items.Add(CreateMenuItem("? Execute Action", _vm.ExecuteSingleActionCommand));
+            menu.Items.Add(new Separator());
         }
 
-        // Wire scroll-to-error: scroll log to specific entry on failure
-        _vm.ScrollToLogEntry += entry =>
+        // ?? Add commands (context-sensitive) ????????????????????????
+        if (node.NodeKind is "WatchList")
         {
-            Dispatcher.InvokeAsync(() =>
+            menu.Items.Add(CreateMenuItem("Add WatchItem", _vm.AddWatchItemCommand));
+        }
+        else if (node.NodeKind is "WatchItem")
+        {
+            menu.Items.Add(CreateMenuItem("Add Event", _vm.AddChildNodeCommand));
+            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddActionGroupCommand));
+        }
+        else if (node.NodeKind is "Event" or "ActionGroup")
+        {
+            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddActionGroupCommand));
+            menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToGroupCommand));
+            menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToGroupCommand));
+            menu.Items.Add(CreateMenuItem("Add Initialize", _vm.AddInitializeToGroupCommand));
+        }
+
+        // ?? Change ExecutionType submenu (Event / ActionGroup) ??????
+        if (node.NodeKind is "Event" or "ActionGroup")
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(BuildExecutionTypeSubmenu(node));
+        }
+
+        // ?? Delete ??????????????????????????????????????????????????
+        if (node.NodeKind is not "WatchList")
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Delete", _vm.ConfirmDeleteSelectedNodeCommand));
+        }
+
+        // ?? Move Up / Down ??????????????????????????????????????????
+        if (CanShowMoveItems(node))
+        {
+            menu.Items.Add(new Separator());
+
+            if (MainViewModel.CanMoveNode(node, -1))
             {
-                if (LogListBox.Items.Contains(entry))
-                {
-                    LogListBox.ScrollIntoView(entry);
-                    LogListBox.SelectedItem = entry;
-                }
-            });
+                var moveUp = new MenuItem { Header = "Move Up" };
+                var capturedNode = node;
+                moveUp.Click += (_, _) => _vm.MoveNodeUp(capturedNode);
+                menu.Items.Add(moveUp);
+            }
+
+            if (MainViewModel.CanMoveNode(node, +1))
+            {
+                var moveDown = new MenuItem { Header = "Move Down" };
+                var capturedNode = node;
+                moveDown.Click += (_, _) => _vm.MoveNodeDown(capturedNode);
+                menu.Items.Add(moveDown);
+            }
+        }
+
+        return menu;
+    }
+
+    private void OnTemplateContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var node = TemplateTreeView.SelectedItem as TreeNodeViewModel;
+        TemplateTreeView.ContextMenu = BuildTemplateContextMenu(node);
+    }
+
+    private ContextMenu BuildTemplateContextMenu(TreeNodeViewModel? node)
+    {
+        var menu = new ContextMenu
+        {
+            Background = (Brush)FindResource("BgCard"),
+            Foreground = (Brush)FindResource("TextP"),
+            BorderBrush = (Brush)FindResource("Bdr"),
         };
+
+        if (node is null) return menu;
+
+        if (node.NodeKind is "TemplateList")
+        {
+            menu.Items.Add(CreateMenuItem("Add Template", _vm.AddTemplateCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Edit Template XML", _vm.EditTemplateXmlCommand));
+        }
+        else if (node.NodeKind is "Template")
+        {
+            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddGroupToTemplateCommand));
+            menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToTemplateCommand));
+            menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToTemplateCommand));
+            menu.Items.Add(CreateMenuItem("Add Initialize", _vm.AddInitializeToTemplateCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
+        }
+        else if (node.NodeKind is "ActionGroup")
+        {
+            menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToTemplateCommand));
+            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddGroupToTemplateCommand));
+            menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToTemplateCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(BuildExecutionTypeSubmenu(node));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
+        }
+        else if (node.NodeKind is not "TemplateList")
+        {
+            menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
+        }
+
+        // ?? Move Up / Down for templates ????????????????????????????
+        if (CanShowMoveItems(node))
+        {
+            menu.Items.Add(new Separator());
+
+            if (MainViewModel.CanMoveNode(node, -1))
+            {
+                var moveUp = new MenuItem { Header = "Move Up" };
+                var capturedNode = node;
+                moveUp.Click += (_, _) => _vm.MoveNodeUp(capturedNode);
+                menu.Items.Add(moveUp);
+            }
+
+            if (MainViewModel.CanMoveNode(node, +1))
+            {
+                var moveDown = new MenuItem { Header = "Move Down" };
+                var capturedNode = node;
+                moveDown.Click += (_, _) => _vm.MoveNodeDown(capturedNode);
+                menu.Items.Add(moveDown);
+            }
+        }
+
+        return menu;
+    }
+
+    private static bool CanShowMoveItems(TreeNodeViewModel node)
+    {
+        // Initialize is always first — no move
+        if (node.NodeKind is "WatchList" or "TemplateList" or "Initialize") return false;
+        return MainViewModel.CanMoveNode(node, -1) || MainViewModel.CanMoveNode(node, +1);
+    }
+
+    private static MenuItem CreateMenuItem(string header, ICommand command)
+    {
+        return new MenuItem { Header = header, Command = command };
+    }
+
+    /// <summary>Builds a "Change Execution Type" submenu with Sequential/Parallel options.</summary>
+    private MenuItem BuildExecutionTypeSubmenu(TreeNodeViewModel node)
+    {
+        var submenu = new MenuItem { Header = "Change Execution Type" };
+
+        var isSequential = string.Equals(node.ExecutionTypeText, "Sequential", StringComparison.OrdinalIgnoreCase);
+        var isParallel = string.Equals(node.ExecutionTypeText, "Parallel", StringComparison.OrdinalIgnoreCase);
+
+        var seqItem = new MenuItem
+        {
+            Header = "Sequential",
+            IsCheckable = true,
+            IsChecked = isSequential
+        };
+        var capturedNode1 = node;
+        seqItem.Click += (_, _) => _vm.ChangeExecutionType(capturedNode1, Models.ExecutionMode.Sequential);
+
+        var parItem = new MenuItem
+        {
+            Header = "Parallel",
+            IsCheckable = true,
+            IsChecked = isParallel
+        };
+        var capturedNode2 = node;
+        parItem.Click += (_, _) => _vm.ChangeExecutionType(capturedNode2, Models.ExecutionMode.Parallel);
+
+        submenu.Items.Add(seqItem);
+        submenu.Items.Add(parItem);
+
+        return submenu;
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // FEATURE 2B: DRAG-AND-DROP WITHIN EVENTS
+    // ???????????????????????????????????????????????????????????????
+
+    private void OnTreePreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStartPoint = e.GetPosition(WatchListTreeView);
+        _isDragging = false;
+    }
+
+    private void OnTreePreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var currentPos = e.GetPosition(WatchListTreeView);
+        var diff = currentPos - _dragStartPoint;
+
+        // Minimum drag distance threshold
+        if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        // Get the dragged node
+        var treeViewItem = FindTreeViewItemUnderMouse(e);
+        if (treeViewItem?.DataContext is not TreeNodeViewModel node) return;
+
+        // Only allow dragging Action, ActionGroup, Ref nodes
+        if (node.NodeKind is not ("Action" or "ActionGroup" or "Ref")) return;
+
+        _draggedNode = node;
+        _isDragging = true;
+
+        var data = new DataObject("TreeNodeViewModel", node);
+        DragDrop.DoDragDrop(WatchListTreeView, data, DragDropEffects.Move);
+
+        _isDragging = false;
+        _draggedNode = null;
+    }
+
+    private void OnTreeDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = DragDropEffects.None;
+
+        if (!e.Data.GetDataPresent("TreeNodeViewModel")) return;
+        if (e.Data.GetData("TreeNodeViewModel") is not TreeNodeViewModel draggedNode) return;
+
+        var treeViewItem = FindTreeViewItemAtPoint(e.GetPosition(WatchListTreeView));
+        if (treeViewItem?.DataContext is not TreeNodeViewModel targetNode) return;
+
+        // Validate: must be in the same Event subtree
+        if (!IsInSameEventSubtree(draggedNode, targetNode)) return;
+
+        // Validate: target must be a valid drop parent or sibling
+        if (IsValidDropTarget(draggedNode, targetNode))
+            e.Effects = DragDropEffects.Move;
+
+        e.Handled = true;
+    }
+
+    private void OnTreeDrop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent("TreeNodeViewModel")) return;
+        if (e.Data.GetData("TreeNodeViewModel") is not TreeNodeViewModel draggedNode) return;
+
+        var treeViewItem = FindTreeViewItemAtPoint(e.GetPosition(WatchListTreeView));
+        if (treeViewItem?.DataContext is not TreeNodeViewModel targetNode) return;
+
+        if (!IsInSameEventSubtree(draggedNode, targetNode)) return;
+        if (!IsValidDropTarget(draggedNode, targetNode)) return;
+
+        // Determine new parent and insert index
+        TreeNodeViewModel newParent;
+        int insertIndex;
+
+        if (targetNode.NodeKind is "Event" or "ActionGroup")
+        {
+            // Drop INTO a container — append at end
+            newParent = targetNode;
+            insertIndex = newParent.Children.Count;
+        }
+        else
+        {
+            // Drop NEXT TO a sibling — insert after the target
+            newParent = targetNode.Parent!;
+            insertIndex = newParent.Children.IndexOf(targetNode) + 1;
+        }
+
+        // Don't drop onto self or into own children
+        if (ReferenceEquals(draggedNode, targetNode)) return;
+        if (IsDescendantOf(targetNode, draggedNode)) return;
+
+        _vm.ReparentNode(draggedNode, newParent, insertIndex);
+
+        // Re-select the moved node
+        draggedNode.IsSelected = true;
+
+        e.Handled = true;
+    }
+
+    /// <summary>Check if both nodes share the same Event ancestor.</summary>
+    private static bool IsInSameEventSubtree(TreeNodeViewModel a, TreeNodeViewModel b)
+    {
+        var eventA = FindAncestorOfKind(a, "Event");
+        var eventB = FindAncestorOfKind(b, "Event");
+        return eventA is not null && ReferenceEquals(eventA, eventB);
+    }
+
+    private static bool IsValidDropTarget(TreeNodeViewModel dragged, TreeNodeViewModel target)
+    {
+        // Can drop into Event or ActionGroup containers
+        if (target.NodeKind is "Event" or "ActionGroup") return true;
+
+        // Can drop next to a sibling (same parent type as Event/ActionGroup)
+        if (target.Parent?.NodeKind is "Event" or "ActionGroup") return true;
+
+        return false;
+    }
+
+    private static bool IsDescendantOf(TreeNodeViewModel node, TreeNodeViewModel potentialAncestor)
+    {
+        var current = node.Parent;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, potentialAncestor)) return true;
+            current = current.Parent;
+        }
+        return false;
+    }
+
+    private static TreeNodeViewModel? FindAncestorOfKind(TreeNodeViewModel node, string kind)
+    {
+        var current = node;
+        while (current is not null)
+        {
+            if (current.NodeKind == kind) return current;
+            current = current.Parent;
+        }
+        return null;
+    }
+
+    private TreeViewItem? FindTreeViewItemUnderMouse(MouseEventArgs e)
+    {
+        var hitResult = VisualTreeHelper.HitTest(WatchListTreeView, e.GetPosition(WatchListTreeView));
+        return FindParent<TreeViewItem>(hitResult?.VisualHit);
+    }
+
+    private TreeViewItem? FindTreeViewItemAtPoint(Point point)
+    {
+        var hitResult = VisualTreeHelper.HitTest(WatchListTreeView, point);
+        return FindParent<TreeViewItem>(hitResult?.VisualHit);
+    }
+
+    private static T? FindParent<T>(DependencyObject? child) where T : DependencyObject
+    {
+        while (child is not null)
+        {
+            if (child is T found) return found;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return null;
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // LOG AUTO-SCROLL
+    // ???????????????????????????????????????????????????????????????
+
+    private void SubscribeToLogAutoScroll()
+    {
+        if (_vm.FilteredLogEntries is INotifyCollectionChanged ncc)
+        {
+            ncc.CollectionChanged += OnFilteredLogEntriesChanged;
+        }
+    }
+
+    private void OnFilteredLogEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!_vm.IsAutoScrollEnabled || e.Action != NotifyCollectionChangedAction.Add)
+            return;
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (LogListBox.Items.Count > 0)
+                LogListBox.ScrollIntoView(LogListBox.Items[^1]);
+        });
+    }
+
+    private void OnScrollToLogEntry(LogEntryViewModel entry)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (LogListBox.Items.Contains(entry))
+            {
+                LogListBox.ScrollIntoView(entry);
+                LogListBox.SelectedItem = entry;
+            }
+        });
     }
 
     /// <summary>Copies selected log entries to clipboard (from context menu).</summary>
@@ -81,12 +591,47 @@ public partial class MainWindow : Window
             if (item is LogEntryViewModel entry)
                 sb.AppendLine(entry.FullText);
         }
-        Clipboard.SetText(sb.ToString());
-        _vm.StatusMessage = $"Copied {selected.Count} selected log entries to clipboard";
+
+        if (sb.Length == 0) return;
+
+        try
+        {
+            Clipboard.SetText(sb.ToString());
+            _vm.StatusMessage = $"Copied {selected.Count} selected log entries to clipboard";
+        }
+        catch (ExternalException)
+        {
+            _vm.StatusMessage = "Clipboard is in use by another application";
+        }
     }
+
+    // ???????????????????????????????????????????????????????????????
+    // CLEANUP
+    // ???????????????????????????????????????????????????????????????
 
     protected override void OnClosed(EventArgs e)
     {
+        _vm.ScrollToLogEntry -= OnScrollToLogEntry;
+        _vm.PropertyChanged -= OnViewModelPropertyChanged;
+
+        if (_vm.FilteredLogEntries is INotifyCollectionChanged ncc)
+            ncc.CollectionChanged -= OnFilteredLogEntriesChanged;
+
+        WatchListTreeView.SelectedItemChanged -= OnWatchListSelectionChanged;
+        WatchListTreeView.ContextMenuOpening -= OnWatchListContextMenuOpening;
+        WatchListTreeView.PreviewMouseLeftButtonDown -= OnTreePreviewMouseDown;
+        WatchListTreeView.PreviewMouseMove -= OnTreePreviewMouseMove;
+        WatchListTreeView.DragOver -= OnTreeDragOver;
+        WatchListTreeView.Drop -= OnTreeDrop;
+
+        TemplateTreeView.SelectedItemChanged -= OnTemplateSelectionChanged;
+        TemplateTreeView.ContextMenuOpening -= OnTemplateContextMenuOpening;
+
+        Loaded -= OnWindowLoaded;
+
+        if (_inlineFoldingManager is not null)
+            FoldingManager.Uninstall(_inlineFoldingManager);
+
         _vm.Dispose();
         base.OnClosed(e);
     }

@@ -31,9 +31,11 @@ public sealed class TestControllerClient : IDisposable
                 HttpHandler = new SocketsHttpHandler
                 {
                     EnableMultipleHttp2Connections = true,
-                    KeepAlivePingDelay   = TimeSpan.FromSeconds(60),
-                    KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
-                    ConnectTimeout       = TimeSpan.FromSeconds(30),
+                    ConnectTimeout               = TimeSpan.FromSeconds(10),
+                    KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
+                    KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
+                    PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
+                    PooledConnectionLifetime      = TimeSpan.FromMinutes(5),
                 }
             }));
     }
@@ -158,7 +160,7 @@ public sealed class TestControllerClient : IDisposable
         {
             await Client.HeartbeatAsync(new HeartbeatRequest
             {
-                AgentName = _settings.GetResolvedEndpoint(),
+                AgentName = _settings.AgentName,
                 State     = state,
                 Metrics   = metrics,
                 Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),

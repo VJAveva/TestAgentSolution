@@ -288,6 +288,89 @@ public static class WatchListXmlParser
         return templates;
     }
 
+    // ── Full WatchList serialization (for inline XML editor) ───────────
+
+    public static string SerializeWatchList(WatchListConfig config)
+    {
+        var root = new XElement("WatchList");
+
+        foreach (var wi in config.WatchItems)
+        {
+            var wiEl = new XElement("WatchItem",
+                new XAttribute("Path", wi.Path),
+                new XAttribute("Filter", wi.Filter));
+            if (!string.IsNullOrEmpty(wi.Tag))
+                wiEl.Add(new XAttribute("Tag", wi.Tag));
+
+            foreach (var ev in wi.Events)
+            {
+                var evEl = new XElement("Event",
+                    new XAttribute("Type", ev.Type),
+                    new XAttribute("ExecutionType", ev.ExecutionType.ToString()));
+                WriteChildren(evEl, ev.Children);
+                wiEl.Add(evEl);
+            }
+            root.Add(wiEl);
+        }
+
+        if (config.Templates.Count > 0)
+        {
+            var templatesEl = new XElement("Templates");
+            foreach (var t in config.Templates)
+            {
+                var tEl = new XElement("Template", new XAttribute("ID", t.ID));
+                WriteChildren(tEl, t.Children);
+                templatesEl.Add(tEl);
+            }
+            root.Add(templatesEl);
+        }
+
+        return root.ToString(SaveOptions.None);
+    }
+
+    public static WatchListConfig? DeserializeWatchList(string xml)
+    {
+        var root = XElement.Parse(xml);
+        if (root.Name.LocalName != "WatchList") return null;
+
+        var config = new WatchListConfig();
+
+        var templatesEl = root.Element("Templates");
+        if (templatesEl is not null)
+        {
+            foreach (var tEl in templatesEl.Elements("Template"))
+            {
+                config.Templates.Add(new TemplateConfig
+                {
+                    ID = Attr(tEl, "ID"),
+                    Children = ParseChildren(tEl),
+                });
+            }
+        }
+
+        foreach (var wiEl in root.Elements("WatchItem"))
+        {
+            var wi = new WatchItemConfig
+            {
+                Tag = Attr(wiEl, "Tag"),
+                Path = Attr(wiEl, "Path"),
+                Filter = Attr(wiEl, "Filter", "*.*"),
+            };
+            foreach (var evEl in wiEl.Elements("Event"))
+            {
+                wi.Events.Add(new EventConfig
+                {
+                    Type = Attr(evEl, "Type", "Renamed"),
+                    ExecutionType = ParseExecMode(Attr(evEl, "ExecutionType")),
+                    Children = ParseChildren(evEl),
+                });
+            }
+            config.WatchItems.Add(wi);
+        }
+
+        return config;
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static string Attr(XElement el, string name, string def = "")

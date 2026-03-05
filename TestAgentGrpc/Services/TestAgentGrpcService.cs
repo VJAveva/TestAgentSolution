@@ -107,9 +107,15 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     {
         _logger.LogInformation("RunCommandStreamed: {Cmd} {Args}", request.Command, request.Arguments);
 
+        // Convert timeout from seconds to milliseconds (0 = no timeout)
+        var timeoutMs = request.TimeoutSeconds > 0 ? request.TimeoutSeconds * 1000 : 0;
+
         var (accepted, execId, reader) = _executor.RunCommandStreamed(
-            request.Command, request.Arguments, request.IsReboot, request.ExecutionId,
-            userName: request.UserName, password: request.Password);
+            request.Command, request.Arguments, request.IsReboot,
+            timeoutMs: timeoutMs,
+            executionId: request.ExecutionId,
+            userName: request.UserName, password: request.Password,
+            externalCt: context.CancellationToken);
 
         if (!accepted || reader is null)
         {
@@ -117,7 +123,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             await responseStream.WriteAsync(new ExecutionEvent
             {
                 ExecutionId = request.ExecutionId ?? "rejected",
-                AgentName   = _settings.GetResolvedEndpoint(),
+                AgentName   = _settings.AgentName,
                 Timestamp   = Timestamp.FromDateTime(DateTime.UtcNow),
                 EventType   = ExecutionEventType.EventFailed,
                 ErrorMessage = "Agent is busy.",
@@ -126,10 +132,20 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             return;
         }
 
-        // Stream events until execution completes
-        await foreach (var evt in reader.ReadAllAsync(context.CancellationToken))
+        // Stream events until execution completes or client disconnects
+        try
         {
-            await responseStream.WriteAsync(evt);
+            await foreach (var evt in reader.ReadAllAsync(context.CancellationToken))
+            {
+                await responseStream.WriteAsync(evt);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Client disconnected — ExecuteAsync will handle cancellation
+            // via the externalCt we passed through. Just drain the reader
+            // so the channel completes cleanly.
+            _logger.LogInformation("RunCommandStreamed client disconnected for {Id}", execId);
         }
     }
 
@@ -185,7 +201,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     {
         var snapshot = new AgentSnapshot
         {
-            AgentName            = _settings.GetResolvedEndpoint(),
+            AgentName            = _settings.AgentName,
             State                = _executor.CurrentState,
             CurrentActivity      = _executor.Activity,
             CurrentExecutionId   = _executor.CurrentExecutionId ?? "",

@@ -77,7 +77,7 @@ public sealed class CommandExecutor : IDisposable
 
         var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
         _ = Task.Run(() => ExecuteAsync(execId, command, arguments, isReboot,
-            perCallChannel: null, userName: userName, password: password));
+            perCallChannel: null, CancellationToken.None, userName: userName, password: password));
         return (true, execId);
     }
 
@@ -85,7 +85,9 @@ public sealed class CommandExecutor : IDisposable
 
     public (bool Accepted, string ExecutionId, ChannelReader<ExecutionEvent>? Stream) RunCommandStreamed(
         string command, string arguments, bool isReboot,
-        string? executionId = null, string? userName = null, string? password = null)
+        int timeoutMs = 0,
+        string? executionId = null, string? userName = null, string? password = null,
+        CancellationToken externalCt = default)
     {
         if (_state == AgentState.Running)
             return (false, string.Empty, null);
@@ -93,8 +95,29 @@ public sealed class CommandExecutor : IDisposable
         var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
         var ch = Channel.CreateUnbounded<ExecutionEvent>();
 
-        _ = Task.Run(() => ExecuteAsync(execId, command, arguments, isReboot, ch.Writer,
-            userName: userName, password: password));
+        // Build a CancellationToken that respects both the caller's token and the timeout
+        var cts = timeoutMs > 0
+            ? CancellationTokenSource.CreateLinkedTokenSource(externalCt)
+            : (externalCt.CanBeCanceled
+                ? CancellationTokenSource.CreateLinkedTokenSource(externalCt)
+                : null);
+        if (timeoutMs > 0)
+            cts!.CancelAfter(timeoutMs);
+
+        var ct = cts?.Token ?? CancellationToken.None;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ExecuteAsync(execId, command, arguments, isReboot, ch.Writer, ct,
+                    userName: userName, password: password);
+            }
+            finally
+            {
+                cts?.Dispose();
+            }
+        });
         return (true, execId, ch.Reader);
     }
 
@@ -106,10 +129,22 @@ public sealed class CommandExecutor : IDisposable
         string arguments,
         bool isReboot,
         ChannelWriter<ExecutionEvent>? perCallChannel,
+        CancellationToken ct,
         string? userName = null,
         string? password = null)
     {
-        await _executionLock.WaitAsync();
+        // Acquire the execution lock — if cancelled here, we must NOT release in finally
+        bool lockAcquired = false;
+        try
+        {
+            await _executionLock.WaitAsync(ct);
+            lockAcquired = true;
+        }
+        catch (OperationCanceledException)
+        {
+            perCallChannel?.TryComplete();
+            throw;
+        }
 
         _currentExecutionId = executionId;
         _currentCommand     = $"{command} {arguments}";
@@ -164,8 +199,8 @@ public sealed class CommandExecutor : IDisposable
             var stderrTask = StreamOutputAsync(executionId, _currentProcess.StandardError,
                 OutputKind.OutputStderr, record, perCallChannel);
 
-            // ── WAIT FOR EXIT ──────────────────────────────────────
-            await _currentProcess.WaitForExitAsync();
+            // ── WAIT FOR EXIT (cancellation-aware) ─────────────────
+            await _currentProcess.WaitForExitAsync(ct);
 
             // Ensure streams are fully drained after process exits
             await Task.WhenAll(stdoutTask, stderrTask);
@@ -182,6 +217,23 @@ public sealed class CommandExecutor : IDisposable
             _logger.LogInformation("Execution {Id} completed — exit {Code}",
                 executionId, _lastExitCode);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Cancellation from timeout or controller disconnect — kill the process
+            KillCurrentProcess();
+
+            _lastExitCode = -1;
+            _lastError = "Execution cancelled (timeout or client disconnect)";
+            record.Fail(_lastError);
+
+            EmitEvent(executionId, ExecutionEventType.EventFailed,
+                exitCode: -1,
+                errorMessage: _lastError,
+                detail: _lastError,
+                perCallChannel: perCallChannel);
+
+            _logger.LogWarning("Execution {Id} cancelled", executionId);
+        }
         catch (Exception ex)
         {
             _lastError = ex.Message;
@@ -196,20 +248,27 @@ public sealed class CommandExecutor : IDisposable
         }
         finally
         {
+            // Always clean up process resources and release the lock
+            _currentProcess?.Dispose();
+            _currentProcess = null;
+            _currentExecutionId = null;
+            _currentCommand = null;
+            _executionStartedUtc = null;
+
             if (!isReboot)
             {
-                _currentProcess?.Dispose();
-                _currentProcess = null;
-                _currentExecutionId = null;
-                _currentCommand = null;
-                _executionStartedUtc = null;
-
                 SetActivity($"Finished: {command} {arguments}");
-                SetState(AgentState.Ready);
+            }
+            else
+            {
+                SetActivity($"Reboot pending: {command} {arguments}");
             }
 
+            SetState(AgentState.Ready);
             perCallChannel?.TryComplete();
-            _executionLock.Release();
+
+            if (lockAcquired)
+                _executionLock.Release();
         }
     }
 
@@ -246,22 +305,42 @@ public sealed class CommandExecutor : IDisposable
     {
         try
         {
-            if (_currentProcess is { HasExited: false })
+            KillCurrentProcess();
+            if (_currentExecutionId is not null)
             {
-                var execId = _currentExecutionId ?? "unknown";
-                _logger.LogWarning("Terminating PID {Pid}", _currentProcess.Id);
-                _currentProcess.Kill(entireProcessTree: true);
-
-                EmitEvent(execId, ExecutionEventType.EventTerminated,
+                EmitEvent(_currentExecutionId, ExecutionEventType.EventTerminated,
                     detail: "Terminated by controller request");
-
-                _tracker.GetCurrent()?.Terminate();
             }
+            _tracker.GetCurrent()?.Terminate();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "TerminateExecution failed");
             _lastError = ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// Kills the current process tree if it's still running.
+    /// Safe to call multiple times or when no process is active.
+    /// </summary>
+    private void KillCurrentProcess()
+    {
+        try
+        {
+            if (_currentProcess is { HasExited: false } proc)
+            {
+                _logger.LogWarning("Killing PID {Pid}", proc.Id);
+                proc.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Process already exited between the check and the kill — safe to ignore
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to kill process");
         }
     }
 
@@ -400,7 +479,7 @@ public sealed class CommandExecutor : IDisposable
         var evt = new ExecutionEvent
         {
             ExecutionId = executionId,
-            AgentName   = _settings.GetResolvedEndpoint(),
+            AgentName   = _settings.AgentName,
             Timestamp   = Timestamp.FromDateTime(DateTime.UtcNow),
             EventType   = type,
         };

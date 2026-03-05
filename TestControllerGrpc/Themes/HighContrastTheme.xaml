@@ -52,4 +52,39 @@
     <SolidColorBrush x:Key="WatchRootBg"    Color="#FF003300" />
     <SolidColorBrush x:Key="TemplateRootBg" Color="#FF330033" />
 
+    <!-- Status indicator dot colors -->
+    <SolidColorBrush x:Key="StatusGreen"   Color="#FF00FF00" />
+    <SolidColorBrush x:Key="StatusRed"     Color="#FFFF0000" />
+    <SolidColorBrush x:Key="StatusYellow"  Color="#FFFFFF00" />
+    <SolidColorBrush x:Key="StatusGray"    Color="#FF666666" />
+    <SolidColorBrush x:Key="StatusBlue"    Color="#FF00FFFF" />
+
+    <!-- Node icon backgrounds by kind -->
+    <SolidColorBrush x:Key="IconBgFolder"    Color="#FF003333" />
+    <SolidColorBrush x:Key="IconBgWatch"     Color="#FF003300" />
+    <SolidColorBrush x:Key="IconBgEvent"     Color="#FF333300" />
+    <SolidColorBrush x:Key="IconBgTemplate"  Color="#FF330033" />
+    <SolidColorBrush x:Key="IconBgGroup"     Color="#FF003333" />
+    <SolidColorBrush x:Key="IconBgAction"    Color="#FF332200" />
+    <SolidColorBrush x:Key="IconBgInit"      Color="#FF222222" />
+    <SolidColorBrush x:Key="IconBgRef"       Color="#FF330033" />
+
+    <!-- Expander section header -->
+    <SolidColorBrush x:Key="ExpanderHeaderBg" Color="#FF1A1A1A" />
+    <SolidColorBrush x:Key="ExpanderHeaderFg" Color="#FFCCCCCC" />
+
+    <!-- Alert/error highlight -->
+    <SolidColorBrush x:Key="AlertErrorBg"   Color="#FF330000" />
+    <SolidColorBrush x:Key="AlertErrorBdr"  Color="#FFFF0000" />
+
+    <!-- Placeholder text -->
+    <SolidColorBrush x:Key="PlaceholderFg"  Color="#FF666666" />
+
+    <!-- Icon foreground (for Segoe MDL2 Assets) -->
+    <SolidColorBrush x:Key="IconFg"         Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="DisabledFg"     Color="#FF666666" />
+
+    <!-- Execution overlay -->
+    <SolidColorBrush x:Key="OverlayBg"      Color="#CC000000" />
+
 </ResourceDictionary>

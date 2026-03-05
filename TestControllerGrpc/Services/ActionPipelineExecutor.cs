@@ -148,7 +148,8 @@ public sealed class ActionPipelineExecutor
 
     // ── ActionGroup ────────────────────────────────────────────────────
 
-    private async Task<bool> ExecuteGroupAsync(
+    /// <summary>Executes an ActionGroup's children (public for direct execution from UI).</summary>
+    public async Task<bool> ExecuteGroupAsync(
         ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
     {
         Log("ActionGroup", $"[{group.Tag}] Mode={group.ExecutionType}, FailAndContinue={group.FailAndContinue}");
@@ -161,6 +162,16 @@ public sealed class ActionPipelineExecutor
     }
 
     // ── Single Action ──────────────────────────────────────────────────
+
+    /// <summary>Executes a single Action node (public for direct execution from UI).</summary>
+    public async Task<bool> ExecuteSingleActionAsync(
+        ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        NodeProgress?.Invoke(action, "Running");
+        var success = await ExecuteActionAsync(action, ctx, ct);
+        NodeProgress?.Invoke(action, success ? "Success" : "Failed");
+        return success;
+    }
 
     private async Task<bool> ExecuteActionAsync(
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)

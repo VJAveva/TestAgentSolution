@@ -290,11 +290,14 @@ public sealed class AgentGrpcDispatcher : IDisposable
         {
             var client = endpoint.GetClient();
 
-            // Use streamed RPC for real-time output
+            // Timeout is stored in milliseconds in WatchList XML
             using var timeoutCts = resolved.Timeout > 0
-                ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
+                ? new CancellationTokenSource(resolved.Timeout)
                 : new CancellationTokenSource();
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+            // Send timeout to agent so it can enforce server-side (ms → seconds for proto field)
+            var timeoutSeconds = resolved.Timeout > 0 ? resolved.Timeout / 1000 : 0;
 
             using var call = client.RunCommandStreamed(new RunCommandRequest
             {
@@ -303,6 +306,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
                 IsReboot = resolved.IsReboot,
                 UserName = resolved.UserName ?? "",
                 Password = resolved.Password ?? "",
+                TimeoutSeconds = timeoutSeconds,
             }, cancellationToken: linked.Token);
 
             int exitCode = 0;
@@ -352,7 +356,8 @@ public sealed class AgentGrpcDispatcher : IDisposable
         }
         catch (OperationCanceledException)
         {
-            return new ActionResult(false, -1, $"Timed out ({resolved.Timeout}s)");
+            var timeoutSec = resolved.Timeout > 0 ? resolved.Timeout / 1000.0 : 0;
+            return new ActionResult(false, -1, $"Timed out ({timeoutSec:F0}s)");
         }
         catch (Exception ex)
         {
@@ -491,8 +496,11 @@ public sealed class AgentGrpcDispatcher : IDisposable
                 HttpHandler = new SocketsHttpHandler
                 {
                     EnableMultipleHttp2Connections = true,
-                    KeepAlivePingDelay = TimeSpan.FromSeconds(60),
-                    KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
+                    ConnectTimeout               = TimeSpan.FromSeconds(5),
+                    KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
+                    KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
+                    PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
+                    PooledConnectionLifetime      = TimeSpan.FromMinutes(5),
                 },
                 DisposeHttpClient = true,
             });

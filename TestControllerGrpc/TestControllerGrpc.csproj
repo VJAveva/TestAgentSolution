@@ -28,6 +28,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
     <PackageReference Include="AvalonEdit" Version="6.3.0.90" />
+    <PackageReference Include="Svg.Skia" Version="2.0.0.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,6 +43,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\XmlSyntaxHighlighting.xshd" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\Icons\**\*.svg" Link="Icons\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
