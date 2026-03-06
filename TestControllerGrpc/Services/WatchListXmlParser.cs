@@ -398,4 +398,182 @@ public static class WatchListXmlParser
         if (!string.IsNullOrEmpty(val))
             el.Add(new XAttribute(name, val));
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Partial serialization — export/import selected items
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Serializes a subset of WatchItems (and optionally their referenced Templates)
+    /// to a standalone &lt;WatchList&gt; XML string that can be re-imported.
+    /// </summary>
+    public static string SerializeWatchItemsToXml(
+        List<WatchItemConfig> items,
+        List<TemplateConfig>? referencedTemplates = null)
+    {
+        var root = new XElement("WatchList");
+
+        foreach (var wi in items)
+        {
+            var wiEl = BuildWatchItemElement(wi);
+            root.Add(wiEl);
+        }
+
+        if (referencedTemplates is { Count: > 0 })
+        {
+            var templatesEl = new XElement("Templates");
+            foreach (var t in referencedTemplates)
+            {
+                var tEl = new XElement("Template", new XAttribute("ID", t.ID));
+                WriteChildren(tEl, t.Children);
+                templatesEl.Add(tEl);
+            }
+            root.Add(templatesEl);
+        }
+
+        return new XDocument(new XDeclaration("1.0", "utf-8", null), root)
+            .ToString(SaveOptions.None);
+    }
+
+    /// <summary>
+    /// Serializes a list of Templates to a standalone &lt;WatchList&gt; XML string.
+    /// </summary>
+    public static string SerializeTemplatesToXml(List<TemplateConfig> templates)
+    {
+        var root = new XElement("WatchList");
+        var templatesEl = new XElement("Templates");
+        foreach (var t in templates)
+        {
+            var tEl = new XElement("Template", new XAttribute("ID", t.ID));
+            WriteChildren(tEl, t.Children);
+            templatesEl.Add(tEl);
+        }
+        root.Add(templatesEl);
+        return new XDocument(new XDeclaration("1.0", "utf-8", null), root)
+            .ToString(SaveOptions.None);
+    }
+
+    /// <summary>
+    /// Parses WatchItems and any bundled Templates from a standalone XML string.
+    /// Accepts both full &lt;WatchList&gt; documents and single &lt;WatchItem&gt; fragments.
+    /// </summary>
+    public static (List<WatchItemConfig> Items, List<TemplateConfig> Templates)
+        ParseWatchItemsFromXml(string xml)
+    {
+        var root = XElement.Parse(xml);
+
+        // Handle a single <WatchItem> element directly
+        if (root.Name.LocalName == "WatchItem")
+        {
+            var single = ParseSingleWatchItemElement(root);
+            return (new List<WatchItemConfig> { single }, []);
+        }
+
+        var items = root.Elements("WatchItem")
+            .Select(ParseSingleWatchItemElement)
+            .ToList();
+
+        var templates = root.Element("Templates")?.Elements("Template")
+            .Select(tEl => new TemplateConfig
+            {
+                ID = Attr(tEl, "ID"),
+                Children = ParseChildren(tEl),
+            }).ToList() ?? [];
+
+        return (items, templates);
+    }
+
+    /// <summary>
+    /// Parses Templates from a standalone XML string.
+    /// Accepts &lt;WatchList&gt; with &lt;Templates&gt; or bare &lt;Templates&gt; element.
+    /// </summary>
+    public static List<TemplateConfig> ParseTemplatesFromXml(string xml)
+    {
+        var root = XElement.Parse(xml);
+
+        // Bare <Templates> root
+        if (root.Name.LocalName == "Templates")
+            return root.Elements("Template")
+                .Select(tEl => new TemplateConfig
+                {
+                    ID = Attr(tEl, "ID"),
+                    Children = ParseChildren(tEl),
+                }).ToList();
+
+        // <WatchList> with nested <Templates>
+        return root.Element("Templates")?.Elements("Template")
+            .Select(tEl => new TemplateConfig
+            {
+                ID = Attr(tEl, "ID"),
+                Children = ParseChildren(tEl),
+            }).ToList() ?? [];
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Template dependency detection
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Collects all Ref TemplateID values referenced by a WatchItem,
+    /// so export can bundle the necessary Templates.
+    /// </summary>
+    public static HashSet<string> CollectRefTemplateIds(WatchItemConfig item)
+    {
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectRefs(item.Events.SelectMany(e => e.Children), ids);
+        return ids;
+    }
+
+    private static void CollectRefs(IEnumerable<IActionNode> nodes, HashSet<string> ids)
+    {
+        foreach (var node in nodes)
+        {
+            if (node is RefConfig r && !string.IsNullOrEmpty(r.TemplateID))
+                ids.Add(r.TemplateID);
+            if (node is ActionGroupConfig g)
+                CollectRefs(g.Children, ids);
+        }
+    }
+
+    // ── Internal element builders (shared by multiple serializers) ────
+
+    private static XElement BuildWatchItemElement(WatchItemConfig wi)
+    {
+        var attrs = new List<object>();
+        if (!string.IsNullOrEmpty(wi.Tag))
+            attrs.Add(new XAttribute("Tag", wi.Tag));
+        attrs.Add(new XAttribute("Path", wi.Path));
+        attrs.Add(new XAttribute("Filter", wi.Filter));
+
+        var wiEl = new XElement("WatchItem", attrs.ToArray());
+        foreach (var ev in wi.Events)
+        {
+            var evEl = new XElement("Event",
+                new XAttribute("Type", ev.Type),
+                new XAttribute("ExecutionType", ev.ExecutionType.ToString()));
+            WriteChildren(evEl, ev.Children);
+            wiEl.Add(evEl);
+        }
+        return wiEl;
+    }
+
+    private static WatchItemConfig ParseSingleWatchItemElement(XElement wiEl)
+    {
+        var wi = new WatchItemConfig
+        {
+            Tag = Attr(wiEl, "Tag"),
+            Path = Attr(wiEl, "Path"),
+            Filter = Attr(wiEl, "Filter", "*.*"),
+        };
+        foreach (var evEl in wiEl.Elements("Event"))
+        {
+            wi.Events.Add(new EventConfig
+            {
+                Type = Attr(evEl, "Type", "Renamed"),
+                ExecutionType = ParseExecMode(Attr(evEl, "ExecutionType")),
+                Children = ParseChildren(evEl),
+            });
+        }
+        return wi;
+    }
 }

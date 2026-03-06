@@ -12,6 +12,7 @@ namespace TestAgentGrpc.Services;
 ///   • <c>SubscribeAgentEvents</c> — firehose of ALL agent events
 ///   • <c>GetExecutionHistory</c>  — query past runs
 ///   • <c>GetAgentSnapshot</c>     — one-shot current state + metrics
+///   • <c>GetAuditLog</c>          — query persistent audit logs
 /// </summary>
 public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 {
@@ -19,6 +20,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     private readonly EventBroadcaster _broadcaster;
     private readonly ExecutionTracker _tracker;
     private readonly SystemMetricsCollector _metrics;
+    private readonly AuditLogger _audit;
+    private readonly ConnectionHealthMonitor _healthMonitor;
     private readonly AgentSettings _settings;
     private readonly ILogger<TestAgentGrpcService> _logger;
     private readonly DateTime _agentStartedUtc = DateTime.UtcNow;
@@ -28,15 +31,19 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         EventBroadcaster broadcaster,
         ExecutionTracker tracker,
         SystemMetricsCollector metrics,
+        AuditLogger audit,
+        ConnectionHealthMonitor healthMonitor,
         Microsoft.Extensions.Options.IOptions<AgentSettings> settings,
         ILogger<TestAgentGrpcService> logger)
     {
-        _executor    = executor;
-        _broadcaster = broadcaster;
-        _tracker     = tracker;
-        _metrics     = metrics;
-        _settings    = settings.Value;
-        _logger      = logger;
+        _executor      = executor;
+        _broadcaster   = broadcaster;
+        _tracker       = tracker;
+        _metrics       = metrics;
+        _audit         = audit;
+        _healthMonitor = healthMonitor;
+        _settings      = settings.Value;
+        _logger        = logger;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -58,12 +65,20 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
         if (!accepted)
         {
+            _audit.Log("CommandRejected", severity: "Warning",
+                source: context.Peer, command: request.Command, arguments: request.Arguments,
+                detail: "Agent is busy executing another command");
+
             return Task.FromResult(new RunCommandReply
             {
                 Accepted = false,
                 Message = "Agent is busy executing another command.",
             });
         }
+
+        _audit.Log("CommandReceived", source: context.Peer,
+            executionId: execId, command: request.Command, arguments: request.Arguments,
+            credentials: string.IsNullOrEmpty(request.UserName) ? null : request.UserName);
 
         return Task.FromResult(new RunCommandReply
         {
@@ -119,6 +134,10 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
         if (!accepted || reader is null)
         {
+            _audit.Log("CommandRejected", severity: "Warning",
+                source: context.Peer, command: request.Command, arguments: request.Arguments,
+                detail: "Agent is busy (streamed)");
+
             // Send a single FAILED event and close
             await responseStream.WriteAsync(new ExecutionEvent
             {
@@ -131,6 +150,10 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             });
             return;
         }
+
+        _audit.Log("CommandReceived", source: context.Peer,
+            executionId: execId, command: request.Command, arguments: request.Arguments,
+            credentials: string.IsNullOrEmpty(request.UserName) ? null : request.UserName);
 
         // Stream events until execution completes or client disconnects
         try
@@ -216,5 +239,66 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             snapshot.ExecutionStarted = Timestamp.FromDateTime(_executor.ExecutionStartedUtc.Value);
 
         return Task.FromResult(snapshot);
+    }
+
+    /// <summary>
+    /// Returns audit log entries matching the request criteria.
+    /// Allows the Controller and Dashboard to query audit logs remotely.
+    /// </summary>
+    public override Task<AuditLogReply> GetAuditLog(AuditLogRequest request, ServerCallContext context)
+    {
+        var maxEntries = request.MaxEntries > 0 ? request.MaxEntries : 500;
+        var entries = _audit.ReadEntries(request.FromDate, request.ToDate,
+            request.EventFilter, maxEntries);
+
+        var reply = new AuditLogReply();
+        foreach (var e in entries)
+        {
+            reply.Entries.Add(new AuditLogEntry
+            {
+                Timestamp   = e.Timestamp.ToString("O"),
+                Event       = e.Event,
+                Severity    = e.Severity,
+                ExecutionId = e.ExecutionId ?? "",
+                Source      = e.Source ?? "",
+                Command     = e.Command ?? "",
+                Detail      = e.Detail ?? "",
+                ExitCode    = e.ExitCode ?? 0,
+                DurationMs  = e.DurationMs ?? 0,
+            });
+        }
+
+        return Task.FromResult(reply);
+    }
+
+    /// <summary>
+    /// Returns the agent's view of connection health to the controller.
+    /// </summary>
+    public override Task<ConnectionHealthReply> GetConnectionHealth(
+        ConnectionHealthRequest request, ServerCallContext context)
+    {
+        var reply = new ConnectionHealthReply
+        {
+            ControllerName      = _healthMonitor.ControllerName ?? "",
+            ControllerAddress   = _healthMonitor.ControllerAddress ?? "",
+            IsConnected         = _healthMonitor.IsConnected,
+            ConsecutiveFailures = _healthMonitor.ConsecutiveFailures,
+            TotalHeartbeatsSent   = _healthMonitor.TotalHeartbeatsSent,
+            TotalHeartbeatsFailed = _healthMonitor.TotalHeartbeatsFailed,
+            CurrentSuccessStreak  = _healthMonitor.CurrentSuccessStreak,
+            EventStreamActive     = _broadcaster.SubscriberCount > 0,
+            LastDisconnectReason  = _healthMonitor.LastError ?? "",
+        };
+
+        if (_healthMonitor.LastSuccessfulHeartbeat is { } lastOk)
+            reply.LastSuccessfulHeartbeat = Timestamp.FromDateTime(DateTime.SpecifyKind(lastOk, DateTimeKind.Utc));
+        if (_healthMonitor.LastFailedHeartbeat is { } lastFail)
+            reply.LastFailedHeartbeat = Timestamp.FromDateTime(DateTime.SpecifyKind(lastFail, DateTimeKind.Utc));
+        if (_healthMonitor.RegistrationTimestamp is { } regTs)
+            reply.RegistrationTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(regTs, DateTimeKind.Utc));
+        if (_healthMonitor.DowntimeDuration is { } downtime)
+            reply.LastDowntimeDuration = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(downtime);
+
+        return Task.FromResult(reply);
     }
 }

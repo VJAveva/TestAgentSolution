@@ -2,6 +2,7 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using TestAgentGrpc;
+using System.IO;
 
 namespace TestControllerGrpc.Services;
 
@@ -88,12 +89,24 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
     {
         _logger.LogInformation("Agent opened event push stream from {Peer}", context.Peer);
 
-        await foreach (var evt in requestStream.ReadAllAsync(context.CancellationToken))
+        try
         {
-            ExecutionEventReceived?.Invoke(evt);
+            await foreach (var evt in requestStream.ReadAllAsync(context.CancellationToken))
+            {
+                ExecutionEventReceived?.Invoke(evt);
+            }
+
+            _logger.LogInformation("Agent event push stream closed from {Peer}", context.Peer);
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "Agent at {Peer} disconnected unexpectedly.", context.Peer);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Agent event push stream from {Peer} was cancelled.", context.Peer);
         }
 
-        _logger.LogInformation("Agent event push stream closed from {Peer}", context.Peer);
         return new Empty();
     }
 

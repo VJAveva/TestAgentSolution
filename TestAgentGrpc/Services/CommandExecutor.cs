@@ -25,6 +25,7 @@ public sealed class CommandExecutor : IDisposable
 {
     private readonly EventBroadcaster _broadcaster;
     private readonly ExecutionTracker _tracker;
+    private readonly AuditLogger _audit;
     private readonly AgentSettings _settings;
     private readonly ILogger<CommandExecutor> _logger;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
@@ -44,11 +45,13 @@ public sealed class CommandExecutor : IDisposable
     public CommandExecutor(
         EventBroadcaster broadcaster,
         ExecutionTracker tracker,
+        AuditLogger audit,
         IOptions<AgentSettings> settings,
         ILogger<CommandExecutor> logger)
     {
         _broadcaster = broadcaster;
         _tracker     = tracker;
+        _audit       = audit;
         _settings    = settings.Value;
         _logger      = logger;
     }
@@ -185,6 +188,11 @@ public sealed class CommandExecutor : IDisposable
                 throw new InvalidOperationException("Process.Start returned null");
             }
 
+            _audit.Log("CommandStarted", executionId: executionId,
+                command: resolvedFile, arguments: resolvedArgs,
+                pid: _currentProcess.Id,
+                detail: $"PID {_currentProcess.Id} launched as {resolvedFile}");
+
             EmitEvent(executionId, ExecutionEventType.EventStarted,
                 command: command, arguments: arguments,
                 detail: $"PID {_currentProcess.Id} launched",
@@ -208,6 +216,13 @@ public sealed class CommandExecutor : IDisposable
             _lastExitCode = _currentProcess.ExitCode;
             record.Complete(_lastExitCode);
 
+            var durationMs = (long)(DateTime.UtcNow - _executionStartedUtc!.Value).TotalMilliseconds;
+            _audit.Log("CommandCompleted", executionId: executionId,
+                command: command, arguments: arguments,
+                exitCode: _lastExitCode, durationMs: durationMs,
+                pid: _currentProcess.Id,
+                detail: $"Exit code {_lastExitCode} after {durationMs}ms");
+
             // ── COMPLETED ──────────────────────────────────────────
             EmitEvent(executionId, ExecutionEventType.EventCompleted,
                 exitCode: _lastExitCode,
@@ -226,6 +241,10 @@ public sealed class CommandExecutor : IDisposable
             _lastError = "Execution cancelled (timeout or client disconnect)";
             record.Fail(_lastError);
 
+            _audit.Log("CommandTerminated", severity: "Warning",
+                executionId: executionId, command: command, arguments: arguments,
+                exitCode: -1, detail: _lastError);
+
             EmitEvent(executionId, ExecutionEventType.EventFailed,
                 exitCode: -1,
                 errorMessage: _lastError,
@@ -238,6 +257,10 @@ public sealed class CommandExecutor : IDisposable
         {
             _lastError = ex.Message;
             record.Fail(ex.Message);
+
+            _audit.Log("CommandFailed", severity: "Error",
+                executionId: executionId, command: command, arguments: arguments,
+                detail: ex.Message);
 
             EmitEvent(executionId, ExecutionEventType.EventFailed,
                 errorMessage: ex.Message,
@@ -308,6 +331,10 @@ public sealed class CommandExecutor : IDisposable
             KillCurrentProcess();
             if (_currentExecutionId is not null)
             {
+                _audit.Log("CommandTerminated", severity: "Warning",
+                    executionId: _currentExecutionId,
+                    detail: "Terminated by controller request");
+
                 EmitEvent(_currentExecutionId, ExecutionEventType.EventTerminated,
                     detail: "Terminated by controller request");
             }

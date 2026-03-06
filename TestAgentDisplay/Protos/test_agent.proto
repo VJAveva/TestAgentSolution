@@ -6,6 +6,7 @@ package testagent;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 // =============================================================================
 // TestController Service — hosted by the Controller.
@@ -31,6 +32,8 @@ service TestAgentService {
   rpc SubscribeAgentEvents (google.protobuf.Empty) returns (stream ExecutionEvent);
   rpc GetExecutionHistory (ExecutionHistoryRequest) returns (ExecutionHistoryReply);
   rpc GetAgentSnapshot (google.protobuf.Empty) returns (AgentSnapshot);
+  rpc GetAuditLog (AuditLogRequest) returns (AuditLogReply);
+  rpc GetConnectionHealth (ConnectionHealthRequest) returns (ConnectionHealthReply);
 }
 
 // =============================================================================
@@ -168,4 +171,54 @@ message AgentSnapshot {
   int32           executions_completed = 8;
   int32           executions_failed    = 9;
   google.protobuf.Timestamp agent_started = 10;
+}
+
+// =============================================================================
+// Audit Log
+// =============================================================================
+
+message AuditLogRequest {
+  string from_date     = 1;  // yyyy-MM-dd
+  string to_date       = 2;  // yyyy-MM-dd
+  string event_filter  = 3;  // optional: "Command*" or "Heartbeat*"
+  int32  max_entries   = 4;  // default 500
+}
+
+message AuditLogReply {
+  repeated AuditLogEntry entries = 1;
+}
+
+message AuditLogEntry {
+  string timestamp    = 1;
+  string event        = 2;
+  string severity     = 3;
+  string execution_id = 4;
+  string source       = 5;
+  string command      = 6;
+  string detail       = 7;
+  int32  exit_code    = 8;
+  int64  duration_ms  = 9;
+}
+
+// =============================================================================
+// Connection Health
+// =============================================================================
+
+message ConnectionHealthRequest {}
+
+message ConnectionHealthReply {
+  string controller_name                         = 1;
+  string controller_address                      = 2;
+  bool   is_connected                            = 3;
+  int32  consecutive_failures                    = 4;
+  google.protobuf.Timestamp last_successful_heartbeat = 5;
+  google.protobuf.Timestamp last_failed_heartbeat     = 6;
+  google.protobuf.Timestamp registration_timestamp    = 7;
+  int64  total_heartbeats_sent                   = 8;
+  int64  total_heartbeats_failed                 = 9;
+  int64  current_success_streak                  = 10;
+  double avg_heartbeat_latency_ms                = 11;
+  bool   event_stream_active                     = 12;
+  string last_disconnect_reason                  = 13;
+  google.protobuf.Duration last_downtime_duration = 14;
 }

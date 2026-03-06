@@ -76,6 +76,33 @@ public sealed class AgentConnectionManager : IDisposable
         catch { return null; }
     }
 
+    public async Task<AuditLogReply?> GetAuditLogAsync(string address, string? fromDate = null, string? toDate = null,
+        string? eventFilter = null, int maxEntries = 500, CancellationToken ct = default)
+    {
+        if (!_connections.TryGetValue(address, out var conn)) return null;
+        try
+        {
+            return await conn.Client.GetAuditLogAsync(new AuditLogRequest
+            {
+                FromDate = fromDate ?? "",
+                ToDate = toDate ?? "",
+                EventFilter = eventFilter ?? "",
+                MaxEntries = maxEntries,
+            }, cancellationToken: ct);
+        }
+        catch { return null; }
+    }
+
+    public async Task<ConnectionHealthReply?> GetConnectionHealthAsync(string address, CancellationToken ct = default)
+    {
+        if (!_connections.TryGetValue(address, out var conn)) return null;
+        try
+        {
+            return await conn.Client.GetConnectionHealthAsync(new ConnectionHealthRequest(), cancellationToken: ct);
+        }
+        catch { return null; }
+    }
+
     public async Task TerminateAsync(string address, CancellationToken ct = default)
     {
         if (!_connections.TryGetValue(address, out var conn)) return;

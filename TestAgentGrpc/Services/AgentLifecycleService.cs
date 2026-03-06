@@ -1,3 +1,4 @@
+using Grpc.Core;
 using TestAgentGrpc.Clients;
 using TestAgentGrpc.Services;
 using Microsoft.Extensions.Options;
@@ -21,12 +22,16 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
     private readonly CommandExecutor _executor;
     private readonly EventBroadcaster _broadcaster;
     private readonly SystemMetricsCollector _metrics;
+    private readonly ConnectionHealthMonitor _healthMonitor;
+    private readonly AuditLogger _audit;
     private readonly AgentSettings _settings;
+    private readonly AuditSettings _auditSettings;
     private readonly ILogger<AgentLifecycleService> _logger;
 
     private CancellationTokenSource? _cts;
     private Task? _heartbeatTask;
     private Task? _eventPushTask;
+    private IDisposable? _eventPushSubscription;
     private volatile bool _registeredWithController;
 
     public AgentLifecycleService(
@@ -34,15 +39,21 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         CommandExecutor executor,
         EventBroadcaster broadcaster,
         SystemMetricsCollector metrics,
+        ConnectionHealthMonitor healthMonitor,
+        AuditLogger audit,
         IOptions<AgentSettings> settings,
+        IOptions<AuditSettings> auditSettings,
         ILogger<AgentLifecycleService> logger)
     {
-        _controller  = controller;
-        _executor    = executor;
-        _broadcaster = broadcaster;
-        _metrics     = metrics;
-        _settings    = settings.Value;
-        _logger      = logger;
+        _controller    = controller;
+        _executor      = executor;
+        _broadcaster   = broadcaster;
+        _metrics       = metrics;
+        _healthMonitor = healthMonitor;
+        _audit         = audit;
+        _settings      = settings.Value;
+        _auditSettings = auditSettings.Value;
+        _logger        = logger;
     }
 
     public async Task StartAsync(CancellationToken ct)
@@ -50,21 +61,54 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _logger.LogInformation("Agent lifecycle starting…");
 
+        _audit.Log("AgentStarted", detail: $"Agent {_settings.AgentName} starting on port {_settings.GrpcPort}");
+
+        // Log resolved configuration for diagnostics
+        _logger.LogInformation(
+            "Configuration: AgentName={Name}, ControllerAddress={Ctrl}, Endpoint={Ep}",
+            _settings.AgentName, _settings.ControllerAddress, _settings.GetResolvedEndpoint());
+
+        // Validate controller address early
+        if (!ValidateControllerAddress(_settings.ControllerAddress))
+        {
+            _logger.LogError(
+                "ControllerAddress '{Address}' is invalid. " +
+                "Check AgentSettings:ControllerAddress in appsettings.json. " +
+                "Expected format: http://hostname:port",
+                _settings.ControllerAddress);
+            _audit.Log("ConfigurationError", severity: "Error",
+                detail: $"Invalid ControllerAddress: {_settings.ControllerAddress}");
+        }
+
         // Wire state changes → controller push
         _executor.StateChanged += OnStateChanged;
 
         // Register with retries (non-blocking — agent stays Ready regardless)
-        _registeredWithController = await _controller.RegisterAsync(ct);
-        if (!_registeredWithController)
+        var (registered, regError) = await _controller.RegisterAsync(ct);
+        _registeredWithController = registered;
+        if (_registeredWithController)
         {
-            _logger.LogWarning("Controller registration failed — will retry during heartbeat loop");
+            _healthMonitor.RecordRegistration(
+                _settings.AgentName, _settings.ControllerAddress);
+            _audit.Log("RegistrationAcked", source: _settings.ControllerAddress,
+                controller: _settings.ControllerAddress);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Controller registration failed — will retry during heartbeat loop. Error: {Error}",
+                regError);
+            _audit.Log("RegistrationFailed", severity: "Warning",
+                detail: $"Initial registration failed: {regError}",
+                controller: _settings.ControllerAddress);
         }
 
         // Start heartbeat loop (will silently fail if controller unreachable)
         _heartbeatTask = RunHeartbeatLoopAsync(_cts.Token);
 
         // Start event push stream to controller (auto-reconnects on failure)
-        var (reader, _) = _broadcaster.Subscribe(capacity: 5000);
+        var (reader, subscription) = _broadcaster.Subscribe(capacity: 5000);
+        _eventPushSubscription = subscription;
         _eventPushTask = _controller.PushEventsAsync(reader, _cts.Token);
     }
 
@@ -81,6 +125,8 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         try { if (_eventPushTask is not null) await _eventPushTask.WaitAsync(ct); } catch { }
 
         await _controller.UnRegisterAsync(ct);
+        _healthMonitor.RecordUnregistration();
+        _audit.Log("AgentStopped", detail: "Agent shutting down gracefully");
     }
 
     // ── Heartbeat ──────────────────────────────────────────────────────
@@ -89,6 +135,9 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
     {
         var interval = TimeSpan.FromSeconds(_settings.HeartbeatIntervalSeconds);
         int consecutiveFailures = 0;
+        long heartbeatCount = 0;
+        bool controllerLost = false;
+        var logEveryN = _auditSettings.LogHeartbeatEveryN;
 
         while (!ct.IsCancellationRequested)
         {
@@ -100,17 +149,62 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                 if (!_registeredWithController || consecutiveFailures >= 3)
                 {
                     _logger.LogInformation("Attempting re-registration with controller…");
-                    _registeredWithController = await _controller.RegisterAsync(ct);
-                    if (_registeredWithController)
+                    var (regOk, regError) = await _controller.RegisterAsync(ct);
+                    _registeredWithController = regOk;
+                    if (regOk)
                     {
                         consecutiveFailures = 0;
+                        _healthMonitor.RecordRegistration(
+                            _settings.AgentName, _settings.ControllerAddress);
+                        _audit.Log("RegistrationAcked", source: _settings.ControllerAddress,
+                            controller: _settings.ControllerAddress);
+
+                        if (controllerLost)
+                        {
+                            controllerLost = false;
+                            _audit.Log("ControllerRecovered",
+                                controller: _settings.ControllerAddress,
+                                detail: "Connection recovered after failures");
+                        }
+
                         _logger.LogInformation("Re-registration successful");
+                    }
+                    else
+                    {
+                        // Registration failed — count as a failure and skip heartbeat
+                        consecutiveFailures++;
+                        _healthMonitor.RecordHeartbeatFailure($"Registration failed: {regError}");
+                        _audit.Log("RegistrationFailed", severity: "Warning",
+                            detail: $"Re-registration failed: {regError}",
+                            controller: _settings.ControllerAddress);
+                        _logger.LogWarning(
+                            "Re-registration failed (consecutive: {Count}): {Error}",
+                            consecutiveFailures, regError);
+
+                        if (consecutiveFailures >= 3 && !controllerLost)
+                        {
+                            controllerLost = true;
+                            _audit.Log("ControllerLost", severity: "Error",
+                                controller: _settings.ControllerAddress,
+                                detail: $"Lost connection after {consecutiveFailures} consecutive failures. Last error: {regError}");
+                        }
+
+                        continue; // Skip heartbeat — can't send to a controller we're not registered with
                     }
                 }
 
                 var sysMetrics = _metrics.Collect();
                 await _controller.SendHeartbeatAsync(_executor.CurrentState, sysMetrics, ct);
                 consecutiveFailures = 0;
+                heartbeatCount++;
+                _healthMonitor.RecordHeartbeatSuccess();
+
+                // Log every Nth heartbeat to avoid noise
+                if (logEveryN > 0 && heartbeatCount % logEveryN == 0)
+                {
+                    _audit.Log("HeartbeatAcked",
+                        detail: $"Heartbeat #{heartbeatCount}, CPU {sysMetrics.CpuUsagePct}%, Mem {sysMetrics.MemoryUsedMb}MB");
+                }
 
                 _broadcaster.Publish(new ExecutionEvent
                 {
@@ -127,7 +221,22 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
             catch (Exception ex)
             {
                 consecutiveFailures++;
-                _logger.LogDebug(ex, "Heartbeat iteration failed (consecutive: {Count})", consecutiveFailures);
+                var errorDetail = ex is RpcException rpc
+                    ? $"gRPC {rpc.StatusCode}: {rpc.Status.Detail}"
+                    : ex.Message;
+                _healthMonitor.RecordHeartbeatFailure(errorDetail);
+                _audit.Log("HeartbeatFailed", severity: "Warning",
+                    detail: errorDetail, controller: _settings.ControllerAddress);
+
+                if (consecutiveFailures >= 3 && !controllerLost)
+                {
+                    controllerLost = true;
+                    _audit.Log("ControllerLost", severity: "Error",
+                        controller: _settings.ControllerAddress,
+                        detail: $"Lost connection after {consecutiveFailures} consecutive heartbeat failures. Last error: {errorDetail}");
+                }
+
+                _logger.LogWarning(ex, "Heartbeat iteration failed (consecutive: {Count})", consecutiveFailures);
             }
         }
     }
@@ -143,6 +252,36 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
     public void Dispose()
     {
         _executor.StateChanged -= OnStateChanged;
+        _eventPushSubscription?.Dispose();
         _cts?.Dispose();
+    }
+
+    // ── Configuration validation ───────────────────────────────────────
+
+    private bool ValidateControllerAddress(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+            return false;
+
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
+            return false;
+
+        if (uri.Scheme is not ("http" or "https"))
+            return false;
+
+        // Catch common placeholder/template values that won't resolve
+        var host = uri.Host;
+        if (host.Contains("controller-machine", StringComparison.OrdinalIgnoreCase) ||
+            host.Contains("your-", StringComparison.OrdinalIgnoreCase) ||
+            host.Contains("example", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "ControllerAddress '{Address}' looks like a placeholder. " +
+                "Update AgentSettings:ControllerAddress in appsettings.json with the actual controller hostname.",
+                address);
+            return false;
+        }
+
+        return true;
     }
 }

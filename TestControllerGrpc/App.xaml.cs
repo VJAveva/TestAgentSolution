@@ -31,6 +31,7 @@ public partial class App : Application
             {
                 services.AddSingleton<VocabularyMonitor>();
                 services.AddSingleton<AgentGrpcDispatcher>();
+                services.AddSingleton<ExecutionSessionManager>();
                 services.AddSingleton<ActionPipelineExecutor>();
                 services.AddSingleton<FileWatcherManager>();
                 services.AddHostedService<ControllerHostedService>();

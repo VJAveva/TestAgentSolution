@@ -44,19 +44,25 @@ public sealed class TestControllerClient : IDisposable
 
     // ── Registration (with retry) ──────────────────────────────────────
 
-    public async Task<bool> RegisterAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Registers with the controller, retrying on failure.
+    /// Returns (success, lastErrorMessage).
+    /// </summary>
+    public async Task<(bool Success, string? Error)> RegisterAsync(CancellationToken ct = default)
     {
         var agentName = _settings.AgentName;
         var endpoint  = _settings.GetResolvedEndpoint();
         var retries   = _settings.RegistrationRetryCount;
         var delay     = TimeSpan.FromSeconds(_settings.RegistrationRetryIntervalSeconds);
+        string? lastError = null;
 
         for (int attempt = 0; attempt <= retries; attempt++)
         {
             try
             {
-                _logger.LogInformation("Registering (attempt {N}): Name={Name}, Endpoint={Ep}",
-                    attempt + 1, agentName, endpoint);
+                _logger.LogInformation(
+                    "Registering (attempt {N}/{Max}): Name={Name}, Endpoint={Ep}, Controller={Ctrl}",
+                    attempt + 1, retries + 1, agentName, endpoint, _settings.ControllerAddress);
                 await Client.RegisterAsync(new TestAgentRef
                 {
                     Name     = agentName,
@@ -64,17 +70,31 @@ public sealed class TestControllerClient : IDisposable
                     Endpoint = endpoint,
                 }, cancellationToken: ct);
                 _logger.LogInformation("Registration successful");
-                return true;
+                return (true, null);
+            }
+            catch (RpcException ex)
+            {
+                lastError = $"gRPC {ex.StatusCode}: {ex.Status.Detail} ({ex.Message})";
+                _logger.LogWarning("Registration attempt {N} failed: {Error}", attempt + 1, lastError);
+                if (attempt < retries) await Task.Delay(delay, ct);
+            }
+            catch (HttpRequestException ex)
+            {
+                lastError = $"HTTP error: {ex.Message} (InnerException: {ex.InnerException?.Message})";
+                _logger.LogWarning("Registration attempt {N} failed: {Error}", attempt + 1, lastError);
+                if (attempt < retries) await Task.Delay(delay, ct);
             }
             catch (Exception ex)
             {
+                lastError = $"{ex.GetType().Name}: {ex.Message}";
                 _logger.LogWarning(ex, "Registration attempt {N} failed", attempt + 1);
                 if (attempt < retries) await Task.Delay(delay, ct);
             }
         }
 
-        _logger.LogError("Registration failed after {N} attempts", retries + 1);
-        return false;
+        _logger.LogError("Registration failed after {N} attempts. Last error: {Error}",
+            retries + 1, lastError);
+        return (false, lastError);
     }
 
     public async Task UnRegisterAsync(CancellationToken ct = default)
@@ -156,20 +176,13 @@ public sealed class TestControllerClient : IDisposable
 
     public async Task SendHeartbeatAsync(AgentState state, ResourceMetrics metrics, CancellationToken ct = default)
     {
-        try
+        await Client.HeartbeatAsync(new HeartbeatRequest
         {
-            await Client.HeartbeatAsync(new HeartbeatRequest
-            {
-                AgentName = _settings.AgentName,
-                State     = state,
-                Metrics   = metrics,
-                Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
-            }, cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Heartbeat failed");
-        }
+            AgentName = _settings.AgentName,
+            State     = state,
+            Metrics   = metrics,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+        }, cancellationToken: ct);
     }
 
     public void Dispose()

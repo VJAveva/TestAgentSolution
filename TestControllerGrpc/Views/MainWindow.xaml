@@ -482,6 +482,27 @@
                                                     <TextBlock Text="Save As" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding ImportWatchItemsCommand}"
+                                                    ToolTip="Import WatchItems from another XML file (additive merge)">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B5;" />
+                                                    <TextBlock Text="Import" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding ExportWatchItemsCommand}"
+                                                    ToolTip="Export selected WatchItem (or all) to XML file">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE898;" />
+                                                    <TextBlock Text="Export" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding OpenWatchListEditorCommand}"
+                                                    ToolTip="Open the full WatchList XML in the editor window">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE70F;" />
+                                                    <TextBlock Text="Edit XML" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                         <TextBlock Text="File" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
@@ -593,6 +614,20 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,4,0" />
                                                     <TextBlock Text="Edit Template XML" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding ImportTemplatesCommand}"
+                                                    ToolTip="Import Templates from XML file">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B5;" Foreground="{DynamicResource AccMauve}" />
+                                                    <TextBlock Text="Import" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding ExportTemplatesCommand}"
+                                                    ToolTip="Export selected Template (or all) to XML file">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE898;" Foreground="{DynamicResource AccMauve}" />
+                                                    <TextBlock Text="Export" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -722,6 +757,13 @@
                                                     </StackPanel>
                                                 </Button>
                                             </Border>
+                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding RetryFailedCommand}"
+                                                    ToolTip="Retry only the failed actions from the last execution">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE72C;" Foreground="{DynamicResource AccPeach}" />
+                                                    <TextBlock Text="Retry Failed" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                         <TextBlock Text="Control" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
@@ -775,22 +817,6 @@
                                                       Style="{StaticResource Cmb}" Width="140" Margin="0" />
                                         </StackPanel>
                                         <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding ToggleInlineXmlEditorCommand}"
-                                                    ToolTip="Toggle inline XML editor panel for the WatchList or selected WatchItem">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE70F;" Foreground="{DynamicResource Accent}" />
-                                                    <TextBlock Text="Edit XML" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                        <TextBlock Text="Editor" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -1000,8 +1026,6 @@
                                                 <TextBlock Text="Edit Template XML" />
                                             </StackPanel>
                                         </Button>
-                                        <TextBlock Text="Template XML Editor" FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource AccMauve}" VerticalAlignment="Center" />
                                     </DockPanel>
                                 </Border>
                             </StackPanel>
@@ -1055,12 +1079,12 @@
                                         </Grid>
                                     </StackPanel>
                                 </Expander>
-                                <!-- Advanced section -->
+                                <!-- Action section -->
                                 <Expander Style="{StaticResource SectionExpander}" IsExpanded="False">
                                     <Expander.Header>
-                                        <TextBlock Text="ADVANCED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
+                                        <TextBlock Text="ACTIONS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
                                     </Expander.Header>
-                                    <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8" Margin="0,4,0,0"
+                                    <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8,6" Margin="0,4,0,0"
                                             BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Style="{StaticResource SmBtn}"
@@ -1174,6 +1198,95 @@
                                     <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
                                              TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
                                 </StackPanel>
+                            </StackPanel>
+                            <!-- ===== Initialize ===== -->
+                            <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Initialize, FallbackValue=Collapsed}">
+                                <Label Content="TAG" Style="{StaticResource Lbl}" />
+                                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
+
+                                <Label Content="PARAMETER FILE" Style="{StaticResource Lbl}" Margin="0,8,0,0" />
+                                <DockPanel>
+                                    <Button Content="Browse..." DockPanel.Dock="Right" Margin="6,2,0,5"
+                                            Style="{StaticResource SmBtn}"
+                                            Command="{Binding DataContext.BrowseParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Fld}" FontFamily="Consolas" />
+                                </DockPanel>
+
+                                <!-- Parameters header + action buttons -->
+                                <DockPanel Margin="0,12,0,4">
+                                    <TextBlock Text="PARAMETERS" Foreground="{DynamicResource TextS}"
+                                               FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                                        <Button Content="Reload" Style="{StaticResource SmBtn}"
+                                                Command="{Binding DataContext.LoadParameterFileFromNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Margin="0,0,4,0" />
+                                        <Button Content="Save File" Style="{StaticResource SmBtn}"
+                                                Command="{Binding DataContext.SaveParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <!-- Parameter DataGrid -->
+                                <DataGrid ItemsSource="{Binding DataContext.ParameterFileEntries, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False" CanUserDeleteRows="False"
+                                          CanUserSortColumns="False"
+                                          HeadersVisibility="Column"
+                                          GridLinesVisibility="Horizontal"
+                                          Background="Transparent"
+                                          Foreground="{DynamicResource TextP}"
+                                          BorderThickness="1"
+                                          BorderBrush="{DynamicResource Bdr}"
+                                          RowBackground="#10FFFFFF"
+                                          AlternatingRowBackground="#18FFFFFF"
+                                          MaxHeight="200"
+                                          Margin="0,0,0,4">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Key" Width="*"
+                                            Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
+                                            Foreground="{DynamicResource TextP}" />
+                                        <DataGridTextColumn Header="Value" Width="2*"
+                                            Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                            Foreground="{DynamicResource TextP}" />
+                                        <DataGridTemplateColumn Header="" Width="30">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Content="✕" FontSize="10"
+                                                            Background="Transparent" Foreground="#F85149"
+                                                            BorderThickness="0" Cursor="Hand" Padding="4,0"
+                                                            Command="{Binding DataContext.RemoveParameterEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <!-- Add Parameter button -->
+                                <Button Content="+ Add Parameter" HorizontalAlignment="Left"
+                                        Style="{StaticResource SmBtn}" Margin="0,0,0,8"
+                                        Command="{Binding DataContext.AddParameterEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+
+                                <!-- Status message -->
+                                <TextBlock Text="{Binding DataContext.ParameterFileStatus, RelativeSource={RelativeSource AncestorType=Window}}"
+                                           FontSize="10" FontStyle="Italic"
+                                           Foreground="{DynamicResource TextS}"
+                                           TextWrapping="Wrap" Margin="0,0,0,4" />
+
+                                <!-- Help text -->
+                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextS}">
+                                    <Run Text="ⓘ" FontWeight="Bold" />
+                                    <Run Text=" Use [Key] tokens in sibling Action commands. Example: [ServerName] resolves to the value defined above." />
+                                </TextBlock>
+                            </StackPanel>
+                            <!-- ===== Ref ===== -->
+                            <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Ref, FallbackValue=Collapsed}">
+                                <Label Content="TEMPLATE ID" Style="{StaticResource Lbl}" />
+                                <TextBox Text="{Binding TemplateID, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
+                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,4">
+                                    <Run Text="ⓘ" FontWeight="Bold" />
+                                    <Run Text=" This node expands to the children of the referenced Template at execution time." />
+                                </TextBlock>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

@@ -18,6 +18,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<AgentSettings>(
     builder.Configuration.GetSection("AgentSettings"));
+builder.Services.Configure<NotificationSettings>(
+    builder.Configuration.GetSection("NotificationSettings"));
+builder.Services.Configure<AuditSettings>(
+    builder.Configuration.GetSection("AuditSettings"));
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -28,9 +32,11 @@ builder.WebHost.ConfigureKestrel(options =>
 // ── Core services ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<EventBroadcaster>();
 builder.Services.AddSingleton<ExecutionTracker>();
+builder.Services.AddSingleton<AuditLogger>();
 builder.Services.AddSingleton<CommandExecutor>();
 builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<TestControllerClient>();
+builder.Services.AddSingleton<ConnectionHealthMonitor>();
 
 // ── gRPC server ────────────────────────────────────────────────────────
 builder.Services.AddGrpc(options =>
@@ -40,7 +46,8 @@ builder.Services.AddGrpc(options =>
     options.EnableDetailedErrors  = builder.Environment.IsDevelopment();
 });
 
-// ── Background lifecycle service ───────────────────────────────────────
+// ── Background services ───────────────────────────────────────────────
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogger>());
 builder.Services.AddHostedService<AgentLifecycleService>();
 
 var app = builder.Build();
@@ -59,6 +66,10 @@ var trayApp = new TrayApplicationContext(
     app.Services.GetRequiredService<EventBroadcaster>(),
     app.Services.GetRequiredService<ExecutionTracker>(),
     app.Services.GetRequiredService<SystemMetricsCollector>(),
+    app.Services.GetRequiredService<ConnectionHealthMonitor>(),
+    app.Services.GetRequiredService<TestControllerClient>(),
+    app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>(),
+    app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NotificationSettings>>(),
     app.Services.GetRequiredService<ILogger<TrayApplicationContext>>());
 
 Application.Run(trayApp);

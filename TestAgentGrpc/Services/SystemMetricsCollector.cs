@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace TestAgentGrpc.Services;
 
@@ -34,6 +33,7 @@ public sealed class SystemMetricsCollector
             foreach (var p in procs)
             {
                 try { totalCpu += p.TotalProcessorTime; } catch { }
+                finally { p.Dispose(); }
             }
 
             if (_lastCpuCheck > DateTime.MinValue)

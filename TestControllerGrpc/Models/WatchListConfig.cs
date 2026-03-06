@@ -1,5 +1,3 @@
-using System.Xml.Serialization;
-
 namespace TestControllerGrpc.Models;
 
 // =============================================================================
@@ -143,3 +141,77 @@ public sealed class PipelineExecutionContext
     public CancellationToken CancellationToken { get; set; }
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
 }
+
+// =============================================================================
+// Execution session — tracks per-action results during a pipeline run
+// =============================================================================
+public sealed class ExecutionSession
+{
+    public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
+    public string WatchItemTag { get; init; } = "";
+    public string EventType { get; init; } = "";
+    public DateTime StartedUtc { get; init; } = DateTime.UtcNow;
+    public DateTime? CompletedUtc { get; set; }
+    public SessionState State { get; set; } = SessionState.Running;
+    public List<ActionExecutionResult> ActionResults { get; } = [];
+
+    /// <summary>Frozen context for retry — same tokens, same Initialize params.</summary>
+    public Dictionary<string, string> ResolvedParameters { get; init; } = new();
+
+    /// <summary>Frozen action tree for retry.</summary>
+    public List<IActionNode> SnapshotNodes { get; init; } = [];
+
+    public IEnumerable<ActionExecutionResult> FailedActions
+        => ActionResults.Where(r => r.IsRetryable);
+
+    public int TotalActions => ActionResults.Count;
+    public int SucceededCount => ActionResults.Count(r => r.Outcome == ActionOutcome.Success);
+    public int FailedCount => ActionResults.Count(r => r.IsRetryable);
+
+    public string SummaryText => State switch
+    {
+        SessionState.Running => $"Running… ({SucceededCount}/{TotalActions} done)",
+        SessionState.Completed => $"All {TotalActions} actions succeeded",
+        SessionState.PartialFailure => $"{FailedCount} of {TotalActions} actions failed",
+        SessionState.Failed => $"All {TotalActions} actions failed",
+        _ => ""
+    };
+}
+
+public enum SessionState { Running, Completed, PartialFailure, Failed }
+
+public sealed class ActionExecutionResult
+{
+    public string ActionTag { get; init; } = "";
+    public string ActionType { get; init; } = "";
+    public string? AgentName { get; init; }
+    public string Command { get; init; } = "";
+    public ActionOutcome Outcome { get; set; } = ActionOutcome.Unknown;
+    public int? ExitCode { get; set; }
+    public TimeSpan Duration { get; set; }
+    public string? ErrorMessage { get; set; }
+    public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>For retry: the original frozen node.</summary>
+    public IActionNode? OriginalNode { get; init; }
+
+    public bool IsRetryable => Outcome is ActionOutcome.Failed
+        or ActionOutcome.Terminated or ActionOutcome.TimedOut;
+
+    public string StatusIcon => Outcome switch
+    {
+        ActionOutcome.Success => "✓",
+        ActionOutcome.Failed => "✗",
+        ActionOutcome.Terminated => "⊘",
+        ActionOutcome.TimedOut => "⏱",
+        _ => "…"
+    };
+
+    public string DurationText => Duration.TotalSeconds < 1
+        ? $"{Duration.TotalMilliseconds:F0}ms"
+        : Duration.TotalMinutes < 1
+            ? $"{Duration.TotalSeconds:F1}s"
+            : Duration.ToString(@"mm\:ss");
+}
+
+public enum ActionOutcome { Unknown, Success, Failed, Terminated, TimedOut }

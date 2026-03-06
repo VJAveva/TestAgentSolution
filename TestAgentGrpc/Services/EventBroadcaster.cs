@@ -25,6 +25,9 @@ public sealed class EventBroadcaster : IDisposable
         _logger = logger;
     }
 
+    /// <summary>Number of active subscribers.</summary>
+    public int SubscriberCount { get { lock (_lock) { return _subscribers.Count; } } }
+
     /// <summary>
     /// Creates a new subscription. Returns a <see cref="ChannelReader{T}"/>
     /// that the consumer reads from, and a dispose handle to unsubscribe.

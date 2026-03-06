@@ -15,6 +15,7 @@ public partial class App : Application
 
         var sc = new ServiceCollection();
         sc.AddSingleton<AgentConnectionManager>();
+        sc.AddSingleton<AuditTimelineViewModel>();
         sc.AddSingleton<MainViewModel>();
         Services = sc.BuildServiceProvider();
     }

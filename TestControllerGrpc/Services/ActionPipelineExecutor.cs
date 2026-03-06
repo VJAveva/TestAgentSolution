@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net.Mail;
 using System.Net.Mime;
@@ -23,6 +24,7 @@ namespace TestControllerGrpc.Services;
 public sealed class ActionPipelineExecutor
 {
     private readonly AgentGrpcDispatcher _dispatcher;
+    private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<ActionPipelineExecutor> _logger;
     private Dictionary<string, TemplateConfig> _templates = new();
 
@@ -37,9 +39,11 @@ public sealed class ActionPipelineExecutor
 
     public ActionPipelineExecutor(
         AgentGrpcDispatcher dispatcher,
+        ExecutionSessionManager sessionManager,
         ILogger<ActionPipelineExecutor> logger)
     {
         _dispatcher = dispatcher;
+        _sessionManager = sessionManager;
         _logger = logger;
     }
 
@@ -368,6 +372,229 @@ public sealed class ActionPipelineExecutor
         _logger.LogInformation("[{Category}] {Message}", category, message);
         LogEntry?.Invoke(new PipelineLogEntry(DateTime.Now, category, message));
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SESSION-TRACKED EXECUTION (snapshot isolation + per-action results)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Executes an Event's children with session tracking and snapshot isolation.
+    /// The live config is cloned before execution so hot-reloads don't affect a running pipeline.
+    /// </summary>
+    public async Task ExecuteEventTrackedAsync(
+        string watchItemTag, EventConfig evt, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        // Snapshot isolation: clone the action tree so hot-reloads don't mutate in-flight nodes
+        var snapshotChildren = evt.Children.Select(DeepCloneNode).ToList();
+
+        var session = _sessionManager.BeginSession(
+            watchItemTag, evt.Type,
+            new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
+            snapshotChildren);
+
+        Log("Session", $"Started {session.SessionId} for {watchItemTag}:{evt.Type}");
+
+        try
+        {
+            await ExecuteChildrenTrackedAsync(
+                snapshotChildren, evt.ExecutionType, true, ctx, session, ct);
+        }
+        finally
+        {
+            _sessionManager.CompleteSession(session.SessionId);
+            Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
+        }
+    }
+
+    private async Task<bool> ExecuteChildrenTrackedAsync(
+        List<IActionNode> children, ExecutionMode mode, bool parentFailAndContinue,
+        PipelineExecutionContext ctx, ExecutionSession session, CancellationToken ct)
+    {
+        if (mode == ExecutionMode.Parallel)
+        {
+            var tasks = children.Select(child =>
+                ExecuteNodeTrackedAsync(child, ctx, session, ct)).ToList();
+            var results = await Task.WhenAll(tasks);
+            return results.All(r => r);
+        }
+
+        // Sequential
+        foreach (var child in children)
+        {
+            ct.ThrowIfCancellationRequested();
+            var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct);
+            if (!success && !parentFailAndContinue)
+            {
+                Log("Pipeline", "Stopping — FailAndContinue=false");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private async Task<bool> ExecuteNodeTrackedAsync(
+        IActionNode node, PipelineExecutionContext ctx,
+        ExecutionSession session, CancellationToken ct)
+    {
+        NodeProgress?.Invoke(node, "Running");
+        bool success;
+        try
+        {
+            success = node switch
+            {
+                InitializeConfig init => ExecuteInitialize(init, ctx),
+                RefConfig refNode => await ExecuteRefTrackedAsync(refNode, ctx, session, ct),
+                ActionGroupConfig group => await ExecuteGroupTrackedAsync(group, ctx, session, ct),
+                ActionConfig action => await ExecuteActionTrackedAsync(action, ctx, session, ct),
+                _ => true,
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Node execution error");
+            success = false;
+        }
+        NodeProgress?.Invoke(node, success ? "Success" : "Failed");
+        return success;
+    }
+
+    private async Task<bool> ExecuteRefTrackedAsync(
+        RefConfig refNode, PipelineExecutionContext ctx,
+        ExecutionSession session, CancellationToken ct)
+    {
+        if (!_templates.TryGetValue(refNode.TemplateID, out var template))
+        {
+            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            return false;
+        }
+
+        Log("Ref", $"Expanding template: {refNode.TemplateID}");
+        return await ExecuteChildrenTrackedAsync(
+            template.Children, ExecutionMode.Sequential, true, ctx, session, ct);
+    }
+
+    private async Task<bool> ExecuteGroupTrackedAsync(
+        ActionGroupConfig group, PipelineExecutionContext ctx,
+        ExecutionSession session, CancellationToken ct)
+    {
+        Log("ActionGroup", $"[{group.Tag}] Mode={group.ExecutionType}, FailAndContinue={group.FailAndContinue}");
+
+        var success = await ExecuteChildrenTrackedAsync(
+            group.Children, group.ExecutionType, group.FailAndContinue, ctx, session, ct);
+
+        Log("ActionGroup", $"[{group.Tag}] {(success ? "✓ Completed" : "✗ Failed")}");
+        return success || group.FailAndContinue;
+    }
+
+    private async Task<bool> ExecuteActionTrackedAsync(
+        ActionConfig action, PipelineExecutionContext ctx,
+        ExecutionSession session, CancellationToken ct)
+    {
+        var result = new ActionExecutionResult
+        {
+            ActionTag = !string.IsNullOrWhiteSpace(action.Order) ? action.Order : action.Command,
+            ActionType = action.Type.ToString(),
+            AgentName = action.AgentName,
+            Command = action.Command,
+            OriginalNode = action,
+            StartedUtc = DateTime.UtcNow
+        };
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var actionSuccess = await ExecuteActionAsync(action, ctx, ct);
+            sw.Stop();
+            result.Duration = sw.Elapsed;
+            result.Outcome = actionSuccess ? ActionOutcome.Success : ActionOutcome.Failed;
+        }
+        catch (OperationCanceledException)
+        {
+            result.Outcome = ActionOutcome.Terminated;
+            result.Duration = sw.Elapsed;
+        }
+        catch (TimeoutException)
+        {
+            result.Outcome = ActionOutcome.TimedOut;
+            result.Duration = sw.Elapsed;
+        }
+        catch (Exception ex)
+        {
+            result.Outcome = ActionOutcome.Failed;
+            result.ErrorMessage = ex.Message;
+            result.Duration = sw.Elapsed;
+        }
+
+        _sessionManager.RecordResult(session.SessionId, result);
+        return !result.IsRetryable || action.FailAndContinue;
+    }
+
+    // ── Retry only failed actions from a previous session ──────────────
+
+    /// <summary>
+    /// Re-executes only the actions that failed in a previous session,
+    /// using the same resolved parameters from the original run.
+    /// </summary>
+    public async Task RetryFailedAsync(ExecutionSession previousSession, CancellationToken ct)
+    {
+        var failedNodes = previousSession.FailedActions
+            .Where(a => a.OriginalNode is not null)
+            .Select(a => a.OriginalNode!)
+            .ToList();
+
+        if (failedNodes.Count == 0) return;
+
+        // Reconstruct context from the original session
+        var ctx = new PipelineExecutionContext
+        {
+            Parameters = new Dictionary<string, string>(
+                previousSession.ResolvedParameters, StringComparer.OrdinalIgnoreCase)
+        };
+
+        var retrySession = _sessionManager.BeginSession(
+            previousSession.WatchItemTag,
+            $"Retry:{previousSession.EventType}",
+            previousSession.ResolvedParameters,
+            failedNodes);
+
+        Log("Retry", $"Retrying {failedNodes.Count} failed action(s) for '{previousSession.WatchItemTag}'");
+
+        try
+        {
+            await ExecuteChildrenTrackedAsync(
+                failedNodes, ExecutionMode.Sequential, true, ctx, retrySession, ct);
+        }
+        finally
+        {
+            _sessionManager.CompleteSession(retrySession.SessionId);
+            Log("Retry", $"Retry completed: {retrySession.SummaryText}");
+        }
+    }
+
+    // ── Deep clone for snapshot isolation ───────────────────────────────
+
+    private static IActionNode DeepCloneNode(IActionNode node) => node switch
+    {
+        ActionConfig a => new ActionConfig
+        {
+            Type = a.Type, AgentName = a.AgentName,
+            Command = a.Command, Parameters = a.Parameters,
+            Timeout = a.Timeout, PollInterval = a.PollInterval,
+            FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
+            Order = a.Order, UserName = a.UserName, Password = a.Password,
+            From = a.From, To = a.To, Title = a.Title, Body = a.Body,
+            Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
+        },
+        ActionGroupConfig g => new ActionGroupConfig
+        {
+            Tag = g.Tag, ExecutionType = g.ExecutionType,
+            FailAndContinue = g.FailAndContinue,
+            Children = g.Children.Select(DeepCloneNode).ToList()
+        },
+        InitializeConfig i => new InitializeConfig { Tag = i.Tag, ParameterFile = i.ParameterFile },
+        RefConfig r => new RefConfig { TemplateID = r.TemplateID },
+        _ => node
+    };
 }
 
 public sealed record PipelineLogEntry(DateTime Timestamp, string Category, string Message);

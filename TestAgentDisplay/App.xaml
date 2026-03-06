@@ -5,6 +5,7 @@
          StartupUri="Views/MainWindow.xaml">
 <Application.Resources>
     <vm:NonEmptyToVisibilityConverter x:Key="NonEmptyVis" />
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <Color x:Key="BgDark">#FF1A1A2E</Color>
         <Color x:Key="BgPanel">#FF16213E</Color>
         <Color x:Key="BgCard">#FF0F3460</Color>

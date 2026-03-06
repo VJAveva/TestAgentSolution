@@ -11,6 +11,7 @@ using ICSharpCode.AvalonEdit.Folding;
 using ICSharpCode.AvalonEdit.Highlighting;
 using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.Views;
@@ -208,15 +209,22 @@ public partial class MainWindow : Window
             menu.Items.Add(new Separator());
         }
 
-        // ?? Add commands (context-sensitive) ????????????????????????
+        // ?? Add commands (context-sensitive) ??????????????????????????
         if (node.NodeKind is "WatchList")
         {
             menu.Items.Add(CreateMenuItem("Add WatchItem", _vm.AddWatchItemCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Import WatchItems…", _vm.ImportWatchItemsCommand));
+            menu.Items.Add(CreateMenuItem("Export All WatchItems…", _vm.ExportWatchItemsCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("? Edit WatchList XML…", _vm.OpenWatchListEditorCommand));
         }
         else if (node.NodeKind is "WatchItem")
         {
             menu.Items.Add(CreateMenuItem("Add Event", _vm.AddChildNodeCommand));
             menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddActionGroupCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Export WatchItem…", _vm.ExportWatchItemsCommand));
         }
         else if (node.NodeKind is "Event" or "ActionGroup")
         {
@@ -238,6 +246,27 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItem("Delete", _vm.ConfirmDeleteSelectedNodeCommand));
+        }
+
+        // ?? Retry Failed (WatchItem/Event with previous failed session) ??
+        if (node.NodeKind is "WatchItem" or "Event")
+        {
+            var retryTag = node.NodeKind == "WatchItem" ? node.Tag : node.Parent?.Tag;
+            if (!string.IsNullOrEmpty(retryTag))
+            {
+                var sessionMgr = App.Services.GetRequiredService<ExecutionSessionManager>();
+                var lastSession = sessionMgr.GetLastSession(retryTag);
+                if (lastSession?.FailedCount > 0)
+                {
+                    menu.Items.Add(new Separator());
+                    var retryItem = new MenuItem
+                    {
+                        Header = $"? Retry Failed ({lastSession.FailedCount} action{(lastSession.FailedCount > 1 ? "s" : "")})",
+                        Command = _vm.RetryFailedCommand
+                    };
+                    menu.Items.Add(retryItem);
+                }
+            }
         }
 
         // ?? Move Up / Down ??????????????????????????????????????????
@@ -287,6 +316,9 @@ public partial class MainWindow : Window
             menu.Items.Add(CreateMenuItem("Add Template", _vm.AddTemplateCommand));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItem("Edit Template XML", _vm.EditTemplateXmlCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Import Templates…", _vm.ImportTemplatesCommand));
+            menu.Items.Add(CreateMenuItem("Export All Templates…", _vm.ExportTemplatesCommand));
         }
         else if (node.NodeKind is "Template")
         {
@@ -294,6 +326,8 @@ public partial class MainWindow : Window
             menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToTemplateCommand));
             menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToTemplateCommand));
             menu.Items.Add(CreateMenuItem("Add Initialize", _vm.AddInitializeToTemplateCommand));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItem("Export Template…", _vm.ExportTemplatesCommand));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
         }
