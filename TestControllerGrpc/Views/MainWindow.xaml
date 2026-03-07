@@ -635,56 +635,6 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
-                                <!-- System Commands -->
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
-                                                    ToolTip="Execute all enabled WatchItems"
-                                                    Visibility="{Binding ShowExecuteAll}">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Execute All" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerWatchItemCommand}"
-                                                    ToolTip="Trigger selected WatchItem"
-                                                    Visibility="{Binding ShowTriggerAllEvents}">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE769;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Trigger Item" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerEventCommand}"
-                                                    ToolTip="Trigger selected Event"
-                                                    Visibility="{Binding ShowTriggerEvent}">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Trigger Event" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteGroupCommand}"
-                                                    ToolTip="Execute selected ActionGroup"
-                                                    Visibility="{Binding ShowExecuteGroup}">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8CB;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Exec Group" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteSingleActionCommand}"
-                                                    ToolTip="Execute selected Action"
-                                                    Visibility="{Binding ShowExecuteAction}">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xEA80;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Exec Action" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                        <TextBlock Text="Run" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
                             </WrapPanel>
                         </Border>
                     </TabItem>
@@ -803,8 +753,8 @@
                         </Border>
                     </TabItem>
 
-                    <!-- ─── VIEW TAB ─── -->
-                    <TabItem Header="VIEW">
+                    <!-- ─── TOOLS TAB ─── -->
+                    <TabItem Header="TOOLS">
                         <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
@@ -817,6 +767,22 @@
                                                       Style="{StaticResource Cmb}" Width="140" Margin="0" />
                                         </StackPanel>
                                         <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
+                                                    ToolTip="Open Help &amp; Feature Guide">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" Foreground="{DynamicResource Accent}" />
+                                                    <TextBlock Text="Help" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="Help" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>

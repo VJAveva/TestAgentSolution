@@ -1,0 +1,341 @@
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using TestAgentGrpc;
+using TestControllerGrpc.Models;
+
+namespace TestControllerGrpc.ViewModels;
+
+// ?? Agent Registration, Test, Diagnose, Health Check, Self-registration ??
+public sealed partial class MainViewModel
+{
+    [ObservableProperty] private AgentInfoViewModel? _selectedAgent;
+
+    [RelayCommand]
+    private async Task RegisterAgent()
+    {
+        if (string.IsNullOrWhiteSpace(NewAgentName))
+        {
+            AddLog("Agent name required.");
+            return;
+        }
+
+        if (!Uri.TryCreate(NewAgentAddress, UriKind.Absolute, out var uri)
+            || uri.Scheme != "http" || uri.Port == 0)
+        {
+            AddLog($"Invalid address: {NewAgentAddress}. Use http://hostname:port");
+            return;
+        }
+
+        var name = NewAgentName.Trim();
+        var addr = NewAgentAddress.Trim();
+
+        // Remove existing if re-registering
+        var existing = RegisteredAgents.FirstOrDefault(a =>
+            string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null) RegisteredAgents.Remove(existing);
+
+        // Register in dispatcher
+        _dispatcher.RegisterAgent(name, addr);
+
+        // Create view model and add to list
+        var agentVm = new AgentInfoViewModel
+        {
+            Name = name, Address = addr, ConnectionStatus = "Testing"
+        };
+        agentVm.UpdateDetailLine();
+        RegisteredAgents.Add(agentVm);
+        AddLog($"Registering agent: {name} ? {addr}...");
+        NewAgentName = "";
+
+        // Test connectivity
+        await TestSingleAgentAsync(agentVm);
+    }
+
+    [RelayCommand]
+    private async Task TestConnection()
+    {
+        if (SelectedAgent is null) return;
+        await TestSingleAgentAsync(SelectedAgent);
+    }
+
+    [RelayCommand]
+    private async Task TestAllAgents()
+    {
+        await TestAllAgentsAsync();
+    }
+
+    [RelayCommand]
+    private async Task DiagnoseAgent()
+    {
+        if (SelectedAgent is null) return;
+        var agent = SelectedAgent;
+        agent.IsDiagnosing = true;
+        agent.ConnectionStatus = "Testing";
+        agent.UpdateDetailLine();
+
+        AddLog($"?? Diagnosing {agent.Name} ({agent.Address}) ??");
+
+        try
+        {
+            var steps = await _dispatcher.DiagnoseAgentAsync(agent.Name);
+            foreach (var step in steps)
+            {
+                var icon = step.Passed ? "?" : "?";
+                AddLog($"  {icon} {step.Name}: {step.Detail}");
+            }
+
+            var allPassed = steps.All(s => s.Passed);
+            var lastFailed = steps.LastOrDefault(s => !s.Passed);
+
+            if (allPassed)
+            {
+                agent.ConnectionStatus = "Online";
+                agent.ErrorDetail = "";
+                // Also update metrics from the last step (Snapshot)
+                await TestSingleAgentAsync(agent);
+            }
+            else
+            {
+                agent.ConnectionStatus = "Offline";
+                agent.ErrorDetail = lastFailed?.Detail ?? "Unknown failure";
+                agent.UpdateDetailLine();
+            }
+
+            AddLog($"?? Diagnosis complete: {(allPassed ? "ALL PASSED" : $"FAILED at {lastFailed?.Name}")} ??");
+        }
+        catch (Exception ex)
+        {
+            agent.ConnectionStatus = "Error";
+            agent.ErrorDetail = ex.Message;
+            agent.UpdateDetailLine();
+            AddLog($"  ? Diagnosis error: {ex.Message}");
+        }
+        finally
+        {
+            agent.IsDiagnosing = false;
+        }
+    }
+
+    [RelayCommand]
+    private void UnregisterAgent()
+    {
+        if (SelectedAgent is null) return;
+        var name = SelectedAgent.Name;
+        _dispatcher.UnregisterAgent(name);
+        RegisteredAgents.Remove(SelectedAgent);
+        SelectedAgent = null;
+        AddLog($"Unregistered agent: {name}");
+        RefreshAgentStatusSummary();
+    }
+
+    private async Task TestSingleAgentAsync(AgentInfoViewModel agentVm)
+    {
+        agentVm.ConnectionStatus = "Testing";
+        agentVm.UpdateDetailLine();
+
+        var (snapshot, error) = await _dispatcher.TestConnectionAsync(agentVm.Name);
+
+        if (snapshot is not null)
+        {
+            var stateLabel = snapshot.State switch
+            {
+                AgentState.Ready => "Ready",
+                AgentState.Running => "Running",
+                _ => "Inactive"
+            };
+            agentVm.AgentState = stateLabel;
+
+            if (snapshot.Metrics is not null)
+            {
+                agentVm.CpuUsage = $"{snapshot.Metrics.CpuUsagePct:F0}%";
+                agentVm.MemoryUsage = $"{snapshot.Metrics.MemoryUsedMb:F0}MB";
+                agentVm.DiskFree = $"{snapshot.Metrics.DiskFreeGb:F1}GB";
+            }
+            else
+            {
+                agentVm.CpuUsage = "—";
+                agentVm.MemoryUsage = "—";
+                agentVm.DiskFree = "—";
+            }
+
+            agentVm.ConnectionStatus = "Online";
+            agentVm.ErrorDetail = "";
+            agentVm.UpdateDetailLine();
+            AddLog($"? Agent {agentVm.Name}: {stateLabel} | CPU: {agentVm.CpuUsage} Mem: {agentVm.MemoryUsage} Disk: {agentVm.DiskFree}");
+        }
+        else
+        {
+            agentVm.ConnectionStatus = "Offline";
+            agentVm.AgentState = "—";
+            agentVm.CpuUsage = "—";
+            agentVm.MemoryUsage = "—";
+            agentVm.DiskFree = "—";
+            agentVm.ErrorDetail = error ?? "Unknown error";
+            agentVm.UpdateDetailLine();
+            AddLog($"? Agent {agentVm.Name}: {error}");
+        }
+        RefreshAgentStatusSummary();
+    }
+
+    private async Task TestAllAgentsAsync()
+    {
+        AddLog($"Testing {RegisteredAgents.Count} agent(s)...");
+        var tasks = RegisteredAgents.Select(TestSingleAgentAsync).ToArray();
+        await Task.WhenAll(tasks);
+        var online = RegisteredAgents.Count(a => a.ConnectionStatus == "Online");
+        AddLog($"Agent check complete: {online}/{RegisteredAgents.Count} online");
+        RefreshAgentStatusSummary();
+    }
+
+    private void RefreshAgentStatusSummary()
+    {
+        if (RegisteredAgents.Count == 0)
+        {
+            AgentStatusSummary = "No agents";
+            return;
+        }
+        var online = RegisteredAgents.Count(a => a.ConnectionStatus == "Online");
+        AgentStatusSummary = $"{online}/{RegisteredAgents.Count} online";
+    }
+
+    // ?? Periodic agent health check (runs every 30s) ??????????????????
+
+    private System.Windows.Threading.DispatcherTimer? _healthCheckTimer;
+
+    /// <summary>Starts background health-check polling for all registered agents.</summary>
+    public void StartPeriodicHealthCheck(int intervalSeconds = 30)
+    {
+        _healthCheckTimer?.Stop();
+        _healthCheckTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(intervalSeconds)
+        };
+        _healthCheckTimer.Tick += async (_, _) =>
+        {
+            if (RegisteredAgents.Count == 0) return;
+            foreach (var agent in RegisteredAgents.ToList())
+            {
+                try
+                {
+                    var (snapshot, _) = await _dispatcher.TestConnectionAsync(agent.Name);
+                    if (snapshot is not null)
+                    {
+                        agent.AgentState = snapshot.State switch
+                        {
+                            AgentState.Ready => "Ready",
+                            AgentState.Running => "Running",
+                            _ => "Inactive"
+                        };
+                        if (snapshot.Metrics is not null)
+                        {
+                            agent.CpuUsage = $"{snapshot.Metrics.CpuUsagePct:F0}%";
+                            agent.MemoryUsage = $"{snapshot.Metrics.MemoryUsedMb:F0}MB";
+                            agent.DiskFree = $"{snapshot.Metrics.DiskFreeGb:F1}GB";
+                        }
+                        agent.ConnectionStatus = "Online";
+                        agent.ErrorDetail = "";
+                    }
+                    else
+                    {
+                        agent.ConnectionStatus = "Offline";
+                    }
+                    agent.UpdateDetailLine();
+                }
+                catch { /* silent — background check */ }
+            }
+        };
+        _healthCheckTimer.Start();
+    }
+
+    public void StopPeriodicHealthCheck()
+    {
+        _healthCheckTimer?.Stop();
+        _healthCheckTimer = null;
+    }
+
+    // ?? Agent self-registration via gRPC server events ??????????????
+
+    private void OnAgentSelfRegistered(string name, string address)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            // If already in list, update address; else add new
+            var existing = RegisteredAgents.FirstOrDefault(a =>
+                string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                existing.Address = address;
+                existing.ConnectionStatus = "Online";
+                existing.AgentState = "Ready";
+                existing.UpdateDetailLine();
+            }
+            else
+            {
+                var vm = new AgentInfoViewModel
+                {
+                    Name = name, Address = address,
+                    ConnectionStatus = "Online", AgentState = "Ready"
+                };
+                vm.UpdateDetailLine();
+                RegisteredAgents.Add(vm);
+            }
+            AddLog($"? Agent self-registered: {name} ? {address}");
+            RefreshAgentStatusSummary();
+        });
+    }
+
+    private void OnAgentSelfUnregistered(string name)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            var existing = RegisteredAgents.FirstOrDefault(a =>
+                string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                existing.ConnectionStatus = "Offline";
+                existing.AgentState = "Shutdown";
+                existing.UpdateDetailLine();
+            }
+            AddLog($"? Agent unregistered: {name}");
+            RefreshAgentStatusSummary();
+        });
+    }
+
+    private void OnAgentHeartbeat(string name, AgentState state, ResourceMetrics? metrics)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            var existing = RegisteredAgents.FirstOrDefault(a =>
+                string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is null)
+            {
+                // Agent is heartbeating but not in the UI list — add it if registered in dispatcher
+                var address = _dispatcher.GetAgentAddress(name);
+                if (address is null) return;
+
+                existing = new AgentInfoViewModel { Name = name, Address = address };
+                RegisteredAgents.Add(existing);
+                AddLog($"? Agent discovered via heartbeat: {name} ? {address}");
+            }
+
+            existing.ConnectionStatus = "Online";
+            existing.AgentState = state switch
+            {
+                AgentState.Ready => "Ready",
+                AgentState.Running => "Running",
+                _ => "Inactive"
+            };
+            if (metrics is not null)
+            {
+                existing.CpuUsage = $"{metrics.CpuUsagePct:F0}%";
+                existing.MemoryUsage = $"{metrics.MemoryUsedMb:F0}MB";
+                existing.DiskFree = $"{metrics.DiskFreeGb:F1}GB";
+            }
+            existing.LastChecked = DateTime.Now.ToString("HH:mm:ss");
+            existing.UpdateDetailLine();
+            RefreshAgentStatusSummary();
+        });
+    }
+}

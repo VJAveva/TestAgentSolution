@@ -170,10 +170,22 @@ public partial class MainWindow : Window
     // FEATURE 2A: CONTEXT MENUS (built in code-behind)
     // ???????????????????????????????????????????????????????????????
 
+    // ?? Context menu caches (rebuilt only when node kind changes) ???
+    private string? _lastWatchListContextMenuNodeKind;
+    private ContextMenu? _cachedWatchListContextMenu;
+    private string? _lastTemplateContextMenuNodeKind;
+    private ContextMenu? _cachedTemplateContextMenu;
+
     private void OnWatchListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var node = WatchListTreeView.SelectedItem as TreeNodeViewModel;
-        WatchListTreeView.ContextMenu = BuildWatchListContextMenu(node);
+        var nodeKind = node?.NodeKind;
+        if (nodeKind != _lastWatchListContextMenuNodeKind || _cachedWatchListContextMenu is null)
+        {
+            _cachedWatchListContextMenu = BuildWatchListContextMenu(node);
+            _lastWatchListContextMenuNodeKind = nodeKind;
+        }
+        WatchListTreeView.ContextMenu = _cachedWatchListContextMenu;
     }
 
     private ContextMenu BuildWatchListContextMenu(TreeNodeViewModel? node)
@@ -297,7 +309,13 @@ public partial class MainWindow : Window
     private void OnTemplateContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var node = TemplateTreeView.SelectedItem as TreeNodeViewModel;
-        TemplateTreeView.ContextMenu = BuildTemplateContextMenu(node);
+        var nodeKind = node?.NodeKind;
+        if (nodeKind != _lastTemplateContextMenuNodeKind || _cachedTemplateContextMenu is null)
+        {
+            _cachedTemplateContextMenu = BuildTemplateContextMenu(node);
+            _lastTemplateContextMenuNodeKind = nodeKind;
+        }
+        TemplateTreeView.ContextMenu = _cachedTemplateContextMenu;
     }
 
     private ContextMenu BuildTemplateContextMenu(TreeNodeViewModel? node)

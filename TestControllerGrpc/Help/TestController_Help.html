@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TestController — Help &amp; Feature Guide</title>
+    <style>
+        :root { --bg: #1e1e2e; --surface: #313244; --text: #cdd6f4; --accent: #89b4fa; --green: #a6e3a1; --red: #f38ba8; --mauve: #cba6f7; --peach: #fab387; --yellow: #f9e2af; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 40px; max-width: 960px; margin: 0 auto; }
+        h1 { color: var(--accent); margin-bottom: 8px; }
+        h2 { color: var(--green); margin: 28px 0 12px; border-bottom: 1px solid var(--surface); padding-bottom: 6px; }
+        h3 { color: var(--mauve); margin: 18px 0 8px; }
+        p, li { margin-bottom: 8px; }
+        ul { padding-left: 24px; }
+        code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 0.9em; }
+        kbd { background: var(--surface); border: 1px solid #585b70; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; }
+        .badge-green { background: #1e3a2a; color: var(--green); }
+        .badge-blue { background: #1e2a3a; color: var(--accent); }
+        .badge-mauve { background: #2a1e3a; color: var(--mauve); }
+        .badge-peach { background: #3a2a1e; color: var(--peach); }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+        th, td { text-align: left; padding: 8px 12px; border: 1px solid var(--surface); }
+        th { background: var(--surface); color: var(--accent); }
+        hr { border: none; border-top: 1px solid var(--surface); margin: 32px 0; }
+    </style>
+</head>
+<body>
+
+<h1>TestController — Help &amp; Feature Guide</h1>
+<p>Version 1.0 &mdash; WatchList Editor, Execution Engine &amp; Agent Management</p>
+
+<hr>
+
+<h2>Getting Started</h2>
+<p>TestController manages <strong>WatchLists</strong> — XML-based configurations that define:</p>
+<ul>
+    <li><strong>WatchItems</strong> — monitored folder paths with file filters</li>
+    <li><strong>Events</strong> — trigger types (Renamed, Created, Changed)</li>
+    <li><strong>Actions</strong> — commands executed when events fire (local, remote, email)</li>
+    <li><strong>Templates</strong> — reusable action pipelines referenced via <code>&lt;Ref&gt;</code></li>
+</ul>
+
+<h2>Ribbon Tabs</h2>
+
+<h3><span class="badge badge-blue">HOME</span> — File &amp; CRUD</h3>
+<ul>
+    <li><strong>Open / Save / Save As</strong> — Load and save WatchList XML files</li>
+    <li><strong>Import / Export</strong> — Merge WatchItems from other files or export selections</li>
+    <li><strong>Edit XML</strong> — Open the full WatchList in the XML editor</li>
+    <li><strong>WatchList group</strong> — Add WatchItem, Event, Group, Action, Ref, Init nodes</li>
+    <li><strong>Templates group</strong> — Add/edit/delete templates (visible when Templates tab is active)</li>
+</ul>
+
+<h3><span class="badge badge-green">EXECUTION</span> — Run &amp; Control</h3>
+<ul>
+    <li><strong>Execute All</strong> — Run all enabled WatchItems</li>
+    <li><strong>Trigger Item / Event</strong> — Run selected WatchItem or Event</li>
+    <li><strong>Exec Group / Action</strong> — Run selected ActionGroup or single Action</li>
+    <li><strong>Reset Status</strong> — Clear all execution status indicators</li>
+    <li><strong>Cancel</strong> — Cancel running execution (appears only during execution)</li>
+    <li><strong>Retry Failed</strong> — Re-execute only failed actions from the last session</li>
+</ul>
+
+<h3><span class="badge badge-mauve">TOOLS</span> — Appearance &amp; Help</h3>
+<ul>
+    <li><strong>Theme</strong> — Switch between Dark, Light, and other themes</li>
+    <li><strong>Help</strong> — Opens this help file</li>
+</ul>
+
+<h2>WatchList Tree</h2>
+<p>The left panel shows the WatchList hierarchy. Right-click any node for context-sensitive actions.</p>
+<ul>
+    <li><strong>Drag &amp; drop</strong> — Reorder Action/Group/Ref nodes within the same Event</li>
+    <li><strong>Search</strong> — Use the search box above the tree to filter nodes by name or tag</li>
+    <li><strong>Status icons</strong> — Green dot = Success, Red = Failed, Blue = Running</li>
+</ul>
+
+<h2>Agent Management</h2>
+<p>The right panel manages remote agents connected via gRPC.</p>
+<ul>
+    <li><strong>Register + Test</strong> — Add an agent with name and <code>http://host:port</code> address</li>
+    <li><strong>Test / Test All</strong> — Verify agent connectivity and retrieve metrics</li>
+    <li><strong>Diagnose</strong> — Run full connectivity diagnostic (DNS, TCP, gRPC, Snapshot)</li>
+    <li><strong>Health Check</strong> — Automatic background polling every 30 seconds</li>
+    <li><strong>Self-registration</strong> — Agents can register themselves via the gRPC server</li>
+</ul>
+
+<h2>Initialize (Parameter Files)</h2>
+<p>Initialize nodes load key-value pairs from <code>.txt</code> files. Tokens like <code>[ServerName]</code> in Action commands are resolved at execution time.</p>
+<ul>
+    <li>Select an Initialize node to browse, edit, and save parameter files inline</li>
+    <li>Tokens are shown resolved in the tree display text</li>
+</ul>
+
+<h2>XML Editors</h2>
+<table>
+    <tr><th>Editor</th><th>Access</th><th>Description</th></tr>
+    <tr><td>Inline XML Editor</td><td>Toggle from center panel</td><td>Edit WatchItem or full WatchList XML with syntax highlighting</td></tr>
+    <tr><td>WatchItem XML Editor</td><td>WatchItem properties ? Edit WatchItem XML</td><td>Standalone modal editor for a single WatchItem</td></tr>
+    <tr><td>WatchList XML Editor</td><td>HOME ? Edit XML</td><td>Full WatchList XML with diff-merge support</td></tr>
+    <tr><td>Template XML Editor</td><td>Templates tab ? Edit Template XML</td><td>Edit all templates in XML</td></tr>
+</table>
+
+<h2>Execution Log</h2>
+<ul>
+    <li><strong>Filter</strong> — By Tag, Agent, Level (Info/Success/Warning/Error), or free-text search</li>
+    <li><strong>Auto-scroll</strong> — Enable/disable automatic scroll to latest entry</li>
+    <li><strong>Pause</strong> — Temporarily stop live updates</li>
+    <li><strong>Export</strong> — Save log to a text file</li>
+    <li><strong>Copy Failed</strong> — Copy only error entries to clipboard</li>
+</ul>
+
+<h2>Keyboard Shortcuts</h2>
+<table>
+    <tr><th>Shortcut</th><th>Action</th></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open WatchList file</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save WatchList</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Delete selected node (with confirmation)</td></tr>
+</table>
+
+<hr>
+<p style="color: #585b70; font-size: 0.85em;">TestController © 2025. Built with WPF, CommunityToolkit.Mvvm, gRPC, and AvalonEdit.</p>
+
+</body>
+</html>
