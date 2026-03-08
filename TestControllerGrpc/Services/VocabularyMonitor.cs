@@ -17,6 +17,7 @@ public sealed class VocabularyMonitor : IDisposable
     private FileSystemWatcher? _watcher;
     private CancellationTokenSource? _debounceCts;
     private string _filePath = "";
+    private volatile bool _suppressNext;
 
     public event Action<WatchListConfig>? ConfigReloaded;
 
@@ -26,6 +27,12 @@ public sealed class VocabularyMonitor : IDisposable
     {
         _logger = logger;
     }
+
+    /// <summary>
+    /// Suppresses the next file-change reload. Call this before saving
+    /// to prevent a save → detect change → reload → rebuild cycle.
+    /// </summary>
+    public void SuppressNextReload() => _suppressNext = true;
 
     /// <summary>
     /// Loads the initial configuration and starts monitoring for changes.
@@ -72,6 +79,13 @@ public sealed class VocabularyMonitor : IDisposable
     /// </summary>
     private void DebounceReload()
     {
+        // If we just saved ourselves, skip this reload cycle
+        if (_suppressNext)
+        {
+            _suppressNext = false;
+            return;
+        }
+
         _debounceCts?.Cancel();
         _debounceCts = new CancellationTokenSource();
         var token = _debounceCts.Token;

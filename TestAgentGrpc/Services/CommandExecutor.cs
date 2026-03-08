@@ -207,11 +207,35 @@ public sealed class CommandExecutor : IDisposable
             var stderrTask = StreamOutputAsync(executionId, _currentProcess.StandardError,
                 OutputKind.OutputStderr, record, perCallChannel);
 
+            // ── HEARTBEAT for long-running silent processes ────────
+            var heartbeatTask = Task.Run(async () =>
+            {
+                var started = DateTime.UtcNow;
+                while (!ct.IsCancellationRequested && !_currentProcess.HasExited)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                    }
+                    catch (OperationCanceledException) { break; }
+
+                    if (!_currentProcess.HasExited)
+                    {
+                        var elapsed = DateTime.UtcNow - started;
+                        EmitEvent(executionId, ExecutionEventType.EventProgress,
+                            detail: $"Still running... (PID {_currentProcess.Id}, {elapsed:hh\\:mm\\:ss} elapsed)",
+                            perCallChannel: perCallChannel);
+                    }
+                }
+            }, ct);
+
             // ── WAIT FOR EXIT (cancellation-aware) ─────────────────
             await _currentProcess.WaitForExitAsync(ct);
 
             // Ensure streams are fully drained after process exits
             await Task.WhenAll(stdoutTask, stderrTask);
+            // Heartbeat will self-terminate since HasExited is now true
+            try { await heartbeatTask; } catch (OperationCanceledException) { }
 
             _lastExitCode = _currentProcess.ExitCode;
             record.Complete(_lastExitCode);

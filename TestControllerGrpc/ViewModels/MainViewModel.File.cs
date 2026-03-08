@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -7,7 +7,7 @@ using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
-// ?? File Operations (Open, Save, SaveAs) ????????????????????????????
+// ── File Operations (Open, Save, SaveAs) ────────────────────────────
 public sealed partial class MainViewModel
 {
     [RelayCommand]
@@ -35,7 +35,7 @@ public sealed partial class MainViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load vocabulary file");
-            AddLog($"? Load error: {ex.Message}", LogSeverity.Error);
+            AddLog($"{Helpers.LogIcons.Error} Load error: {ex.Message}", LogSeverity.Error);
         }
     }
 
@@ -46,6 +46,10 @@ public sealed partial class MainViewModel
         try
         {
             WriteBackAll();
+
+            // Suppress the file-watcher reload — we're saving our own in-memory state
+            _vocabMonitor.SuppressNextReload();
+
             WatchListXmlParser.Save(_config, VocabFilePath);
             IsDirty = false;
             AddLog($"Saved: {VocabFilePath}");
@@ -53,7 +57,7 @@ public sealed partial class MainViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save vocabulary file");
-            AddLog($"? Save error: {ex.Message}", LogSeverity.Error);
+            AddLog($"{Helpers.LogIcons.Error} Save error: {ex.Message}", LogSeverity.Error);
         }
     }
 
@@ -74,3 +78,4 @@ public sealed partial class MainViewModel
         Application.Current?.Shutdown();
     }
 }
+

@@ -45,6 +45,9 @@ public sealed class ExecutionMonitorForm : Form
 
     private IDisposable? _subscription;
     private CancellationTokenSource? _cts;
+    private readonly System.Windows.Forms.Timer _heartbeatTimer;
+    private readonly ToolStripStatusLabel _connectionLabel;
+    private bool _isPaused;
 
     public ExecutionMonitorForm(
         CommandExecutor executor,
@@ -70,9 +73,10 @@ public sealed class ExecutionMonitorForm : Form
         _memLabel   = new ToolStripStatusLabel("Mem: —") { BorderSides = ToolStripStatusLabelBorderSides.Left };
         _diskLabel  = new ToolStripStatusLabel("Disk: —") { BorderSides = ToolStripStatusLabelBorderSides.Left };
         _runsLabel  = new ToolStripStatusLabel("Runs: 0/0") { BorderSides = ToolStripStatusLabelBorderSides.Left, Spring = true };
+        _connectionLabel = new ToolStripStatusLabel("\u25CF Connected") { ForeColor = Color.LimeGreen, BorderSides = ToolStripStatusLabelBorderSides.Left };
 
         _statusStrip = new StatusStrip();
-        _statusStrip.Items.AddRange(new ToolStripItem[] { _stateLabel, _cpuLabel, _memLabel, _diskLabel, _runsLabel });
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _stateLabel, _cpuLabel, _memLabel, _diskLabel, _runsLabel, _connectionLabel });
 
         // ── Live output (top panel) ────────────────────────────────
         var liveLabel = new Label
@@ -151,6 +155,20 @@ public sealed class ExecutionMonitorForm : Form
         bottomPanel.Controls.Add(_historyGrid);
         bottomPanel.Controls.Add(histLabel);
 
+        // ── Toolbar ────────────────────────────────────────────────
+        var toolbar = new ToolStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden };
+        var clearBtn = new ToolStripButton("Clear Output") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        clearBtn.Click += (_, _) => { _liveOutput.Clear(); };
+        var pauseBtn = new ToolStripButton("Pause") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        pauseBtn.Click += (_, _) =>
+        {
+            _isPaused = !_isPaused;
+            pauseBtn.Text = _isPaused ? "Resume" : "Pause";
+        };
+        var refreshBtn = new ToolStripButton("Refresh History") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        refreshBtn.Click += (_, _) => RefreshHistory();
+        toolbar.Items.AddRange(new ToolStripItem[] { clearBtn, new ToolStripSeparator(), pauseBtn, new ToolStripSeparator(), refreshBtn });
+
         // ── Splitter ───────────────────────────────────────────────
         _splitter = new SplitContainer
         {
@@ -163,7 +181,16 @@ public sealed class ExecutionMonitorForm : Form
         _splitter.Panel2.Controls.Add(bottomPanel);
 
         Controls.Add(_splitter);
+        Controls.Add(toolbar);
         Controls.Add(_statusStrip);
+
+        // ── Heartbeat blink timer ──────────────────────────────────
+        _heartbeatTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _heartbeatTimer.Tick += (_, _) =>
+        {
+            _connectionLabel.ForeColor = _connectionLabel.ForeColor == Color.LimeGreen
+                ? Color.FromArgb(30, 30, 30) : Color.LimeGreen;
+        };
 
         // ── Start event consumption ────────────────────────────────
         Load += OnLoad;
@@ -173,8 +200,22 @@ public sealed class ExecutionMonitorForm : Form
     private void OnLoad(object? s, EventArgs e)
     {
         _cts = new CancellationTokenSource();
-        var (reader, sub) = _broadcaster.Subscribe();
+
+        // Dispose previous subscription if form is reopened
+        _subscription?.Dispose();
+        var (reader, sub) = _broadcaster.Subscribe(capacity: 5000);
         _subscription = sub;
+
+        // Show recent history as context when form opens
+        var recent = _tracker.GetHistory(20);
+        foreach (var r in recent.Reverse())
+        {
+            var icon = r.Outcome == ExecutionOutcome.OutcomeSuccess ? "\u2714" : "\u2716";
+            AppendLine($"[HISTORY] {icon} {r.Command} {r.Arguments} \u2192 exit {r.ExitCode}",
+                r.ExitCode == 0 ? Color.DimGray : Color.IndianRed);
+        }
+        if (recent.Count > 0)
+            AppendLine("\u2500\u2500 Live events below \u2500\u2500", Color.DimGray);
 
         // Consume events on a background task, marshal to UI thread
         _ = Task.Run(async () =>
@@ -195,14 +236,16 @@ public sealed class ExecutionMonitorForm : Form
             }
         });
 
-        // Load existing history
+        // Load existing history & start heartbeat blink
         RefreshHistory();
         RefreshStatus();
+        _heartbeatTimer.Start();
     }
 
     private void OnFormClosed(object? s, FormClosedEventArgs e)
     {
         _cts?.Cancel();
+        _heartbeatTimer.Stop();
         _subscription?.Dispose();
     }
 
@@ -213,37 +256,43 @@ public sealed class ExecutionMonitorForm : Form
         switch (evt.EventType)
         {
             case ExecutionEventType.EventQueued:
-                AppendLine($"⏳ [{evt.ExecutionId}] QUEUED: {evt.Detail}", Color.Gray);
+                AppendLine($"\u23F3 [{evt.ExecutionId}] QUEUED: {evt.Detail}", Color.Gray);
                 break;
 
             case ExecutionEventType.EventStarted:
-                AppendLine($"🚀 [{evt.ExecutionId}] STARTED: {evt.Command} {evt.Arguments}", Color.FromArgb(100, 200, 255));
+                AppendLine($"\uD83D\uDE80 [{evt.ExecutionId}] STARTED: {evt.Command} {evt.Arguments}", Color.FromArgb(100, 200, 255));
                 AppendLine($"   Execution ID: {evt.ExecutionId}", Color.FromArgb(150, 150, 255));
                 break;
 
             case ExecutionEventType.EventStdoutLine:
-                AppendLine($"   {evt.OutputLine}", Color.FromArgb(204, 204, 204));
+                if (!_isPaused)
+                    AppendLine($"   {evt.OutputLine}", Color.FromArgb(204, 204, 204));
                 break;
 
             case ExecutionEventType.EventStderrLine:
-                AppendLine($"⚠  {evt.OutputLine}", Color.FromArgb(255, 180, 80));
+                AppendLine($"\u26A0  {evt.OutputLine}", Color.FromArgb(255, 180, 80));
+                break;
+
+            case ExecutionEventType.EventProgress:
+                if (!_isPaused)
+                    AppendLine($"\u2139 [{evt.ExecutionId}] {evt.Detail}", Color.FromArgb(120, 180, 255));
                 break;
 
             case ExecutionEventType.EventCompleted:
                 var color = evt.ExitCode == 0 ? Color.FromArgb(80, 220, 100) : Color.FromArgb(255, 100, 100);
-                AppendLine($"✅ [{evt.ExecutionId}] COMPLETED — exit code {evt.ExitCode}", color);
+                AppendLine($"\u2714 [{evt.ExecutionId}] COMPLETED \u2014 exit code {evt.ExitCode}", color);
                 AppendLine("", Color.Gray); // blank separator
                 RefreshHistory();
                 break;
 
             case ExecutionEventType.EventFailed:
-                AppendLine($"❌ [{evt.ExecutionId}] FAILED: {evt.ErrorMessage}", Color.Red);
+                AppendLine($"\u2716 [{evt.ExecutionId}] FAILED: {evt.ErrorMessage}", Color.Red);
                 AppendLine("", Color.Gray);
                 RefreshHistory();
                 break;
 
             case ExecutionEventType.EventTerminated:
-                AppendLine($"🛑 [{evt.ExecutionId}] TERMINATED: {evt.Detail}", Color.FromArgb(255, 100, 100));
+                AppendLine($"\uD83D\uDED1 [{evt.ExecutionId}] TERMINATED: {evt.Detail}", Color.FromArgb(255, 100, 100));
                 RefreshHistory();
                 break;
 

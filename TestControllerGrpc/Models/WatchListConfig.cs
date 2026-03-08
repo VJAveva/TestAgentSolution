@@ -66,6 +66,7 @@ public sealed class ActionConfig : IActionNode
     public string AgentName { get; set; } = "";
     public string Command { get; set; } = "";
     public string Parameters { get; set; } = "";
+    /// <summary>Timeout in seconds. 0 = no timeout (infinite). For installs, use 3600+ (1 hour).</summary>
     public int Timeout { get; set; }
     public int PollInterval { get; set; } = 1000;
     public bool FailAndContinue { get; set; }

@@ -292,17 +292,17 @@ public sealed class AgentGrpcDispatcher : IDisposable
         {
             var client = endpoint.GetClient();
 
-            // Timeout=0 means no limit — support long-running actions (1h+)
+            // Timeout is in SECONDS in the WatchList XML. 0 = no limit.
             CancellationTokenSource? timeoutCts = resolved.Timeout > 0
-                ? new CancellationTokenSource(resolved.Timeout)
+                ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
                 : null;
             using var _timeoutCtsDisposable = timeoutCts;
             using var linked = timeoutCts is not null
                 ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
                 : CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-            // Send timeout to agent so it can enforce server-side (ms → seconds for proto field)
-            var timeoutSeconds = resolved.Timeout > 0 ? resolved.Timeout / 1000 : 0;
+            // Send timeout to agent so it can enforce server-side (already in seconds)
+            var timeoutSeconds = resolved.Timeout;
 
             using var call = client.RunCommandStreamed(new RunCommandRequest
             {
@@ -385,8 +385,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
         }
         catch (OperationCanceledException)
         {
-            var timeoutSec = resolved.Timeout > 0 ? resolved.Timeout / 1000.0 : 0;
-            return new ActionResult(false, -1, $"Timed out ({timeoutSec:F0}s)");
+            return new ActionResult(false, -1, $"Timed out ({resolved.Timeout}s)");
         }
         catch (Exception ex)
         {
@@ -528,6 +527,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
                     ConnectTimeout               = TimeSpan.FromSeconds(5),
                     KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
                     KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
+                    KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
                     PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
                     PooledConnectionLifetime      = TimeSpan.FromMinutes(5),
                 },
