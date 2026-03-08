@@ -300,4 +300,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         StopPeriodicHealthCheck();
         _executionCts?.Dispose();
     }
+
+    /// <summary>Auto-populate gRPC address from agent name for convenience.</summary>
+    partial void OnNewAgentNameChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            NewAgentAddress = $"http://{value.Trim()}:5200";
+        else
+            NewAgentAddress = "http://localhost:5200";
+    }
 }

@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
@@ -136,14 +137,12 @@ public sealed partial class MainViewModel
         {
             if (msg.Contains("error", StringComparison.OrdinalIgnoreCase)
              || msg.Contains("failed", StringComparison.OrdinalIgnoreCase)
-             || msg.Contains("?", StringComparison.Ordinal)
-             || msg.Contains("?", StringComparison.Ordinal)
+             || msg.Contains(LogIcons.Error, StringComparison.Ordinal)
              || msg.StartsWith("[Action] X", StringComparison.Ordinal))
                 severity = LogSeverity.Error;
             else if (msg.Contains("success", StringComparison.OrdinalIgnoreCase)
                   || msg.Contains("completed", StringComparison.OrdinalIgnoreCase)
-                  || msg.Contains("?", StringComparison.Ordinal)
-                  || msg.Contains("?", StringComparison.Ordinal))
+                  || msg.Contains(LogIcons.Success, StringComparison.Ordinal))
                 severity = LogSeverity.Success;
         }
 

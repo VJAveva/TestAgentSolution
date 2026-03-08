@@ -1,6 +1,7 @@
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -379,7 +380,7 @@ public sealed partial class MainViewModel
 
         IsExecuting = true;
         _executionCts = new CancellationTokenSource();
-        AddLog($"? Retrying {lastSession.FailedCount} failed action(s) for '{watchItemTag}'…");
+        AddLog($"{LogIcons.Info} Retrying {lastSession.FailedCount} failed action(s) for '{watchItemTag}'...");
 
         try
         {
@@ -387,9 +388,9 @@ public sealed partial class MainViewModel
 
             var retrySession = _sessionManager.GetLastSession(watchItemTag);
             if (retrySession?.FailedCount == 0)
-                AddLog("? Retry complete: all actions succeeded.", LogSeverity.Success);
+                AddLog($"{LogIcons.Success} Retry complete: all actions succeeded.", LogSeverity.Success);
             else
-                AddLog($"? Retry complete: {retrySession?.FailedCount} action(s) still failing.", LogSeverity.Warning);
+                AddLog($"{LogIcons.Warning} Retry complete: {retrySession?.FailedCount} action(s) still failing.", LogSeverity.Warning);
         }
         catch (OperationCanceledException)
         {
@@ -397,7 +398,7 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            AddLog($"? Retry failed: {ex.Message}", LogSeverity.Error);
+            AddLog($"{LogIcons.Error} Retry failed: {ex.Message}", LogSeverity.Error);
         }
         finally
         {
@@ -428,3 +429,4 @@ public sealed partial class MainViewModel
         AddLog($"Changed ExecutionType of '{node.DisplayText}' to {newMode}");
     }
 }
+

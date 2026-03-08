@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.Generic;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -247,12 +249,10 @@ public sealed partial class MainViewModel
     private void OnLogEntry(PipelineLogEntry e)
     {
         var severity = e.Message.Contains("Failed", StringComparison.OrdinalIgnoreCase)
-                    || e.Message.StartsWith("?", StringComparison.Ordinal)
-                    || e.Message.StartsWith("?", StringComparison.Ordinal)
+                    || e.Message.Contains(LogIcons.Error, StringComparison.Ordinal)
             ? LogSeverity.Error
             : e.Message.Contains("Success", StringComparison.OrdinalIgnoreCase)
-                    || e.Message.StartsWith("?", StringComparison.Ordinal)
-                    || e.Message.StartsWith("?", StringComparison.Ordinal)
+                    || e.Message.Contains(LogIcons.Success, StringComparison.Ordinal)
               ? LogSeverity.Success
               : LogSeverity.Info;
         AddLog($"[{e.Category}] {e.Message}", severity);
@@ -264,8 +264,17 @@ public sealed partial class MainViewModel
         AddLog($"[{agent}:{kind}] {line}", severity);
     }
 
+    private readonly Dictionary<string, string> _lastAgentStatus = new(StringComparer.OrdinalIgnoreCase);
+
     private void OnStatusChanged(string agent, string status)
     {
+        // Only log when the status actually changes for this agent to avoid noise
+        if (_lastAgentStatus.TryGetValue(agent, out var previous) &&
+            string.Equals(previous, status, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _lastAgentStatus[agent] = status;
+
         var severity = status.Contains("Failed", StringComparison.OrdinalIgnoreCase)
                     || status.Contains("Unreachable", StringComparison.OrdinalIgnoreCase)
             ? LogSeverity.Error

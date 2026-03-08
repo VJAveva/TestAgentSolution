@@ -1,7 +1,8 @@
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Windows;
 using TestAgentGrpc;
+using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.ViewModels;
@@ -45,7 +46,7 @@ public sealed partial class MainViewModel
         };
         agentVm.UpdateDetailLine();
         RegisteredAgents.Add(agentVm);
-        AddLog($"Registering agent: {name} ? {addr}...");
+        AddLog($"{LogIcons.Info} Registering agent: {name} {LogIcons.Arrow} {addr}...");
         NewAgentName = "";
 
         // Test connectivity
@@ -74,19 +75,22 @@ public sealed partial class MainViewModel
         agent.ConnectionStatus = "Testing";
         agent.UpdateDetailLine();
 
-        AddLog($"?? Diagnosing {agent.Name} ({agent.Address}) ??");
+        AddLog($"{LogIcons.Diagnose} Diagnosing {agent.Name} ({agent.Address})");
 
         try
         {
             var steps = await _dispatcher.DiagnoseAgentAsync(agent.Name);
             foreach (var step in steps)
             {
-                var icon = step.Passed ? "?" : "?";
-                AddLog($"  {icon} {step.Name}: {step.Detail}");
+                var icon = LogIcons.ForDiagnosticStep(step.Passed, step.IsFatal);
+                var stepSeverity = step.Passed ? LogSeverity.Success
+                    : step.IsFatal ? LogSeverity.Error
+                    : LogSeverity.Warning;
+                AddLog($"  {icon} {step.Name}: {step.Detail}", stepSeverity);
             }
 
-            var allPassed = steps.All(s => s.Passed);
-            var lastFailed = steps.LastOrDefault(s => !s.Passed);
+            var allPassed = steps.All(s => s.Passed || !s.IsFatal);
+            var lastFailed = steps.LastOrDefault(s => !s.Passed && s.IsFatal);
 
             if (allPassed)
             {
@@ -102,14 +106,16 @@ public sealed partial class MainViewModel
                 agent.UpdateDetailLine();
             }
 
-            AddLog($"?? Diagnosis complete: {(allPassed ? "ALL PASSED" : $"FAILED at {lastFailed?.Name}")} ??");
+            var resultSeverity = allPassed ? LogSeverity.Success : LogSeverity.Error;
+            var resultIcon = allPassed ? LogIcons.Success : LogIcons.Error;
+            AddLog($"{resultIcon} Diagnosis complete: {(allPassed ? "ALL PASSED" : $"FAILED at {lastFailed?.Name}")}", resultSeverity);
         }
         catch (Exception ex)
         {
             agent.ConnectionStatus = "Error";
             agent.ErrorDetail = ex.Message;
             agent.UpdateDetailLine();
-            AddLog($"  ? Diagnosis error: {ex.Message}");
+            AddLog($"  {LogIcons.Error} Diagnosis error: {ex.Message}", LogSeverity.Error);
         }
         finally
         {
@@ -154,33 +160,33 @@ public sealed partial class MainViewModel
             }
             else
             {
-                agentVm.CpuUsage = "—";
-                agentVm.MemoryUsage = "—";
-                agentVm.DiskFree = "—";
+                agentVm.CpuUsage = "\u2014";
+                agentVm.MemoryUsage = "\u2014";
+                agentVm.DiskFree = "\u2014";
             }
 
             agentVm.ConnectionStatus = "Online";
             agentVm.ErrorDetail = "";
             agentVm.UpdateDetailLine();
-            AddLog($"? Agent {agentVm.Name}: {stateLabel} | CPU: {agentVm.CpuUsage} Mem: {agentVm.MemoryUsage} Disk: {agentVm.DiskFree}");
+            AddLog($"{LogIcons.Success} Agent {agentVm.Name}: {stateLabel} | CPU: {agentVm.CpuUsage} | Mem: {agentVm.MemoryUsage} | Disk: {agentVm.DiskFree}", LogSeverity.Success);
         }
         else
         {
             agentVm.ConnectionStatus = "Offline";
-            agentVm.AgentState = "—";
-            agentVm.CpuUsage = "—";
-            agentVm.MemoryUsage = "—";
-            agentVm.DiskFree = "—";
+            agentVm.AgentState = "\u2014";
+            agentVm.CpuUsage = "\u2014";
+            agentVm.MemoryUsage = "\u2014";
+            agentVm.DiskFree = "\u2014";
             agentVm.ErrorDetail = error ?? "Unknown error";
             agentVm.UpdateDetailLine();
-            AddLog($"? Agent {agentVm.Name}: {error}");
+            AddLog($"{LogIcons.Error} Agent {agentVm.Name}: {error}", LogSeverity.Error);
         }
         RefreshAgentStatusSummary();
     }
 
     private async Task TestAllAgentsAsync()
     {
-        AddLog($"Testing {RegisteredAgents.Count} agent(s)...");
+        AddLog($"{LogIcons.Info} Testing {RegisteredAgents.Count} agent(s)...");
         var tasks = RegisteredAgents.Select(TestSingleAgentAsync).ToArray();
         await Task.WhenAll(tasks);
         var online = RegisteredAgents.Count(a => a.ConnectionStatus == "Online");
@@ -199,7 +205,7 @@ public sealed partial class MainViewModel
         AgentStatusSummary = $"{online}/{RegisteredAgents.Count} online";
     }
 
-    // ?? Periodic agent health check (runs every 30s) ??????????????????
+    // ?? Periodic agent health check (runs every 30s) ????????????????
 
     private System.Windows.Threading.DispatcherTimer? _healthCheckTimer;
 
@@ -279,8 +285,8 @@ public sealed partial class MainViewModel
                 };
                 vm.UpdateDetailLine();
                 RegisteredAgents.Add(vm);
+                AddLog($"{LogIcons.Success} Agent self-registered: {name} {LogIcons.Arrow} {address}", LogSeverity.Success);
             }
-            AddLog($"? Agent self-registered: {name} ? {address}");
             RefreshAgentStatusSummary();
         });
     }
@@ -297,7 +303,7 @@ public sealed partial class MainViewModel
                 existing.AgentState = "Shutdown";
                 existing.UpdateDetailLine();
             }
-            AddLog($"? Agent unregistered: {name}");
+            AddLog($"{LogIcons.Warning} Agent unregistered: {name}", LogSeverity.Warning);
             RefreshAgentStatusSummary();
         });
     }
@@ -317,7 +323,7 @@ public sealed partial class MainViewModel
 
                 existing = new AgentInfoViewModel { Name = name, Address = address };
                 RegisteredAgents.Add(existing);
-                AddLog($"? Agent discovered via heartbeat: {name} ? {address}");
+                AddLog($"{LogIcons.Info} Agent discovered via heartbeat: {name} {LogIcons.Arrow} {address}");
             }
 
             existing.ConnectionStatus = "Online";

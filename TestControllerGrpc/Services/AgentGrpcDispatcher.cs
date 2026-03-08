@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -193,7 +194,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
         {
             // Not fatal — gRPC may still work on HTTP/2 even if GET / fails
             steps.Add(new("HTTP Endpoint", false,
-                $"GET / failed (may be normal for pure gRPC): {ex.Message}"));
+                $"GET / failed (may be normal for pure gRPC): {ex.Message}", IsFatal: false));
         }
 
         // Step 5: gRPC GetState (simplest RPC)
@@ -242,7 +243,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
         return steps;
     }
 
-    public sealed record DiagnosticStep(string Name, bool Passed, string Detail);
+    public sealed record DiagnosticStep(string Name, bool Passed, string Detail, bool IsFatal = true);
 
     /// <summary>
     /// Quick ping — just checks if GetState responds within 3 seconds.
@@ -270,6 +271,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
     /// Executes a RunRemoteCommand on the specified agent.
     /// Streams stdout/stderr events back in real-time.
     /// Handles reboot actions (waits for agent to come back).
+    /// Supports long-running actions (Timeout=0 means no limit).
     /// </summary>
     public async Task<ActionResult> ExecuteRemoteCommandAsync(
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
@@ -290,11 +292,14 @@ public sealed class AgentGrpcDispatcher : IDisposable
         {
             var client = endpoint.GetClient();
 
-            // Timeout is stored in milliseconds in WatchList XML
-            using var timeoutCts = resolved.Timeout > 0
+            // Timeout=0 means no limit — support long-running actions (1h+)
+            CancellationTokenSource? timeoutCts = resolved.Timeout > 0
                 ? new CancellationTokenSource(resolved.Timeout)
-                : new CancellationTokenSource();
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+                : null;
+            using var _timeoutCtsDisposable = timeoutCts;
+            using var linked = timeoutCts is not null
+                ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
+                : CancellationTokenSource.CreateLinkedTokenSource(ct);
 
             // Send timeout to agent so it can enforce server-side (ms → seconds for proto field)
             var timeoutSeconds = resolved.Timeout > 0 ? resolved.Timeout / 1000 : 0;
@@ -311,6 +316,9 @@ public sealed class AgentGrpcDispatcher : IDisposable
 
             int exitCode = 0;
             string errorMessage = "";
+            var startTimestamp = Stopwatch.GetTimestamp();
+            var lastProgressLog = startTimestamp;
+            var progressInterval = TimeSpan.FromMinutes(5);
 
             await foreach (var evt in call.ResponseStream.ReadAllAsync(linked.Token))
             {
@@ -322,6 +330,10 @@ public sealed class AgentGrpcDispatcher : IDisposable
                     case ExecutionEventType.EventStderrLine:
                         OutputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
                         break;
+                    case ExecutionEventType.EventProgress:
+                        OutputReceived?.Invoke(agentName,
+                            $"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}", "info");
+                        break;
                     case ExecutionEventType.EventCompleted:
                         exitCode = evt.ExitCode;
                         break;
@@ -330,12 +342,25 @@ public sealed class AgentGrpcDispatcher : IDisposable
                         exitCode = -1;
                         break;
                 }
+
+                // Periodic progress logging for long-running actions
+                var now = Stopwatch.GetTimestamp();
+                if (Stopwatch.GetElapsedTime(lastProgressLog, now) >= progressInterval)
+                {
+                    var elapsed = Stopwatch.GetElapsedTime(startTimestamp, now);
+                    _logger.LogInformation(
+                        "Long-running action on {Agent}: {Command} running for {Elapsed}",
+                        agentName, resolved.Command, elapsed.ToString(@"hh\:mm\:ss"));
+                    StatusChanged?.Invoke(agentName,
+                        $"Running: {resolved.Command} ({elapsed:hh\\:mm\\:ss})");
+                    lastProgressLog = now;
+                }
             }
 
             // Reboot handling: wait for agent to come back
             if (resolved.IsReboot)
             {
-                StatusChanged?.Invoke(agentName, "Rebooting… waiting for agent");
+                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
             }
 
@@ -347,12 +372,16 @@ public sealed class AgentGrpcDispatcher : IDisposable
         {
             if (resolved.IsReboot)
             {
-                StatusChanged?.Invoke(agentName, "Rebooting… waiting for agent");
+                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                 var client = endpoint.GetClient();
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
                 return new ActionResult(true, 0, "Reboot completed");
             }
             return new ActionResult(false, -1, $"Agent {agentName} unavailable: {ex.Status.Detail}");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return new ActionResult(false, -1, "Cancelled by user");
         }
         catch (OperationCanceledException)
         {
