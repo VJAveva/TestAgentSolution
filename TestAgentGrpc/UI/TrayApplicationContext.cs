@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Drawing.Drawing2D;
 using Microsoft.Extensions.Options;
 using TestAgentGrpc.Clients;
@@ -22,6 +23,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly SystemMetricsCollector _metrics;
     private readonly ConnectionHealthMonitor _healthMonitor;
     private readonly TestControllerClient _controllerClient;
+    private readonly AgentLifecycleService _lifecycle;
+    private readonly IHostApplicationLifetime _appLifetime;
     private readonly AgentSettings _agentSettings;
     private readonly NotificationSettings _notificationSettings;
     private readonly ILogger<TrayApplicationContext> _logger;
@@ -33,6 +36,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _activityItem;
     private readonly ToolStripMenuItem _metricsItem;
     private readonly ToolStripMenuItem _lastCommandItem;
+    private readonly ToolStripMenuItem _reRegisterItem;
     private readonly ContextMenuStrip _contextMenu;
     private readonly System.Windows.Forms.Timer _menuRefreshTimer;
 
@@ -52,6 +56,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         SystemMetricsCollector metrics,
         ConnectionHealthMonitor healthMonitor,
         TestControllerClient controllerClient,
+        AgentLifecycleService lifecycle,
+        IHostApplicationLifetime appLifetime,
         IOptions<AgentSettings> agentSettings,
         IOptions<NotificationSettings> notificationSettings,
         ILogger<TrayApplicationContext> logger)
@@ -62,6 +68,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _metrics              = metrics;
         _healthMonitor        = healthMonitor;
         _controllerClient     = controllerClient;
+        _lifecycle            = lifecycle;
+        _appLifetime          = appLifetime;
         _agentSettings        = agentSettings.Value;
         _notificationSettings = notificationSettings.Value;
         _logger               = logger;
@@ -73,12 +81,13 @@ public sealed class TrayApplicationContext : ApplicationContext
         _grayIcon   = CreateColoredIcon(Color.FromArgb(140, 140, 140));
 
         // ── Context menu ───────────────────────────────────────────
-        _connectionItem  = new ToolStripMenuItem("● Not registered") { Enabled = false };
-        _uptimeItem      = new ToolStripMenuItem("Uptime: — | Heartbeats: 0") { Enabled = false };
+        _connectionItem  = new ToolStripMenuItem("\u25CF Not registered") { Enabled = false };
+        _uptimeItem      = new ToolStripMenuItem("Uptime: \u2014 | Heartbeats: 0") { Enabled = false };
         _stateItem       = new ToolStripMenuItem("State: Ready") { Enabled = false };
         _activityItem    = new ToolStripMenuItem("Listening...") { Enabled = false };
-        _metricsItem     = new ToolStripMenuItem("CPU: — | Mem: —") { Enabled = false };
-        _lastCommandItem = new ToolStripMenuItem("Last Command: —") { Enabled = false };
+        _metricsItem     = new ToolStripMenuItem("CPU: \u2014 | Mem: \u2014") { Enabled = false };
+        _lastCommandItem = new ToolStripMenuItem("Last Command: \u2014") { Enabled = false };
+        _reRegisterItem  = new ToolStripMenuItem("Re-Register to Controller", null, (_, _) => OnReRegister());
 
         _contextMenu = new ContextMenuStrip();
         _contextMenu.Items.Add(_connectionItem);
@@ -94,9 +103,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         _contextMenu.Items.Add("Connection Details...", null, (_, _) => ShowConnectionDetails());
         _contextMenu.Items.Add("Export Report...", null, (_, _) => ExportReport());
         _contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add(_reRegisterItem);
         _contextMenu.Items.Add("Settings", null, (_, _) => OpenSettings());
         _contextMenu.Items.Add("Refresh", null, (_, _) => RefreshAll());
         _contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add("Stop Agent Service", null, (_, _) => OnStopService());
         _contextMenu.Items.Add("Exit", null, OnExit);
 
         // ── Notify icon ────────────────────────────────────────────
@@ -345,6 +356,84 @@ public sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to open settings file");
+        }
+    }
+
+    private async void OnReRegister()
+    {
+        _reRegisterItem.Enabled = false;
+        _reRegisterItem.Text = "Re-Registering\u2026";
+
+        try
+        {
+            var (success, error) = await _lifecycle.ReRegisterAsync();
+
+            if (success)
+            {
+                _notifyIcon.ShowBalloonTip(3000,
+                    "TestAgent \u2014 Re-Registered",
+                    $"Successfully re-registered with controller at {_healthMonitor.ControllerAddress}.",
+                    ToolTipIcon.Info);
+            }
+            else
+            {
+                _notifyIcon.ShowBalloonTip(5000,
+                    "TestAgent \u2014 Re-Registration Failed",
+                    $"Could not re-register: {error}",
+                    ToolTipIcon.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Re-register failed");
+            MessageBox.Show($"Re-registration failed:\n{ex.Message}", "TestAgent",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _reRegisterItem.Text = "Re-Register to Controller";
+            _reRegisterItem.Enabled = true;
+        }
+    }
+
+    private void OnStopService()
+    {
+        var result = MessageBox.Show(
+            "This will unregister the agent from the controller, stop the gRPC server, and exit.\n\n" +
+            "Are you sure you want to stop the agent service?",
+            "Stop Agent Service",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (result != DialogResult.Yes) return;
+
+        _logger.LogInformation("Stop Agent Service requested from tray menu");
+
+        try
+        {
+            // Stop the menu refresh first
+            _menuRefreshTimer.Stop();
+
+            _notifyIcon.ShowBalloonTip(2000,
+                "TestAgent \u2014 Stopping",
+                "Agent service is shutting down\u2026",
+                ToolTipIcon.Info);
+
+            // Trigger graceful application shutdown (unregisters, stops gRPC, etc.)
+            _appLifetime.StopApplication();
+
+            // Close the tray UI
+            _notifyIcon.Visible = false;
+            _notifyIcon.Dispose();
+            _monitorForm?.Close();
+            _connectionDetailForm?.Close();
+            ExitThread();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during service stop");
+            MessageBox.Show($"Error stopping service:\n{ex.Message}", "TestAgent",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 

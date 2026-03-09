@@ -34,6 +34,9 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
     private IDisposable? _eventPushSubscription;
     private volatile bool _registeredWithController;
 
+    /// <summary>True when the agent has an active registration with the controller.</summary>
+    public bool IsRegistered => _registeredWithController;
+
     public AgentLifecycleService(
         TestControllerClient controller,
         CommandExecutor executor,
@@ -254,6 +257,58 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         _executor.StateChanged -= OnStateChanged;
         _eventPushSubscription?.Dispose();
         _cts?.Dispose();
+    }
+
+    /// <summary>
+    /// Performs an on-demand re-registration cycle: unregister → register.
+    /// Returns (success, errorMessage).
+    /// </summary>
+    public async Task<(bool Success, string? Error)> ReRegisterAsync()
+    {
+        _logger.LogInformation("Manual re-registration requested");
+        _audit.Log("ReRegistrationRequested", detail: "Manual re-registration triggered from tray menu");
+
+        try
+        {
+            // Unregister first to clear stale state on the controller
+            await _controller.UnRegisterAsync();
+            _healthMonitor.RecordUnregistration();
+            _registeredWithController = false;
+
+            // Brief pause to let the controller process the unregistration
+            await Task.Delay(500);
+
+            // Re-register
+            var (success, error) = await _controller.RegisterAsync();
+            _registeredWithController = success;
+
+            if (success)
+            {
+                _healthMonitor.RecordRegistration(
+                    _settings.AgentName, _settings.ControllerAddress);
+                _audit.Log("ReRegistrationSuccess",
+                    source: _settings.ControllerAddress,
+                    controller: _settings.ControllerAddress,
+                    detail: "Manual re-registration successful");
+                _logger.LogInformation("Manual re-registration successful");
+            }
+            else
+            {
+                _audit.Log("ReRegistrationFailed", severity: "Warning",
+                    detail: $"Manual re-registration failed: {error}",
+                    controller: _settings.ControllerAddress);
+                _logger.LogWarning("Manual re-registration failed: {Error}", error);
+            }
+
+            return (success, error);
+        }
+        catch (Exception ex)
+        {
+            var msg = $"Re-registration error: {ex.Message}";
+            _logger.LogError(ex, "Manual re-registration failed");
+            _audit.Log("ReRegistrationFailed", severity: "Error", detail: msg);
+            return (false, msg);
+        }
     }
 
     // ── Configuration validation ───────────────────────────────────────

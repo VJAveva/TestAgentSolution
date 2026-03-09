@@ -48,7 +48,8 @@ builder.Services.AddGrpc(options =>
 
 // ── Background services ───────────────────────────────────────────────
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogger>());
-builder.Services.AddHostedService<AgentLifecycleService>();
+builder.Services.AddSingleton<AgentLifecycleService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentLifecycleService>());
 
 var app = builder.Build();
 
@@ -68,6 +69,8 @@ var trayApp = new TrayApplicationContext(
     app.Services.GetRequiredService<SystemMetricsCollector>(),
     app.Services.GetRequiredService<ConnectionHealthMonitor>(),
     app.Services.GetRequiredService<TestControllerClient>(),
+    app.Services.GetRequiredService<AgentLifecycleService>(),
+    app.Services.GetRequiredService<IHostApplicationLifetime>(),
     app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>(),
     app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NotificationSettings>>(),
     app.Services.GetRequiredService<ILogger<TrayApplicationContext>>());
