@@ -30,6 +30,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly AgentGrpcDispatcher _dispatcher;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<MainViewModel> _logger;
+    private readonly IAppLogger _appLogger;
 
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
     [ObservableProperty] private TreeNodeViewModel? _selectedTemplateNode;
@@ -149,6 +150,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ── Template search/filter ──────────────────────────────────────
+    private string _templateSearchText = "";
+    public string TemplateSearchText
+    {
+        get => _templateSearchText;
+        set
+        {
+            if (SetProperty(ref _templateSearchText, value))
+                ApplyTemplateSearch();
+        }
+    }
+
     public string[] LogLevelOptions { get; } = ["All", "Info", "Success", "Warning", "Error"];
 
     /// <summary>TreeRoots[0] is the single "WatchList" root node — always present.</summary>
@@ -174,7 +187,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(VocabularyMonitor vocabMonitor, FileWatcherManager watcherManager,
         ActionPipelineExecutor executor, AgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
-        BuildResultsViewModel buildResultsVM)
+        BuildResultsViewModel buildResultsVM, IAppLogger appLogger)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -182,6 +195,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _dispatcher = dispatcher;
         _sessionManager = sessionManager;
         _logger = logger;
+        _appLogger = appLogger;
         BuildResultsVM = buildResultsVM;
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
@@ -270,5 +284,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             NewAgentAddress = $"http://{value.Trim()}:5200";
         else
             NewAgentAddress = "http://localhost:5200";
+    }
+
+    partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
+    {
+        if (value is null) return;
+
+        ActiveEditNode = value;
+        ActiveEditingContext = value.NodeKind is "Template" or "TemplateList" ? "Templates" : "WatchList";
+
+        // Context-sensitive execute button visibility
+        ShowExecuteAll = value.NodeKind == "WatchList" ? Visibility.Visible : Visibility.Collapsed;
+        ShowTriggerAllEvents = value.NodeKind == "WatchItem" ? Visibility.Visible : Visibility.Collapsed;
+        ShowTriggerEvent = value.NodeKind == "Event" ? Visibility.Visible : Visibility.Collapsed;
+        ShowExecuteGroup = value.NodeKind == "ActionGroup" ? Visibility.Visible : Visibility.Collapsed;
+        ShowExecuteAction = value.NodeKind == "Action" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Load Initialize parameter file entries
+        if (value.NodeKind == "Initialize" && !string.IsNullOrWhiteSpace(value.ParameterFile))
+            LoadParameterFileEntries(value.ParameterFile);
+        else
+            ParameterFileEntries.Clear();
+    }
+
+    partial void OnSelectedTemplateNodeChanged(TreeNodeViewModel? value)
+    {
+        if (value is null) return;
+
+        ActiveEditNode = value;
+        ActiveEditingContext = "Templates";
     }
 }

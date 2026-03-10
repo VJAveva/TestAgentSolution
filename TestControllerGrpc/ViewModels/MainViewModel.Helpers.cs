@@ -11,10 +11,13 @@ namespace TestControllerGrpc.ViewModels;
 // ?? Helpers: BuildTree, RebuildTreeFromConfig, utility methods ???????
 public sealed partial class MainViewModel
 {
-    // ?? Tree search ?????????????????????????????????????????????????
+    // ?? Tree search ????????????????????????????????????????????????
 
     [RelayCommand]
     private void ClearTreeSearch() => TreeSearchText = "";
+
+    [RelayCommand]
+    private void ClearTemplateSearch() => TemplateSearchText = "";
 
     private void ApplyTreeSearch()
     {
@@ -26,6 +29,17 @@ public sealed partial class MainViewModel
             return;
         }
         ApplyTreeSearchRecursive(WatchListRoot, search);
+    }
+
+    private void ApplyTemplateSearch()
+    {
+        if (TemplateListRoot is null) return;
+        if (string.IsNullOrWhiteSpace(TemplateSearchText))
+        {
+            SetTreeVisibilityRecursive(TemplateListRoot, true);
+            return;
+        }
+        ApplyTreeSearchRecursive(TemplateListRoot, TemplateSearchText);
     }
 
     private static bool ApplyTreeSearchRecursive(TreeNodeViewModel node, string search)

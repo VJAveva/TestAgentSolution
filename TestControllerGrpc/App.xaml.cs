@@ -37,6 +37,11 @@ public partial class App : Application
                 services.AddSingleton<FileWatcherManager>();
                 services.AddHostedService<ControllerHostedService>();
                 services.AddHostedService<ControllerGrpcServerHost>();
+
+                // Application logger (file + in-memory ring buffer)
+                services.AddSingleton<IAppLogger>(sp =>
+                    new AppLogger("controller", @"C:\TestAgentSolution\Logs"));
+
                 services.AddSingleton<MainViewModel>();
 
                 // Build Results services

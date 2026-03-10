@@ -146,6 +146,15 @@ public sealed partial class MainViewModel
                 severity = LogSeverity.Success;
         }
 
+        // Write to structured file logger
+        var logLevel = severity switch
+        {
+            LogSeverity.Error => Microsoft.Extensions.Logging.LogLevel.Error,
+            LogSeverity.Warning => Microsoft.Extensions.Logging.LogLevel.Warning,
+            _ => Microsoft.Extensions.Logging.LogLevel.Information,
+        };
+        _appLogger.Log(logLevel, "UI", msg);
+
         var entry = new LogEntryViewModel
         {
             Timestamp = DateTime.Now.ToString("HH:mm:ss"),

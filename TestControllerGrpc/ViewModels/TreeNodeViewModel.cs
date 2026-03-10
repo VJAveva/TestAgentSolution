@@ -29,6 +29,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _filter = "";
     [ObservableProperty] private bool _isEnabled = true;
     [ObservableProperty] private string _eventType = "Renamed";
+    [ObservableProperty] private string _buildNumberField = "BuildNumber";
+    [ObservableProperty] private string _dropLocationField = "DropLocation";
+    [ObservableProperty] private string _lastBuildNumber = "";
+    [ObservableProperty] private string _lastDropLocation = "";
     [ObservableProperty] private string _actionTypeText = "RunCommand";
     [ObservableProperty] private string _agentName = "";
     [ObservableProperty] private string _command = "";
@@ -339,6 +343,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             NodeIconGlyph = ResolveNodeIconGlyph("Event"),
             EventType = ev.Type,
             ExecutionTypeText = ev.ExecutionType.ToString(),
+            BuildNumberField = ev.BuildNumberField,
+            DropLocationField = ev.DropLocationField,
+            LastBuildNumber = ev.LastBuildNumber ?? "",
+            LastDropLocation = ev.LastDropLocation ?? "",
             DisplayText = $"Event: {ev.Type} ({ev.ExecutionType})", ModelObject = ev,
         };
         foreach (var child in ev.Children) { var c = FromActionNode(child); c.Parent = node; node.Children.Add(c); }
@@ -435,7 +443,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 wi.Tag = Tag; wi.Path = WatchPath; wi.Filter = Filter; wi.IsEnabled = IsEnabled; break;
             case EventConfig ev:
                 ev.Type = EventType;
-                ev.ExecutionType = Enum.TryParse<ExecutionMode>(ExecutionTypeText, out var em) ? em : ExecutionMode.Sequential; break;
+                ev.ExecutionType = Enum.TryParse<ExecutionMode>(ExecutionTypeText, out var em) ? em : ExecutionMode.Sequential;
+                ev.BuildNumberField = BuildNumberField;
+                ev.DropLocationField = DropLocationField;
+                break;
             case ActionGroupConfig ag:
                 ag.Tag = Tag;
                 ag.ExecutionType = Enum.TryParse<ExecutionMode>(ExecutionTypeText, out var am) ? am : ExecutionMode.Sequential;

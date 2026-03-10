@@ -19,7 +19,6 @@ namespace TestControllerGrpc.Views;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
-    private bool _initialLayoutComplete;
 
     // ?? Inline AvalonEdit editor ????????????????????????????????????
     private TextEditor? _inlineEditor;
@@ -71,7 +70,6 @@ public partial class MainWindow : Window
         {
             _vm.SyncRegisteredAgents();
             _vm.EnsureWatchListSelected();
-            _initialLayoutComplete = true;
         }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
@@ -84,11 +82,7 @@ public partial class MainWindow : Window
     private void OnTemplateSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (e.NewValue is TreeNodeViewModel node)
-        {
             _vm.SelectedTemplateNode = node;
-            if (_initialLayoutComplete)
-                _vm.ActiveEditNode = node;
-        }
     }
 
     // ???????????????????????????????????????????????????????????????

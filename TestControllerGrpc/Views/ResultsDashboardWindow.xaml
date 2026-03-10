@@ -790,7 +790,7 @@
                                         <TextBlock Text="TRX FILE" FontSize="10" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
                                         <DockPanel Margin="0,0,0,8">
-                                            <Button Content="Open in Explorer" DockPanel.Dock="Right"
+                                            <Button Content="Open in Edge" DockPanel.Dock="Right"
                                                     Command="{Binding OpenTrxInExplorerCommand}"
                                                     Style="{StaticResource SmBtn}" Padding="8,3" />
                                             <TextBlock Text="{Binding DetailTrxFileName}" FontFamily="Consolas" FontSize="11"

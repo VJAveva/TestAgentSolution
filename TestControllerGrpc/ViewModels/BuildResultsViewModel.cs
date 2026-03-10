@@ -27,6 +27,9 @@ public partial class BuildResultsViewModel : ObservableObject
     /// <summary>All loaded builds (for multi-build / "Load All" support).</summary>
     public ObservableCollection<BuildNode> LoadedBuildNodes { get; } = new();
 
+    /// <summary>Tracks expand state by node key so it survives flat list rebuilds.</summary>
+    private readonly Dictionary<string, bool> _expandState = new();
+
     [ObservableProperty] private BuildListItem? _selectedBuild;
     [ObservableProperty] private BuildNode? _currentBuildNode;
     [ObservableProperty] private string _healthColor = "#6B7280";
@@ -177,37 +180,101 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private void OpenTrxInExplorer()
     {
-        if (!string.IsNullOrEmpty(DetailTrxFilePath) && File.Exists(DetailTrxFilePath))
+        // Generate an HTML detail page for the current selection and open in Edge
+        if (HasDetailSelected)
         {
-            Process.Start("explorer.exe", $"/select,\"{DetailTrxFilePath}\"");
+            var html = GenerateTestDetailHtml();
+            var safeName = string.Join("_", DetailTestName.Split(Path.GetInvalidFileNameChars()));
+            if (safeName.Length > 80) safeName = safeName[..80];
+            var tempPath = Path.Combine(Path.GetTempPath(), $"TestResult_{safeName}.html");
+            File.WriteAllText(tempPath, html, Encoding.UTF8);
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "msedge.exe",
+                    Arguments = $"\"{tempPath}\"",
+                    UseShellExecute = true,
+                });
+            }
+            catch
+            {
+                // Fallback: open with default browser
+                Process.Start(new ProcessStartInfo(tempPath) { UseShellExecute = true });
+            }
+            StatusMessage = $"Opened detail report in browser.";
             return;
         }
 
-        // Fallback: try to find the file by searching recursively
-        if (!string.IsNullOrEmpty(DetailTrxFileName))
+        StatusMessage = "No test result selected.";
+    }
+
+    private string GenerateTestDetailHtml()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine($"<title>Test Result: {System.Net.WebUtility.HtmlEncode(DetailTestName)}</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("body{font-family:'Segoe UI',Arial;background:#0F1629;color:#E2E8F0;margin:0;padding:24px}");
+        sb.AppendLine(".card{background:#1A2238;border-radius:8px;padding:16px;margin:12px 0}");
+        sb.AppendLine(".badge{display:inline-block;padding:4px 12px;border-radius:4px;font-weight:bold;color:#fff}");
+        sb.AppendLine("pre{background:#0F1629;border:1px solid #334155;border-radius:6px;padding:12px;overflow-x:auto;font-size:12px;color:#94A3B8;white-space:pre-wrap}");
+        sb.AppendLine(".pass{background:#10B981} .fail{background:#EF4444} .warn{background:#F59E0B}");
+        sb.AppendLine("h1{color:#89B4FA;margin:0 0 4px} h3{color:#94A3B8;margin:16px 0 8px;font-size:13px}");
+        sb.AppendLine("table{width:100%;border-collapse:collapse} td,th{padding:6px 10px;border-bottom:1px solid #1E293B;font-size:12px;text-align:left}");
+        sb.AppendLine("th{color:#64748B;font-size:11px;text-transform:uppercase}");
+        sb.AppendLine(".step-pass{color:#10B981} .step-fail{color:#EF4444}");
+        sb.AppendLine("</style></head><body>");
+
+        var outcomeClass = DetailOutcome == "Failed" ? "fail" : DetailOutcome == "Passed" ? "pass" : "warn";
+        sb.AppendLine($"<h1>{System.Net.WebUtility.HtmlEncode(DetailTestName)}</h1>");
+        sb.AppendLine($"<span class='badge {outcomeClass}'>{System.Net.WebUtility.HtmlEncode(DetailOutcome)}</span>");
+        sb.AppendLine($"<span style='color:#64748B;margin-left:12px'>{System.Net.WebUtility.HtmlEncode(DetailUseCaseName)} &middot; {System.Net.WebUtility.HtmlEncode(DetailBuildNumber)} &middot; {DetailDuration}</span>");
+
+        // Execution Steps
+        if (HasExecutionSteps && DetailExecutionSteps.Count > 0)
         {
-            var buildPath = LoadedBuildNodes
-                .FirstOrDefault(b => b.BuildNumber == DetailBuildNumber)?.RootPath;
-            if (buildPath != null)
+            sb.AppendLine("<div class='card'><h3>EXECUTION STEPS</h3>");
+            sb.AppendLine("<table><tr><th></th><th>Step</th><th>Duration</th></tr>");
+            foreach (var step in DetailExecutionSteps)
             {
-                try
-                {
-                    var found = Directory.GetFiles(buildPath,
-                        $"*{DetailTrxFileName}*.trx", SearchOption.AllDirectories)
-                        .FirstOrDefault();
-                    if (found != null)
-                    {
-                        Process.Start("explorer.exe", $"/select,\"{found}\"");
-                        return;
-                    }
-                }
-                catch { /* ignore search errors */ }
+                var cls = step.Outcome == "Passed" ? "step-pass" : "step-fail";
+                sb.AppendLine($"<tr><td class='{cls}'>{System.Net.WebUtility.HtmlEncode(step.OutcomeIcon)}</td><td>{System.Net.WebUtility.HtmlEncode(step.StepName)}</td><td>{step.DurationText}</td></tr>");
             }
+            sb.AppendLine("</table></div>");
         }
 
-        StatusMessage = string.IsNullOrEmpty(DetailTrxFileName)
-            ? "No TRX file associated with this selection."
-            : $"TRX file not found: {DetailTrxFileName}";
+        // Error Message
+        if (!string.IsNullOrWhiteSpace(DetailErrorMessage) && DetailErrorMessage != "(no error message)" )
+        {
+            sb.AppendLine("<div class='card'><h3>ERROR MESSAGE</h3>");
+            sb.AppendLine($"<pre style='color:#EF4444'>{System.Net.WebUtility.HtmlEncode(DetailErrorMessage)}</pre></div>");
+        }
+
+        // Stack Trace
+        if (!string.IsNullOrWhiteSpace(DetailStackTrace) && DetailStackTrace != "(no stack trace)")
+        {
+            sb.AppendLine("<div class='card'><h3>STACK TRACE</h3>");
+            sb.AppendLine($"<pre>{System.Net.WebUtility.HtmlEncode(DetailStackTrace)}</pre></div>");
+        }
+
+        // Stdout
+        if (!string.IsNullOrWhiteSpace(DetailStdOut) && DetailStdOut != "(no stdout captured)")
+        {
+            sb.AppendLine("<div class='card'><h3>STDOUT</h3>");
+            sb.AppendLine($"<pre>{System.Net.WebUtility.HtmlEncode(DetailStdOut)}</pre></div>");
+        }
+
+        // TRX file path
+        if (!string.IsNullOrEmpty(DetailTrxFilePath))
+        {
+            sb.AppendLine($"<div class='card'><h3>TRX FILE</h3><pre>{System.Net.WebUtility.HtmlEncode(DetailTrxFilePath)}</pre></div>");
+        }
+
+        sb.AppendLine($"<p style='color:#64748B;font-size:11px;margin-top:24px'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by TestController</p>");
+        sb.AppendLine("</body></html>");
+        return sb.ToString();
     }
 
     [RelayCommand]
@@ -240,6 +307,10 @@ public partial class BuildResultsViewModel : ObservableObject
             // Replace loaded builds with just this one
             LoadedBuildNodes.Clear();
             LoadedBuildNodes.Add(buildNode);
+
+            // Reset expand state — single build starts expanded
+            _expandState.Clear();
+            _expandState[$"Build|{buildNode.BuildNumber}"] = true;
 
             // Update statistics
             StatTotal = buildNode.TotalTests;
@@ -296,6 +367,10 @@ public partial class BuildResultsViewModel : ObservableObject
 
         IsLoading = true;
         LoadedBuildNodes.Clear();
+
+        // Reset expand state — AllBuilds starts expanded, individual builds collapsed
+        _expandState.Clear();
+        _expandState["AllBuilds"] = true;
 
         try
         {
@@ -485,17 +560,28 @@ public partial class BuildResultsViewModel : ObservableObject
                 PassRate = allRate,
                 PassRateColor = GetRateColor(allRate),
                 IndentLevel = 0,
-                IsExpanded = true,
+                IsExpanded = GetExpandState("AllBuilds", true),
                 ShowEmailButton = true,
                 ShowStats = true,
             };
             allNode.SendEmailCommand = new RelayCommand(() => SendReportForAllBuilds());
+            allNode.ToggleExpandCommand = new RelayCommand(() =>
+            {
+                SetExpandState("AllBuilds", !GetExpandState("AllBuilds", true));
+                BuildFlatList();
+            });
             FlatResultsList.Add(allNode);
+
+            // If AllBuilds is collapsed, skip children
+            if (!allNode.IsExpanded) return;
         }
 
         foreach (var buildNode in LoadedBuildNodes)
         {
             var buildIndent = hasAllBuildsRow ? 1 : 0;
+            var buildKey = $"Build|{buildNode.BuildNumber}";
+            var buildExpanded = GetExpandState(buildKey, LoadedBuildNodes.Count == 1);
+
             var buildRow = new ResultsFlatNode
             {
                 Name = buildNode.BuildNumber,
@@ -508,69 +594,82 @@ public partial class BuildResultsViewModel : ObservableObject
                 PassRate = buildNode.PassRate,
                 PassRateColor = GetRateColor(buildNode.PassRate),
                 IndentLevel = buildIndent,
-                IsExpanded = LoadedBuildNodes.Count == 1,
+                IsExpanded = buildExpanded,
                 ShowEmailButton = true,
                 ShowStats = true,
             };
+            var capturedBuildKey = buildKey;
             var capturedNode = buildNode;
             buildRow.SendEmailCommand = new RelayCommand(() => SendReportForBuild(capturedNode));
             buildRow.ExportHtmlCommand = new RelayCommand(() => ExportBuildToHtml(capturedNode));
             buildRow.ExportCsvCommand = new RelayCommand(() => ExportBuildToCsv(capturedNode));
             buildRow.ToggleExpandCommand = new RelayCommand(() =>
             {
-                buildRow.IsExpanded = !buildRow.IsExpanded;
+                SetExpandState(capturedBuildKey, !GetExpandState(capturedBuildKey, false));
                 BuildFlatList();
             });
             FlatResultsList.Add(buildRow);
 
-            if (buildRow.IsExpanded)
-            {
-                foreach (var uc in buildNode.UseCases)
-                {
-                    var ucRow = new ResultsFlatNode
-                    {
-                        Name = uc.UseCaseName,
-                        NodeLevel = "UseCase",
-                        BuildNumber = buildNode.BuildNumber,
-                        Total = uc.Total,
-                        Passed = uc.Passed,
-                        Failed = uc.Failed,
-                        NotExecuted = uc.NotExecuted,
-                        PassRate = uc.PassRate,
-                        PassRateColor = GetRateColor(uc.PassRate),
-                        IndentLevel = buildIndent + 1,
-                        IsExpanded = false,
-                        ShowStats = true,
-                    };
-                    ucRow.ToggleExpandCommand = new RelayCommand(() =>
-                    {
-                        ucRow.IsExpanded = !ucRow.IsExpanded;
-                        BuildFlatList();
-                    });
-                    FlatResultsList.Add(ucRow);
+            if (!buildExpanded) continue;
 
-                    if (ucRow.IsExpanded)
+            foreach (var uc in buildNode.UseCases)
+            {
+                var ucKey = $"UC|{buildNode.BuildNumber}|{uc.UseCaseName}";
+                var ucExpanded = GetExpandState(ucKey, false);
+
+                var ucRow = new ResultsFlatNode
+                {
+                    Name = uc.UseCaseName,
+                    NodeLevel = "UseCase",
+                    BuildNumber = buildNode.BuildNumber,
+                    Total = uc.Total,
+                    Passed = uc.Passed,
+                    Failed = uc.Failed,
+                    NotExecuted = uc.NotExecuted,
+                    PassRate = uc.PassRate,
+                    PassRateColor = GetRateColor(uc.PassRate),
+                    IndentLevel = buildIndent + 1,
+                    IsExpanded = ucExpanded,
+                    ShowStats = true,
+                };
+                var capturedUcKey = ucKey;
+                ucRow.ToggleExpandCommand = new RelayCommand(() =>
+                {
+                    SetExpandState(capturedUcKey, !GetExpandState(capturedUcKey, false));
+                    BuildFlatList();
+                });
+                FlatResultsList.Add(ucRow);
+
+                if (!ucExpanded) continue;
+
+                foreach (var test in uc.TestResults)
+                {
+                    FlatResultsList.Add(new ResultsFlatNode
                     {
-                        foreach (var test in uc.TestResults)
-                        {
-                            FlatResultsList.Add(new ResultsFlatNode
-                            {
-                                Name = test.TestName,
-                                NodeLevel = "TestResult",
-                                BuildNumber = buildNode.BuildNumber,
-                                Outcome = test.Outcome,
-                                IndentLevel = buildIndent + 2,
-                                TestResultModel = test,
-                                ErrorMessage = TruncateError(test.ErrorMessage),
-                                FullError = test.ErrorMessage ?? "",
-                                FullStackTrace = test.StackTrace ?? "",
-                                ShowStats = false,
-                            });
-                        }
-                    }
+                        Name = test.TestName,
+                        NodeLevel = "TestResult",
+                        BuildNumber = buildNode.BuildNumber,
+                        Outcome = test.Outcome,
+                        IndentLevel = buildIndent + 2,
+                        TestResultModel = test,
+                        ErrorMessage = TruncateError(test.ErrorMessage),
+                        FullError = test.ErrorMessage ?? "",
+                        FullStackTrace = test.StackTrace ?? "",
+                        ShowStats = false,
+                    });
                 }
             }
         }
+    }
+
+    private bool GetExpandState(string key, bool defaultValue)
+    {
+        return _expandState.TryGetValue(key, out var val) ? val : defaultValue;
+    }
+
+    private void SetExpandState(string key, bool value)
+    {
+        _expandState[key] = value;
     }
 
     [RelayCommand]
