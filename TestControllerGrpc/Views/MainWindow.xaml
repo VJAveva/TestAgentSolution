@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
+        xmlns:views="clr-namespace:TestControllerGrpc.Views"
         Title="TestController  -  WatchList Editor"
         Height="900" Width="1400" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
@@ -790,6 +791,22 @@
                                                       Style="{StaticResource Cmb}" Width="140" Margin="0" />
                                         </StackPanel>
                                         <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenResultsCommand}"
+                                                    ToolTip="Open the Results Dashboard window">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Results Viewer" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="Results" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>

@@ -38,6 +38,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\XmlSyntaxHighlighting.xshd" />
+    <EmbeddedResource Include="Resources\chart.umd.min.js" />
   </ItemGroup>
 
   <ItemGroup>

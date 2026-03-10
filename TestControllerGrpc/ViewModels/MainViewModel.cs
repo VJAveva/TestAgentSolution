@@ -166,61 +166,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private TreeNodeViewModel? WatchListRoot => TreeRoots.Count > 0 ? TreeRoots[0] : null;
     private TreeNodeViewModel? TemplateListRoot => TemplateRoots.Count > 0 ? TemplateRoots[0] : null;
 
-    // ── Selection change handlers ───────────────────────────────────
-
-    partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
-    {
-        if (value is not null)
-        {
-            ActiveEditNode = value;
-            ActiveEditingContext = "WatchList";
-            // Auto-close XML editor when selection changes
-            IsXmlEditorOpen = false;
-            XmlEditorStatus = "";
-
-            // Auto-load parameter file entries when Initialize node is selected
-            if (value.NodeKind == "Initialize" && !string.IsNullOrWhiteSpace(value.ParameterFile))
-                LoadParameterFileEntries(value.ParameterFile);
-            else
-                ParameterFileEntries.Clear();
-        }
-        RefreshExecuteButtonVisibility();
-        NotifyExecutionCanExecuteChanged();
-    }
-
-    // Note: TemplateTree ActiveEditNode is now set from code-behind
-    // after _initialLayoutComplete guard, to prevent startup auto-selection override.
-    partial void OnSelectedTemplateNodeChanged(TreeNodeViewModel? value)
-    {
-        if (value is not null)
-            ActiveEditingContext = "Templates";
-        RefreshExecuteButtonVisibility();
-    }
-
-    /// <summary>Refreshes context-sensitive execute button visibility based on the active selection.</summary>
-    private void RefreshExecuteButtonVisibility()
-    {
-        var kind = ActiveEditingContext == "Templates" ? null : SelectedNode?.NodeKind;
-
-        ShowExecuteAll = kind is null or "WatchList" ? Visibility.Visible : Visibility.Collapsed;
-        ShowTriggerAllEvents = kind is "WatchItem" ? Visibility.Visible : Visibility.Collapsed;
-        ShowTriggerEvent = kind is "Event" ? Visibility.Visible : Visibility.Collapsed;
-        ShowExecuteGroup = kind is "ActionGroup" ? Visibility.Visible : Visibility.Collapsed;
-        ShowExecuteAction = kind is "Action" ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>Called once after window layout completes to ensure WatchList root is active.</summary>
-    public void EnsureWatchListSelected()
-    {
-        if (WatchListRoot is not null)
-            ActiveEditNode = WatchListRoot;
-    }
+    // ── Build Results ────────────────────────────────────────────────
+    public BuildResultsViewModel BuildResultsVM { get; }
 
     // ── Constructor ─────────────────────────────────────────────────
 
     public MainViewModel(VocabularyMonitor vocabMonitor, FileWatcherManager watcherManager,
         ActionPipelineExecutor executor, AgentGrpcDispatcher dispatcher,
-        ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger)
+        ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
+        BuildResultsViewModel buildResultsVM)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -228,6 +182,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _dispatcher = dispatcher;
         _sessionManager = sessionManager;
         _logger = logger;
+        BuildResultsVM = buildResultsVM;
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
         _executor.NodeProgress += OnNodeProgress;
@@ -252,6 +207,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
         TemplateRoots.Clear();
         TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+    }
+
+    /// <summary>Called once after window layout completes to ensure WatchList root is active.</summary>
+    public void EnsureWatchListSelected()
+    {
+        if (WatchListRoot is not null)
+            ActiveEditNode = WatchListRoot;
     }
 
     public void SyncRegisteredAgents()

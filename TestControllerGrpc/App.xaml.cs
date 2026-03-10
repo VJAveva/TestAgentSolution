@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
 
@@ -37,6 +38,18 @@ public partial class App : Application
                 services.AddHostedService<ControllerHostedService>();
                 services.AddHostedService<ControllerGrpcServerHost>();
                 services.AddSingleton<MainViewModel>();
+
+                // Build Results services
+                services.AddSingleton<TrxResultsParser>();
+                services.AddSingleton(sp =>
+                {
+                    var config = sp.GetRequiredService<IConfiguration>();
+                    var rc = new BuildResultsConfig();
+                    config.GetSection("BuildResults").Bind(rc);
+                    return rc;
+                });
+                services.AddSingleton<BuildResultsAggregator>();
+                services.AddSingleton<BuildResultsViewModel>();
             })
             .Build();
 
