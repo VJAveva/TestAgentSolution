@@ -41,6 +41,8 @@ public static class WatchListXmlParser
                 Tag = Attr(wiEl, "Tag"),
                 Path = Attr(wiEl, "Path"),
                 Filter = Attr(wiEl, "Filter", "*.*"),
+                BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
+                DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
             };
             foreach (var evEl in wiEl.Elements("Event"))
             {
@@ -130,6 +132,8 @@ public static class WatchListXmlParser
                 new XAttribute("Filter", wi.Filter));
             if (!string.IsNullOrEmpty(wi.Tag))
                 wiEl.Add(new XAttribute("Tag", wi.Tag));
+            AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
+            AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
 
             foreach (var ev in wi.Events)
             {
@@ -222,6 +226,8 @@ public static class WatchListXmlParser
         attrs.Add(new XAttribute("Filter", wi.Filter));
 
         var wiEl = new XElement("WatchItem", attrs.ToArray());
+        AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
+        AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
 
         foreach (var ev in wi.Events)
         {
@@ -244,6 +250,8 @@ public static class WatchListXmlParser
             Tag = Attr(wiEl, "Tag"),
             Path = Attr(wiEl, "Path"),
             Filter = Attr(wiEl, "Filter", "*.*"),
+            BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
+            DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
         };
         foreach (var evEl in wiEl.Elements("Event"))
         {
@@ -301,6 +309,8 @@ public static class WatchListXmlParser
                 new XAttribute("Filter", wi.Filter));
             if (!string.IsNullOrEmpty(wi.Tag))
                 wiEl.Add(new XAttribute("Tag", wi.Tag));
+            AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
+            AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
 
             foreach (var ev in wi.Events)
             {
@@ -355,6 +365,8 @@ public static class WatchListXmlParser
                 Tag = Attr(wiEl, "Tag"),
                 Path = Attr(wiEl, "Path"),
                 Filter = Attr(wiEl, "Filter", "*.*"),
+                BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
+                DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
             };
             foreach (var evEl in wiEl.Elements("Event"))
             {
@@ -546,6 +558,9 @@ public static class WatchListXmlParser
         attrs.Add(new XAttribute("Filter", wi.Filter));
 
         var wiEl = new XElement("WatchItem", attrs.ToArray());
+        AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
+        AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
+
         foreach (var ev in wi.Events)
         {
             var evEl = new XElement("Event",
@@ -564,6 +579,8 @@ public static class WatchListXmlParser
             Tag = Attr(wiEl, "Tag"),
             Path = Attr(wiEl, "Path"),
             Filter = Attr(wiEl, "Filter", "*.*"),
+            BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
+            DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
         };
         foreach (var evEl in wiEl.Elements("Event"))
         {

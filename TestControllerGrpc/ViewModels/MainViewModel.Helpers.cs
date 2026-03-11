@@ -193,9 +193,37 @@ public sealed partial class MainViewModel
 
         AvailableAgentNames.Clear();
         AvailableAgentNames.Add(""); // "All" option
+
+        // Include registered (connected) agents
         foreach (var agent in RegisteredAgents)
             if (!string.IsNullOrWhiteSpace(agent.Name))
                 AvailableAgentNames.Add(agent.Name);
+
+        // Also include agent names already used in the loaded WatchList XML
+        // so Remote Command actions show the correct agent even before connecting
+        var usedAgentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectAgentNamesFromChildren(
+            _config.WatchItems.SelectMany(wi => wi.Events).SelectMany(ev => ev.Children),
+            usedAgentNames);
+        CollectAgentNamesFromChildren(
+            _config.Templates.SelectMany(t => t.Children),
+            usedAgentNames);
+
+        foreach (var name in usedAgentNames)
+            if (!AvailableAgentNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                AvailableAgentNames.Add(name);
+    }
+
+    private static void CollectAgentNamesFromChildren(
+        IEnumerable<IActionNode> nodes, HashSet<string> names)
+    {
+        foreach (var node in nodes)
+        {
+            if (node is ActionConfig a && !string.IsNullOrWhiteSpace(a.AgentName))
+                names.Add(a.AgentName);
+            else if (node is ActionGroupConfig ag)
+                CollectAgentNamesFromChildren(ag.Children, names);
+        }
     }
 
     // ?? Node progress handler (maps IActionNode ? TreeNodeViewModel) ??

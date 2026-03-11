@@ -54,6 +54,15 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _templateName = "";
     [ObservableProperty] private int _childCount;
 
+    /// <summary>Returns the Parameters string with [Token] placeholders resolved. Read-only display value.</summary>
+    public string ResolvedParameters => ResolveTokens(Parameters);
+
+    /// <summary>Called by source generator when Parameters changes — refreshes ResolvedParameters.</summary>
+    partial void OnParametersChanged(string value)
+    {
+        OnPropertyChanged(nameof(ResolvedParameters));
+    }
+
     // ── Tree search/filter visibility ───────────────────────────────
     [ObservableProperty] private bool _isFilterVisible = true;
 
@@ -227,6 +236,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public void RefreshResolvedTextRecursive()
     {
         UpdateResolvedText(DisplayText);
+        OnPropertyChanged(nameof(ResolvedParameters));
         foreach (var c in Children) c.RefreshResolvedTextRecursive();
     }
 
@@ -329,6 +339,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             NodeIconGlyph = ResolveNodeIconGlyph("WatchItem"),
             Tag = wi.Tag,
             WatchPath = wi.Path, Filter = wi.Filter, IsEnabled = wi.IsEnabled,
+            BuildNumberField = wi.BuildNumberField,
+            DropLocationField = wi.DropLocationField,
+            LastBuildNumber = wi.LastBuildNumber ?? "",
+            LastDropLocation = wi.LastDropLocation ?? "",
             DisplayText = label, ModelObject = wi,
         };
         foreach (var ev in wi.Events) { var c = FromEvent(ev); c.Parent = node; node.Children.Add(c); }
@@ -343,10 +357,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             NodeIconGlyph = ResolveNodeIconGlyph("Event"),
             EventType = ev.Type,
             ExecutionTypeText = ev.ExecutionType.ToString(),
-            BuildNumberField = ev.BuildNumberField,
-            DropLocationField = ev.DropLocationField,
-            LastBuildNumber = ev.LastBuildNumber ?? "",
-            LastDropLocation = ev.LastDropLocation ?? "",
             DisplayText = $"Event: {ev.Type} ({ev.ExecutionType})", ModelObject = ev,
         };
         foreach (var child in ev.Children) { var c = FromActionNode(child); c.Parent = node; node.Children.Add(c); }
@@ -395,12 +405,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         var icon = ResolveCommandIcon(a.Command, a.Type);
         var label = a.Type switch
         {
-            ActionType.RunRemoteCommand => $"{a.AgentName}: {a.Command}",
-            ActionType.RunCommand => $"{a.Command} {a.Parameters}",
-            ActionType.SendMail => $"Mail > {a.To}: {a.Title}",
+            ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(a.AgentName)
+                ? $"Remote Command on '{a.AgentName}' \u2014 {a.Command}"
+                : $"Remote Command \u2014 {a.Command}",
+            ActionType.RunCommand => $"Run \u2014 {a.Command} {a.Parameters}".TrimEnd(),
+            ActionType.SendMail => $"Send Mail to {a.To}: {a.Title}",
             _ => a.Command,
         };
-        if (label.Length > 80) label = label[..80] + "...";
+        if (label.Length > 100) label = label[..100] + "\u2026";
         return new TreeNodeViewModel
         {
             NodeKind = "Action", NodeIcon = icon,
@@ -440,12 +452,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         switch (ModelObject)
         {
             case WatchItemConfig wi:
-                wi.Tag = Tag; wi.Path = WatchPath; wi.Filter = Filter; wi.IsEnabled = IsEnabled; break;
+                wi.Tag = Tag; wi.Path = WatchPath; wi.Filter = Filter; wi.IsEnabled = IsEnabled;
+                wi.BuildNumberField = BuildNumberField;
+                wi.DropLocationField = DropLocationField;
+                break;
             case EventConfig ev:
                 ev.Type = EventType;
                 ev.ExecutionType = Enum.TryParse<ExecutionMode>(ExecutionTypeText, out var em) ? em : ExecutionMode.Sequential;
-                ev.BuildNumberField = BuildNumberField;
-                ev.DropLocationField = DropLocationField;
                 break;
             case ActionGroupConfig ag:
                 ag.Tag = Tag;
@@ -478,7 +491,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             "WatchItem" => !string.IsNullOrWhiteSpace(Tag) ? $"{Tag}  ({WatchPath}{Filter})" : $"{WatchPath}{Filter}",
             "Event" => $"Event: {EventType} ({ExecutionTypeText})",
             "ActionGroup" => $"[{ExecutionTypeText}] {Tag}",
-            "Action" => $"{ActionTypeText}: {Command}",
+            "Action" => FormatActionLabel(ActionTypeText, AgentName, Command, Parameters, To, Title),
             "Initialize" => $"Initialize: {ParameterFile}",
             "Ref" => $"Ref > {TemplateID}",
             "Template" => $"Template: {TemplateName}",
@@ -489,6 +502,23 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             NodeIcon = ResolveCommandIcon(Command, t);
             NodeIconGlyph = ResolveNodeIconGlyph("Action", ActionTypeText);
         }
+    }
+
+    /// <summary>Formats a human-readable label for an Action node.</summary>
+    private static string FormatActionLabel(string actionTypeText, string agentName, string command, string parameters, string to, string title)
+    {
+        if (!Enum.TryParse<ActionType>(actionTypeText, out var actionType))
+            return $"{command} {parameters}".TrimEnd();
+
+        var label = actionType switch
+        {
+            ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(agentName)
+                ? $"Remote Command on '{agentName}' \u2014 {command}"
+                : $"Remote Command \u2014 {command}",
+            ActionType.SendMail => $"Send Mail to {to}: {title}",
+            _ => $"Run \u2014 {command} {parameters}".TrimEnd(),
+        };
+        return label.Length > 100 ? label[..100] + "\u2026" : label;
     }
 
     // ── Helpers for finding tree nodes by model object ───────────────

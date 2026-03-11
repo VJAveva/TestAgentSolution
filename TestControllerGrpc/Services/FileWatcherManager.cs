@@ -214,8 +214,8 @@ public sealed class FileWatcherManager : IDisposable
         // Load parameters from trigger file
         ParameterResolver.LoadTriggerFile(ctx, fullPath);
 
-        // Extract configured metadata fields from trigger file into EventConfig
-        ParseTriggerFileMetadata(evt, ctx);
+        // Extract configured metadata fields from the Filter file into WatchItemConfig
+        ParseTriggerFileMetadata(wi, ctx);
 
         // Execute pipeline on background thread
         _ = Task.Run(async () =>
@@ -233,19 +233,19 @@ public sealed class FileWatcherManager : IDisposable
 
     /// <summary>
     /// Extracts configured field names from the trigger file parameters
-    /// into the EventConfig's runtime properties and the execution context.
+    /// into the WatchItemConfig's runtime properties and the execution context.
     /// </summary>
-    private static void ParseTriggerFileMetadata(EventConfig evt, PipelineExecutionContext ctx)
+    private static void ParseTriggerFileMetadata(WatchItemConfig wi, PipelineExecutionContext ctx)
     {
-        if (ctx.Parameters.TryGetValue(evt.BuildNumberField, out var buildNum))
+        if (ctx.Parameters.TryGetValue(wi.BuildNumberField, out var buildNum))
         {
-            evt.LastBuildNumber = buildNum;
+            wi.LastBuildNumber = buildNum;
             ctx.Parameters["BuildNumber"] = buildNum;
         }
 
-        if (ctx.Parameters.TryGetValue(evt.DropLocationField, out var dropLoc))
+        if (ctx.Parameters.TryGetValue(wi.DropLocationField, out var dropLoc))
         {
-            evt.LastDropLocation = dropLoc;
+            wi.LastDropLocation = dropLoc;
             ctx.Parameters["DropLocation"] = dropLoc;
         }
     }

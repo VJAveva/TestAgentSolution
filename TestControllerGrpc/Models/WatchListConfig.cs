@@ -24,6 +24,16 @@ public sealed class WatchItemConfig
 
     /// <summary>Runtime: is this WatchItem currently enabled?</summary>
     public bool IsEnabled { get; set; } = true;
+
+    // Trigger file metadata field names (configurable keys to extract from Filter file)
+    public string BuildNumberField { get; set; } = "BuildNumber";
+    public string DropLocationField { get; set; } = "DropLocation";
+
+    // Runtime-only: populated when trigger fires (not serialized to XML)
+    [System.Xml.Serialization.XmlIgnore]
+    public string? LastBuildNumber { get; set; }
+    [System.Xml.Serialization.XmlIgnore]
+    public string? LastDropLocation { get; set; }
 }
 
 // =============================================================================
@@ -34,16 +44,6 @@ public sealed class EventConfig
     public string Type { get; set; } = "Renamed";         // Renamed, Created, Changed
     public ExecutionMode ExecutionType { get; set; } = ExecutionMode.Sequential;
     public List<IActionNode> Children { get; set; } = new();
-
-    // Trigger file metadata field names (configurable keys to extract)
-    public string BuildNumberField { get; set; } = "BuildNumber";
-    public string DropLocationField { get; set; } = "DropLocation";
-
-    // Runtime-only: populated when trigger fires (not serialized to XML)
-    [System.Xml.Serialization.XmlIgnore]
-    public string? LastBuildNumber { get; set; }
-    [System.Xml.Serialization.XmlIgnore]
-    public string? LastDropLocation { get; set; }
 }
 
 // =============================================================================
