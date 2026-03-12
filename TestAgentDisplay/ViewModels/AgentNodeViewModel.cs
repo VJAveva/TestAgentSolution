@@ -116,6 +116,11 @@ public sealed partial class AgentNodeViewModel : ObservableObject
 
     public void ApplySnapshot(AgentSnapshot snap)
     {
+        // Use the agent's configured name from the snapshot if available,
+        // instead of the hostname extracted from the URL
+        if (!string.IsNullOrWhiteSpace(snap.AgentName))
+            DisplayName = snap.AgentName;
+
         UpdateAgentState(snap.State);
         Activity = snap.CurrentActivity;
         CurrentCommand = snap.CurrentCommand;

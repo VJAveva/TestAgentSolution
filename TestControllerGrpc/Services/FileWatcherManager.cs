@@ -23,6 +23,12 @@ public sealed class FileWatcherManager : IDisposable
     /// <summary>Raised when a file trigger fires.</summary>
     public event Action<string, string>? TriggerFired;  // watchPath, fileName
 
+    /// <summary>Raised when trigger file metadata is parsed, carrying WatchItem tag and extracted values.</summary>
+    public event Action<string, string, string>? TriggerMetadataParsed;  // watchItemTag, buildNumber, dropLocation
+
+    /// <summary>Raised after trigger file is parsed, carrying all resolved parameters for UI token updates.</summary>
+    public event Action<string, Dictionary<string, string>>? TriggerParametersLoaded;  // watchItemTag, parameters
+
     public FileWatcherManager(
         ActionPipelineExecutor executor,
         ILogger<FileWatcherManager> logger)
@@ -217,6 +223,12 @@ public sealed class FileWatcherManager : IDisposable
         // Extract configured metadata fields from the Filter file into WatchItemConfig
         ParseTriggerFileMetadata(wi, ctx);
 
+        // Notify UI of extracted metadata so tree nodes can be updated
+        TriggerMetadataParsed?.Invoke(wi.Tag, wi.LastBuildNumber ?? "", wi.LastDropLocation ?? "");
+
+        // Notify UI of all parameters for token resolution
+        TriggerParametersLoaded?.Invoke(wi.Tag, ctx.Parameters.ToDictionary(p => p.Key, p => p.Value));
+
         // Execute pipeline on background thread
         _ = Task.Run(async () =>
         {
@@ -234,20 +246,44 @@ public sealed class FileWatcherManager : IDisposable
     /// <summary>
     /// Extracts configured field names from the trigger file parameters
     /// into the WatchItemConfig's runtime properties and the execution context.
+    /// Looks up both the configured field name and the underscore-prefixed variant
+    /// (e.g. BuildNumber and _BuildNumber) since trigger files commonly use the _ prefix.
     /// </summary>
     private static void ParseTriggerFileMetadata(WatchItemConfig wi, PipelineExecutionContext ctx)
     {
-        if (ctx.Parameters.TryGetValue(wi.BuildNumberField, out var buildNum))
+        // Try configured field name first, then with underscore prefix
+        if (TryGetParam(ctx, wi.BuildNumberField, out var buildNum))
         {
             wi.LastBuildNumber = buildNum;
+            // Ensure canonical key is also available for downstream resolution
             ctx.Parameters["BuildNumber"] = buildNum;
+            ctx.Parameters["_BuildNumber"] = buildNum;
         }
 
-        if (ctx.Parameters.TryGetValue(wi.DropLocationField, out var dropLoc))
+        if (TryGetParam(ctx, wi.DropLocationField, out var dropLoc))
         {
             wi.LastDropLocation = dropLoc;
             ctx.Parameters["DropLocation"] = dropLoc;
+            ctx.Parameters["_DropLocation"] = dropLoc;
         }
+    }
+
+    /// <summary>
+    /// Tries to get a parameter value by key, also checking the underscore-prefixed
+    /// variant (e.g. "BuildNumber" also checks "_BuildNumber" and vice versa).
+    /// </summary>
+    private static bool TryGetParam(PipelineExecutionContext ctx, string fieldName, out string value)
+    {
+        if (ctx.Parameters.TryGetValue(fieldName, out value!))
+            return true;
+        // Try with underscore prefix if not already prefixed
+        if (!fieldName.StartsWith('_') && ctx.Parameters.TryGetValue("_" + fieldName, out value!))
+            return true;
+        // Try without underscore prefix if already prefixed
+        if (fieldName.StartsWith('_') && ctx.Parameters.TryGetValue(fieldName[1..], out value!))
+            return true;
+        value = "";
+        return false;
     }
 
     private void TearDown()

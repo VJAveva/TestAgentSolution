@@ -9,10 +9,11 @@ namespace TestControllerGrpc.Services;
 ///
 /// Tokens like [BuildNumber], [EmailAddress], [DropLocation] are replaced
 /// from two sources:
-///   1. The trigger file content (first line = BuildNumber by convention)
-///   2. Initialize → ParameterFile (key=value lines, e.g. Emails.txt)
+///   1. The trigger file content (CSV: _Key,Value or Key=Value per line)
+///   2. Initialize → ParameterFile (CSV: _Key,Value or Key=Value per line)
 ///
-/// This mirrors the legacy TestControllerSvc behavior.
+/// Keys with a leading underscore (e.g. _BuildNumber) are stored both with
+/// and without the prefix so [BuildNumber] and [_BuildNumber] both resolve.
 /// </summary>
 public static partial class ParameterResolver
 {
@@ -20,34 +21,6 @@ public static partial class ParameterResolver
 
     [GeneratedRegex(@"\[(\w+)\]")]
     private static partial Regex TokenRegex();
-
-    /// <summary>
-    /// Loads parameters from the trigger file. By convention, the first
-    /// non-empty line is used as [BuildNumber].
-    /// </summary>
-    public static void LoadTriggerFile(PipelineExecutionContext ctx, string triggerFilePath)
-    {
-        if (!File.Exists(triggerFilePath)) return;
-
-        try
-        {
-            var lines = File.ReadAllLines(triggerFilePath)
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-                .ToArray();
-
-            if (lines.Length > 0)
-                ctx.Parameters["BuildNumber"] = lines[0].Trim();
-
-            // Additional lines as key=value pairs
-            foreach (var line in lines.Skip(1))
-            {
-                var parts = line.Split(new[] { '=' }, 2);
-                if (parts.Length == 2)
-                    ctx.Parameters[parts[0].Trim()] = parts[1].Trim();
-            }
-        }
-        catch { /* trigger file may still be locked by writer */ }
-    }
 
     /// <summary>
     /// Loads parameters from an Initialize ParameterFile.
@@ -167,4 +140,33 @@ public static partial class ParameterResolver
         Embed = Resolve(action.Embed, ctx),
         LargeFilesShare = Resolve(action.LargeFilesShare, ctx),
     };
+
+    /// <summary>
+    /// Loads parameters from the trigger file.
+    /// Supports two formats per line:
+    ///   1. Comma-delimited: <c>_Key,Value</c>  (same format as parameter files)
+    ///   2. Equals-delimited: <c>Key=Value</c>
+    /// Lines starting with '#' are treated as comments.
+    /// Keys with a leading underscore are stored both with and without the underscore
+    /// so tokens like [BuildNumber] and [_BuildNumber] both resolve.
+    /// </summary>
+    public static void LoadTriggerFile(PipelineExecutionContext ctx, string triggerFilePath)
+    {
+        if (!File.Exists(triggerFilePath)) return;
+
+        try
+        {
+            var entries = ParseParameterFile(triggerFilePath);
+            foreach (var (key, value) in entries)
+            {
+                ctx.Parameters[key] = value;
+
+                // Also store without leading underscore so [BuildNumber] works
+                // when file has _BuildNumber,Value
+                if (key.StartsWith('_'))
+                    ctx.Parameters[key[1..]] = value;
+            }
+        }
+        catch { /* trigger file may still be locked by writer */ }
+    }
 }

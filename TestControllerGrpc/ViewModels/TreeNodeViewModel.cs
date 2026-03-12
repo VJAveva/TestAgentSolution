@@ -57,10 +57,19 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// <summary>Returns the Parameters string with [Token] placeholders resolved. Read-only display value.</summary>
     public string ResolvedParameters => ResolveTokens(Parameters);
 
+    /// <summary>Returns the AgentName string with [Token] placeholders resolved. Read-only display value.</summary>
+    public string ResolvedAgentName => ResolveTokens(AgentName);
+
     /// <summary>Called by source generator when Parameters changes — refreshes ResolvedParameters.</summary>
     partial void OnParametersChanged(string value)
     {
         OnPropertyChanged(nameof(ResolvedParameters));
+    }
+
+    /// <summary>Called by source generator when AgentName changes — refreshes ResolvedAgentName.</summary>
+    partial void OnAgentNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(ResolvedAgentName));
     }
 
     // ── Tree search/filter visibility ───────────────────────────────
@@ -237,6 +246,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         UpdateResolvedText(DisplayText);
         OnPropertyChanged(nameof(ResolvedParameters));
+        OnPropertyChanged(nameof(ResolvedAgentName));
         foreach (var c in Children) c.RefreshResolvedTextRecursive();
     }
 
@@ -403,6 +413,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public static TreeNodeViewModel FromAction(ActionConfig a)
     {
         var icon = ResolveCommandIcon(a.Command, a.Type);
+        var tag = DeriveActionTag(a);
         var label = a.Type switch
         {
             ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(a.AgentName)
@@ -418,6 +429,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             NodeKind = "Action", NodeIcon = icon,
             NodeIconGlyph = ResolveNodeIconGlyph("Action", a.Type.ToString()),
             ActionTypeText = a.Type.ToString(),
+            Tag = tag,
             AgentName = a.AgentName, Command = a.Command, Parameters = a.Parameters,
             Timeout = a.Timeout, PollInterval = a.PollInterval,
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
@@ -426,6 +438,35 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
             DisplayText = label, ModelObject = a,
         };
+    }
+
+    /// <summary>Derives a readable Tag for an Action node from its type and command/mail fields.</summary>
+    private static string DeriveActionTag(ActionConfig a)
+    {
+        return a.Type switch
+        {
+            ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(a.AgentName)
+                ? $"{a.AgentName}:{GetCommandFileName(a.Command)}"
+                : GetCommandFileName(a.Command),
+            ActionType.SendMail => !string.IsNullOrWhiteSpace(a.Title)
+                ? $"Mail:{a.Title}" : "SendMail",
+            _ => GetCommandFileName(a.Command),
+        };
+    }
+
+    /// <summary>Extracts a short filename from a command path for use in tags.</summary>
+    private static string GetCommandFileName(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return "Action";
+        try
+        {
+            var trimmed = command.Trim().Trim('"');
+            return Path.GetFileName(trimmed);
+        }
+        catch
+        {
+            return command.Length > 30 ? command[..30] : command;
+        }
     }
 
     public static TreeNodeViewModel FromInitialize(InitializeConfig init) => new()

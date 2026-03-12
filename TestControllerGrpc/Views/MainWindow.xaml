@@ -527,6 +527,13 @@
                                                     <TextBlock Text="Edit XML" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
+                                            <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding RefreshWatchListCommand}"
+                                                    ToolTip="Reload WatchList from disk and re-resolve all Initialize parameters">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE72C;" />
+                                                    <TextBlock Text="Refresh" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                         <TextBlock Text="File" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
@@ -1051,7 +1058,7 @@
                             </StackPanel>
                             <!-- ===== WatchItem ===== -->
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=WatchItem, FallbackValue=Collapsed}">
-                                <Border Background="{DynamicResource WatchRootBg}" CornerRadius="4" Padding="8" Margin="0,0,0,8"
+                                <Border Background="{DynamicResource WatchRootBg}" CornerRadius="4" Padding="8,6" Margin="0,0,0,8"
                                         BorderBrush="{DynamicResource AccGreen}" BorderThickness="1">
                                     <DockPanel>
                                         <Button DockPanel.Dock="Right" Content="▶ Trigger All Events" Style="{StaticResource TriggerOutlineBtn}"
@@ -1206,6 +1213,10 @@
                                     <TextBlock Text="REMOTE AGENT" Style="{StaticResource Sec}" />
                                     <Label Content="AGENT NAME" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding AgentName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
+                                    <Label Content="RESOLVED AGENT NAME" Style="{StaticResource Lbl}" />
+                                    <TextBox Text="{Binding ResolvedAgentName, Mode=OneWay}" Style="{StaticResource Fld}"
+                                             IsReadOnly="True" Foreground="{DynamicResource AccGreen}"
+                                             ToolTip="Read-only: shows AgentName with [Token] placeholders resolved" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" />
@@ -1336,93 +1347,93 @@
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
-            </DockPanel>
-        </Border>
+                </DockPanel>
+            </Border>
 
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- INLINE XML EDITOR PANEL (Col 2, Row 0): overlays center panel -->
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
-                BorderBrush="{DynamicResource Accent}" BorderThickness="2"
-                Visibility="{Binding IsInlineXmlEditorVisible, Converter={StaticResource BoolVis}}">
-            <DockPanel>
-                <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="12,8" CornerRadius="6,6,0,0">
-                    <DockPanel>
-                        <TextBlock FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Accent}">
-                            <Run Text="XML Editor" />
-                            <Run Text=" — " Foreground="{DynamicResource TextS}" />
-                            <Run Text="{Binding InlineXmlEditorScope, Mode=OneWay}" Foreground="{DynamicResource AccMauve}" />
-                        </TextBlock>
-                        <Button DockPanel.Dock="Right" Content="✕ Close" Style="{StaticResource SmBtn}" HorizontalAlignment="Right"
-                                Background="{DynamicResource DangerBtnBg}" Foreground="{DynamicResource AccRed}"
-                                Command="{Binding ToggleInlineXmlEditorCommand}" ToolTip="Close inline XML editor" />
-                    </DockPanel>
-                </Border>
-                <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource BgCard}" CornerRadius="0,0,6,6"
-                        BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
-                    <DockPanel>
-                        <Button Content="Apply XML" Style="{StaticResource Btn}" HorizontalAlignment="Left"
-                                Command="{Binding ApplyInlineXmlCommand}" />
-                        <TextBlock Text="{Binding InlineXmlEditorStatus}" FontSize="11" FontFamily="Consolas"
-                                   Foreground="{DynamicResource AccYellow}" VerticalAlignment="Center" Margin="12,0,0,0"
-                                   TextTrimming="CharacterEllipsis" />
-                    </DockPanel>
-                </Border>
-                <!-- AvalonEdit host — instantiated in code-behind -->
-                <Border x:Name="InlineXmlEditorHost" Background="{DynamicResource FieldBg}" Margin="4" />
-            </DockPanel>
-        </Border>
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <!-- INLINE XML EDITOR PANEL (Col 2, Row 0): overlays center panel -->
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
+                    BorderBrush="{DynamicResource Accent}" BorderThickness="2"
+                    Visibility="{Binding IsInlineXmlEditorVisible, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="12,8" CornerRadius="6,6,0,0">
+                        <DockPanel>
+                            <TextBlock FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Accent}">
+                                <Run Text="XML Editor" />
+                                <Run Text=" — " Foreground="{DynamicResource TextS}" />
+                                <Run Text="{Binding InlineXmlEditorScope, Mode=OneWay}" Foreground="{DynamicResource AccMauve}" />
+                            </TextBlock>
+                            <Button DockPanel.Dock="Right" Content="✕ Close" Style="{StaticResource SmBtn}" HorizontalAlignment="Right"
+                                    Background="{DynamicResource DangerBtnBg}" Foreground="{DynamicResource AccRed}"
+                                    Command="{Binding ToggleInlineXmlEditorCommand}" ToolTip="Close inline XML editor" />
+                        </DockPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource BgCard}" CornerRadius="0,0,6,6"
+                            BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
+                        <DockPanel>
+                            <Button Content="Apply XML" Style="{StaticResource Btn}" HorizontalAlignment="Left"
+                                    Command="{Binding ApplyInlineXmlCommand}" />
+                            <TextBlock Text="{Binding InlineXmlEditorStatus}" FontSize="11" FontFamily="Consolas"
+                                       Foreground="{DynamicResource AccYellow}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </Border>
+                    <!-- AvalonEdit host — instantiated in code-behind -->
+                    <Border x:Name="InlineXmlEditorHost" Background="{DynamicResource FieldBg}" Margin="4" />
+                </DockPanel>
+            </Border>
 
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- VERTICAL SPLITTER: Center | Right                      -->
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <GridSplitter Grid.Column="3" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
-                      HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                      ResizeBehavior="PreviousAndNext" />
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <!-- VERTICAL SPLITTER: Center | Right                      -->
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <GridSplitter Grid.Column="3" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
+                          HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext" />
 
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- RIGHT PANEL (Col 4, Row 0): Agents                    -->
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <Border Grid.Column="4" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
-                BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
-            <DockPanel>
-                <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
-                    <TextBlock Text="Agents" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
-                </Border>
-                <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="2*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <Label Content="Name" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding NewAgentName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <Label Content="gRPC Address" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding NewAgentAddress, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" FontSize="11" />
-                            </StackPanel>
-                        </Grid>
-                        <WrapPanel Orientation="Horizontal" Margin="0,5,0,5">
-                            <Button Content="Register + Test" Style="{StaticResource SmBtn}"
-                                    Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
-                                    Command="{Binding RegisterAgentCommand}" ToolTip="Register new agent and test connection" />
-                            <Button Content="Test All" Style="{StaticResource SmBtn}"
-                                    Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                    Command="{Binding TestAllAgentsCommand}" ToolTip="Test connectivity to all registered agents" />
-                            <Button Content="Test" Style="{StaticResource SmBtn}"
-                                    Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                                    Command="{Binding TestConnectionCommand}" ToolTip="Test connectivity to selected agent" />
-                            <Button Content="Diagnose" Style="{StaticResource SmBtn}"
-                                    Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
-                                    Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic" />
-                            <Button Content="Remove" Style="{StaticResource DangerBtn}"
-                                    Command="{Binding UnregisterAgentCommand}" ToolTip="Remove selected agent" />
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
-                <ListBox ItemsSource="{Binding RegisteredAgents}"
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <!-- RIGHT PANEL (Col 4, Row 0): Agents                    -->
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <Border Grid.Column="4" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
+                        <TextBlock Text="Agents" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
+                    </Border>
+                    <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="2*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <Label Content="Name" Style="{StaticResource Lbl}" />
+                                    <TextBox Text="{Binding NewAgentName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <Label Content="gRPC Address" Style="{StaticResource Lbl}" />
+                                    <TextBox Text="{Binding NewAgentAddress, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" FontSize="11" />
+                                </StackPanel>
+                            </Grid>
+                            <WrapPanel Orientation="Horizontal" Margin="0,5,0,5">
+                                <Button Content="Register + Test" Style="{StaticResource SmBtn}"
+                                        Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
+                                        Command="{Binding RegisterAgentCommand}" ToolTip="Register new agent and test connection" />
+                                <Button Content="Test All" Style="{StaticResource SmBtn}"
+                                        Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                                        Command="{Binding TestAllAgentsCommand}" ToolTip="Test connectivity to all registered agents" />
+                                <Button Content="Test" Style="{StaticResource SmBtn}"
+                                        Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
+                                        Command="{Binding TestConnectionCommand}" ToolTip="Test connectivity to selected agent" />
+                                <Button Content="Diagnose" Style="{StaticResource SmBtn}"
+                                        Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
+                                        Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic" />
+                                <Button Content="Remove" Style="{StaticResource DangerBtn}"
+                                        Command="{Binding UnregisterAgentCommand}" ToolTip="Remove selected agent" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                    <ListBox ItemsSource="{Binding RegisteredAgents}"
                          SelectedItem="{Binding SelectedAgent}"
                          Background="Transparent" BorderThickness="0"
                          Margin="6,5,6,6">

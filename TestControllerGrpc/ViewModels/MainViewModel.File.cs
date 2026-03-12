@@ -7,7 +7,7 @@ using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
-// ── File Operations (Open, Save, SaveAs) ────────────────────────────
+// ── File Operations (Open, Save, SaveAs, Refresh) ───────────────────
 public sealed partial class MainViewModel
 {
     [RelayCommand]
@@ -47,6 +47,10 @@ public sealed partial class MainViewModel
         {
             WriteBackAll();
 
+            // Persist resolved AgentName values so the saved XML contains
+            // the actual agent names instead of [Token] placeholders.
+            ResolveAgentNamesInConfig(_config);
+
             // Suppress the file-watcher reload — we're saving our own in-memory state
             _vocabMonitor.SuppressNextReload();
 
@@ -69,6 +73,37 @@ public sealed partial class MainViewModel
         if (dlg.ShowDialog() != true) return;
         VocabFilePath = dlg.FileName;
         SaveVocabulary();
+    }
+
+    /// <summary>
+    /// Refreshes the WatchList by reloading from disk and re-resolving all
+    /// Initialize parameter tokens across the tree.
+    /// </summary>
+    [RelayCommand]
+    private void RefreshWatchList()
+    {
+        if (string.IsNullOrEmpty(VocabFilePath) || !File.Exists(VocabFilePath))
+        {
+            // No file loaded — just re-resolve tokens from current in-memory config
+            LoadTokensFromConfig(_config);
+            AddLog("Refreshed token resolution (no file loaded)");
+            return;
+        }
+
+        try
+        {
+            var config = WatchListXmlParser.Load(VocabFilePath);
+            config.FilePath = VocabFilePath;
+            ApplyConfig(config);
+            IsDirty = false;
+            AddLog($"Refreshed: {VocabFilePath}");
+            StatusMessage = $"Refreshed — {config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refresh vocabulary file");
+            AddLog($"{Helpers.LogIcons.Error} Refresh error: {ex.Message}", LogSeverity.Error);
+        }
     }
 
     /// <summary>Close the application.</summary>

@@ -203,6 +203,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _dispatcher.OutputReceived += OnOutputReceived;
         _dispatcher.StatusChanged += OnStatusChanged;
         _watcherManager.TriggerFired += OnTriggerFired;
+        _watcherManager.TriggerMetadataParsed += OnTriggerMetadataParsed;
+        _watcherManager.TriggerParametersLoaded += OnTriggerParametersLoaded;
 
         // Subscribe to gRPC server events (agents calling in)
         Services.TestControllerGrpcService.AgentRegistered += OnAgentSelfRegistered;
@@ -267,6 +269,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _dispatcher.OutputReceived -= OnOutputReceived;
         _dispatcher.StatusChanged -= OnStatusChanged;
         _watcherManager.TriggerFired -= OnTriggerFired;
+        _watcherManager.TriggerMetadataParsed -= OnTriggerMetadataParsed;
+        _watcherManager.TriggerParametersLoaded -= OnTriggerParametersLoaded;
 
         // Unsubscribe from static gRPC server events to prevent memory leak
         Services.TestControllerGrpcService.AgentRegistered -= OnAgentSelfRegistered;
@@ -305,6 +309,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             LoadParameterFileEntries(value.ParameterFile);
         else
             ParameterFileEntries.Clear();
+
+        // Re-evaluate CanExecute for all execution commands since they depend on SelectedNode
+        NotifyExecutionCanExecuteChanged();
     }
 
     partial void OnSelectedTemplateNodeChanged(TreeNodeViewModel? value)

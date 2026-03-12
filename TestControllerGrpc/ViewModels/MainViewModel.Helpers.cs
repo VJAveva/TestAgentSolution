@@ -329,6 +329,47 @@ public sealed partial class MainViewModel
 
     private void OnTriggerFired(string p, string f) => AddLog($"Trigger: {p} > {f}");
 
+    /// <summary>
+    /// Called when a trigger file is parsed — merges all extracted key-value pairs
+    /// into the shared TokenValues dictionary so the tree UI shows resolved text.
+    /// </summary>
+    private void OnTriggerParametersLoaded(string watchItemTag, Dictionary<string, string> parameters)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            foreach (var (key, value) in parameters)
+            {
+                TreeNodeViewModel.TokenValues[key] = value;
+                if (key.StartsWith('_'))
+                    TreeNodeViewModel.TokenValues[key[1..]] = value;
+            }
+
+            // Refresh resolved display text across all trees
+            WatchListRoot?.RefreshResolvedTextRecursive();
+            TemplateListRoot?.RefreshResolvedTextRecursive();
+
+            AddLog($"[{watchItemTag}] Trigger parameters loaded ({parameters.Count} tokens)", LogSeverity.Success);
+        });
+    }
+
+    private void OnTriggerMetadataParsed(string watchItemTag, string buildNumber, string dropLocation)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            if (WatchListRoot is null) return;
+            foreach (var child in WatchListRoot.Children)
+            {
+                if (string.Equals(child.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase)
+                    && child.NodeKind == "WatchItem")
+                {
+                    child.LastBuildNumber = buildNumber;
+                    child.LastDropLocation = dropLocation;
+                    break;
+                }
+            }
+        });
+    }
+
     /// <summary>Opens the bundled help file in the default browser.</summary>
     [RelayCommand]
     private void OpenHelp()
@@ -338,5 +379,35 @@ public sealed partial class MainViewModel
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(helpPath) { UseShellExecute = true });
         else
             AddLog("Help file not found. Expected at: " + helpPath);
+    }
+
+    /// <summary>
+    /// Resolves [Token] placeholders in AgentName fields across all Actions in the config
+    /// so that the saved XML persists the actual resolved agent names.
+    /// </summary>
+    private static void ResolveAgentNamesInConfig(WatchListConfig config)
+    {
+        foreach (var wi in config.WatchItems)
+            foreach (var ev in wi.Events)
+                ResolveAgentNamesInChildren(ev.Children);
+        foreach (var t in config.Templates)
+            ResolveAgentNamesInChildren(t.Children);
+    }
+
+    private static void ResolveAgentNamesInChildren(List<IActionNode> children)
+    {
+        foreach (var child in children)
+        {
+            if (child is ActionConfig a && !string.IsNullOrWhiteSpace(a.AgentName))
+            {
+                var resolved = TreeNodeViewModel.ResolveTokens(a.AgentName);
+                if (!string.Equals(a.AgentName, resolved, StringComparison.Ordinal))
+                    a.AgentName = resolved;
+            }
+            else if (child is ActionGroupConfig ag)
+            {
+                ResolveAgentNamesInChildren(ag.Children);
+            }
+        }
     }
 }
