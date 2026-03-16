@@ -84,7 +84,6 @@ public sealed partial class MainViewModel
     {
         if (string.IsNullOrEmpty(VocabFilePath) || !File.Exists(VocabFilePath))
         {
-            // No file loaded — just re-resolve tokens from current in-memory config
             LoadTokensFromConfig(_config);
             AddLog("Refreshed token resolution (no file loaded)");
             return;
@@ -94,9 +93,38 @@ public sealed partial class MainViewModel
         {
             var config = WatchListXmlParser.Load(VocabFilePath);
             config.FilePath = VocabFilePath;
-            ApplyConfig(config);
-            IsDirty = false;
-            AddLog($"Refreshed: {VocabFilePath}");
+
+            if (_sessionManager.HasAnyActiveExecution)
+            {
+                // DIFFERENTIAL reload — preserve running watchers
+                _config = config;
+                _executor.LoadTemplates(config.Templates);
+                _watcherManager.ApplyDiff(config.WatchItems);
+
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    TreeRoots.Clear();
+                    TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
+                    TemplateRoots.Clear();
+                    TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                    RebuildTemplateIds();
+                    RebuildFilterOptions();
+                    LoadTokensFromConfig(config);
+                    ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                });
+
+                IsDirty = false;
+                AddLog($"Refreshed (differential — {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
+                    LogSeverity.Success);
+            }
+            else
+            {
+                // FULL reload — no executions running
+                ApplyConfig(config);
+                IsDirty = false;
+                AddLog($"Refreshed: {VocabFilePath}", LogSeverity.Success);
+            }
+
             StatusMessage = $"Refreshed — {config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
         }
         catch (Exception ex)

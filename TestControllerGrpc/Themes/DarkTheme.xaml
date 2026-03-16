@@ -39,6 +39,8 @@
     <!-- Accent button backgrounds -->
     <SolidColorBrush x:Key="AccentBtnBg"    Color="#3389B4FA" />
     <SolidColorBrush x:Key="GreenBtnBg"     Color="#33A6E3A1" />
+    <SolidColorBrush x:Key="BlueBtnBg"      Color="#333B82F6" />
+    <SolidColorBrush x:Key="AccBlue"        Color="#FF3B82F6" />
     <SolidColorBrush x:Key="DangerBtnBg"    Color="#33F38BA8" />
     <SolidColorBrush x:Key="MauveBtnBg"     Color="#33CBA6F7" />
     <SolidColorBrush x:Key="YellowBtnBg"    Color="#33F9E2AF" />

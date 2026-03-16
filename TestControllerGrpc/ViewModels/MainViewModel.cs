@@ -84,6 +84,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private Visibility _showExecuteGroup = Visibility.Collapsed;
     [ObservableProperty] private Visibility _showExecuteAction = Visibility.Collapsed;
 
+    // ── Import/Export/EditXML ribbon button visibility ────────────
+    [ObservableProperty] private Visibility _showImportButton = Visibility.Visible;
+    [ObservableProperty] private Visibility _showExportButton = Visibility.Visible;
+    [ObservableProperty] private Visibility _showEditXmlButton = Visibility.Visible;
+
     // ── Initialize parameter file editor state ──────────────────────
     public ObservableCollection<ParameterEntryViewModel> ParameterFileEntries { get; } = new();
     [ObservableProperty] private string _parameterFileStatus = "";
@@ -303,6 +308,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ShowTriggerEvent = value.NodeKind == "Event" ? Visibility.Visible : Visibility.Collapsed;
         ShowExecuteGroup = value.NodeKind == "ActionGroup" ? Visibility.Visible : Visibility.Collapsed;
         ShowExecuteAction = value.NodeKind == "Action" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Import/Export/EditXML visibility — only for WatchList-level operations
+        ShowImportButton = value.NodeKind is "WatchList"
+            ? Visibility.Visible : Visibility.Collapsed;
+        ShowEditXmlButton = value.NodeKind is "WatchList"
+            ? Visibility.Visible : Visibility.Collapsed;
+        ShowExportButton = value.NodeKind is "WatchList" or "WatchItem"
+            ? Visibility.Visible : Visibility.Collapsed;
 
         // Load Initialize parameter file entries
         if (value.NodeKind == "Initialize" && !string.IsNullOrWhiteSpace(value.ParameterFile))

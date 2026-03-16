@@ -507,6 +507,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding ImportWatchItemsCommand}"
+                                                    Visibility="{Binding ShowImportButton}"
                                                     ToolTip="Import WatchItems from another XML file (additive merge)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B5;" />
@@ -514,6 +515,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding ExportWatchItemsCommand}"
+                                                    Visibility="{Binding ShowExportButton}"
                                                     ToolTip="Export selected WatchItem (or all) to XML file">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE898;" />
@@ -521,6 +523,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding OpenWatchListEditorCommand}"
+                                                    Visibility="{Binding ShowEditXmlButton}"
                                                     ToolTip="Open the full WatchList XML in the editor window">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE70F;" />

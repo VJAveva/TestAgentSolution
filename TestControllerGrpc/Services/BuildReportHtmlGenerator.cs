@@ -1,0 +1,478 @@
+using System.Net;
+using System.Text;
+using TestControllerGrpc.Models;
+
+namespace TestControllerGrpc.Services;
+
+/// <summary>
+/// Generates HTML reports for build results. Extracted from BuildResultsViewModel
+/// to keep presentation logic separate from ViewModel orchestration.
+/// </summary>
+public class BuildReportHtmlGenerator
+{
+    private readonly BuildResultsConfig _config;
+
+    public BuildReportHtmlGenerator(BuildResultsConfig config)
+    {
+        _config = config;
+    }
+
+    private double GoodThreshold => _config.GoodThreshold;
+    private double WarningThreshold => _config.WarningThreshold;
+
+    private string GetRateClass(double rate) =>
+        rate > GoodThreshold ? "pass" : rate >= WarningThreshold ? "warn" : "fail";
+
+    private static string Enc(string? s) => WebUtility.HtmlEncode(s ?? "");
+
+    private static string TruncateError(string? msg) =>
+        msg is null ? "" : msg.Length > 120 ? msg[..120] + "…" : msg;
+
+    private static string Timestamp() => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+    // ?? Shared CSS blocks ???????????????????????????????????????????
+
+    private static string DarkThemeBase() => """
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0F1629; color: #E2E8F0; margin: 0; padding: 20px; }
+        .card { background: #1A2238; border-radius: 8px; padding: 16px; margin: 8px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        th { background: #1E293B; color: #94A3B8; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }
+        td { padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; }
+        tr:hover { background: #1E293B; }
+        .fail { color: #EF4444; font-weight: 600; }
+        .pass { color: #10B981; }
+        .warn { color: #F59E0B; }
+        svg text { font-family: 'Segoe UI', Arial, sans-serif; }
+        """;
+
+    private static string KpiCss() => """
+        .kpi-row { display: flex; gap: 16px; margin: 16px 0; }
+        .kpi-card { flex: 1; background: #1A2238; border-radius: 10px; padding: 20px 24px; text-align: center; border: 1px solid #1E293B; }
+        .kpi-value { font-size: 32px; font-weight: 800; line-height: 1.1; }
+        .kpi-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; }
+        .kpi-sub { font-size: 11px; color: #64748B; margin-top: 4px; }
+        """;
+
+    private static string StatsCss() => """
+        .stats { display: flex; gap: 12px; margin: 12px 0; }
+        .stat { background: #1A2238; border-radius: 8px; padding: 12px 20px; text-align: center; flex: 1; }
+        .stat .num { font-size: 28px; font-weight: bold; }
+        .stat .lbl { font-size: 11px; color: #94A3B8; margin-top: 4px; }
+        """;
+
+    private static string DetailTableCss() => """
+        .detail-table { width: 100%; border-collapse: collapse; }
+        .detail-table th { background: #0F1629; color: #94A3B8; text-align: left; padding: 10px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #334155; }
+        .detail-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #1E293B; }
+        .detail-table tr:hover { background: #263350 !important; }
+        .row-even { background: #1A2238; }
+        .row-odd { background: #151D30; }
+        .build-short { cursor: default; border-bottom: 1px dotted #64748B; }
+        .fail-link { cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+        .fail-link:hover { text-decoration: underline; }
+        """;
+
+    private static void AppendFooter(StringBuilder sb)
+    {
+        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:20px'>Generated {Timestamp()} by TestController</p>");
+        sb.AppendLine("</body></html>");
+    }
+
+    // ?? Stat KPI row helper ?????????????????????????????????????????
+
+    private static void AppendStatCards(StringBuilder sb, int total, int passed, int failed, int timeout)
+    {
+        sb.AppendLine("<div class='stats'>");
+        sb.AppendLine($"<div class='stat'><div class='num' style='color:#60A5FA'>{total}</div><div class='lbl'>Total</div></div>");
+        sb.AppendLine($"<div class='stat'><div class='num' style='color:#10B981'>{passed}</div><div class='lbl'>Passed</div></div>");
+        sb.AppendLine($"<div class='stat'><div class='num' style='color:#EF4444'>{failed}</div><div class='lbl'>Failed</div></div>");
+        sb.AppendLine($"<div class='stat'><div class='num' style='color:#F59E0B'>{timeout}</div><div class='lbl'>Timeout</div></div>");
+        sb.AppendLine("</div>");
+    }
+
+    // ?? Health color helper ?????????????????????????????????????????
+
+    private static string HealthToColor(HealthStatus health) => health switch
+    {
+        HealthStatus.Good => "#10B981",
+        HealthStatus.Warning => "#F59E0B",
+        _ => "#EF4444",
+    };
+
+    private static string HealthToCssClass(HealthStatus health) => health switch
+    {
+        HealthStatus.Good => "good-bg",
+        HealthStatus.Warning => "warn-bg",
+        _ => "bad-bg",
+    };
+
+    // ???????????????????????????????????????????????????????????????
+    // Test Detail HTML (single test result)
+    // ???????????????????????????????????????????????????????????????
+
+    public record TestDetailContext(
+        string TestName, string UseCaseName, string BuildNumber,
+        string Outcome, string Duration,
+        string ErrorMessage, string StackTrace, string StdOut, string TrxFilePath,
+        IReadOnlyList<StepInfo> ExecutionSteps);
+
+    public record StepInfo(string StepName, string Outcome, string OutcomeIcon, string DurationText);
+
+    public string GenerateTestDetailHtml(TestDetailContext ctx)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine($"<title>Test Result: {Enc(ctx.TestName)}</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("body{font-family:'Segoe UI',Arial;background:#0F1629;color:#E2E8F0;margin:0;padding:24px}");
+        sb.AppendLine(".card{background:#1A2238;border-radius:8px;padding:16px;margin:12px 0}");
+        sb.AppendLine(".badge{display:inline-block;padding:4px 12px;border-radius:4px;font-weight:bold;color:#fff}");
+        sb.AppendLine("pre{background:#0F1629;border:1px solid #334155;border-radius:6px;padding:12px;overflow-x:auto;font-size:12px;color:#94A3B8;white-space:pre-wrap}");
+        sb.AppendLine(".pass{background:#10B981} .fail{background:#EF4444} .warn{background:#F59E0B}");
+        sb.AppendLine("h1{color:#89B4FA;margin:0 0 4px} h3{color:#94A3B8;margin:16px 0 8px;font-size:13px}");
+        sb.AppendLine("table{width:100%;border-collapse:collapse} td,th{padding:6px 10px;border-bottom:1px solid #1E293B;font-size:12px;text-align:left}");
+        sb.AppendLine("th{color:#64748B;font-size:11px;text-transform:uppercase}");
+        sb.AppendLine(".step-pass{color:#10B981} .step-fail{color:#EF4444}");
+        sb.AppendLine("</style></head><body>");
+
+        var outcomeClass = ctx.Outcome == "Failed" ? "fail" : ctx.Outcome == "Passed" ? "pass" : "warn";
+        sb.AppendLine($"<h1>{Enc(ctx.TestName)}</h1>");
+        sb.AppendLine($"<span class='badge {outcomeClass}'>{Enc(ctx.Outcome)}</span>");
+        sb.AppendLine($"<span style='color:#64748B;margin-left:12px'>{Enc(ctx.UseCaseName)} &middot; {Enc(ctx.BuildNumber)} &middot; {ctx.Duration}</span>");
+
+        if (ctx.ExecutionSteps.Count > 0)
+        {
+            sb.AppendLine("<div class='card'><h3>EXECUTION STEPS</h3>");
+            sb.AppendLine("<table><tr><th></th><th>Step</th><th>Duration</th></tr>");
+            foreach (var step in ctx.ExecutionSteps)
+            {
+                var cls = step.Outcome == "Passed" ? "step-pass" : "step-fail";
+                sb.AppendLine($"<tr><td class='{cls}'>{Enc(step.OutcomeIcon)}</td><td>{Enc(step.StepName)}</td><td>{step.DurationText}</td></tr>");
+            }
+            sb.AppendLine("</table></div>");
+        }
+
+        AppendOptionalSection(sb, "ERROR MESSAGE", ctx.ErrorMessage, "(no error message)", "color:#EF4444");
+        AppendOptionalSection(sb, "STACK TRACE", ctx.StackTrace, "(no stack trace)", null);
+        AppendOptionalSection(sb, "STDOUT", ctx.StdOut, "(no stdout captured)", null);
+
+        if (!string.IsNullOrEmpty(ctx.TrxFilePath))
+            sb.AppendLine($"<div class='card'><h3>TRX FILE</h3><pre>{Enc(ctx.TrxFilePath)}</pre></div>");
+
+        AppendFooter(sb);
+        return sb.ToString();
+    }
+
+    private static void AppendOptionalSection(StringBuilder sb, string title, string content, string placeholder, string? style)
+    {
+        if (string.IsNullOrWhiteSpace(content) || content == placeholder) return;
+        var styleAttr = style != null ? $" style='{style}'" : "";
+        sb.AppendLine($"<div class='card'><h3>{title}</h3>");
+        sb.AppendLine($"<pre{styleAttr}>{Enc(content)}</pre></div>");
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Single Build HTML Report
+    // ???????????????????????????????????????????????????????????????
+
+    public string GenerateSingleBuildHtml(BuildNode node)
+    {
+        var healthBg = HealthToColor(node.Health);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine("<style>");
+        sb.AppendLine(DarkThemeBase());
+        sb.AppendLine(StatsCss());
+        sb.AppendLine(KpiCss());
+        sb.AppendLine(DetailTableCss());
+        sb.AppendLine(".health-bar { border-radius: 6px; height: 36px; display: flex; align-items: center; padding: 0 16px; font-weight: bold; font-size: 16px; color: #fff; }");
+        sb.AppendLine(".badge-crit { display:inline-block; background:#7F1D1D; color:#FCA5A5; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px; }");
+        sb.AppendLine("</style></head><body>");
+
+        sb.AppendLine($"<h2>Build Results: {node.BuildNumber}</h2>");
+        sb.AppendLine($"<div class='health-bar' style='background:{healthBg}'>{node.PassRate:F1}% — {node.Health}</div>");
+
+        AppendStatCards(sb, node.TotalTests, node.PassedTests, node.FailedTests, node.TimeoutTests);
+
+        // Use Case Breakdown
+        sb.AppendLine("<div class='card'><h3>Use Case Breakdown</h3>");
+        sb.AppendLine("<table><tr><th>Use Case</th><th>Duration</th><th>Total</th><th>Passed</th><th>Failed</th><th>Timeout</th><th>Pass Rate</th><th>Failed Tests</th></tr>");
+        foreach (var uc in node.UseCases)
+        {
+            var rateClass = GetRateClass(uc.PassRate);
+            var failedNames = string.Join(", ", uc.FailedTests.Select(t => t.TestName));
+            sb.AppendLine($"<tr><td>{uc.UseCaseName}</td><td>{uc.Duration:hh\\:mm\\:ss}</td><td>{uc.Total}</td><td class='pass'>{uc.Passed}</td><td class='{(uc.Failed > 0 ? "fail" : "")}'>{uc.Failed}</td><td>{uc.Timeout}</td><td class='{rateClass}'>{uc.PassRate:F1}%</td><td class='fail' style='font-size:11px'>{failedNames}</td></tr>");
+        }
+        sb.AppendLine("</table></div>");
+
+        // Failed Tests Detail
+        if (node.AllFailedTests.Count > 0)
+        {
+            sb.AppendLine("<div class='card'><h3>Failed Tests Detail</h3>");
+            sb.AppendLine("<table><tr><th>Test Name</th><th>TRX File</th><th>Error Message</th></tr>");
+            foreach (var t in node.AllFailedTests)
+            {
+                sb.AppendLine($"<tr><td class='fail'>{t.TestName}</td><td>{t.TrxFileName}</td><td style='font-size:11px'>{Enc(TruncateError(t.ErrorMessage))}</td></tr>");
+            }
+            sb.AppendLine("</table></div>");
+        }
+
+        AppendFooter(sb);
+        return sb.ToString();
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Multi-Build Summary HTML Report
+    // ???????????????????????????????????????????????????????????????
+
+    public string GenerateMultiBuildHtml(IReadOnlyList<BuildNode> builds, int statTotal, int statPassed, int statFailed, int statTimeout)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine("<style>");
+        sb.AppendLine(DarkThemeBase());
+        sb.AppendLine(StatsCss());
+        sb.AppendLine(KpiCss());
+        sb.AppendLine(DetailTableCss());
+        sb.AppendLine("h2 { color: #60A5FA; } h3 { color: #94A3B8; margin: 0 0 8px; font-size: 14px; }");
+        sb.AppendLine(".good-bg { background: #10B981; } .warn-bg { background: #F59E0B; } .bad-bg { background: #EF4444; }");
+        sb.AppendLine(".health-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }");
+        sb.AppendLine("</style></head><body>");
+
+        sb.AppendLine($"<h2>All Builds Summary ({builds.Count} builds)</h2>");
+        AppendStatCards(sb, statTotal, statPassed, statFailed, statTimeout);
+
+        sb.AppendLine("<div class='card'><h3>Build Breakdown</h3>");
+        sb.AppendLine("<table><tr><th>Build</th><th>Total</th><th>Passed</th><th>Failed</th><th>Pass Rate</th><th>Health</th></tr>");
+        foreach (var b in builds)
+        {
+            var rateClass = GetRateClass(b.PassRate);
+            var healthBg = HealthToCssClass(b.Health);
+            sb.AppendLine($"<tr><td><strong>{Enc(b.BuildNumber)}</strong></td>" +
+                           $"<td>{b.TotalTests}</td>" +
+                           $"<td class='pass'>{b.PassedTests}</td>" +
+                           $"<td class='{(b.FailedTests > 0 ? "fail" : "")}'>{b.FailedTests}</td>" +
+                           $"<td class='{rateClass}'>{b.PassRate:F1}%</td>" +
+                           $"<td><span class='health-pill {healthBg}'>{b.Health}</span></td></tr>");
+        }
+        sb.AppendLine("</table></div>");
+
+        AppendFooter(sb);
+        return sb.ToString();
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Trend Report HTML
+    // ???????????????????????????????????????????????????????????????
+
+    public string GenerateTrendHtml(TrendReport trend)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine($"<title>Trend Report — {trend.Builds.Count} Builds</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine(DarkThemeBase());
+        sb.AppendLine(KpiCss());
+        sb.AppendLine("h2 { color: #89B4FA; margin-bottom: 4px; }");
+        sb.AppendLine("h3 { color: #94A3B8; margin: 24px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }");
+        sb.AppendLine(".sub { color: #64748B; font-size: 12px; margin-bottom: 16px; }");
+        sb.AppendLine(".good-bg { background: #10B981; } .warn-bg { background: #F59E0B; } .bad-bg { background: #EF4444; }");
+        sb.AppendLine(".health-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }");
+        sb.AppendLine(".chart-container { background: #1A2238; border-radius: 8px; padding: 20px; margin: 12px 0; }");
+        sb.AppendLine("</style></head><body>");
+
+        sb.AppendLine("<h2>Trend Report</h2>");
+        sb.AppendLine($"<p class='sub'>{trend.Builds.Count} build(s) analyzed &middot; Generated {Timestamp()}</p>");
+
+        if (trend.Builds.Count == 0)
+        {
+            sb.AppendLine("<div class='card'><p>No build data available for trend analysis.</p></div>");
+            sb.AppendLine("</body></html>");
+            return sb.ToString();
+        }
+
+        var totalFailed = trend.Builds.Sum(b => b.FailedTests);
+        var avgPassRate = trend.Builds.Average(b => b.PassRate);
+        var bestBuild = trend.Builds.MaxBy(b => b.PassRate);
+        var worstBuild = trend.Builds.MinBy(b => b.PassRate);
+
+        // KPIs
+        sb.AppendLine("<div class='kpi-row'>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#60A5FA'>{trend.Builds.Count}</div><div class='kpi-label'>Builds</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#E2E8F0'>{trend.Builds.Sum(b => b.TotalTests):N0}</div><div class='kpi-label'>Total Tests</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#10B981'>{avgPassRate:F1}%</div><div class='kpi-label'>Avg Pass Rate</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#EF4444'>{totalFailed:N0}</div><div class='kpi-label'>Total Failures</div></div>");
+        sb.AppendLine("</div>");
+
+        // SVG Chart
+        if (trend.Builds.Count >= 2)
+            AppendPassRateChart(sb, trend.Builds);
+
+        // Per-Build Table
+        sb.AppendLine("<div class='card'><h3 style='margin-top:0'>Build Breakdown</h3>");
+        sb.AppendLine("<table><tr><th>Build</th><th>Date</th><th>Total</th><th>Passed</th><th>Failed</th><th>Timeout</th><th>Pass Rate</th><th>Health</th></tr>");
+        foreach (var b in trend.Builds)
+        {
+            var rateClass = GetRateClass(b.PassRate);
+            var healthBg = HealthToCssClass(b.Health);
+            sb.AppendLine($"<tr><td><strong>{Enc(b.BuildNumber)}</strong></td>" +
+                           $"<td style='color:#64748B'>{b.Date:yyyy-MM-dd HH:mm}</td>" +
+                           $"<td>{b.TotalTests}</td>" +
+                           $"<td class='pass'>{b.PassedTests}</td>" +
+                           $"<td class='{(b.FailedTests > 0 ? "fail" : "")}'>{b.FailedTests}</td>" +
+                           $"<td>{b.TimeoutTests}</td>" +
+                           $"<td class='{rateClass}'>{b.PassRate:F1}%</td>" +
+                           $"<td><span class='health-pill {healthBg}'>{b.Health}</span></td></tr>");
+        }
+        sb.AppendLine("</table></div>");
+
+        // Best / Worst
+        if (bestBuild is not null && worstBuild is not null)
+        {
+            sb.AppendLine("<div class='kpi-row'>");
+            sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#10B981'>{bestBuild.PassRate:F1}%</div><div class='kpi-label'>Best Build</div><div class='kpi-sub'>{Enc(bestBuild.BuildNumber)} ({bestBuild.Date:yyyy-MM-dd})</div></div>");
+            sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#EF4444'>{worstBuild.PassRate:F1}%</div><div class='kpi-label'>Worst Build</div><div class='kpi-sub'>{Enc(worstBuild.BuildNumber)} ({worstBuild.Date:yyyy-MM-dd})</div></div>");
+            sb.AppendLine("</div>");
+        }
+
+        AppendPeriodTable(sb, "Weekly Summary", "Week", trend.WeeklySummaries);
+        AppendPeriodTable(sb, "Monthly Summary", "Month", trend.MonthlySummaries);
+
+        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:24px'>Generated {Timestamp()} by TestController</p>");
+        sb.AppendLine("</body></html>");
+        return sb.ToString();
+    }
+
+    private void AppendPassRateChart(StringBuilder sb, List<BuildTrendEntry> builds)
+    {
+        const int chartW = 800, chartH = 200, padL = 50, padR = 20, padT = 20, padB = 30;
+        var plotW = chartW - padL - padR;
+        var plotH = chartH - padT - padB;
+        var count = builds.Count;
+
+        sb.AppendLine("<div class='chart-container'>");
+        sb.AppendLine("<h3 style='margin-top:0'>Pass Rate Over Time</h3>");
+        sb.AppendLine($"<svg width='{chartW}' height='{chartH}' viewBox='0 0 {chartW} {chartH}'>");
+
+        // Y-axis gridlines
+        for (int pct = 0; pct <= 100; pct += 25)
+        {
+            var y = padT + plotH - (plotH * pct / 100.0);
+            sb.AppendLine($"<line x1='{padL}' y1='{y:F1}' x2='{padL + plotW}' y2='{y:F1}' stroke='#334155' stroke-width='1' />");
+            sb.AppendLine($"<text x='{padL - 6}' y='{y + 4:F1}' fill='#64748B' font-size='10' text-anchor='end'>{pct}%</text>");
+        }
+
+        // Threshold lines
+        var goodY = padT + plotH - (plotH * GoodThreshold / 100.0);
+        var warnY = padT + plotH - (plotH * WarningThreshold / 100.0);
+        sb.AppendLine($"<line x1='{padL}' y1='{goodY:F1}' x2='{padL + plotW}' y2='{goodY:F1}' stroke='#10B981' stroke-width='1' stroke-dasharray='6,4' opacity='0.5' />");
+        sb.AppendLine($"<line x1='{padL}' y1='{warnY:F1}' x2='{padL + plotW}' y2='{warnY:F1}' stroke='#F59E0B' stroke-width='1' stroke-dasharray='6,4' opacity='0.5' />");
+
+        // Polyline
+        var points = new List<string>();
+        for (int i = 0; i < count; i++)
+        {
+            var (x, y) = PlotPoint(builds[i].PassRate, i, count, padL, padT, plotW, plotH);
+            points.Add($"{x:F1},{y:F1}");
+        }
+        sb.AppendLine($"<polyline points='{string.Join(" ", points)}' fill='none' stroke='#89B4FA' stroke-width='2.5' stroke-linejoin='round' />");
+
+        // Dots & X-axis labels
+        for (int i = 0; i < count; i++)
+        {
+            var b = builds[i];
+            var (x, y) = PlotPoint(b.PassRate, i, count, padL, padT, plotW, plotH);
+            var dotColor = b.PassRate > GoodThreshold ? "#10B981" : b.PassRate >= WarningThreshold ? "#F59E0B" : "#EF4444";
+            sb.AppendLine($"<circle cx='{x:F1}' cy='{y:F1}' r='4' fill='{dotColor}' />");
+
+            if (count <= 15 || i % Math.Max(1, count / 10) == 0 || i == count - 1)
+            {
+                var label = b.BuildNumber.Length > 12 ? b.BuildNumber[..12] : b.BuildNumber;
+                sb.AppendLine($"<text x='{x:F1}' y='{chartH - 4}' fill='#64748B' font-size='9' text-anchor='middle'>{Enc(label)}</text>");
+            }
+        }
+
+        sb.AppendLine("</svg></div>");
+    }
+
+    private static (double x, double y) PlotPoint(double passRate, int index, int count, int padL, int padT, int plotW, int plotH)
+    {
+        var x = padL + (count == 1 ? plotW / 2.0 : (double)index / (count - 1) * plotW);
+        var y = padT + plotH - (plotH * Math.Clamp(passRate, 0, 100) / 100.0);
+        return (x, y);
+    }
+
+    private void AppendPeriodTable(StringBuilder sb, string title, string periodLabel, List<PeriodSummary> summaries)
+    {
+        if (summaries.Count == 0) return;
+
+        sb.AppendLine($"<div class='card'><h3 style='margin-top:0'>{title}</h3>");
+        sb.AppendLine($"<table><tr><th>{periodLabel}</th><th>Builds</th><th>Total Tests</th><th>Passed</th><th>Failed</th><th>Avg Pass Rate</th></tr>");
+        foreach (var s in summaries)
+        {
+            var rateClass = GetRateClass(s.AvgPassRate);
+            sb.AppendLine($"<tr><td>{s.Period}</td><td>{s.BuildCount}</td><td>{s.TotalTests}</td>" +
+                           $"<td class='pass'>{s.TotalPassed}</td><td class='{(s.TotalFailed > 0 ? "fail" : "")}'>{s.TotalFailed}</td>" +
+                           $"<td class='{rateClass}'>{s.AvgPassRate:F1}%</td></tr>");
+        }
+        sb.AppendLine("</table></div>");
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Alert Email HTML
+    // ???????????????????????????????????????????????????????????????
+
+    public string GenerateAlertEmailHtml(IReadOnlyList<ConsecutiveFailureAlert> alerts)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a2e; padding: 20px; }");
+        sb.AppendLine("h2 { color: #EF4444; }");
+        sb.AppendLine("table { width: 100%; border-collapse: collapse; margin: 12px 0; }");
+        sb.AppendLine("th { background: #f1f5f9; padding: 8px 12px; font-size: 11px; text-transform: uppercase; text-align: left; }");
+        sb.AppendLine("td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }");
+        sb.AppendLine(".critical { color: #dc2626; font-weight: bold; }");
+        sb.AppendLine(".high { color: #ea580c; font-weight: bold; }");
+        sb.AppendLine(".medium { color: #d97706; font-weight: bold; }");
+        sb.AppendLine("</style></head><body>");
+        sb.AppendLine($"<h2>\u26A0 Priority Investigation Required</h2>");
+        sb.AppendLine($"<p>{alerts.Count} test(s) are failing across consecutive builds and require investigation.</p>");
+        sb.AppendLine("<table><tr><th>Priority</th><th>Test Name</th><th>Use Case</th><th>Consecutive Fails</th><th>Failed In Builds</th><th>Last Error</th></tr>");
+        foreach (var a in alerts)
+        {
+            var cls = a.Priority.ToLowerInvariant();
+            var builds = string.Join(", ", a.FailedInBuilds);
+            var err = Enc(TruncateError(a.LastError));
+            sb.AppendLine($"<tr><td class='{cls}'>{a.Priority}</td><td>{a.TestName}</td><td>{a.UseCaseName}</td><td>{a.ConsecutiveFailCount}</td><td style='font-size:11px'>{builds}</td><td style='font-size:11px'>{err}</td></tr>");
+        }
+        sb.AppendLine("</table>");
+        sb.AppendLine($"<p style='font-size:11px;color:#94a3b8'>Generated {Timestamp()} by TestController</p>");
+        sb.AppendLine("</body></html>");
+        return sb.ToString();
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // CSV Export
+    // ???????????????????????????????????????????????????????????????
+
+    public string GenerateCsvContent(BuildNode node)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Build,{node.BuildNumber}");
+        sb.AppendLine($"Total,{node.TotalTests}");
+        sb.AppendLine($"Passed,{node.PassedTests}");
+        sb.AppendLine($"Failed,{node.FailedTests}");
+        sb.AppendLine($"Timeout,{node.TimeoutTests}");
+        sb.AppendLine($"PassRate,{node.PassRate:F1}%");
+        sb.AppendLine();
+        sb.AppendLine("UseCase,Duration,Total,Passed,Failed,Timeout,PassRate,FailedTests");
+        foreach (var uc in node.UseCases)
+        {
+            var failedNames = string.Join("; ", uc.FailedTests.Select(t => t.TestName));
+            sb.AppendLine($"\"{uc.UseCaseName}\",\"{uc.Duration:hh\\:mm\\:ss}\",{uc.Total},{uc.Passed},{uc.Failed},{uc.Timeout},{uc.PassRate:F1}%,\"{failedNames}\"");
+        }
+        return sb.ToString();
+    }
+}

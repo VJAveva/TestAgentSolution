@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Mail;
@@ -17,19 +18,16 @@ public partial class BuildResultsViewModel : ObservableObject
     private readonly TrxResultsParser _parser;
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
+    private readonly BuildReportHtmlGenerator _htmlGenerator;
 
     public ObservableCollection<BuildListItem> AvailableBuilds { get; } = new();
     public ObservableCollection<ResultsTreeNode> ResultsTree { get; } = new();
-
-    /// <summary>Flat list of nodes for the ListView-based grid (proper column alignment).</summary>
     public ObservableCollection<ResultsFlatNode> FlatResultsList { get; } = new();
-
-    /// <summary>All loaded builds (for multi-build / "Load All" support).</summary>
     public ObservableCollection<BuildNode> LoadedBuildNodes { get; } = new();
 
-    /// <summary>Tracks expand state by node key so it survives flat list rebuilds.</summary>
     private readonly Dictionary<string, bool> _expandState = new();
 
+    // ?? Core state ??
     [ObservableProperty] private BuildListItem? _selectedBuild;
     [ObservableProperty] private BuildNode? _currentBuildNode;
     [ObservableProperty] private string _healthColor = "#6B7280";
@@ -41,7 +39,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [ObservableProperty] private double _warningThreshold;
     [ObservableProperty] private string _resultsRootPath = "";
 
-    // ?? Statistics for the ribbon/dashboard ??
+    // ?? Dashboard statistics ??
     [ObservableProperty] private int _statTotal;
     [ObservableProperty] private int _statPassed;
     [ObservableProperty] private int _statFailed;
@@ -50,6 +48,16 @@ public partial class BuildResultsViewModel : ObservableObject
     // ?? Consecutive failure alerts ??
     [ObservableProperty] private ObservableCollection<ConsecutiveFailureAlert> _failureAlerts = new();
     [ObservableProperty] private string _alertStatusText = "";
+
+    // ?? Consolidated reporting ??
+    [ObservableProperty] private ReportScope _currentScope = ReportScope.SingleBuild;
+    [ObservableProperty] private TimeRangeFilter _selectedTimeRange = TimeRangeFilter.OneWeek;
+    [ObservableProperty] private string _scopeSummaryText = "";
+    [ObservableProperty] private int _filteredBuildCount;
+    [ObservableProperty] private string _consolidatedFolderSummary = "";
+
+    public bool IsSingleBuildMode => CurrentScope == ReportScope.SingleBuild;
+    public bool IsConsolidatedMode => CurrentScope == ReportScope.Consolidated;
 
     // ?? Detail panel ??
     [ObservableProperty] private ResultsFlatNode? _selectedResultNode;
@@ -65,23 +73,52 @@ public partial class BuildResultsViewModel : ObservableObject
     [ObservableProperty] private string _detailTrxFileName = "";
     [ObservableProperty] private string _detailTrxFilePath = "";
     [ObservableProperty] private bool _hasDetailSelected;
-
-    // ?? Detail panel — execution steps ??
     [ObservableProperty] private ObservableCollection<StepRowVM> _detailExecutionSteps = new();
     [ObservableProperty] private bool _hasExecutionSteps;
 
-    /// <summary>PassRateToColorConverter instance shared with the view.</summary>
     public PassRateToColorConverter PassRateConverter { get; }
+
+    // ???????????????????????????????????????????????????????????????
+    // Constructor
+    // ???????????????????????????????????????????????????????????????
 
     public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config)
     {
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
+        _htmlGenerator = new BuildReportHtmlGenerator(config);
         _goodThreshold = config.GoodThreshold;
         _warningThreshold = config.WarningThreshold;
         _resultsRootPath = config.ResultsRootPath;
         PassRateConverter = new PassRateToColorConverter(config);
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Property-change handlers
+    // ???????????????????????????????????????????????????????????????
+
+    partial void OnCurrentScopeChanged(ReportScope value)
+    {
+        OnPropertyChanged(nameof(IsSingleBuildMode));
+        OnPropertyChanged(nameof(IsConsolidatedMode));
+        if (value == ReportScope.Consolidated)
+        {
+            RefreshBuilds();
+            ApplyTimeRangeFilter();
+        }
+        else
+        {
+            ScopeSummaryText = "";
+            FilteredBuildCount = 0;
+            ConsolidatedFolderSummary = "";
+        }
+    }
+
+    partial void OnSelectedTimeRangeChanged(TimeRangeFilter value)
+    {
+        if (IsConsolidatedMode)
+            ApplyTimeRangeFilter();
     }
 
     partial void OnSelectedBuildChanged(BuildListItem? value)
@@ -102,74 +139,11 @@ public partial class BuildResultsViewModel : ObservableObject
 
         if (value.NodeLevel == "TestResult" && value.TestResultModel is TestResult tr)
         {
-            DetailTestName = tr.TestName;
-            DetailUseCaseName = tr.UseCaseName;
-            DetailBuildNumber = value.BuildNumber ?? "";
-            DetailOutcome = tr.Outcome;
-            DetailOutcomeColor = tr.Outcome == "Passed" ? "#10B981"
-                : tr.Outcome == "Failed" ? "#EF4444" : "#F59E0B";
-            DetailDuration = tr.Duration.ToString(@"hh\:mm\:ss\.fff");
-            DetailErrorMessage = tr.ErrorMessage ?? "(no error message)";
-            DetailStackTrace = tr.StackTrace ?? "(no stack trace)";
-            DetailStdOut = tr.StdOut ?? "(no stdout captured)";
-            DetailTrxFileName = tr.TrxFileName;
-
-            // Fix: search with wildcard and AllDirectories for the TRX file
-            var buildPath = LoadedBuildNodes
-                .FirstOrDefault(b => b.BuildNumber == value.BuildNumber)?.RootPath;
-            if (buildPath != null)
-            {
-                try
-                {
-                    DetailTrxFilePath = Directory.GetFiles(buildPath,
-                        $"*{tr.TrxFileName}*.trx", SearchOption.AllDirectories)
-                        .FirstOrDefault() ?? "";
-                }
-                catch { DetailTrxFilePath = ""; }
-            }
-            else
-            {
-                DetailTrxFilePath = "";
-            }
-
-            // Populate execution steps
-            DetailExecutionSteps.Clear();
-            if (tr.ExecutionSteps.Count > 0)
-            {
-                foreach (var step in tr.ExecutionSteps)
-                    DetailExecutionSteps.Add(new StepRowVM
-                    {
-                        StepName = step.StepName,
-                        Outcome = step.Outcome,
-                        Duration = step.Duration,
-                        OutcomeIcon = step.Outcome == "Passed" ? "\u2713" : step.Outcome == "Failed" ? "\u2717" : "\u25CB",
-                        DurationText = step.Duration.TotalSeconds < 1
-                            ? $"{step.Duration.TotalMilliseconds:F0}ms"
-                            : step.Duration.ToString(@"mm\:ss"),
-                    });
-                HasExecutionSteps = true;
-            }
-            else
-            {
-                HasExecutionSteps = false;
-            }
+            PopulateTestResultDetail(value, tr);
         }
         else if (value.NodeLevel is "Build" or "UseCase" or "AllBuilds")
         {
-            DetailTestName = value.Name;
-            DetailUseCaseName = "";
-            DetailBuildNumber = value.BuildNumber ?? "";
-            DetailOutcome = $"{value.Passed}/{value.Total} passed";
-            DetailOutcomeColor = GetRateColor(value.PassRate ?? 0);
-            DetailDuration = "";
-            DetailErrorMessage = value.Failed > 0
-                ? $"{value.Failed} test(s) failed" : "All tests passed";
-            DetailStackTrace = "";
-            DetailStdOut = "";
-            DetailTrxFileName = "";
-            DetailTrxFilePath = "";
-            DetailExecutionSteps.Clear();
-            HasExecutionSteps = false;
+            PopulateAggregateDetail(value);
         }
         else
         {
@@ -177,105 +151,9 @@ public partial class BuildResultsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void OpenTrxInExplorer()
-    {
-        // Generate an HTML detail page for the current selection and open in Edge
-        if (HasDetailSelected)
-        {
-            var html = GenerateTestDetailHtml();
-            var safeName = string.Join("_", DetailTestName.Split(Path.GetInvalidFileNameChars()));
-            if (safeName.Length > 80) safeName = safeName[..80];
-            var tempPath = Path.Combine(Path.GetTempPath(), $"TestResult_{safeName}.html");
-            File.WriteAllText(tempPath, html, Encoding.UTF8);
-
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "msedge.exe",
-                    Arguments = $"\"{tempPath}\"",
-                    UseShellExecute = true,
-                });
-            }
-            catch
-            {
-                // Fallback: open with default browser
-                Process.Start(new ProcessStartInfo(tempPath) { UseShellExecute = true });
-            }
-            StatusMessage = $"Opened detail report in browser.";
-            return;
-        }
-
-        StatusMessage = "No test result selected.";
-    }
-
-    private string GenerateTestDetailHtml()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine($"<title>Test Result: {System.Net.WebUtility.HtmlEncode(DetailTestName)}</title>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body{font-family:'Segoe UI',Arial;background:#0F1629;color:#E2E8F0;margin:0;padding:24px}");
-        sb.AppendLine(".card{background:#1A2238;border-radius:8px;padding:16px;margin:12px 0}");
-        sb.AppendLine(".badge{display:inline-block;padding:4px 12px;border-radius:4px;font-weight:bold;color:#fff}");
-        sb.AppendLine("pre{background:#0F1629;border:1px solid #334155;border-radius:6px;padding:12px;overflow-x:auto;font-size:12px;color:#94A3B8;white-space:pre-wrap}");
-        sb.AppendLine(".pass{background:#10B981} .fail{background:#EF4444} .warn{background:#F59E0B}");
-        sb.AppendLine("h1{color:#89B4FA;margin:0 0 4px} h3{color:#94A3B8;margin:16px 0 8px;font-size:13px}");
-        sb.AppendLine("table{width:100%;border-collapse:collapse} td,th{padding:6px 10px;border-bottom:1px solid #1E293B;font-size:12px;text-align:left}");
-        sb.AppendLine("th{color:#64748B;font-size:11px;text-transform:uppercase}");
-        sb.AppendLine(".step-pass{color:#10B981} .step-fail{color:#EF4444}");
-        sb.AppendLine("</style></head><body>");
-
-        var outcomeClass = DetailOutcome == "Failed" ? "fail" : DetailOutcome == "Passed" ? "pass" : "warn";
-        sb.AppendLine($"<h1>{System.Net.WebUtility.HtmlEncode(DetailTestName)}</h1>");
-        sb.AppendLine($"<span class='badge {outcomeClass}'>{System.Net.WebUtility.HtmlEncode(DetailOutcome)}</span>");
-        sb.AppendLine($"<span style='color:#64748B;margin-left:12px'>{System.Net.WebUtility.HtmlEncode(DetailUseCaseName)} &middot; {System.Net.WebUtility.HtmlEncode(DetailBuildNumber)} &middot; {DetailDuration}</span>");
-
-        // Execution Steps
-        if (HasExecutionSteps && DetailExecutionSteps.Count > 0)
-        {
-            sb.AppendLine("<div class='card'><h3>EXECUTION STEPS</h3>");
-            sb.AppendLine("<table><tr><th></th><th>Step</th><th>Duration</th></tr>");
-            foreach (var step in DetailExecutionSteps)
-            {
-                var cls = step.Outcome == "Passed" ? "step-pass" : "step-fail";
-                sb.AppendLine($"<tr><td class='{cls}'>{System.Net.WebUtility.HtmlEncode(step.OutcomeIcon)}</td><td>{System.Net.WebUtility.HtmlEncode(step.StepName)}</td><td>{step.DurationText}</td></tr>");
-            }
-            sb.AppendLine("</table></div>");
-        }
-
-        // Error Message
-        if (!string.IsNullOrWhiteSpace(DetailErrorMessage) && DetailErrorMessage != "(no error message)" )
-        {
-            sb.AppendLine("<div class='card'><h3>ERROR MESSAGE</h3>");
-            sb.AppendLine($"<pre style='color:#EF4444'>{System.Net.WebUtility.HtmlEncode(DetailErrorMessage)}</pre></div>");
-        }
-
-        // Stack Trace
-        if (!string.IsNullOrWhiteSpace(DetailStackTrace) && DetailStackTrace != "(no stack trace)")
-        {
-            sb.AppendLine("<div class='card'><h3>STACK TRACE</h3>");
-            sb.AppendLine($"<pre>{System.Net.WebUtility.HtmlEncode(DetailStackTrace)}</pre></div>");
-        }
-
-        // Stdout
-        if (!string.IsNullOrWhiteSpace(DetailStdOut) && DetailStdOut != "(no stdout captured)")
-        {
-            sb.AppendLine("<div class='card'><h3>STDOUT</h3>");
-            sb.AppendLine($"<pre>{System.Net.WebUtility.HtmlEncode(DetailStdOut)}</pre></div>");
-        }
-
-        // TRX file path
-        if (!string.IsNullOrEmpty(DetailTrxFilePath))
-        {
-            sb.AppendLine($"<div class='card'><h3>TRX FILE</h3><pre>{System.Net.WebUtility.HtmlEncode(DetailTrxFilePath)}</pre></div>");
-        }
-
-        sb.AppendLine($"<p style='color:#64748B;font-size:11px;margin-top:24px'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by TestController</p>");
-        sb.AppendLine("</body></html>");
-        return sb.ToString();
-    }
+    // ???????????????????????????????????????????????????????????????
+    // Commands — Build loading
+    // ???????????????????????????????????????????????????????????????
 
     [RelayCommand]
     private void RefreshBuilds()
@@ -304,19 +182,13 @@ public partial class BuildResultsViewModel : ObservableObject
             buildNode = _aggregator.EvaluateBuildHealth(buildNode);
             CurrentBuildNode = buildNode;
 
-            // Replace loaded builds with just this one
             LoadedBuildNodes.Clear();
             LoadedBuildNodes.Add(buildNode);
 
-            // Reset expand state — single build starts expanded
             _expandState.Clear();
             _expandState[$"Build|{buildNode.BuildNumber}"] = true;
 
-            // Update statistics
-            StatTotal = buildNode.TotalTests;
-            StatPassed = buildNode.PassedTests;
-            StatFailed = buildNode.FailedTests;
-            StatTimeout = buildNode.TimeoutTests;
+            UpdateAggregateStats();
 
             if (buildNode.UseCases.Count == 0)
             {
@@ -327,15 +199,9 @@ public partial class BuildResultsViewModel : ObservableObject
                 return;
             }
 
-            _config.GoodThreshold = GoodThreshold;
-            _config.WarningThreshold = WarningThreshold;
-
-            // Build hierarchical tree (legacy)
+            SyncThresholdsToConfig();
             BuildResultsTree(buildNode);
-            // Build flat list for ListView
             BuildFlatList();
-
-            // Run consecutive failure detection
             await RunConsecutiveFailureDetection();
 
             UpdateHealthIndicator(buildNode);
@@ -367,48 +233,24 @@ public partial class BuildResultsViewModel : ObservableObject
 
         IsLoading = true;
         LoadedBuildNodes.Clear();
-
-        // Reset expand state — AllBuilds starts expanded, individual builds collapsed
         _expandState.Clear();
         _expandState["AllBuilds"] = true;
 
         try
         {
-            foreach (var build in AvailableBuilds)
-            {
-                StatusMessage = $"Parsing {build.BuildNumber}...";
-                var node = await Task.Run(() => _parser.ParseBuildFolder(build.Path));
-                node = _aggregator.EvaluateBuildHealth(node);
-                LoadedBuildNodes.Add(node);
-                build.HasBeenLoaded = true;
-            }
+            await ParseBuildsAsync(AvailableBuilds);
 
-            // Set current to first
             CurrentBuildNode = LoadedBuildNodes.FirstOrDefault();
+            UpdateAggregateStats();
+            SyncThresholdsToConfig();
 
-            // Update aggregate statistics
-            StatTotal = LoadedBuildNodes.Sum(b => b.TotalTests);
-            StatPassed = LoadedBuildNodes.Sum(b => b.PassedTests);
-            StatFailed = LoadedBuildNodes.Sum(b => b.FailedTests);
-            StatTimeout = LoadedBuildNodes.Sum(b => b.TimeoutTests);
-
-            _config.GoodThreshold = GoodThreshold;
-            _config.WarningThreshold = WarningThreshold;
-
-            // Build trees
             BuildMultiBuildResultsTree();
             BuildFlatList();
 
-            // Aggregate health
-            var aggRate = StatTotal > 0 ? (double)StatPassed / StatTotal * 100 : 0;
-            PassRatePercent = aggRate;
-            var health = _aggregator.EvaluateHealth(aggRate);
-            HealthColor = health switch { HealthStatus.Good => "#10B981", HealthStatus.Warning => "#F59E0B", _ => "#EF4444" };
-            HealthLabel = health switch { HealthStatus.Good => "GOOD", HealthStatus.Warning => "WARNING", _ => "BAD" };
-
-            // Run failure detection
+            UpdateAggregateHealth();
             await RunConsecutiveFailureDetection();
 
+            var aggRate = StatTotal > 0 ? (double)StatPassed / StatTotal * 100 : 0;
             StatusMessage = $"Loaded {LoadedBuildNodes.Count} builds ({StatTotal} tests, {aggRate:F1}% pass rate)";
         }
         catch (Exception ex)
@@ -421,283 +263,9 @@ public partial class BuildResultsViewModel : ObservableObject
         }
     }
 
-    private void BuildResultsTree(BuildNode buildNode)
-    {
-        ResultsTree.Clear();
-
-        var buildTreeNode = new ResultsTreeNode
-        {
-            Name = buildNode.BuildNumber,
-            Total = buildNode.TotalTests,
-            Passed = buildNode.PassedTests,
-            Failed = buildNode.FailedTests,
-            NotExecuted = buildNode.NotExecutedTests,
-            PassRate = buildNode.PassRate,
-            PassRateColor = GetRateColor(buildNode.PassRate),
-            NodeLevel = "Build",
-            ModifiedDate = buildNode.LatestRun,
-            IsExpanded = true,
-            ShowExportButtons = true,
-        };
-
-        // Wire up export commands for the build-level node
-        buildTreeNode.ExportHtmlCommand = new RelayCommand(() => ExportBuildToHtml(buildNode));
-        buildTreeNode.ExportCsvCommand = new RelayCommand(() => ExportBuildToCsv(buildNode));
-
-        foreach (var uc in buildNode.UseCases)
-        {
-            var ucNode = new ResultsTreeNode
-            {
-                Name = uc.UseCaseName,
-                Total = uc.Total,
-                Passed = uc.Passed,
-                Failed = uc.Failed,
-                NotExecuted = uc.NotExecuted,
-                PassRate = uc.PassRate,
-                PassRateColor = GetRateColor(uc.PassRate),
-                NodeLevel = "UseCase",
-            };
-
-            foreach (var tr in uc.FailedTests)
-            {
-                ucNode.Children.Add(new ResultsTreeNode
-                {
-                    Name = tr.TestName,
-                    NodeLevel = "TestResult",
-                    Outcome = tr.Outcome,
-                    ErrorMessage = TruncateError(tr.ErrorMessage),
-                    FullError = tr.ErrorMessage ?? "",
-                    FullStackTrace = tr.StackTrace ?? "",
-                });
-            }
-
-            buildTreeNode.Children.Add(ucNode);
-        }
-
-        ResultsTree.Add(buildTreeNode);
-    }
-
-    private void BuildMultiBuildResultsTree()
-    {
-        ResultsTree.Clear();
-
-        foreach (var buildNode in LoadedBuildNodes)
-        {
-            var buildTreeNode = new ResultsTreeNode
-            {
-                Name = buildNode.BuildNumber,
-                Total = buildNode.TotalTests,
-                Passed = buildNode.PassedTests,
-                Failed = buildNode.FailedTests,
-                NotExecuted = buildNode.NotExecutedTests,
-                PassRate = buildNode.PassRate,
-                PassRateColor = GetRateColor(buildNode.PassRate),
-                NodeLevel = "Build",
-                ModifiedDate = buildNode.LatestRun,
-                IsExpanded = false,
-                ShowExportButtons = true,
-            };
-
-            buildTreeNode.ExportHtmlCommand = new RelayCommand(() => ExportBuildToHtml(buildNode));
-            buildTreeNode.ExportCsvCommand = new RelayCommand(() => ExportBuildToCsv(buildNode));
-
-            foreach (var uc in buildNode.UseCases)
-            {
-                var ucNode = new ResultsTreeNode
-                {
-                    Name = uc.UseCaseName,
-                    Total = uc.Total,
-                    Passed = uc.Passed,
-                    Failed = uc.Failed,
-                    NotExecuted = uc.NotExecuted,
-                    PassRate = uc.PassRate,
-                    PassRateColor = GetRateColor(uc.PassRate),
-                    NodeLevel = "UseCase",
-                };
-
-                foreach (var tr in uc.FailedTests)
-                {
-                    ucNode.Children.Add(new ResultsTreeNode
-                    {
-                        Name = tr.TestName,
-                        NodeLevel = "TestResult",
-                        Outcome = tr.Outcome,
-                        ErrorMessage = TruncateError(tr.ErrorMessage),
-                        FullError = tr.ErrorMessage ?? "",
-                        FullStackTrace = tr.StackTrace ?? "",
-                    });
-                }
-
-                buildTreeNode.Children.Add(ucNode);
-            }
-
-            ResultsTree.Add(buildTreeNode);
-        }
-    }
-
-    /// <summary>Build a flat list for the ListView grid with proper column alignment.</summary>
-    private void BuildFlatList()
-    {
-        FlatResultsList.Clear();
-        var hasAllBuildsRow = LoadedBuildNodes.Count > 1;
-
-        if (hasAllBuildsRow)
-        {
-            var allTotal = LoadedBuildNodes.Sum(b => b.TotalTests);
-            var allPassed = LoadedBuildNodes.Sum(b => b.PassedTests);
-            var allFailed = LoadedBuildNodes.Sum(b => b.FailedTests);
-            var allNotExe = LoadedBuildNodes.Sum(b => b.NotExecutedTests);
-            var allRate = allTotal > 0 ? (double)allPassed / allTotal * 100 : 0;
-
-            var allNode = new ResultsFlatNode
-            {
-                Name = $"All Builds ({LoadedBuildNodes.Count})",
-                NodeLevel = "AllBuilds",
-                Total = allTotal,
-                Passed = allPassed,
-                Failed = allFailed,
-                NotExecuted = allNotExe,
-                PassRate = allRate,
-                PassRateColor = GetRateColor(allRate),
-                IndentLevel = 0,
-                IsExpanded = GetExpandState("AllBuilds", true),
-                ShowEmailButton = true,
-                ShowStats = true,
-            };
-            allNode.SendEmailCommand = new RelayCommand(() => SendReportForAllBuilds());
-            allNode.ToggleExpandCommand = new RelayCommand(() =>
-            {
-                SetExpandState("AllBuilds", !GetExpandState("AllBuilds", true));
-                BuildFlatList();
-            });
-            FlatResultsList.Add(allNode);
-
-            // If AllBuilds is collapsed, skip children
-            if (!allNode.IsExpanded) return;
-        }
-
-        foreach (var buildNode in LoadedBuildNodes)
-        {
-            var buildIndent = hasAllBuildsRow ? 1 : 0;
-            var buildKey = $"Build|{buildNode.BuildNumber}";
-            var buildExpanded = GetExpandState(buildKey, LoadedBuildNodes.Count == 1);
-
-            var buildRow = new ResultsFlatNode
-            {
-                Name = buildNode.BuildNumber,
-                NodeLevel = "Build",
-                BuildNumber = buildNode.BuildNumber,
-                Total = buildNode.TotalTests,
-                Passed = buildNode.PassedTests,
-                Failed = buildNode.FailedTests,
-                NotExecuted = buildNode.NotExecutedTests,
-                PassRate = buildNode.PassRate,
-                PassRateColor = GetRateColor(buildNode.PassRate),
-                IndentLevel = buildIndent,
-                IsExpanded = buildExpanded,
-                ShowEmailButton = true,
-                ShowStats = true,
-            };
-            var capturedBuildKey = buildKey;
-            var capturedNode = buildNode;
-            buildRow.SendEmailCommand = new RelayCommand(() => SendReportForBuild(capturedNode));
-            buildRow.ExportHtmlCommand = new RelayCommand(() => ExportBuildToHtml(capturedNode));
-            buildRow.ExportCsvCommand = new RelayCommand(() => ExportBuildToCsv(capturedNode));
-            buildRow.ToggleExpandCommand = new RelayCommand(() =>
-            {
-                SetExpandState(capturedBuildKey, !GetExpandState(capturedBuildKey, false));
-                BuildFlatList();
-            });
-            FlatResultsList.Add(buildRow);
-
-            if (!buildExpanded) continue;
-
-            foreach (var uc in buildNode.UseCases)
-            {
-                var ucKey = $"UC|{buildNode.BuildNumber}|{uc.UseCaseName}";
-                var ucExpanded = GetExpandState(ucKey, false);
-
-                var ucRow = new ResultsFlatNode
-                {
-                    Name = uc.UseCaseName,
-                    NodeLevel = "UseCase",
-                    BuildNumber = buildNode.BuildNumber,
-                    Total = uc.Total,
-                    Passed = uc.Passed,
-                    Failed = uc.Failed,
-                    NotExecuted = uc.NotExecuted,
-                    PassRate = uc.PassRate,
-                    PassRateColor = GetRateColor(uc.PassRate),
-                    IndentLevel = buildIndent + 1,
-                    IsExpanded = ucExpanded,
-                    ShowStats = true,
-                };
-                var capturedUcKey = ucKey;
-                ucRow.ToggleExpandCommand = new RelayCommand(() =>
-                {
-                    SetExpandState(capturedUcKey, !GetExpandState(capturedUcKey, false));
-                    BuildFlatList();
-                });
-                FlatResultsList.Add(ucRow);
-
-                if (!ucExpanded) continue;
-
-                foreach (var test in uc.TestResults)
-                {
-                    FlatResultsList.Add(new ResultsFlatNode
-                    {
-                        Name = test.TestName,
-                        NodeLevel = "TestResult",
-                        BuildNumber = buildNode.BuildNumber,
-                        Outcome = test.Outcome,
-                        IndentLevel = buildIndent + 2,
-                        TestResultModel = test,
-                        ErrorMessage = TruncateError(test.ErrorMessage),
-                        FullError = test.ErrorMessage ?? "",
-                        FullStackTrace = test.StackTrace ?? "",
-                        ShowStats = false,
-                    });
-                }
-            }
-        }
-    }
-
-    private bool GetExpandState(string key, bool defaultValue)
-    {
-        return _expandState.TryGetValue(key, out var val) ? val : defaultValue;
-    }
-
-    private void SetExpandState(string key, bool value)
-    {
-        _expandState[key] = value;
-    }
-
-    [RelayCommand]
-    private void ApplyThresholds()
-    {
-        _config.GoodThreshold = GoodThreshold;
-        _config.WarningThreshold = WarningThreshold;
-        PassRateConverter.UpdateThresholds(GoodThreshold, WarningThreshold);
-        if (CurrentBuildNode is not null)
-        {
-            UpdateHealthIndicator(CurrentBuildNode);
-            RefreshTreeColors(ResultsTree);
-        }
-        // Rebuild flat list to update colors
-        if (LoadedBuildNodes.Count > 0)
-            BuildFlatList();
-        StatusMessage = $"Thresholds updated: Good > {GoodThreshold}%, Warning ? {WarningThreshold}%";
-    }
-
-    private void RefreshTreeColors(ObservableCollection<ResultsTreeNode> nodes)
-    {
-        foreach (var node in nodes)
-        {
-            if (node.PassRate.HasValue)
-                node.PassRateColor = GetRateColor(node.PassRate.Value);
-            RefreshTreeColors(node.Children);
-        }
-    }
+    // ???????????????????????????????????????????????????????????????
+    // Commands — Export & Report
+    // ???????????????????????????????????????????????????????????????
 
     [RelayCommand]
     private void ExportToCsv()
@@ -711,8 +279,7 @@ public partial class BuildResultsViewModel : ObservableObject
         };
         if (dlg.ShowDialog() != true) return;
 
-        var csv = GenerateCsvContent(CurrentBuildNode);
-        File.WriteAllText(dlg.FileName, csv);
+        File.WriteAllText(dlg.FileName, _htmlGenerator.GenerateCsvContent(CurrentBuildNode));
         StatusMessage = $"Exported CSV to {dlg.FileName}";
     }
 
@@ -728,111 +295,91 @@ public partial class BuildResultsViewModel : ObservableObject
         };
         if (dlg.ShowDialog() != true) return;
 
-        var html = GenerateHtmlReport(CurrentBuildNode);
-        File.WriteAllText(dlg.FileName, html);
+        File.WriteAllText(dlg.FileName, _htmlGenerator.GenerateSingleBuildHtml(CurrentBuildNode));
         StatusMessage = $"Exported HTML report to {dlg.FileName}";
     }
 
-    private void ExportBuildToHtml(BuildNode node)
+    [RelayCommand]
+    private void OpenTrxInExplorer()
     {
-        var html = GenerateHtmlReport(node);
-        var path = Path.Combine(Path.GetTempPath(), $"{node.BuildNumber}_Report.html");
-        File.WriteAllText(path, html);
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-        StatusMessage = $"Opened HTML report for {node.BuildNumber}";
+        if (!HasDetailSelected)
+        {
+            StatusMessage = "No test result selected.";
+            return;
+        }
+
+        var ctx = new BuildReportHtmlGenerator.TestDetailContext(
+            DetailTestName, DetailUseCaseName, DetailBuildNumber,
+            DetailOutcome, DetailDuration,
+            DetailErrorMessage, DetailStackTrace, DetailStdOut, DetailTrxFilePath,
+            DetailExecutionSteps.Select(s =>
+                new BuildReportHtmlGenerator.StepInfo(s.StepName, s.Outcome, s.OutcomeIcon, s.DurationText)).ToList());
+
+        var html = _htmlGenerator.GenerateTestDetailHtml(ctx);
+        var safeName = string.Join("_", DetailTestName.Split(Path.GetInvalidFileNameChars()));
+        if (safeName.Length > 80) safeName = safeName[..80];
+        var tempPath = Path.Combine(Path.GetTempPath(), $"TestResult_{safeName}.html");
+        File.WriteAllText(tempPath, html, Encoding.UTF8);
+
+        OpenInBrowser(tempPath);
+        StatusMessage = "Opened detail report in browser.";
     }
 
-    private void ExportBuildToCsv(BuildNode node)
-    {
-        var csv = GenerateCsvContent(node);
-        var path = Path.Combine(Path.GetTempPath(), $"{node.BuildNumber}_Results.csv");
-        File.WriteAllText(path, csv);
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-        StatusMessage = $"Opened CSV for {node.BuildNumber}";
-    }
+    // ???????????????????????????????????????????????????????????????
+    // Commands — Email
+    // ???????????????????????????????????????????????????????????????
 
     [RelayCommand]
     private void SendReport()
     {
         if (CurrentBuildNode is null) return;
+        var html = _htmlGenerator.GenerateSingleBuildHtml(CurrentBuildNode);
+        var subject = $"Build Results: {CurrentBuildNode.BuildNumber} — {CurrentBuildNode.PassRate:F1}% ({CurrentBuildNode.Health})";
+        SendEmail(_config.ReportRecipients, subject, html, "Report");
+    }
 
-        if (string.IsNullOrWhiteSpace(_config.ReportRecipients) || string.IsNullOrWhiteSpace(_config.FromAddress))
-        {
-            StatusMessage = "Configure ReportRecipients and FromAddress in appsettings.json BuildResults section.";
-            return;
-        }
+    [RelayCommand]
+    private void SendQaAlert()
+    {
+        if (FailureAlerts.Count == 0) return;
+        var html = _htmlGenerator.GenerateAlertEmailHtml(FailureAlerts);
+        var subject = $"\u26A0 Priority Investigation Required — {FailureAlerts.Count} tests failing consecutively";
+        SendEmail(_config.QaAlertRecipients, subject, html, "QA alert");
+    }
 
-        try
+    [RelayCommand]
+    private async Task SendEmailSummary()
+    {
+        if (IsConsolidatedMode)
         {
-            var html = GenerateHtmlReport(CurrentBuildNode);
-            using var smtp = new SmtpClient(_config.SmtpServer, _config.SmtpPort) { UseDefaultCredentials = true };
-            using var message = new MailMessage(_config.FromAddress, _config.ReportRecipients)
-            {
-                Subject = $"Build Results: {CurrentBuildNode.BuildNumber} — {CurrentBuildNode.PassRate:F1}% ({CurrentBuildNode.Health})",
-                Body = html,
-                IsBodyHtml = true,
-            };
-            smtp.Send(message);
-            StatusMessage = $"Report sent to {_config.ReportRecipients}";
+            if (LoadedBuildNodes.Count == 0)
+                await LoadConsolidatedBuilds();
+            if (LoadedBuildNodes.Count == 0) return;
+            SendReportForAllBuilds();
         }
-        catch (Exception ex)
+        else
         {
-            StatusMessage = $"Failed to send report: {ex.Message}";
+            SendReportCommand.Execute(null);
         }
     }
 
-    private void SendReportForBuild(BuildNode node)
+    // ???????????????????????????????????????????????????????????????
+    // Commands — Thresholds & Clipboard
+    // ???????????????????????????????????????????????????????????????
+
+    [RelayCommand]
+    private void ApplyThresholds()
     {
-        if (string.IsNullOrWhiteSpace(_config.ReportRecipients) || string.IsNullOrWhiteSpace(_config.FromAddress))
+        SyncThresholdsToConfig();
+        PassRateConverter.UpdateThresholds(GoodThreshold, WarningThreshold);
+        if (CurrentBuildNode is not null)
         {
-            StatusMessage = "Configure ReportRecipients and FromAddress in appsettings.json BuildResults section.";
-            return;
+            UpdateHealthIndicator(CurrentBuildNode);
+            RefreshTreeColors(ResultsTree);
         }
-
-        try
-        {
-            var html = GenerateHtmlReport(node);
-            using var smtp = new SmtpClient(_config.SmtpServer, _config.SmtpPort) { UseDefaultCredentials = true };
-            using var message = new MailMessage(_config.FromAddress, _config.ReportRecipients)
-            {
-                Subject = $"Build Results: {node.BuildNumber} — {node.PassRate:F1}% ({node.Health})",
-                Body = html,
-                IsBodyHtml = true,
-            };
-            smtp.Send(message);
-            StatusMessage = $"Report for {node.BuildNumber} sent to {_config.ReportRecipients}";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Failed to send report for {node.BuildNumber}: {ex.Message}";
-        }
-    }
-
-    private void SendReportForAllBuilds()
-    {
-        if (string.IsNullOrWhiteSpace(_config.ReportRecipients) || string.IsNullOrWhiteSpace(_config.FromAddress))
-        {
-            StatusMessage = "Configure ReportRecipients and FromAddress in appsettings.json BuildResults section.";
-            return;
-        }
-
-        try
-        {
-            var html = GenerateMultiBuildHtmlReport();
-            using var smtp = new SmtpClient(_config.SmtpServer, _config.SmtpPort) { UseDefaultCredentials = true };
-            using var message = new MailMessage(_config.FromAddress, _config.ReportRecipients)
-            {
-                Subject = $"All Build Results: {LoadedBuildNodes.Count} builds — {StatPassed}/{StatTotal} passed",
-                Body = html,
-                IsBodyHtml = true,
-            };
-            smtp.Send(message);
-            StatusMessage = $"Aggregate report sent to {_config.ReportRecipients}";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Failed to send aggregate report: {ex.Message}";
-        }
+        if (LoadedBuildNodes.Count > 0)
+            BuildFlatList();
+        StatusMessage = $"Thresholds updated: Good > {GoodThreshold}%, Warning ? {WarningThreshold}%";
     }
 
     [RelayCommand]
@@ -858,7 +405,20 @@ public partial class BuildResultsViewModel : ObservableObject
         StatusMessage = $"Copied {CurrentBuildNode.AllFailedTests.Count} failed test(s) to clipboard.";
     }
 
-    // ?? Trend Reports ???????????????????????????????????????????????
+    [RelayCommand]
+    private void CopyAlertList()
+    {
+        if (FailureAlerts.Count == 0) return;
+
+        var text = string.Join(Environment.NewLine, FailureAlerts.Select(a =>
+            $"{a.Priority} | {a.TestName} | {a.ConsecutiveFailCount} builds | {a.UseCaseName} | {TruncateError(a.LastError)}"));
+        Clipboard.SetText(text);
+        StatusMessage = $"Copied {FailureAlerts.Count} alert(s) to clipboard.";
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Commands — Trend & Consecutive Failure Detection
+    // ???????????????????????????????????????????????????????????????
 
     [RelayCommand]
     private async Task GenerateTrendReport()
@@ -880,10 +440,10 @@ public partial class BuildResultsViewModel : ObservableObject
                 return analyzer.AnalyzeTrends(ResultsRootPath, _parser);
             });
 
-            var html = GenerateTrendHtml(trend);
+            var html = _htmlGenerator.GenerateTrendHtml(trend);
             var path = Path.Combine(Path.GetTempPath(), "TestResults_Trend.html");
             File.WriteAllText(path, html);
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            OpenInBrowser(path);
             StatusMessage = $"Trend report generated: {trend.Builds.Count} builds analyzed.";
         }
         catch (Exception ex)
@@ -895,8 +455,6 @@ public partial class BuildResultsViewModel : ObservableObject
             IsLoading = false;
         }
     }
-
-    // ?? Consecutive Failure Detection ???????????????????????????????
 
     [RelayCommand]
     private async Task DetectConsecutiveFailures()
@@ -932,6 +490,504 @@ public partial class BuildResultsViewModel : ObservableObject
         }
     }
 
+    // ???????????????????????????????????????????????????????????????
+    // Commands — Consolidated Reporting
+    // ???????????????????????????????????????????????????????????????
+
+    [RelayCommand]
+    private void SetScopeSingle() => CurrentScope = ReportScope.SingleBuild;
+
+    [RelayCommand]
+    private void SetScopeConsolidated() => CurrentScope = ReportScope.Consolidated;
+
+    [RelayCommand]
+    private void SetRange1D() => SelectedTimeRange = TimeRangeFilter.OneDay;
+
+    [RelayCommand]
+    private void SetRange1W() => SelectedTimeRange = TimeRangeFilter.OneWeek;
+
+    [RelayCommand]
+    private void SetRange1M() => SelectedTimeRange = TimeRangeFilter.OneMonth;
+
+    [RelayCommand]
+    private async Task LoadConsolidatedBuilds()
+    {
+        if (AvailableBuilds.Count == 0)
+        {
+            RefreshBuilds();
+            if (AvailableBuilds.Count == 0)
+            {
+                StatusMessage = "No builds found. Set the results root path first.";
+                return;
+            }
+        }
+
+        var cutoff = GetTimeRangeCutoff();
+        var filtered = AvailableBuilds.Where(b => b.ModifiedDate >= cutoff).ToList();
+        if (filtered.Count == 0)
+        {
+            StatusMessage = "No builds match the selected time range.";
+            return;
+        }
+
+        IsLoading = true;
+        LoadedBuildNodes.Clear();
+        _expandState.Clear();
+        _expandState["AllBuilds"] = true;
+
+        try
+        {
+            await ParseBuildsAsync(filtered);
+
+            CurrentBuildNode = LoadedBuildNodes.FirstOrDefault();
+            UpdateAggregateStats();
+            SyncThresholdsToConfig();
+
+            BuildMultiBuildResultsTree();
+            BuildFlatList();
+            UpdateAggregateHealth();
+            await RunConsecutiveFailureDetection();
+
+            var rangeLabel = GetRangeLabel(abbreviated: true);
+            var aggRate = StatTotal > 0 ? (double)StatPassed / StatTotal * 100 : 0;
+            ScopeSummaryText = $"Showing consolidated data for {filtered.Count} build(s) over the last {rangeLabel}.";
+            StatusMessage = $"Consolidated: {LoadedBuildNodes.Count} builds ({StatTotal} tests, {aggRate:F1}% pass rate)";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error loading consolidated builds: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task GenerateConsolidatedHtml()
+    {
+        if (IsConsolidatedMode)
+        {
+            if (LoadedBuildNodes.Count == 0)
+                await LoadConsolidatedBuilds();
+            if (LoadedBuildNodes.Count == 0) return;
+
+            IsLoading = true;
+            StatusMessage = "Generating consolidated HTML report...";
+            try
+            {
+                var trend = await Task.Run(() =>
+                {
+                    var analyzer = new BuildTrendAnalyzer(_aggregator, _config);
+                    return analyzer.AnalyzeTrends(ResultsRootPath, _parser);
+                });
+                var html = _htmlGenerator.GenerateTrendHtml(trend);
+                var path = Path.Combine(Path.GetTempPath(), "Consolidated_Report.html");
+                File.WriteAllText(path, html);
+                OpenInBrowser(path);
+                StatusMessage = $"Consolidated report generated: {trend.Builds.Count} builds.";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+            finally { IsLoading = false; }
+        }
+        else
+        {
+            ExportToHtmlCommand.Execute(null);
+        }
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Tree building
+    // ???????????????????????????????????????????????????????????????
+
+    private void BuildResultsTree(BuildNode buildNode)
+    {
+        ResultsTree.Clear();
+        var treeNode = CreateBuildTreeNode(buildNode, isExpanded: true);
+        ResultsTree.Add(treeNode);
+    }
+
+    private void BuildMultiBuildResultsTree()
+    {
+        ResultsTree.Clear();
+        foreach (var buildNode in LoadedBuildNodes)
+            ResultsTree.Add(CreateBuildTreeNode(buildNode, isExpanded: false));
+    }
+
+    private ResultsTreeNode CreateBuildTreeNode(BuildNode buildNode, bool isExpanded)
+    {
+        var treeNode = new ResultsTreeNode
+        {
+            Name = buildNode.BuildNumber,
+            Total = buildNode.TotalTests,
+            Passed = buildNode.PassedTests,
+            Failed = buildNode.FailedTests,
+            NotExecuted = buildNode.NotExecutedTests,
+            PassRate = buildNode.PassRate,
+            PassRateColor = GetRateColor(buildNode.PassRate),
+            NodeLevel = "Build",
+            ModifiedDate = buildNode.LatestRun,
+            IsExpanded = isExpanded,
+            ShowExportButtons = true,
+        };
+
+        treeNode.ExportHtmlCommand = new RelayCommand(() => ExportBuildToHtml(buildNode));
+        treeNode.ExportCsvCommand = new RelayCommand(() => ExportBuildToCsv(buildNode));
+
+        foreach (var uc in buildNode.UseCases)
+        {
+            var ucNode = new ResultsTreeNode
+            {
+                Name = uc.UseCaseName,
+                Total = uc.Total,
+                Passed = uc.Passed,
+                Failed = uc.Failed,
+                NotExecuted = uc.NotExecuted,
+                PassRate = uc.PassRate,
+                PassRateColor = GetRateColor(uc.PassRate),
+                NodeLevel = "UseCase",
+            };
+
+            foreach (var tr in uc.FailedTests)
+            {
+                ucNode.Children.Add(new ResultsTreeNode
+                {
+                    Name = tr.TestName,
+                    NodeLevel = "TestResult",
+                    Outcome = tr.Outcome,
+                    ErrorMessage = TruncateError(tr.ErrorMessage),
+                    FullError = tr.ErrorMessage ?? "",
+                    FullStackTrace = tr.StackTrace ?? "",
+                });
+            }
+
+            treeNode.Children.Add(ucNode);
+        }
+
+        return treeNode;
+    }
+
+    private void BuildFlatList()
+    {
+        FlatResultsList.Clear();
+        var hasAllBuildsRow = LoadedBuildNodes.Count > 1;
+
+        if (hasAllBuildsRow)
+        {
+            var allTotal = LoadedBuildNodes.Sum(b => b.TotalTests);
+            var allPassed = LoadedBuildNodes.Sum(b => b.PassedTests);
+            var allFailed = LoadedBuildNodes.Sum(b => b.FailedTests);
+            var allNotExe = LoadedBuildNodes.Sum(b => b.NotExecutedTests);
+            var allRate = allTotal > 0 ? (double)allPassed / allTotal * 100 : 0;
+
+            var allNode = new ResultsFlatNode
+            {
+                Name = $"All Builds ({LoadedBuildNodes.Count})",
+                NodeLevel = "AllBuilds",
+                Total = allTotal, Passed = allPassed, Failed = allFailed, NotExecuted = allNotExe,
+                PassRate = allRate, PassRateColor = GetRateColor(allRate),
+                IndentLevel = 0, IsExpanded = GetExpandState("AllBuilds", true),
+                ShowEmailButton = true, ShowStats = true,
+            };
+            allNode.SendEmailCommand = new RelayCommand(SendReportForAllBuilds);
+            allNode.ToggleExpandCommand = new RelayCommand(() =>
+            {
+                SetExpandState("AllBuilds", !GetExpandState("AllBuilds", true));
+                BuildFlatList();
+            });
+            FlatResultsList.Add(allNode);
+
+            if (!allNode.IsExpanded) return;
+        }
+
+        foreach (var buildNode in LoadedBuildNodes)
+        {
+            var buildIndent = hasAllBuildsRow ? 1 : 0;
+            var buildKey = $"Build|{buildNode.BuildNumber}";
+            var buildExpanded = GetExpandState(buildKey, LoadedBuildNodes.Count == 1);
+
+            var buildRow = new ResultsFlatNode
+            {
+                Name = buildNode.BuildNumber,
+                NodeLevel = "Build", BuildNumber = buildNode.BuildNumber,
+                Total = buildNode.TotalTests, Passed = buildNode.PassedTests,
+                Failed = buildNode.FailedTests, NotExecuted = buildNode.NotExecutedTests,
+                PassRate = buildNode.PassRate, PassRateColor = GetRateColor(buildNode.PassRate),
+                IndentLevel = buildIndent, IsExpanded = buildExpanded,
+                ShowEmailButton = true, ShowStats = true,
+            };
+            var capturedBuildKey = buildKey;
+            var capturedNode = buildNode;
+            buildRow.SendEmailCommand = new RelayCommand(() => SendReportForBuild(capturedNode));
+            buildRow.ExportHtmlCommand = new RelayCommand(() => ExportBuildToHtml(capturedNode));
+            buildRow.ExportCsvCommand = new RelayCommand(() => ExportBuildToCsv(capturedNode));
+            buildRow.ToggleExpandCommand = new RelayCommand(() =>
+            {
+                SetExpandState(capturedBuildKey, !GetExpandState(capturedBuildKey, false));
+                BuildFlatList();
+            });
+            FlatResultsList.Add(buildRow);
+
+            if (!buildExpanded) continue;
+
+            foreach (var uc in buildNode.UseCases)
+            {
+                var ucKey = $"UC|{buildNode.BuildNumber}|{uc.UseCaseName}";
+                var ucExpanded = GetExpandState(ucKey, false);
+
+                var ucRow = new ResultsFlatNode
+                {
+                    Name = uc.UseCaseName, NodeLevel = "UseCase", BuildNumber = buildNode.BuildNumber,
+                    Total = uc.Total, Passed = uc.Passed, Failed = uc.Failed, NotExecuted = uc.NotExecuted,
+                    PassRate = uc.PassRate, PassRateColor = GetRateColor(uc.PassRate),
+                    IndentLevel = buildIndent + 1, IsExpanded = ucExpanded, ShowStats = true,
+                };
+                var capturedUcKey = ucKey;
+                ucRow.ToggleExpandCommand = new RelayCommand(() =>
+                {
+                    SetExpandState(capturedUcKey, !GetExpandState(capturedUcKey, false));
+                    BuildFlatList();
+                });
+                FlatResultsList.Add(ucRow);
+
+                if (!ucExpanded) continue;
+
+                foreach (var test in uc.TestResults)
+                {
+                    FlatResultsList.Add(new ResultsFlatNode
+                    {
+                        Name = test.TestName, NodeLevel = "TestResult", BuildNumber = buildNode.BuildNumber,
+                        Outcome = test.Outcome, IndentLevel = buildIndent + 2, TestResultModel = test,
+                        ErrorMessage = TruncateError(test.ErrorMessage),
+                        FullError = test.ErrorMessage ?? "", FullStackTrace = test.StackTrace ?? "",
+                        ShowStats = false,
+                    });
+                }
+            }
+        }
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Detail panel population
+    // ???????????????????????????????????????????????????????????????
+
+    private void PopulateTestResultDetail(ResultsFlatNode node, TestResult tr)
+    {
+        DetailTestName = tr.TestName;
+        DetailUseCaseName = tr.UseCaseName;
+        DetailBuildNumber = node.BuildNumber ?? "";
+        DetailOutcome = tr.Outcome;
+        DetailOutcomeColor = tr.Outcome == "Passed" ? "#10B981"
+            : tr.Outcome == "Failed" ? "#EF4444" : "#F59E0B";
+        DetailDuration = tr.Duration.ToString(@"hh\:mm\:ss\.fff");
+        DetailErrorMessage = tr.ErrorMessage ?? "(no error message)";
+        DetailStackTrace = tr.StackTrace ?? "(no stack trace)";
+        DetailStdOut = tr.StdOut ?? "(no stdout captured)";
+        DetailTrxFileName = tr.TrxFileName;
+
+        var buildPath = LoadedBuildNodes
+            .FirstOrDefault(b => b.BuildNumber == node.BuildNumber)?.RootPath;
+        if (buildPath != null)
+        {
+            try
+            {
+                DetailTrxFilePath = Directory.GetFiles(buildPath,
+                    $"*{tr.TrxFileName}*.trx", SearchOption.AllDirectories)
+                    .FirstOrDefault() ?? "";
+            }
+            catch { DetailTrxFilePath = ""; }
+        }
+        else
+        {
+            DetailTrxFilePath = "";
+        }
+
+        DetailExecutionSteps.Clear();
+        if (tr.ExecutionSteps.Count > 0)
+        {
+            foreach (var step in tr.ExecutionSteps)
+                DetailExecutionSteps.Add(new StepRowVM
+                {
+                    StepName = step.StepName,
+                    Outcome = step.Outcome,
+                    Duration = step.Duration,
+                    OutcomeIcon = step.Outcome == "Passed" ? "\u2713" : step.Outcome == "Failed" ? "\u2717" : "\u25CB",
+                    DurationText = step.Duration.TotalSeconds < 1
+                        ? $"{step.Duration.TotalMilliseconds:F0}ms"
+                        : step.Duration.ToString(@"mm\:ss"),
+                });
+            HasExecutionSteps = true;
+        }
+        else
+        {
+            HasExecutionSteps = false;
+        }
+    }
+
+    private void PopulateAggregateDetail(ResultsFlatNode node)
+    {
+        DetailTestName = node.Name;
+        DetailUseCaseName = "";
+        DetailBuildNumber = node.BuildNumber ?? "";
+        DetailOutcome = $"{node.Passed}/{node.Total} passed";
+        DetailOutcomeColor = GetRateColor(node.PassRate ?? 0);
+        DetailDuration = "";
+        DetailErrorMessage = node.Failed > 0
+            ? $"{node.Failed} test(s) failed" : "All tests passed";
+        DetailStackTrace = "";
+        DetailStdOut = "";
+        DetailTrxFileName = "";
+        DetailTrxFilePath = "";
+        DetailExecutionSteps.Clear();
+        HasExecutionSteps = false;
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Email (consolidated)
+    // ???????????????????????????????????????????????????????????????
+
+    private void SendEmail(string? recipients, string subject, string htmlBody, string label)
+    {
+        if (string.IsNullOrWhiteSpace(recipients) || string.IsNullOrWhiteSpace(_config.FromAddress))
+        {
+            StatusMessage = $"Configure recipients and FromAddress in appsettings.json BuildResults section.";
+            return;
+        }
+
+        try
+        {
+            using var smtp = new SmtpClient(_config.SmtpServer, _config.SmtpPort) { UseDefaultCredentials = true };
+            using var message = new MailMessage(_config.FromAddress, recipients)
+            {
+                Subject = subject,
+                Body = htmlBody,
+                IsBodyHtml = true,
+            };
+            smtp.Send(message);
+            StatusMessage = $"{label} sent to {recipients}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failed to send {label}: {ex.Message}";
+        }
+    }
+
+    private void SendReportForBuild(BuildNode node)
+    {
+        var html = _htmlGenerator.GenerateSingleBuildHtml(node);
+        var subject = $"Build Results: {node.BuildNumber} — {node.PassRate:F1}% ({node.Health})";
+        SendEmail(_config.ReportRecipients, subject, html, $"Report for {node.BuildNumber}");
+    }
+
+    private void SendReportForAllBuilds()
+    {
+        var html = _htmlGenerator.GenerateMultiBuildHtml(
+            LoadedBuildNodes.ToList(), StatTotal, StatPassed, StatFailed, StatTimeout);
+        var subject = $"All Build Results: {LoadedBuildNodes.Count} builds — {StatPassed}/{StatTotal} passed";
+        SendEmail(_config.ReportRecipients, subject, html, "Aggregate report");
+    }
+
+    private void ExportBuildToHtml(BuildNode node)
+    {
+        var html = _htmlGenerator.GenerateSingleBuildHtml(node);
+        var path = Path.Combine(Path.GetTempPath(), $"{node.BuildNumber}_Report.html");
+        File.WriteAllText(path, html);
+        OpenInBrowser(path);
+        StatusMessage = $"Opened HTML report for {node.BuildNumber}";
+    }
+
+    private void ExportBuildToCsv(BuildNode node)
+    {
+        var csv = _htmlGenerator.GenerateCsvContent(node);
+        var path = Path.Combine(Path.GetTempPath(), $"{node.BuildNumber}_Results.csv");
+        File.WriteAllText(path, csv);
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        StatusMessage = $"Opened CSV for {node.BuildNumber}";
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Health & stats
+    // ???????????????????????????????????????????????????????????????
+
+    private void UpdateHealthIndicator(BuildNode? node)
+    {
+        if (node is null)
+        {
+            HealthColor = "#6B7280";
+            HealthLabel = "N/A";
+            PassRatePercent = 0;
+            return;
+        }
+
+        PassRatePercent = node.PassRate;
+        var health = _aggregator.EvaluateHealth(node.PassRate);
+        (HealthColor, HealthLabel) = health switch
+        {
+            HealthStatus.Good => ("#10B981", "GOOD"),
+            HealthStatus.Warning => ("#F59E0B", "WARNING"),
+            _ => ("#EF4444", "BAD"),
+        };
+    }
+
+    private void UpdateAggregateHealth()
+    {
+        var aggRate = StatTotal > 0 ? (double)StatPassed / StatTotal * 100 : 0;
+        PassRatePercent = aggRate;
+        var health = _aggregator.EvaluateHealth(aggRate);
+        (HealthColor, HealthLabel) = health switch
+        {
+            HealthStatus.Good => ("#10B981", "GOOD"),
+            HealthStatus.Warning => ("#F59E0B", "WARNING"),
+            _ => ("#EF4444", "BAD"),
+        };
+    }
+
+    private void UpdateAggregateStats()
+    {
+        StatTotal = LoadedBuildNodes.Sum(b => b.TotalTests);
+        StatPassed = LoadedBuildNodes.Sum(b => b.PassedTests);
+        StatFailed = LoadedBuildNodes.Sum(b => b.FailedTests);
+        StatTimeout = LoadedBuildNodes.Sum(b => b.TimeoutTests);
+    }
+
+    private void SyncThresholdsToConfig()
+    {
+        _config.GoodThreshold = GoodThreshold;
+        _config.WarningThreshold = WarningThreshold;
+    }
+
+    private string GetRateColor(double rate) =>
+        rate > GoodThreshold ? "#10B981"
+        : rate >= WarningThreshold ? "#F59E0B"
+        : "#EF4444";
+
+    private static string TruncateError(string? msg) =>
+        msg is null ? "" : msg.Length > 120 ? msg[..120] + "…" : msg;
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Expand state & tree colors
+    // ???????????????????????????????????????????????????????????????
+
+    private bool GetExpandState(string key, bool defaultValue) =>
+        _expandState.TryGetValue(key, out var val) ? val : defaultValue;
+
+    private void SetExpandState(string key, bool value) =>
+        _expandState[key] = value;
+
+    private void RefreshTreeColors(ObservableCollection<ResultsTreeNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.PassRate.HasValue)
+                node.PassRateColor = GetRateColor(node.PassRate.Value);
+            RefreshTreeColors(node.Children);
+        }
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Consecutive failure detection
+    // ???????????????????????????????????????????????????????????????
+
     private async Task RunConsecutiveFailureDetection()
     {
         if (!_config.AlertOnLoad || string.IsNullOrWhiteSpace(ResultsRootPath)) return;
@@ -953,583 +1009,74 @@ public partial class BuildResultsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void SendQaAlert()
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Consolidated time range
+    // ???????????????????????????????????????????????????????????????
+
+    private void ApplyTimeRangeFilter()
     {
-        if (FailureAlerts.Count == 0) return;
+        var cutoff = GetTimeRangeCutoff();
+        var matching = AvailableBuilds.Where(b => b.ModifiedDate >= cutoff).ToList();
+        FilteredBuildCount = matching.Count;
 
-        if (string.IsNullOrWhiteSpace(_config.QaAlertRecipients) || string.IsNullOrWhiteSpace(_config.FromAddress))
+        var rangeLabel = GetRangeLabel(abbreviated: false);
+        ScopeSummaryText = matching.Count > 0
+            ? $"Showing consolidated data for {matching.Count} build(s) over the {rangeLabel}."
+            : $"No builds found in the {rangeLabel}.";
+
+        ConsolidatedFolderSummary = matching.Count > 0
+            ? $"Folders in range ({rangeLabel}):\n" + string.Join("\n", matching.Select(b => $"  • {b.BuildNumber}  ({b.ModifiedDate:yyyy-MM-dd HH:mm})"))
+            : $"No folders in the {rangeLabel}.";
+
+        StatusMessage = ScopeSummaryText;
+    }
+
+    private DateTime GetTimeRangeCutoff() => SelectedTimeRange switch
+    {
+        TimeRangeFilter.OneDay => DateTime.Now.AddDays(-1),
+        TimeRangeFilter.OneWeek => DateTime.Now.AddDays(-7),
+        TimeRangeFilter.OneMonth => DateTime.Now.AddDays(-30),
+        _ => DateTime.MinValue
+    };
+
+    private string GetRangeLabel(bool abbreviated) => SelectedTimeRange switch
+    {
+        TimeRangeFilter.OneDay => abbreviated ? "24h" : "last 24 hours",
+        TimeRangeFilter.OneWeek => abbreviated ? "7d" : "last 7 days",
+        TimeRangeFilter.OneMonth => abbreviated ? "30d" : "last 30 days",
+        _ => "custom range"
+    };
+
+    // ???????????????????????????????????????????????????????????????
+    // Private helpers — Shared build parsing & browser launch
+    // ???????????????????????????????????????????????????????????????
+
+    private async Task ParseBuildsAsync(IEnumerable<BuildListItem> builds)
+    {
+        foreach (var build in builds)
         {
-            StatusMessage = "Configure QaAlertRecipients and FromAddress in appsettings.json BuildResults section.";
-            return;
+            StatusMessage = $"Parsing {build.BuildNumber}...";
+            var node = await Task.Run(() => _parser.ParseBuildFolder(build.Path));
+            node = _aggregator.EvaluateBuildHealth(node);
+            LoadedBuildNodes.Add(node);
+            build.HasBeenLoaded = true;
         }
+    }
 
+    private static void OpenInBrowser(string filePath)
+    {
         try
         {
-            var html = GenerateAlertEmailHtml();
-            using var smtp = new SmtpClient(_config.SmtpServer, _config.SmtpPort) { UseDefaultCredentials = true };
-            using var message = new MailMessage(_config.FromAddress, _config.QaAlertRecipients)
+            Process.Start(new ProcessStartInfo
             {
-                Subject = $"\u26A0 Priority Investigation Required — {FailureAlerts.Count} tests failing consecutively",
-                Body = html,
-                IsBodyHtml = true,
-            };
-            smtp.Send(message);
-            StatusMessage = $"QA alert sent to {_config.QaAlertRecipients}";
+                FileName = "msedge.exe",
+                Arguments = $"\"{filePath}\"",
+                UseShellExecute = true,
+            });
         }
-        catch (Exception ex)
+        catch
         {
-            StatusMessage = $"Failed to send QA alert: {ex.Message}";
+            Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
         }
     }
-
-    [RelayCommand]
-    private void CopyAlertList()
-    {
-        if (FailureAlerts.Count == 0) return;
-
-        var text = string.Join(Environment.NewLine, FailureAlerts.Select(a =>
-            $"{a.Priority} | {a.TestName} | {a.ConsecutiveFailCount} builds | {a.UseCaseName} | {TruncateError(a.LastError)}"));
-        Clipboard.SetText(text);
-        StatusMessage = $"Copied {FailureAlerts.Count} alert(s) to clipboard.";
-    }
-
-    // ?? Helpers ??????????????????????????????????????????????????????
-
-    private void UpdateHealthIndicator(BuildNode? node)
-    {
-        if (node is null)
-        {
-            HealthColor = "#6B7280";
-            HealthLabel = "N/A";
-            PassRatePercent = 0;
-            return;
-        }
-
-        PassRatePercent = node.PassRate;
-        var health = _aggregator.EvaluateHealth(node.PassRate);
-        switch (health)
-        {
-            case HealthStatus.Good:
-                HealthColor = "#10B981";
-                HealthLabel = "GOOD";
-                break;
-            case HealthStatus.Warning:
-                HealthColor = "#F59E0B";
-                HealthLabel = "WARNING";
-                break;
-            default:
-                HealthColor = "#EF4444";
-                HealthLabel = "BAD";
-                break;
-        }
-    }
-
-    private string GetRateColor(double rate) =>
-        rate > GoodThreshold ? "#10B981"
-        : rate >= WarningThreshold ? "#F59E0B"
-        : "#EF4444";
-
-    private static string TruncateError(string? msg) =>
-        msg is null ? "" : msg.Length > 120 ? msg[..120] + "…" : msg;
-
-    private string GenerateCsvContent(BuildNode node)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"Build,{node.BuildNumber}");
-        sb.AppendLine($"Total,{node.TotalTests}");
-        sb.AppendLine($"Passed,{node.PassedTests}");
-        sb.AppendLine($"Failed,{node.FailedTests}");
-        sb.AppendLine($"Timeout,{node.TimeoutTests}");
-        sb.AppendLine($"PassRate,{node.PassRate:F1}%");
-        sb.AppendLine();
-        sb.AppendLine("UseCase,Duration,Total,Passed,Failed,Timeout,PassRate,FailedTests");
-        foreach (var uc in node.UseCases)
-        {
-            var failedNames = string.Join("; ", uc.FailedTests.Select(t => t.TestName));
-            sb.AppendLine($"\"{uc.UseCaseName}\",\"{uc.Duration:hh\\:mm\\:ss}\",{uc.Total},{uc.Passed},{uc.Failed},{uc.Timeout},{uc.PassRate:F1}%,\"{failedNames}\"");
-        }
-        return sb.ToString();
-    }
-
-    private string GenerateHtmlReport(BuildNode node)
-    {
-        var healthBg = node.Health switch
-        {
-            HealthStatus.Good => "#10B981",
-            HealthStatus.Warning => "#F59E0B",
-            _ => "#EF4444",
-        };
-
-        var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; background: #0F1629; color: #E2E8F0; margin: 0; padding: 20px; }");
-        sb.AppendLine(".card { background: #1A2238; border-radius: 8px; padding: 16px; margin: 8px 0; }");
-        sb.AppendLine(".health-bar { border-radius: 6px; height: 36px; display: flex; align-items: center; padding: 0 16px; font-weight: bold; font-size: 16px; color: #fff; }");
-        sb.AppendLine(".stats { display: flex; gap: 12px; margin: 12px 0; }");
-        sb.AppendLine(".stat { background: #1A2238; border-radius: 8px; padding: 12px 20px; text-align: center; flex: 1; }");
-        sb.AppendLine(".stat .num { font-size: 28px; font-weight: bold; }");
-        sb.AppendLine(".stat .lbl { font-size: 11px; color: #94A3B8; margin-top: 4px; }");
-        sb.AppendLine("table { width: 100%; border-collapse: collapse; margin: 8px 0; }");
-        sb.AppendLine("th { background: #1E293B; color: #94A3B8; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }");
-        sb.AppendLine("td { padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; }");
-        sb.AppendLine("tr:hover { background: #1E293B; }");
-        sb.AppendLine(".fail { color: #EF4444; font-weight: 600; }");
-        sb.AppendLine(".pass { color: #10B981; }");
-        sb.AppendLine(".warn { color: #F59E0B; }");
-        sb.AppendLine("</style></head><body>");
-
-        sb.AppendLine($"<h2>Build Results: {node.BuildNumber}</h2>");
-        sb.AppendLine($"<div class='health-bar' style='background:{healthBg}'>{node.PassRate:F1}% — {node.Health}</div>");
-
-        sb.AppendLine("<div class='stats'>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#60A5FA'>{node.TotalTests}</div><div class='lbl'>Total</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#10B981'>{node.PassedTests}</div><div class='lbl'>Passed</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#EF4444'>{node.FailedTests}</div><div class='lbl'>Failed</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#F59E0B'>{node.TimeoutTests}</div><div class='lbl'>Timeout</div></div>");
-        sb.AppendLine("</div>");
-
-        sb.AppendLine("<div class='card'><h3>Use Case Breakdown</h3>");
-        sb.AppendLine("<table><tr><th>Use Case</th><th>Duration</th><th>Total</th><th>Passed</th><th>Failed</th><th>Timeout</th><th>Pass Rate</th><th>Failed Tests</th></tr>");
-        foreach (var uc in node.UseCases)
-        {
-            var rateClass = uc.PassRate > GoodThreshold ? "pass" : uc.PassRate >= WarningThreshold ? "warn" : "fail";
-            var failedNames = string.Join(", ", uc.FailedTests.Select(t => t.TestName));
-            sb.AppendLine($"<tr><td>{uc.UseCaseName}</td><td>{uc.Duration:hh\\:mm\\:ss}</td><td>{uc.Total}</td><td class='pass'>{uc.Passed}</td><td class='{(uc.Failed > 0 ? "fail" : "")}'>{uc.Failed}</td><td>{uc.Timeout}</td><td class='{rateClass}'>{uc.PassRate:F1}%</td><td class='fail' style='font-size:11px'>{failedNames}</td></tr>");
-        }
-        sb.AppendLine("</table></div>");
-
-        if (node.AllFailedTests.Count > 0)
-        {
-            sb.AppendLine("<div class='card'><h3>Failed Tests Detail</h3>");
-            sb.AppendLine("<table><tr><th>Test Name</th><th>TRX File</th><th>Error Message</th></tr>");
-            foreach (var t in node.AllFailedTests)
-            {
-                var errMsg = System.Net.WebUtility.HtmlEncode(TruncateError(t.ErrorMessage));
-                sb.AppendLine($"<tr><td class='fail'>{t.TestName}</td><td>{t.TrxFileName}</td><td style='font-size:11px'>{errMsg}</td></tr>");
-            }
-            sb.AppendLine("</table></div>");
-        }
-
-        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:20px'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by TestController</p>");
-        sb.AppendLine("</body></html>");
-        return sb.ToString();
-    }
-
-    private string GenerateMultiBuildHtmlReport()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; background: #0F1629; color: #E2E8F0; margin: 0; padding: 20px; }");
-        sb.AppendLine(".card { background: #1A2238; border-radius: 8px; padding: 16px; margin: 12px 0; }");
-        sb.AppendLine("h2 { color: #60A5FA; } h3 { color: #94A3B8; margin-top: 0; }");
-        sb.AppendLine("table { width: 100%; border-collapse: collapse; margin: 8px 0; }");
-        sb.AppendLine("th { background: #1E293B; color: #94A3B8; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }");
-        sb.AppendLine("td { padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; }");
-        sb.AppendLine("tr:hover { background: #1E293B; }");
-        sb.AppendLine(".pass { color: #10B981; } .fail { color: #EF4444; } .warn { color: #F59E0B; }");
-        sb.AppendLine(".send-btn { display:inline-block; background:#3B82F6; color:#fff; padding:10px 24px; border-radius:6px; text-decoration:none; font-weight:bold; margin:12px 4px; }");
-        sb.AppendLine(".send-btn:hover { background:#2563EB; }");
-        sb.AppendLine("</style></head><body>");
-
-        sb.AppendLine($"<h2>All Builds Summary ({LoadedBuildNodes.Count} builds)</h2>");
-
-        sb.AppendLine("<div class='stats'>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#60A5FA'>{StatTotal}</div><div class='lbl'>Total</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#10B981'>{StatPassed}</div><div class='lbl'>Passed</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#EF4444'>{StatFailed}</div><div class='lbl'>Failed</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#F59E0B'>{StatTimeout}</div><div class='lbl'>Timeout</div></div>");
-        sb.AppendLine("</div>");
-
-        sb.AppendLine("<div class='card'><h3>Build Breakdown</h3>");
-        sb.AppendLine("<table><tr><th>Build</th><th>Total</th><th>Passed</th><th>Failed</th><th>Pass Rate</th><th>Health</th></tr>");
-        foreach (var b in LoadedBuildNodes)
-        {
-            var rateClass = b.PassRate > GoodThreshold ? "pass" : b.PassRate >= WarningThreshold ? "warn" : "fail";
-            sb.AppendLine($"<tr><td><strong>{b.BuildNumber}</strong></td><td>{b.TotalTests}</td><td class='pass'>{b.PassedTests}</td><td class='{(b.FailedTests > 0 ? "fail" : "")}'>{b.FailedTests}</td><td class='{rateClass}'>{b.PassRate:F1}%</td><td class='{rateClass}'>{b.Health}</td></tr>");
-        }
-        sb.AppendLine("</table></div>");
-
-        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:20px'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by TestController</p>");
-        sb.AppendLine("</body></html>");
-        return sb.ToString();
-    }
-
-    private string GenerateTrendHtml(TrendReport trend)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-
-        sb.AppendLine("<style>");
-        sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; background: #0F1629; color: #E2E8F0; margin: 0; padding: 20px; }");
-        sb.AppendLine(".card { background: #1A2238; border-radius: 8px; padding: 16px; margin: 12px 0; }");
-        sb.AppendLine("h2 { color: #60A5FA; } h3 { color: #94A3B8; margin-top: 0; }");
-        sb.AppendLine("table { width: 100%; border-collapse: collapse; margin: 8px 0; }");
-        sb.AppendLine("th { background: #1E293B; color: #94A3B8; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }");
-        sb.AppendLine("td { padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; }");
-        sb.AppendLine("tr:hover { background: #1E293B; }");
-        sb.AppendLine(".pass { color: #10B981; } .fail { color: #EF4444; } .warn { color: #F59E0B; }");
-        sb.AppendLine(".send-btn { display:inline-block; background:#3B82F6; color:#fff; padding:10px 24px; border-radius:6px; text-decoration:none; font-weight:bold; margin:12px 4px; }");
-        sb.AppendLine(".send-btn:hover { background:#2563EB; }");
-        sb.AppendLine("svg text { font-family: 'Segoe UI', Arial, sans-serif; }");
-        sb.AppendLine("</style></head><body>");
-        sb.AppendLine("<h2>Build Trend Report</h2>");
-        sb.AppendLine($"<p style='color:#64748B'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} &mdash; {trend.Builds.Count} builds analyzed</p>");
-
-        // SVG Charts (no JavaScript needed — works with file:// protocol)
-        sb.AppendLine("<div class='card'><h3>Pass Rate Trend</h3>");
-        sb.AppendLine(GeneratePassRateTrendSvg(trend.Builds));
-        sb.AppendLine("</div>");
-
-        sb.AppendLine("<div class='card'><h3>Pass / Fail / Timeout per Build</h3>");
-        sb.AppendLine(GeneratePassFailBarSvg(trend.Builds));
-        sb.AppendLine("</div>");
-
-        var totalP = trend.Builds.Sum(b => b.PassedTests);
-        var totalF = trend.Builds.Sum(b => b.FailedTests);
-        var totalT = trend.Builds.Sum(b => b.TimeoutTests);
-        sb.AppendLine("<div class='card' style='max-width:500px'><h3>Overall Distribution</h3>");
-        sb.AppendLine(GeneratePieChartSvg(totalP, totalF, totalT));
-        sb.AppendLine("</div>");
-
-        // Weekly summary table with per-build drill-down
-        if (trend.WeeklySummaries.Count > 0)
-        {
-            sb.AppendLine("<div class='card'><h3>Weekly Summary</h3>");
-            sb.AppendLine("<table><tr><th>Week</th><th>Build</th><th>Total</th><th>Passed</th><th>Failed</th><th>Pass Rate</th></tr>");
-            foreach (var w in trend.WeeklySummaries)
-            {
-                var cls = w.AvgPassRate > _config.GoodThreshold ? "pass" : w.AvgPassRate >= _config.WarningThreshold ? "warn" : "fail";
-                sb.AppendLine($"<tr style='background:#1E293B'><td colspan='2'><b>{w.Period}</b> ({w.BuildCount} builds)</td><td>{w.TotalTests}</td><td class='pass'>{w.TotalPassed}</td><td class='fail'>{w.TotalFailed}</td><td class='{cls}'>{w.AvgPassRate:F1}%</td></tr>");
-
-                // Per-build rows within this week
-                var weekKey = w.Period;
-                foreach (var build in trend.Builds.Where(b =>
-                    $"{b.Date.Year}-W{System.Globalization.ISOWeek.GetWeekOfYear(b.Date):D2}" == weekKey))
-                {
-                    var rateClass = build.PassRate > GoodThreshold ? "pass" : build.PassRate >= WarningThreshold ? "warn" : "fail";
-                    sb.AppendLine($"<tr><td></td><td style='padding-left:20px'>{build.BuildNumber}</td><td>{build.TotalTests}</td><td class='pass'>{build.PassedTests}</td><td class='{(build.FailedTests > 0 ? "fail" : "")}'>{build.FailedTests}</td><td class='{rateClass}'>{build.PassRate:F1}%</td></tr>");
-                }
-            }
-            sb.AppendLine("</table></div>");
-        }
-
-        // Monthly summary table with per-build drill-down
-        if (trend.MonthlySummaries.Count > 0)
-        {
-            sb.AppendLine("<div class='card'><h3>Monthly Summary</h3>");
-            sb.AppendLine("<table><tr><th>Month</th><th>Build</th><th>Total</th><th>Passed</th><th>Failed</th><th>Pass Rate</th></tr>");
-            foreach (var m in trend.MonthlySummaries)
-            {
-                var cls = m.AvgPassRate > _config.GoodThreshold ? "pass" : m.AvgPassRate >= _config.WarningThreshold ? "warn" : "fail";
-                sb.AppendLine($"<tr style='background:#1E293B'><td colspan='2'><b>{m.Period}</b> ({m.BuildCount} builds)</td><td>{m.TotalTests}</td><td class='pass'>{m.TotalPassed}</td><td class='fail'>{m.TotalFailed}</td><td class='{cls}'>{m.AvgPassRate:F1}%</td></tr>");
-
-                var monthKey = m.Period;
-                foreach (var build in trend.Builds.Where(b => b.Date.ToString("yyyy-MM") == monthKey))
-                {
-                    var rateClass = build.PassRate > GoodThreshold ? "pass" : build.PassRate >= WarningThreshold ? "warn" : "fail";
-                    sb.AppendLine($"<tr><td></td><td style='padding-left:20px'>{build.BuildNumber}</td><td>{build.TotalTests}</td><td class='pass'>{build.PassedTests}</td><td class='{(build.FailedTests > 0 ? "fail" : "")}'>{build.FailedTests}</td><td class='{rateClass}'>{build.PassRate:F1}%</td></tr>");
-                }
-            }
-            sb.AppendLine("</table></div>");
-        }
-
-        // Send Report button
-        var recipients = _config.ReportRecipients ?? "team@company.com";
-        sb.AppendLine("<div style='margin:20px 0;text-align:center'>");
-        sb.AppendLine($"<a class='send-btn' href='mailto:{System.Net.WebUtility.HtmlEncode(recipients)}?subject=Build Trend Report {DateTime.Now:yyyy-MM-dd}'>\u2709 Send to Team</a>");
-        sb.AppendLine("</div>");
-
-        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:20px'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by TestController</p>");
-        sb.AppendLine("</body></html>");
-        return sb.ToString();
-    }
-
-    private string GeneratePassRateTrendSvg(List<BuildTrendEntry> builds)
-    {
-        if (builds.Count == 0) return "";
-
-        int w = 800, h = 200, pad = 40;
-        var chartW = w - pad * 2;
-        var chartH = h - pad * 2;
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"<svg viewBox='0 0 {w} {h}' xmlns='http://www.w3.org/2000/svg' style='width:100%;max-height:220px'>");
-
-        // Grid lines
-        for (int i = 0; i <= 4; i++)
-        {
-            var y = pad + chartH * i / 4;
-            var label = 100 - i * 25;
-            sb.AppendLine($"<line x1='{pad}' y1='{y}' x2='{w - pad}' y2='{y}' stroke='#1E293B' stroke-width='1'/>");
-            sb.AppendLine($"<text x='{pad - 5}' y='{y + 4}' fill='#94A3B8' font-size='10' text-anchor='end'>{label}%</text>");
-        }
-
-        // Data points and line
-        var points = new List<string>();
-        for (int i = 0; i < builds.Count; i++)
-        {
-            var x = pad + (builds.Count == 1 ? chartW / 2 : chartW * i / (builds.Count - 1));
-            var yVal = pad + chartH * (1 - builds[i].PassRate / 100.0);
-            points.Add($"{x:F0},{yVal:F0}");
-
-            var color = builds[i].PassRate > GoodThreshold ? "#10B981"
-                : builds[i].PassRate >= WarningThreshold ? "#F59E0B" : "#EF4444";
-
-            sb.AppendLine($"<circle cx='{x:F0}' cy='{yVal:F0}' r='5' fill='{color}'/>");
-            sb.AppendLine($"<text x='{x:F0}' y='{yVal - 10:F0}' fill='#E2E8F0' font-size='10' text-anchor='middle'>{builds[i].PassRate:F0}%</text>");
-
-            var shortName = builds[i].BuildNumber.Length > 20
-                ? builds[i].BuildNumber[^20..] : builds[i].BuildNumber;
-            sb.AppendLine($"<text x='{x:F0}' y='{h - 5}' fill='#94A3B8' font-size='8' text-anchor='middle' transform='rotate(-30 {x:F0} {h - 5})'>{System.Net.WebUtility.HtmlEncode(shortName)}</text>");
-        }
-
-        if (points.Count > 1)
-        {
-            sb.AppendLine($"<polyline points='{string.Join(" ", points)}' fill='none' stroke='#3B82F6' stroke-width='2'/>");
-            var areaPoints = string.Join(" ", points) + $" {w - pad},{pad + chartH} {pad},{pad + chartH}";
-            sb.AppendLine($"<polygon points='{areaPoints}' fill='rgba(59,130,246,0.1)'/>");
-        }
-
-        sb.AppendLine("</svg>");
-        return sb.ToString();
-    }
-
-    private string GeneratePassFailBarSvg(List<BuildTrendEntry> builds)
-    {
-        if (builds.Count == 0) return "";
-
-        int w = 800, h = 200, pad = 40;
-        var chartW = w - pad * 2;
-        var chartH = h - pad * 2;
-        var barW = Math.Max(chartW / Math.Max(builds.Count, 1) - 4, 8);
-        var maxTotal = builds.Max(b => b.TotalTests);
-        if (maxTotal == 0) maxTotal = 1;
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"<svg viewBox='0 0 {w} {h}' xmlns='http://www.w3.org/2000/svg' style='width:100%;max-height:220px'>");
-
-        for (int i = 0; i < builds.Count; i++)
-        {
-            var x = pad + (chartW * i / Math.Max(builds.Count, 1)) + 2;
-            var b = builds[i];
-
-            var passH = (double)chartH * b.PassedTests / maxTotal;
-            var failH = (double)chartH * b.FailedTests / maxTotal;
-            var timeH = (double)chartH * b.TimeoutTests / maxTotal;
-
-            var passY = pad + chartH - passH;
-            var failY = passY - failH;
-            var timeY = failY - timeH;
-
-            sb.AppendLine($"<rect x='{x}' y='{passY:F0}' width='{barW}' height='{passH:F0}' fill='#10B981' rx='2'/>");
-            if (failH > 0)
-                sb.AppendLine($"<rect x='{x}' y='{failY:F0}' width='{barW}' height='{failH:F0}' fill='#EF4444' rx='2'/>");
-            if (timeH > 0)
-                sb.AppendLine($"<rect x='{x}' y='{timeY:F0}' width='{barW}' height='{timeH:F0}' fill='#F59E0B' rx='2'/>");
-        }
-
-        // Legend
-        sb.AppendLine($"<rect x='{w - 160}' y='5' width='10' height='10' fill='#10B981' rx='2'/>");
-        sb.AppendLine($"<text x='{w - 145}' y='14' fill='#E2E8F0' font-size='10'>Passed</text>");
-        sb.AppendLine($"<rect x='{w - 100}' y='5' width='10' height='10' fill='#EF4444' rx='2'/>");
-        sb.AppendLine($"<text x='{w - 85}' y='14' fill='#E2E8F0' font-size='10'>Failed</text>");
-        sb.AppendLine($"<rect x='{w - 40}' y='5' width='10' height='10' fill='#F59E0B' rx='2'/>");
-        sb.AppendLine($"<text x='{w - 25}' y='14' fill='#E2E8F0' font-size='10'>Timeout</text>");
-
-        sb.AppendLine("</svg>");
-        return sb.ToString();
-    }
-
-    private static string GeneratePieChartSvg(int passed, int failed, int timeout)
-    {
-        var total = passed + failed + timeout;
-        if (total == 0) return "";
-
-        var sb = new StringBuilder();
-        sb.AppendLine("<svg viewBox='0 0 300 200' xmlns='http://www.w3.org/2000/svg' style='width:300px;height:200px'>");
-
-        double cx = 100, cy = 100, r = 80;
-        var slices = new[] {
-            (Count: passed, Color: "#10B981", Label: "Passed"),
-            (Count: failed, Color: "#EF4444", Label: "Failed"),
-            (Count: timeout, Color: "#F59E0B", Label: "Timeout")
-        }.Where(s => s.Count > 0).ToArray();
-
-        double startAngle = -90; // Start from top
-        foreach (var (count, color, label) in slices)
-        {
-            var pct = (double)count / total;
-            var endAngle = startAngle + pct * 360;
-            var large = pct > 0.5 ? 1 : 0;
-
-            var x1 = cx + r * Math.Cos(startAngle * Math.PI / 180);
-            var y1 = cy + r * Math.Sin(startAngle * Math.PI / 180);
-            var x2 = cx + r * Math.Cos(endAngle * Math.PI / 180);
-            var y2 = cy + r * Math.Sin(endAngle * Math.PI / 180);
-
-            if (slices.Length == 1)
-                sb.AppendLine($"<circle cx='{cx}' cy='{cy}' r='{r}' fill='{color}'/>");
-            else
-                sb.AppendLine($"<path d='M{cx},{cy} L{x1:F1},{y1:F1} A{r},{r} 0 {large},1 {x2:F1},{y2:F1} Z' fill='{color}'/>");
-
-            startAngle = endAngle;
-        }
-
-        // Legend
-        int ly = 30;
-        foreach (var (count, color, label) in slices)
-        {
-            sb.AppendLine($"<rect x='210' y='{ly}' width='12' height='12' fill='{color}' rx='2'/>");
-            sb.AppendLine($"<text x='228' y='{ly + 10}' fill='#E2E8F0' font-size='11'>{label}: {count} ({(double)count / total * 100:F1}%)</text>");
-            ly += 22;
-        }
-
-        sb.AppendLine("</svg>");
-        return sb.ToString();
-    }
-
-    private string GenerateAlertEmailHtml()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a2e; padding: 20px; }");
-        sb.AppendLine("h2 { color: #EF4444; }");
-        sb.AppendLine("table { width: 100%; border-collapse: collapse; margin: 12px 0; }");
-        sb.AppendLine("th { background: #f1f5f9; padding: 8px 12px; font-size: 11px; text-transform: uppercase; text-align: left; }");
-        sb.AppendLine("td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; fontSize: 13px; }");
-        sb.AppendLine(".critical { color: #dc2626; font-weight: bold; }");
-        sb.AppendLine(".high { color: #ea580c; font-weight: bold; }");
-        sb.AppendLine(".medium { color: #d97706; font-weight: bold; }");
-        sb.AppendLine("</style></head><body>");
-        sb.AppendLine($"<h2>\u26A0 Priority Investigation Required</h2>");
-        sb.AppendLine($"<p>{FailureAlerts.Count} test(s) are failing across consecutive builds and require investigation.</p>");
-        sb.AppendLine("<table><tr><th>Priority</th><th>Test Name</th><th>Use Case</th><th>Consecutive Fails</th><th>Failed In Builds</th><th>Last Error</th></tr>");
-        foreach (var a in FailureAlerts)
-        {
-            var cls = a.Priority.ToLowerInvariant();
-            var builds = string.Join(", ", a.FailedInBuilds);
-            var err = System.Net.WebUtility.HtmlEncode(TruncateError(a.LastError));
-            sb.AppendLine($"<tr><td class='{cls}'>{a.Priority}</td><td>{a.TestName}</td><td>{a.UseCaseName}</td><td>{a.ConsecutiveFailCount}</td><td style='font-size:11px'>{builds}</td><td style='font-size:11px'>{err}</td></tr>");
-        }
-        sb.AppendLine("</table>");
-        sb.AppendLine($"<p style='font-size:11px;color:#94a3b8'>Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by TestController</p>");
-        sb.AppendLine("</body></html>");
-        return sb.ToString();
-    }
-}
-
-// ?? Supporting view models ??????????????????????????????????????????
-
-public partial class BuildListItem : ObservableObject
-{
-    [ObservableProperty] private string _buildNumber = "";
-    [ObservableProperty] private string _path = "";
-    [ObservableProperty] private DateTime _modifiedDate;
-    [ObservableProperty] private bool _hasBeenLoaded;
-
-    public override string ToString() => $"{BuildNumber}  ({ModifiedDate:yyyy-MM-dd HH:mm})";
-}
-
-/// <summary>Unified tree node for Build ? UseCase ? TestResult hierarchy (used by legacy TreeView).</summary>
-public partial class ResultsTreeNode : ObservableObject
-{
-    [ObservableProperty] private string _name = "";
-    [ObservableProperty] private int? _total;
-    [ObservableProperty] private int? _passed;
-    [ObservableProperty] private int? _failed;
-    [ObservableProperty] private int? _notExecuted;
-    [ObservableProperty] private double? _passRate;
-    [ObservableProperty] private string _passRateColor = "#10B981";
-    [ObservableProperty] private string _nodeLevel = "";  // "Build", "UseCase", "TestResult"
-    [ObservableProperty] private DateTime? _modifiedDate;
-    [ObservableProperty] private bool _isExpanded;
-
-    // TestResult-level
-    [ObservableProperty] private string? _outcome;
-    [ObservableProperty] private string? _errorMessage;
-    [ObservableProperty] private string _fullError = "";
-    [ObservableProperty] private string _fullStackTrace = "";
-
-    // Export (build-level only)
-    [ObservableProperty] private bool _showExportButtons;
-    public IRelayCommand? ExportHtmlCommand { get; set; }
-    public IRelayCommand? ExportCsvCommand { get; set; }
-
-    public ObservableCollection<ResultsTreeNode> Children { get; } = new();
-
-    public string PassRateFormatted => PassRate.HasValue ? $"{PassRate.Value:F1}%" : "";
-    public bool HasChildren => Children.Count > 0;
-}
-
-/// <summary>Flat node for the ListView-based grid with indent support and detail panel.</summary>
-public partial class ResultsFlatNode : ObservableObject
-{
-    [ObservableProperty] private string _name = "";
-    [ObservableProperty] private string _nodeLevel = "";  // "AllBuilds", "Build", "UseCase", "TestResult"
-    [ObservableProperty] private string? _buildNumber;
-    [ObservableProperty] private int? _total;
-    [ObservableProperty] private int? _passed;
-    [ObservableProperty] private int? _failed;
-    [ObservableProperty] private int? _notExecuted;
-    [ObservableProperty] private double? _passRate;
-    [ObservableProperty] private string _passRateColor = "#10B981";
-    [ObservableProperty] private int _indentLevel;
-    [ObservableProperty] private bool _isExpanded;
-    [ObservableProperty] private bool _showEmailButton;
-    [ObservableProperty] private bool _showStats = true;
-
-    partial void OnIsExpandedChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ExpandIcon));
-    }
-
-    // TestResult-level
-    [ObservableProperty] private string? _outcome;
-    [ObservableProperty] private string? _errorMessage;
-    [ObservableProperty] private string _fullError = "";
-    [ObservableProperty] private string _fullStackTrace = "";
-    public TestResult? TestResultModel { get; set; }
-
-    // Export (build-level)
-    public bool ShowExportButtons => NodeLevel is "Build" or "AllBuilds";
-    public IRelayCommand? ExportHtmlCommand { get; set; }
-    public IRelayCommand? ExportCsvCommand { get; set; }
-
-    // Commands
-    public IRelayCommand? SendEmailCommand { get; set; }
-    public IRelayCommand? ToggleExpandCommand { get; set; }
-
-    /// <summary>Left margin based on indent level (for tree-like display in a flat list).</summary>
-    public Thickness IndentMargin => new(IndentLevel * 20, 0, 0, 0);
-
-    public string PassRateFormatted => PassRate.HasValue ? $"{PassRate.Value:F1}%" : "";
-
-    /// <summary>Expand/collapse icon glyph.</summary>
-    public string ExpandIcon => IsExpanded ? "\u25BC" : "\u25B6";
-
-    /// <summary>Whether this node has expandable children.</summary>
-    public bool CanExpand => NodeLevel is "AllBuilds" or "Build" or "UseCase";
-
-    /// <summary>Outcome icon for test results.</summary>
-    public string OutcomeIcon => Outcome switch
-    {
-        "Passed" => "\u2713",
-        "Failed" => "\u2717",
-        "Timeout" => "\u23F1",
-        _ => "\u25CB",
-    };
-}
-
-/// <summary>Simple VM for displaying execution step rows in the detail panel.</summary>
-public class StepRowVM
-{
-    public string StepName { get; set; } = "";
-    public string Outcome { get; set; } = "";
-    public TimeSpan Duration { get; set; }
-    public string OutcomeIcon { get; set; } = "\u25CB";
-    public string DurationText { get; set; } = "";
 }

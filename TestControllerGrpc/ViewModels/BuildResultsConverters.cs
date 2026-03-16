@@ -144,3 +144,18 @@ public class PassRateToColorConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>Returns true when the bound enum value equals the converter parameter string.</summary>
+public class EnumEqualsToBoolConverter : IValueConverter
+{
+    public static readonly EnumEqualsToBoolConverter Instance = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is null || parameter is null) return false;
+        return value.ToString() == parameter.ToString();
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

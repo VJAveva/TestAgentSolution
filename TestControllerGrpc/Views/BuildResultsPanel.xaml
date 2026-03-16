@@ -35,6 +35,72 @@
             <Setter Property="Margin" Value="2,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+
+        <!-- ?? Ribbon group styles ?? -->
+        <Style x:Key="RibbonGroupBorder" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource BgCard}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="RibbonGroupLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="TextAlignment" Value="Center" />
+        </Style>
+        <!-- Toggle button style for segmented controls -->
+        <Style x:Key="SegBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BtnBg}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
+        </Style>
+        <!-- Ribbon action button style -->
+        <Style x:Key="RibbonActionBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BtnBg}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BtnBorder}" />
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <!-- High-contrast green Generate button -->
+        <Style x:Key="RibbonGenerateBtn" TargetType="Button" BasedOn="{StaticResource RibbonActionBtn}">
+            <Setter Property="Background" Value="{DynamicResource GreenBtnBg}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccGreen}" />
+            <Setter Property="MinWidth" Value="100" />
+        </Style>
+        <!-- Subtle blue Email button -->
+        <Style x:Key="RibbonEmailBtn" TargetType="Button" BasedOn="{StaticResource RibbonActionBtn}">
+            <Setter Property="Background" Value="{DynamicResource BlueBtnBg}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccBlue}" />
+            <Setter Property="MinWidth" Value="100" />
+        </Style>
+        <Style x:Key="ThresholdInput" TargetType="TextBox" BasedOn="{StaticResource Fld}">
+            <Setter Property="Width" Value="50" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="4,3" />
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -72,34 +138,238 @@
             </Border>
 
             <DockPanel>
-                <!-- ??? BUILD SELECTOR ??? -->
-                <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" CornerRadius="6" Padding="12" Margin="8,8,8,4">
-                    <StackPanel>
-                        <TextBlock Text="BUILD SELECTOR" FontSize="10" FontWeight="Bold"
-                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,6" />
-                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Path:" FontSize="11" Foreground="{DynamicResource TextS}"
+                <!-- ??????????????????????????????????????????????????????????? -->
+                <!-- ?  RIBBON: 4 Functional Groups                           ? -->
+                <!-- ??????????????????????????????????????????????????????????? -->
+                <Border DockPanel.Dock="Top" Background="{DynamicResource BgPanel}" Padding="6,6" Margin="0,0,0,2"
+                        BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+                    <DockPanel>
+                        <!-- Path bar (always visible, compact) -->
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,0,4,6">
+                            <TextBlock Text="Path:" FontSize="10.5" Foreground="{DynamicResource TextS}"
                                        VerticalAlignment="Center" Margin="0,0,6,0" />
                             <TextBox Text="{Binding ResultsRootPath, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource Fld}" Width="300" Margin="0,0,6,0"
-                                     FontFamily="Consolas" FontSize="11" VerticalAlignment="Center" />
-                            <Button Content="Browse" Style="{StaticResource SmBtn}" Command="{Binding BrowseResultsPathCommand}"
-                                    Margin="0,0,4,0" />
-                            <Button Content="Refresh" Style="{StaticResource SmBtn}" Command="{Binding RefreshBuildsCommand}"
-                                    Background="{DynamicResource AccGreen}" />
+                                     Style="{StaticResource Fld}" Width="320" Margin="0" FontFamily="Consolas"
+                                     FontSize="10.5" VerticalAlignment="Center" Padding="4,3" />
+                            <Button Content="??" Style="{StaticResource SmBtn}" Command="{Binding BrowseResultsPathCommand}"
+                                    FontSize="12" Padding="6,3" Margin="4,0,2,0" ToolTip="Browse for results folder" />
+                            <Button Content="?" Style="{StaticResource SmBtn}" Command="{Binding RefreshBuildsCommand}"
+                                    Background="{DynamicResource AccGreen}" FontSize="12" Padding="6,3" Margin="2,0"
+                                    ToolTip="Refresh build list" />
+                        </StackPanel>
+
+                        <!-- Ribbon groups row -->
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                            <!-- ?? GROUP 1: DATA SCOPE ?? -->
+                            <Border Style="{StaticResource RibbonGroupBorder}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <!-- Scope toggle: Single Build | Consolidated -->
+                                        <Border CornerRadius="4" BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                                                SnapsToDevicePixels="True">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="Single Build" Command="{Binding SetScopeSingleCommand}"
+                                                        Margin="0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SegBtn}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSingleBuildMode}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="Consolidated" Command="{Binding SetScopeConsolidatedCommand}"
+                                                        Margin="0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SegBtn}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsConsolidatedMode}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                    <!-- Build dropdown: single-build selector or consolidated folder list summary -->
+                                    <ComboBox ItemsSource="{Binding AvailableBuilds}" SelectedItem="{Binding SelectedBuild}"
+                                              IsEnabled="{Binding IsSingleBuildMode}"
+                                              Width="180" Margin="0,6,0,0"
+                                              Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"
+                                              BorderBrush="{DynamicResource Bdr}" Padding="4,3" FontSize="10.5">
+                                        <ComboBox.Style>
+                                            <Style TargetType="ComboBox">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsConsolidatedMode}" Value="True">
+                                                        <Setter Property="ToolTip" Value="{Binding ConsolidatedFolderSummary}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ComboBox.Style>
+                                    </ComboBox>
+                                    <!-- Consolidated folder count badge (visible only in consolidated mode) -->
+                                    <TextBlock FontSize="9.5" Foreground="{DynamicResource Accent}"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0"
+                                               Visibility="{Binding IsConsolidatedMode, Converter={StaticResource BoolVis}}"
+                                               Text="{Binding FilteredBuildCount, StringFormat='? {0} folder(s) in range'}" />
+                                    <TextBlock Text="DATA SCOPE" Style="{StaticResource RibbonGroupLabel}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ?? Vertical separator ?? -->
+                            <Rectangle Width="1" Height="60" Fill="{DynamicResource Bdr}" Margin="2,4" VerticalAlignment="Center" />
+
+                            <!-- ?? GROUP 2: TIME FILTER ?? -->
+                            <Border Style="{StaticResource RibbonGroupBorder}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <Border CornerRadius="4" BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                                                SnapsToDevicePixels="True">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="1 Day" Command="{Binding SetRange1DCommand}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SegBtn}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SelectedTimeRange}" Value="OneDay">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="1 Week" Command="{Binding SetRange1WCommand}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SegBtn}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SelectedTimeRange}" Value="OneWeek">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="1 Month" Command="{Binding SetRange1MCommand}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SegBtn}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SelectedTimeRange}" Value="OneMonth">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                    <!-- Filtered build count summary -->
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource TextS}"
+                                               HorizontalAlignment="Center" Margin="0,6,0,0"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="180">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="{Binding FilteredBuildCount, StringFormat='{}{0} build(s) match'}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding FilteredBuildCount}" Value="0">
+                                                        <Setter Property="Text" Value="No filter applied" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="REPORT RANGE" Style="{StaticResource RibbonGroupLabel}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ?? Vertical separator ?? -->
+                            <Rectangle Width="1" Height="60" Fill="{DynamicResource Bdr}" Margin="2,4" VerticalAlignment="Center" />
+
+                            <!-- ?? GROUP 3: REPORT CONFIG ?? -->
+                            <Border Style="{StaticResource RibbonGroupBorder}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,2">
+                                        <TextBlock Text="Good ?" FontSize="10" Foreground="{DynamicResource AccGreen}"
+                                                   VerticalAlignment="Center" Margin="0,0,2,0" FontWeight="SemiBold" />
+                                        <TextBox Text="{Binding GoodThreshold, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ThresholdInput}" />
+                                        <TextBlock Text="%" FontSize="10" Foreground="{DynamicResource TextS}"
+                                                   VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Text="Warn ?" FontSize="10" Foreground="{DynamicResource AccYellow}"
+                                                   VerticalAlignment="Center" Margin="0,0,2,0" FontWeight="SemiBold" />
+                                        <TextBox Text="{Binding WarningThreshold, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ThresholdInput}" />
+                                        <TextBlock Text="%" FontSize="10" Foreground="{DynamicResource TextS}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Button Content="Apply" Command="{Binding ApplyThresholdsCommand}"
+                                            Style="{StaticResource SmBtn}" FontSize="10" Padding="12,3"
+                                            HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                    <TextBlock Text="REPORT CONFIG" Style="{StaticResource RibbonGroupLabel}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ?? Vertical separator ?? -->
+                            <Rectangle Width="1" Height="60" Fill="{DynamicResource Bdr}" Margin="2,4" VerticalAlignment="Center" />
+
+                            <!-- ?? GROUP 4: REPORT ACTIONS ?? -->
+                            <Border Style="{StaticResource RibbonGroupBorder}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <!-- Primary: Generate Consolidated HTML (high-contrast green) -->
+                                        <Button Command="{Binding GenerateConsolidatedHtmlCommand}"
+                                                ToolTip="Generate consolidated HTML report"
+                                                Style="{StaticResource RibbonGenerateBtn}">
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <TextBlock Text="&#xE9F9;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                                           HorizontalAlignment="Center" Foreground="{DynamicResource AccGreen}" />
+                                                <TextBlock Text="Generate" FontSize="9" FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource AccGreen}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                        <!-- Secondary: Send Email Summary (subtle blue) -->
+                                        <Button Command="{Binding SendEmailSummaryCommand}"
+                                                ToolTip="Send email summary report"
+                                                Style="{StaticResource RibbonEmailBtn}">
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <TextBlock Text="&#xE715;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                                           HorizontalAlignment="Center" Foreground="{DynamicResource AccBlue}" />
+                                                <TextBlock Text="Email" FontSize="9" FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource AccBlue}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                        <!-- Trends (merged into this group) -->
+                                        <Button Command="{Binding GenerateTrendReportCommand}"
+                                                ToolTip="View trend analysis across builds"
+                                                Style="{StaticResource RibbonActionBtn}">
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <TextBlock Text="&#xE9D2;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                                           HorizontalAlignment="Center" Foreground="{DynamicResource AccMauve}" />
+                                                <TextBlock Text="Trends" FontSize="9" HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource TextS}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                    <TextBlock Text="REPORT ACTIONS" Style="{StaticResource RibbonGroupLabel}" />
+                                </StackPanel>
+                            </Border>
+
                         </WrapPanel>
-                        <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <TextBlock Text="Build:" FontSize="11" Foreground="{DynamicResource TextS}"
-                                       VerticalAlignment="Center" Margin="0,0,6,0" />
-                            <ComboBox ItemsSource="{Binding AvailableBuilds}" SelectedItem="{Binding SelectedBuild}"
-                                      Width="360" Margin="0,0,8,0"
-                                      Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"
-                                      BorderBrush="{DynamicResource Bdr}" Padding="6,4" />
-                        </WrapPanel>
-                    </StackPanel>
+                    </DockPanel>
                 </Border>
 
-                <!-- ??? HEALTH INDICATOR BAR ??? -->
+                <!-- ?? HEALTH INDICATOR BAR ?? -->
                 <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" CornerRadius="6" Padding="12" Margin="8,4,8,4">
                     <Grid>
                         <Border CornerRadius="4" Background="#1E293B" Height="36" />
