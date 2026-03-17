@@ -132,7 +132,7 @@ export default function TrendCharts() {
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${priorityColor}`}>{a.priority}</span>
                     <span className="font-medium text-text-primary">{a.testName}</span>
-                    <span className="text-text-muted ml-auto">{a.consecutiveFailCount}× consecutive</span>
+                    <span className="text-text-muted ml-auto">{a.consecutiveFailCount}Ã— consecutive</span>
                   </div>
                   <div className="text-text-muted mt-0.5">{a.useCaseName}</div>
                   {a.lastError && (

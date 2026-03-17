@@ -68,7 +68,10 @@ export function useSignalR(): HubConnection | null {
       console.error('[SignalR] Connection failed:', err);
     });
 
-    return () => { conn.stop(); };
+    return () => {
+      started.current = false;
+      conn.stop().catch(err => console.error('[SignalR] Stop error:', err));
+    };
   }, []);
 
   return connection;

@@ -19,7 +19,7 @@ export default function BuildDetail() {
       <div className="flex items-center gap-3">
         <h2 className="text-base font-semibold text-text-primary">Build: {build.buildNumber}</h2>
         <span className={`text-xs px-2 py-0.5 rounded font-bold ${healthColor}`}>
-          {build.passRate.toFixed(1)}% — {build.health}
+          {build.passRate.toFixed(1)}% Â· {build.health}
         </span>
         <div className="flex-1" />
         <button
@@ -88,7 +88,7 @@ export default function BuildDetail() {
             {build.allFailedTests.map((t, i) => (
               <div key={i} className="px-3 py-2 border-b border-bdr/30 text-xs">
                 <div className="font-medium text-acc-red">{t.testName}</div>
-                <div className="text-text-muted">{t.useCaseName} — {t.trxFileName}</div>
+                <div className="text-text-muted">{t.useCaseName} Â· {t.trxFileName}</div>
                 {t.errorMessage && (
                   <div className="mt-1 text-text-secondary bg-bg-panel rounded p-1.5 whitespace-pre-wrap break-all max-h-20 overflow-auto">
                     {t.errorMessage}

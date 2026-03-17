@@ -29,7 +29,7 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
     case 'Action': {
       const a = node;
       const label = a.type === 'RunRemoteCommand' && a.agentName
-        ? `Remote on '${a.agentName}' — ${a.command}`
+        ? `Remote on '${a.agentName}' â†’ ${a.command}`
         : a.type === 'SendMail' ? `SendMail ? ${a.to}` : a.command || 'Action';
       return {
         id: nextId(), nodeKind: 'Action', displayText: label,

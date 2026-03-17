@@ -13,9 +13,10 @@ export function useWatchList() {
   }, [setConfig]);
 
   const saveConfig = useCallback(async (config: WatchListConfig) => {
-    const { data } = await axios.put('/api/watchlist', config);
+    const { data } = await axios.put<WatchListConfig>('/api/watchlist', config);
+    setConfig(data);
     return data;
-  }, []);
+  }, [setConfig]);
 
   const refresh = useCallback(async () => {
     const { data } = await axios.post('/api/watchlist/refresh');

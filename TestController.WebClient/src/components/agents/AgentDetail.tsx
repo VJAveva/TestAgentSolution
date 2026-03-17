@@ -54,7 +54,7 @@ function SnapshotCard({ name }: { name: string }) {
             </div>
           ))}
         </div>
-      ) : <p className="text-xs text-text-muted">Loading…</p>}
+      ) : <p className="text-xs text-text-muted">Loadingâ€¦</p>}
     </SectionCard>
   );
 }
@@ -79,7 +79,7 @@ function DiagnoseCard({ name }: { name: string }) {
         className="mb-2 px-2 py-1 rounded text-xs bg-acc-mauve/15 text-acc-mauve hover:bg-acc-mauve/25 disabled:opacity-40"
         onClick={run} disabled={loading}
       >
-        {loading ? 'Running…' : 'Run Diagnostics'}
+        {loading ? 'Runningâ€¦' : 'Run Diagnostics'}
       </button>
       {steps && (
         <div className="space-y-1">
@@ -112,7 +112,7 @@ function HealthCard({ name }: { name: string }) {
             </div>
           ))}
         </div>
-      ) : <p className="text-xs text-text-muted">Loading…</p>}
+      ) : <p className="text-xs text-text-muted">Loadingâ€¦</p>}
     </SectionCard>
   );
 }
@@ -129,11 +129,11 @@ function HistoryCard({ name }: { name: string }) {
           {records.map((r, i) => (
             <div key={i} className="bg-bg-panel rounded p-1.5">
               <div className="font-medium text-text-primary truncate">{String(r.command || '')}</div>
-              <div className="text-text-muted">Exit: {String(r.exitCode ?? '?')} — {String(r.outcome ?? '')}</div>
+              <div className="text-text-muted">Exit: {String(r.exitCode ?? '?')} Â· {String(r.outcome ?? '')}</div>
             </div>
           ))}
         </div>
-      ) : <p className="text-xs text-text-muted">{records === null ? 'Loading…' : 'No history.'}</p>}
+      ) : <p className="text-xs text-text-muted">{records === null ? 'Loadingâ€¦' : 'No history.'}</p>}
     </SectionCard>
   );
 }

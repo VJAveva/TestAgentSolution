@@ -1,0 +1,28 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "npm",
+            "script": "dev",
+            "label": "npm: dev",
+            "detail": "vite",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "vite",
+                "pattern": {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".*vite.*",
+                    "endsPattern": ".*Local:.*http://localhost:3000.*"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}
