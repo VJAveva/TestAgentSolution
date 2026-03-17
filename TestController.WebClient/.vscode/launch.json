@@ -1,6 +1,27 @@
 {
     "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "Dev + Chrome",
+            "configurations": [
+                "Run Vite Dev Server",
+                "Launch Chrome (Vite dev)"
+            ]
+        }
+    ],
     "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run Vite Dev Server",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
         {
             "type": "chrome",
             "request": "launch",

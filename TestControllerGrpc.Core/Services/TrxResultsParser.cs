@@ -13,6 +13,19 @@ public class TrxResultsParser
     private static readonly XNamespace TrxNs =
         "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
 
+    // Cached XName instances to avoid repeated allocations from (TrxNs + string)
+    private static readonly XName CountersName = TrxNs + "Counters";
+    private static readonly XName TimesName = TrxNs + "Times";
+    private static readonly XName UnitTestResultName = TrxNs + "UnitTestResult";
+    private static readonly XName InnerResultsName = TrxNs + "InnerResults";
+    private static readonly XName OutputName = TrxNs + "Output";
+    private static readonly XName StdOutName = TrxNs + "StdOut";
+    private static readonly XName TextMessagesName = TrxNs + "TextMessages";
+    private static readonly XName MessageName = TrxNs + "Message";
+    private static readonly XName StackTraceName = TrxNs + "StackTrace";
+    private static readonly XName ErrorInfoName = TrxNs + "ErrorInfo";
+    private static readonly XName ResultsName = TrxNs + "Results";
+
     /// <summary>
     /// Scans a build folder with structure: [BuildFolder] > [UseCaseFolder] > *.trx
     /// and returns a fully populated <see cref="BuildNode"/>.
@@ -53,6 +66,30 @@ public class TrxResultsParser
             TrackTimeRange(runs, ref earliest, ref latest);
         }
 
+        var totalTests = 0;
+        var passedTests = 0;
+        var failedTests = 0;
+        var timeoutTests = 0;
+        var notExecutedTests = 0;
+        var totalDurationTicks = 0L;
+        List<TestResult>? allFailed = null;
+
+        foreach (var uc in useCases)
+        {
+            totalTests += uc.Total;
+            passedTests += uc.Passed;
+            failedTests += uc.Failed;
+            timeoutTests += uc.Timeout;
+            notExecutedTests += uc.NotExecuted;
+            totalDurationTicks += uc.Duration.Ticks;
+
+            if (uc.FailedTests.Count > 0)
+            {
+                allFailed ??= new List<TestResult>();
+                allFailed.AddRange(uc.FailedTests);
+            }
+        }
+
         return new BuildNode
         {
             BuildNumber = buildNumber,
@@ -60,6 +97,14 @@ public class TrxResultsParser
             EarliestRun = earliest,
             LatestRun = latest,
             UseCases = useCases,
+            TotalDuration = TimeSpan.FromTicks(totalDurationTicks),
+            TotalTests = totalTests,
+            PassedTests = passedTests,
+            FailedTests = failedTests,
+            TimeoutTests = timeoutTests,
+            NotExecutedTests = notExecutedTests,
+            PassRate = totalTests > 0 ? (double)passedTests / totalTests * 100 : 0,
+            AllFailedTests = allFailed ?? [],
         };
     }
 
@@ -72,52 +117,87 @@ public class TrxResultsParser
         var fileName = Path.GetFileNameWithoutExtension(trxFilePath);
         var featureName = ExtractFeatureName(fileName);
 
-        var counters = root.Descendants(TrxNs + "Counters").FirstOrDefault();
+        var counters = root.Descendants(CountersName).FirstOrDefault();
 
-        var times = root.Descendants(TrxNs + "Times").FirstOrDefault();
+        var times = root.Descendants(TimesName).FirstOrDefault();
         var startTime = DateTime.TryParse(times?.Attribute("start")?.Value, out var st) ? st : DateTime.MinValue;
         var endTime = DateTime.TryParse(times?.Attribute("finish")?.Value, out var et) ? et : DateTime.MinValue;
 
-        var testCases = root.Descendants(TrxNs + "UnitTestResult")
-            .Select(r =>
+        // Use targeted navigation: Results > UnitTestResult instead of full Descendants scan
+        var resultsElement = root.Element(ResultsName);
+        var unitTestResults = resultsElement?.Elements(UnitTestResultName);
+
+        var testCases = new List<TrxTestCase>();
+        long totalDurationTicks = 0;
+
+        if (unitTestResults is not null)
+        {
+            foreach (var r in unitTestResults)
             {
-                // Get all inner test results (test steps)
-                var innerResults = r.Elements(TrxNs + "InnerResults")
-                    .Descendants(TrxNs + "UnitTestResult")
-                    .Select(ir => new TestStep
+                // Get all inner test results (test steps) via direct child navigation
+                var innerResultsEl = r.Element(InnerResultsName);
+                List<TestStep> innerResults;
+                if (innerResultsEl is not null)
+                {
+                    innerResults = new List<TestStep>();
+                    foreach (var ir in innerResultsEl.Elements(UnitTestResultName))
                     {
-                        StepName = ir.Attribute("testName")?.Value ?? "",
-                        Outcome = ir.Attribute("outcome")?.Value ?? "",
-                        Duration = TimeSpan.TryParse(ir.Attribute("duration")?.Value, out var sd) ? sd : TimeSpan.Zero,
-                        StdOut = ir.Descendants(TrxNs + "StdOut").FirstOrDefault()?.Value ?? "",
-                        ErrorMessage = ir.Descendants(TrxNs + "Message").FirstOrDefault()?.Value,
-                    })
-                    .ToList();
+                        // Navigate Output > StdOut and Output > ErrorInfo > Message for inner results
+                        var irOutput = ir.Element(OutputName);
+                        var irStdOut = irOutput?.Element(StdOutName)?.Value ?? "";
+                        var irErrorInfo = irOutput?.Element(ErrorInfoName);
+                        var irMessage = irErrorInfo?.Element(MessageName)?.Value;
 
-                // Main Output > StdOut
-                var mainStdOut = r.Element(TrxNs + "Output")
-                    ?.Element(TrxNs + "StdOut")?.Value ?? "";
+                        innerResults.Add(new TestStep
+                        {
+                            StepName = ir.Attribute("testName")?.Value ?? "",
+                            Outcome = ir.Attribute("outcome")?.Value ?? "",
+                            Duration = TimeSpan.TryParse(ir.Attribute("duration")?.Value, out var sd) ? sd : TimeSpan.Zero,
+                            StdOut = irStdOut,
+                            ErrorMessage = irMessage,
+                        });
+                    }
+                }
+                else
+                {
+                    innerResults = [];
+                }
 
-                // TextMessages (MSTest debug trace)
-                var textMessages = r.Descendants(TrxNs + "TextMessages")
-                    ?.Descendants(TrxNs + "Message")
-                    .Select(m => m.Value)
-                    .ToList() ?? new();
+                // Main Output > StdOut via direct child navigation
+                var outputEl = r.Element(OutputName);
+                var mainStdOut = outputEl?.Element(StdOutName)?.Value ?? "";
 
-                return new TrxTestCase
+                // Output > ErrorInfo > Message and StackTrace via targeted navigation
+                var errorInfoEl = outputEl?.Element(ErrorInfoName);
+                var errorMessage = errorInfoEl?.Element(MessageName)?.Value;
+                var stackTrace = errorInfoEl?.Element(StackTraceName)?.Value;
+
+                // TextMessages > Message (MSTest debug trace)
+                var textMessagesEl = outputEl?.Element(TextMessagesName);
+                var debugTrace = "";
+                if (textMessagesEl is not null)
+                {
+                    var messages = textMessagesEl.Elements(MessageName);
+                    debugTrace = string.Join("\n", messages.Select(m => m.Value));
+                }
+
+                var duration = TimeSpan.TryParse(r.Attribute("duration")?.Value, out var d) ? d : TimeSpan.Zero;
+                totalDurationTicks += duration.Ticks;
+
+                testCases.Add(new TrxTestCase
                 {
                     TestName = r.Attribute("testName")?.Value ?? "",
                     Outcome = r.Attribute("outcome")?.Value ?? "NotExecuted",
-                    Duration = TimeSpan.TryParse(r.Attribute("duration")?.Value, out var d) ? d : TimeSpan.Zero,
-                    ErrorMessage = r.Descendants(TrxNs + "Message").FirstOrDefault()?.Value,
-                    StackTrace = r.Descendants(TrxNs + "StackTrace").FirstOrDefault()?.Value,
+                    Duration = duration,
+                    ErrorMessage = errorMessage,
+                    StackTrace = stackTrace,
                     StdOut = mainStdOut,
                     TrxFileName = fileName,
                     ExecutionSteps = innerResults,
-                    DebugTrace = string.Join("\n", textMessages),
-                };
-            })
-            .ToList();
+                    DebugTrace = debugTrace,
+                });
+            }
+        }
 
         return new TrxTestRun
         {
@@ -130,7 +210,7 @@ public class TrxResultsParser
             Failed = int.TryParse(counters?.Attribute("failed")?.Value, out var f) ? f : testCases.Count(c => c.Outcome == "Failed"),
             Timeout = int.TryParse(counters?.Attribute("timeout")?.Value, out var to) ? to : testCases.Count(c => c.Outcome == "Timeout"),
             NotExecuted = int.TryParse(counters?.Attribute("notExecuted")?.Value, out var ne) ? ne : testCases.Count(c => c.Outcome == "NotExecuted"),
-            Duration = testCases.Aggregate(TimeSpan.Zero, (sum, tc) => sum + tc.Duration),
+            Duration = TimeSpan.FromTicks(totalDurationTicks),
             TestCases = testCases,
         };
     }
@@ -190,32 +270,39 @@ public class TrxResultsParser
             })
             .ToList();
 
+        var failedTests = testResults.Where(t => t.Outcome == "Failed").ToList();
+        var total = runs.Sum(r => r.Total);
+        var passed = runs.Sum(r => r.Passed);
+
         return new UseCaseNode
         {
             UseCaseName = useCaseName,
             Duration = TimeSpan.FromTicks(runs.Sum(r => r.Duration.Ticks)),
-            Total = runs.Sum(r => r.Total),
-            Passed = runs.Sum(r => r.Passed),
+            Total = total,
+            Passed = passed,
             Failed = runs.Sum(r => r.Failed),
             Timeout = runs.Sum(r => r.Timeout),
             NotExecuted = runs.Sum(r => r.NotExecuted),
+            PassRate = total > 0 ? (double)passed / total * 100 : 0,
             TestResults = testResults,
+            FailedTests = failedTests,
         };
     }
 
     private static void TrackTimeRange(List<TrxTestRun> runs, ref DateTime? earliest, ref DateTime? latest)
     {
-        var starts = runs.Where(r => r.StartTime > DateTime.MinValue).Select(r => r.StartTime).ToList();
-        var ends = runs.Where(r => r.EndTime > DateTime.MinValue).Select(r => r.EndTime).ToList();
-        if (starts.Count > 0)
+        foreach (var r in runs)
         {
-            var min = starts.Min();
-            if (earliest is null || min < earliest) earliest = min;
-        }
-        if (ends.Count > 0)
-        {
-            var max = ends.Max();
-            if (latest is null || max > latest) latest = max;
+            if (r.StartTime > DateTime.MinValue)
+            {
+                if (earliest is null || r.StartTime < earliest)
+                    earliest = r.StartTime;
+            }
+            if (r.EndTime > DateTime.MinValue)
+            {
+                if (latest is null || r.EndTime > latest)
+                    latest = r.EndTime;
+            }
         }
     }
 }

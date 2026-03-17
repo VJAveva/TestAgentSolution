@@ -11,10 +11,12 @@ public sealed class WatchListFileService
 {
     private readonly string _filePath;
     private readonly object _lock = new();
+    private readonly IAppLogger _logger;
 
-    public WatchListFileService(IConfiguration config)
+    public WatchListFileService(IConfiguration config, IAppLogger logger)
     {
         _filePath = config["VocabularyFile"] ?? @"C:\TestControllerService\WatchList.xml";
+        _logger = logger;
     }
 
     public string FilePath => _filePath;
@@ -23,22 +25,50 @@ public sealed class WatchListFileService
     {
         lock (_lock)
         {
-            var config = WatchListXmlParser.Load(_filePath);
-            config.FilePath = _filePath;
-            return config;
+            try
+            {
+                var config = WatchListXmlParser.Load(_filePath);
+                config.FilePath = _filePath;
+                return config;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("WatchListFile", $"Failed to load WatchList from '{_filePath}'", ex);
+                throw;
+            }
         }
     }
 
     public void Save(WatchListConfig config)
     {
         lock (_lock)
-            WatchListXmlParser.Save(config, _filePath);
+        {
+            try
+            {
+                WatchListXmlParser.Save(config, _filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("WatchListFile", $"Failed to save WatchList to '{_filePath}'", ex);
+                throw;
+            }
+        }
     }
 
     public string GetXml()
     {
         lock (_lock)
-            return File.ReadAllText(_filePath);
+        {
+            try
+            {
+                return File.ReadAllText(_filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("WatchListFile", $"Failed to read XML from '{_filePath}'", ex);
+                throw;
+            }
+        }
     }
 
     public bool Exists() => File.Exists(_filePath);

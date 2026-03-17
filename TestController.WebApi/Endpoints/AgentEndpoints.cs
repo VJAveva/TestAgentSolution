@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using TestAgentGrpc;
 using TestController.WebApi.Hubs;
 using TestController.WebApi.Services;
+using TestControllerGrpc.Services;
 
 namespace TestController.WebApi.Endpoints;
 
@@ -63,7 +64,8 @@ public static class AgentEndpoints
         string name,
         AgentRegistry registry,
         AgentGrpcClientManager grpcManager,
-        IHubContext<LiveHub> hub)
+        IHubContext<LiveHub> hub,
+        IAppLogger logger)
     {
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
@@ -83,7 +85,14 @@ public static class AgentEndpoints
         {
             registry.UpdateStatus(name, "Unreachable", ex.Status.Detail);
             await hub.Clients.All.SendAsync("AgentStatus", name, "Unreachable");
+            logger.Warn("Agent", $"Agent '{name}' unreachable: {ex.Status.Detail}");
             return Results.Ok(new { name, status = "Unreachable", message = ex.Status.Detail });
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Agent", $"Unexpected error testing agent '{name}'", ex);
+            registry.UpdateStatus(name, "Error", ex.Message);
+            return Results.Problem($"Failed to test agent '{name}': {ex.Message}", statusCode: 502);
         }
     }
 
@@ -91,7 +100,8 @@ public static class AgentEndpoints
     private static async Task<IResult> DiagnoseAgent(
         string name,
         AgentRegistry registry,
-        AgentGrpcClientManager grpcManager)
+        AgentGrpcClientManager grpcManager,
+        IAppLogger logger)
     {
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
@@ -108,6 +118,7 @@ public static class AgentEndpoints
         catch (Exception ex)
         {
             steps.Add(new("DNS Resolution", false, ex.Message));
+            logger.Warn("Agent", $"DNS resolution failed for '{name}': {ex.Message}");
             return Results.Ok(new { name, steps });
         }
 

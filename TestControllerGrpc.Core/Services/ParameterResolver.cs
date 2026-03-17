@@ -47,7 +47,10 @@ public static partial class ParameterResolver
                     ctx.Parameters[key[1..]] = value;
             }
         }
-        catch { }
+        catch (IOException)
+        {
+            // File may be locked by another process — acceptable to skip silently
+        }
     }
 
     /// <summary>
@@ -167,6 +170,9 @@ public static partial class ParameterResolver
                     ctx.Parameters[key[1..]] = value;
             }
         }
-        catch { /* trigger file may still be locked by writer */ }
+        catch (IOException)
+        {
+            // Trigger file may still be locked by writer — acceptable to skip silently
+        }
     }
 }

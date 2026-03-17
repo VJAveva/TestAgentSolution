@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using TestController.WebApi.Endpoints;
 using TestController.WebApi.Hubs;
 using TestController.WebApi.Services;
@@ -5,6 +7,14 @@ using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ?? JSON serializer: camelCase + string enums for React client ??????
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+});
 
 // Shared services from Core
 builder.Services.AddSingleton<TrxResultsParser>();
@@ -62,3 +72,6 @@ app.MapHub<LiveHub>("/hub/live");
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+// Expose for WebApplicationFactory<Program> in integration tests
+public partial class Program { }

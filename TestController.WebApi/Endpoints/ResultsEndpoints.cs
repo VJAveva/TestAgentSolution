@@ -93,20 +93,38 @@ public static class ResultsEndpoints
     private static IResult GetTrends(
         TrxResultsParser parser,
         BuildTrendAnalyzer trendAnalyzer,
-        BuildResultsConfig config)
+        BuildResultsConfig config,
+        IAppLogger logger)
     {
-        var report = trendAnalyzer.AnalyzeTrends(config.ResultsRootPath, parser);
-        return Results.Ok(report);
+        try
+        {
+            var report = trendAnalyzer.AnalyzeTrends(config.ResultsRootPath, parser);
+            return Results.Ok(report);
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Results", "Failed to analyze trends", ex);
+            return Results.Problem($"Failed to analyze trends: {ex.Message}", statusCode: 500);
+        }
     }
 
     /// <summary>GET /api/results/alerts — consecutive failure alerts.</summary>
     private static IResult GetAlerts(
         TrxResultsParser parser,
         ConsecutiveFailureDetector detector,
-        BuildResultsConfig config)
+        BuildResultsConfig config,
+        IAppLogger logger)
     {
-        var alerts = detector.Detect(config.ResultsRootPath, parser, config.ConsecutiveFailThreshold);
-        return Results.Ok(alerts);
+        try
+        {
+            var alerts = detector.Detect(config.ResultsRootPath, parser, config.ConsecutiveFailThreshold);
+            return Results.Ok(alerts);
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Results", "Failed to detect consecutive failures", ex);
+            return Results.Problem($"Failed to detect alerts: {ex.Message}", statusCode: 500);
+        }
     }
 
     /// <summary>GET /api/results/export/{buildNumber}?format=html|csv — download report.</summary>

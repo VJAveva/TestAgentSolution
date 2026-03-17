@@ -169,6 +169,12 @@ public class WatchListConfigModelTests
     {
         var node = new BuildNode
         {
+            TotalTests = 80,
+            PassedTests = 73,
+            FailedTests = 4,
+            TimeoutTests = 2,
+            NotExecutedTests = 1,
+            PassRate = 73.0 / 80.0 * 100,
             UseCases =
             [
                 new UseCaseNode { Total = 50, Passed = 45, Failed = 3, Timeout = 2, NotExecuted = 0, TestResults = [] },
@@ -187,22 +193,26 @@ public class WatchListConfigModelTests
     [Fact]
     public void BuildNode_Should_ReturnZeroPassRate_When_NoTests()
     {
-        var node = new BuildNode { UseCases = [] };
+        var node = new BuildNode { UseCases = [], PassRate = 0 };
         Assert.Equal(0, node.PassRate);
     }
 
     [Fact]
     public void UseCaseNode_Should_FilterFailedTests_When_FailedTestsAccessed()
     {
+        var fail1 = new TestResult { TestName = "Fail1", Outcome = "Failed" };
+        var fail2 = new TestResult { TestName = "Fail2", Outcome = "Failed" };
+
         var uc = new UseCaseNode
         {
             Total = 3, Passed = 1, Failed = 2,
             TestResults =
             [
                 new TestResult { TestName = "Pass1", Outcome = "Passed" },
-                new TestResult { TestName = "Fail1", Outcome = "Failed" },
-                new TestResult { TestName = "Fail2", Outcome = "Failed" },
-            ]
+                fail1,
+                fail2,
+            ],
+            FailedTests = [fail1, fail2],
         };
 
         Assert.Equal(2, uc.FailedTests.Count);

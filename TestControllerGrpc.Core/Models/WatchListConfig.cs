@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TestControllerGrpc.Models;
 
 // =============================================================================
@@ -49,8 +51,14 @@ public sealed class EventConfig
 // =============================================================================
 // Polymorphic children: ActionGroup | Action | Initialize | Ref
 // =============================================================================
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "nodeType")]
+[JsonDerivedType(typeof(ActionGroupConfig), "ActionGroup")]
+[JsonDerivedType(typeof(ActionConfig), "Action")]
+[JsonDerivedType(typeof(InitializeConfig), "Initialize")]
+[JsonDerivedType(typeof(RefConfig), "Ref")]
 public interface IActionNode
 {
+    [JsonIgnore]
     string NodeType { get; }
 }
 
@@ -59,6 +67,7 @@ public interface IActionNode
 // =============================================================================
 public sealed class ActionGroupConfig : IActionNode
 {
+    [JsonIgnore]
     public string NodeType => "ActionGroup";
     public string Tag { get; set; } = "";
     public ExecutionMode ExecutionType { get; set; } = ExecutionMode.Sequential;
@@ -71,6 +80,7 @@ public sealed class ActionGroupConfig : IActionNode
 // =============================================================================
 public sealed class ActionConfig : IActionNode
 {
+    [JsonIgnore]
     public string NodeType => "Action";
     public ActionType Type { get; set; } = ActionType.RunCommand;
     public string AgentName { get; set; } = "";
@@ -102,6 +112,7 @@ public sealed class ActionConfig : IActionNode
 // =============================================================================
 public sealed class InitializeConfig : IActionNode
 {
+    [JsonIgnore]
     public string NodeType => "Initialize";
     public string Tag { get; set; } = "";
     public string ParameterFile { get; set; } = "";
@@ -112,6 +123,7 @@ public sealed class InitializeConfig : IActionNode
 // =============================================================================
 public sealed class RefConfig : IActionNode
 {
+    [JsonIgnore]
     public string NodeType => "Ref";
     public string TemplateID { get; set; } = "";
 }

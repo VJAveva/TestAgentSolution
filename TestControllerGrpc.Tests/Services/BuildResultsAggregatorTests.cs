@@ -53,6 +53,9 @@ public class BuildResultsAggregatorTests
         var node = new BuildNode
         {
             BuildNumber = "1.0",
+            TotalTests = 100,
+            PassedTests = 100,
+            PassRate = 100.0,
             UseCases =
             [
                 new UseCaseNode
@@ -60,6 +63,7 @@ public class BuildResultsAggregatorTests
                     UseCaseName = "UC1",
                     Total = 100,
                     Passed = 100,
+                    PassRate = 100.0,
                     TestResults = Enumerable.Range(0, 100)
                         .Select(i => new TestResult { TestName = $"Test{i}", Outcome = "Passed" })
                         .ToList()
@@ -83,11 +87,16 @@ public class BuildResultsAggregatorTests
 
         var node = new BuildNode
         {
+            TotalTests = 100,
+            PassedTests = 50,
+            FailedTests = 50,
+            PassRate = 50.0,
             UseCases =
             [
                 new UseCaseNode
                 {
                     Total = 100, Passed = 50, Failed = 50,
+                    PassRate = 50.0,
                     TestResults = []
                 }
             ]
@@ -104,7 +113,7 @@ public class BuildResultsAggregatorTests
         var config = new BuildResultsConfig();
         var aggregator = new BuildResultsAggregator(config);
 
-        var node = new BuildNode { UseCases = [] };
+        var node = new BuildNode { UseCases = [], TotalTests = 0, PassRate = 0.0 };
         var result = aggregator.EvaluateBuildHealth(node);
 
         Assert.Equal(0, result.TotalTests);
@@ -122,7 +131,10 @@ public class BuildResultsAggregatorTests
         {
             BuildNumber = "orig",
             Health = HealthStatus.Unknown,
-            UseCases = [new UseCaseNode { Total = 10, Passed = 10, TestResults = [] }]
+            TotalTests = 10,
+            PassedTests = 10,
+            PassRate = 100.0,
+            UseCases = [new UseCaseNode { Total = 10, Passed = 10, PassRate = 100.0, TestResults = [] }]
         };
 
         var result = aggregator.EvaluateBuildHealth(original);

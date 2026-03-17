@@ -15,6 +15,20 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestControllerGrpc.Core", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestController.WebApi", "TestController.WebApi\TestController.WebApi.csproj", "{B5C11169-D14C-4AD4-849C-B6DFC1791A2D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestController.WebClient", "TestController.WebClient", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		TestController.WebClient\index.html = TestController.WebClient\index.html
+		TestController.WebClient\package-lock.json = TestController.WebClient\package-lock.json
+		TestController.WebClient\package.json = TestController.WebClient\package.json
+		TestController.WebClient\postcss.config.js = TestController.WebClient\postcss.config.js
+		TestController.WebClient\tailwind.config.js = TestController.WebClient\tailwind.config.js
+		TestController.WebClient\tsconfig.json = TestController.WebClient\tsconfig.json
+		TestController.WebClient\tsconfig.tsbuildinfo = TestController.WebClient\tsconfig.tsbuildinfo
+		TestController.WebClient\vite.config.ts = TestController.WebClient\vite.config.ts
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestController.WebApi.Tests", "TestController.WebApi.Tests\TestController.WebApi.Tests.csproj", "{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,8 +111,23 @@ Global
 		{B5C11169-D14C-4AD4-849C-B6DFC1791A2D}.Release|x64.Build.0 = Release|Any CPU
 		{B5C11169-D14C-4AD4-849C-B6DFC1791A2D}.Release|x86.ActiveCfg = Release|Any CPU
 		{B5C11169-D14C-4AD4-849C-B6DFC1791A2D}.Release|x86.Build.0 = Release|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Debug|x64.Build.0 = Debug|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Debug|x86.Build.0 = Debug|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Release|x64.ActiveCfg = Release|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Release|x64.Build.0 = Release|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Release|x86.ActiveCfg = Release|Any CPU
+		{CD8C8BCD-E5AF-BD6C-BDAA-D490C880F539}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1FB0780D-7A1F-4876-A1E6-429C5A237AB3}
 	EndGlobalSection
 EndGlobal

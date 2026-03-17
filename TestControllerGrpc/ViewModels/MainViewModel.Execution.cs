@@ -16,7 +16,7 @@ public sealed partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanTriggerEvent))]
     private async Task TriggerEvent()
     {
-        if (SelectedNode.ModelObject is not EventConfig ev) return;
+        if (SelectedNode?.ModelObject is not EventConfig ev) return;
         if (IsExecuting) { AddLog("Execution already in progress"); return; }
 
         WriteBackAll();
@@ -74,7 +74,7 @@ public sealed partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanTriggerWatchItem))]
     private async Task TriggerWatchItem()
     {
-        if (SelectedNode.ModelObject is not WatchItemConfig wi) return;
+        if (SelectedNode?.ModelObject is not WatchItemConfig wi) return;
         if (IsExecuting) { AddLog("Execution already in progress"); return; }
 
         WriteBackAll();
@@ -239,7 +239,7 @@ public sealed partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanExecuteGroup))]
     private async Task ExecuteGroup()
     {
-        if (SelectedNode.ModelObject is not ActionGroupConfig ag) return;
+        if (SelectedNode?.ModelObject is not ActionGroupConfig ag) return;
         if (IsExecuting) { AddLog("Execution already in progress"); return; }
 
         WriteBackAll();
@@ -294,7 +294,7 @@ public sealed partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanExecuteSingleAction))]
     private async Task ExecuteSingleAction()
     {
-        if (SelectedNode.ModelObject is not ActionConfig action) return;
+        if (SelectedNode?.ModelObject is not ActionConfig action) return;
         if (IsExecuting) { AddLog("Execution already in progress"); return; }
 
         WriteBackAll();
@@ -429,4 +429,3 @@ public sealed partial class MainViewModel
         AddLog($"Changed ExecutionType of '{node.DisplayText}' to {newMode}");
     }
 }
-

@@ -24,9 +24,20 @@ public static class ExecutionEndpoints
     private static IResult TriggerAll(
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub)
+        IHubContext<LiveHub> hub,
+        IAppLogger logger)
     {
-        var config = fileService.Load();
+        WatchListConfig config;
+        try
+        {
+            config = fileService.Load();
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Execution", "Failed to load WatchList for trigger-all", ex);
+            return Results.Problem($"Failed to load WatchList: {ex.Message}", statusCode: 500);
+        }
+
         var triggered = new List<string>();
 
         foreach (var wi in config.WatchItems.Where(w => w.IsEnabled))
@@ -52,6 +63,7 @@ public static class ExecutionEndpoints
             });
         }
 
+        logger.Info("Execution", $"Trigger-all: triggered {triggered.Count} WatchItem(s)");
         return Results.Ok(new
         {
             message = $"Triggered {triggered.Count} WatchItem(s).",
@@ -65,9 +77,20 @@ public static class ExecutionEndpoints
         string tag,
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub)
+        IHubContext<LiveHub> hub,
+        IAppLogger logger)
     {
-        var config = fileService.Load();
+        WatchListConfig config;
+        try
+        {
+            config = fileService.Load();
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Execution", $"Failed to load WatchList for trigger '{tag}'", ex);
+            return Results.Problem($"Failed to load WatchList: {ex.Message}", statusCode: 500);
+        }
+
         var wi = config.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, tag, StringComparison.OrdinalIgnoreCase));
 
@@ -91,6 +114,7 @@ public static class ExecutionEndpoints
             Timestamp = DateTime.UtcNow
         });
 
+        logger.Info("Execution", $"Triggered WatchItem '{wi.Tag}' (session {session.SessionId})");
         return Results.Ok(new
         {
             message = $"Triggered '{wi.Tag}'.",
@@ -104,9 +128,20 @@ public static class ExecutionEndpoints
         int eventIndex,
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub)
+        IHubContext<LiveHub> hub,
+        IAppLogger logger)
     {
-        var config = fileService.Load();
+        WatchListConfig config;
+        try
+        {
+            config = fileService.Load();
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Execution", $"Failed to load WatchList for trigger-event '{tag}'", ex);
+            return Results.Problem($"Failed to load WatchList: {ex.Message}", statusCode: 500);
+        }
+
         var wi = config.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, tag, StringComparison.OrdinalIgnoreCase));
 
@@ -131,6 +166,7 @@ public static class ExecutionEndpoints
             Timestamp = DateTime.UtcNow
         });
 
+        logger.Info("Execution", $"Triggered '{wi.Tag}' event [{eventIndex}] ({ev.Type})");
         return Results.Ok(new
         {
             message = $"Triggered '{wi.Tag}' event [{eventIndex}] ({ev.Type}).",

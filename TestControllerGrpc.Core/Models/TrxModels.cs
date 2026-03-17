@@ -9,16 +9,16 @@ public record BuildNode
     public string RootPath { get; init; } = "";
     public DateTime? EarliestRun { get; init; }
     public DateTime? LatestRun { get; init; }
-    public TimeSpan TotalDuration => TimeSpan.FromTicks(UseCases.Sum(u => u.Duration.Ticks));
-    public int TotalTests => UseCases.Sum(u => u.Total);
-    public int PassedTests => UseCases.Sum(u => u.Passed);
-    public int FailedTests => UseCases.Sum(u => u.Failed);
-    public int TimeoutTests => UseCases.Sum(u => u.Timeout);
-    public int NotExecutedTests => UseCases.Sum(u => u.NotExecuted);
-    public double PassRate => TotalTests > 0 ? (double)PassedTests / TotalTests * 100 : 0;
+    public TimeSpan TotalDuration { get; init; }
+    public int TotalTests { get; init; }
+    public int PassedTests { get; init; }
+    public int FailedTests { get; init; }
+    public int TimeoutTests { get; init; }
+    public int NotExecutedTests { get; init; }
+    public double PassRate { get; init; }
     public HealthStatus Health { get; init; } = HealthStatus.Unknown;
     public List<UseCaseNode> UseCases { get; init; } = new();
-    public List<TestResult> AllFailedTests => UseCases.SelectMany(u => u.TestResults.Where(t => t.Outcome == "Failed")).ToList();
+    public List<TestResult> AllFailedTests { get; init; } = new();
 }
 
 /// <summary>A use-case (feature) aggregating one or more .trx file results.</summary>
@@ -31,9 +31,9 @@ public record UseCaseNode
     public int Failed { get; init; }
     public int Timeout { get; init; }
     public int NotExecuted { get; init; }
-    public double PassRate => Total > 0 ? (double)Passed / Total * 100 : 0;
+    public double PassRate { get; init; }
     public List<TestResult> TestResults { get; init; } = new();
-    public List<TestResult> FailedTests => TestResults.Where(t => t.Outcome == "Failed").ToList();
+    public List<TestResult> FailedTests { get; init; } = new();
 }
 
 /// <summary>Individual test result from a .trx file.</summary>

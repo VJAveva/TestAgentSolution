@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TestController.WebApi</RootNamespace>
+    <SpaRoot>..\TestController.WebClient\</SpaRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,5 +16,30 @@
     <PackageReference Include="Grpc.Net.Client" Version="2.62.0" />
     <PackageReference Include="Google.Protobuf" Version="3.26.1" />
   </ItemGroup>
+  
+   <!-- Auto-build React on publish -->
+  <Target Name="BuildReactApp" BeforeTargets="Build" Condition="!Exists('wwwroot\index.html')">
+    <Message Importance="high" Text="Building React app from $(SpaRoot)..." />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+    <ItemGroup>
+      <ReactBuildFiles Include="$(SpaRoot)dist\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ReactBuildFiles)" 
+          DestinationFolder="wwwroot\%(RecursiveDir)" />
+  </Target>
+
+  <!-- Always rebuild React on publish -->
+  <Target Name="PublishReactApp" AfterTargets="ComputeFilesToPublish">
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+    <ItemGroup>
+      <ReactPublishFiles Include="$(SpaRoot)dist\**\*" />
+      <ResolvedFileToPublish Include="@(ReactPublishFiles)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>
