@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TestControllerGrpc\TestControllerGrpc.csproj" />
+    <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
     <ProjectReference Include="..\TestAgentGrpc\TestAgentGrpc.csproj">
       <Aliases>AgentAlias</Aliases>
     </ProjectReference>

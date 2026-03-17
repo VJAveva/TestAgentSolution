@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background: #1E1E2E;
+  color: #CDD6F4;
+}
+
+/* Custom scrollbar (Catppuccin dark) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #181825; }
+::-webkit-scrollbar-thumb { background: #45475A; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #585B70; }
