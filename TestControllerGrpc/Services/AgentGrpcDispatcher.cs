@@ -7,6 +7,10 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.CircuitBreaker;
+using Polly.Retry;
+using Polly.Timeout;
 using TestAgentGrpc;
 using TestControllerGrpc.Models;
 
@@ -17,10 +21,30 @@ namespace TestControllerGrpc.Services;
 /// Maintains a pool of channels keyed by agent name → address.
 /// Supports command execution with timeout, polling, and reboot handling.
 /// </summary>
-public sealed class AgentGrpcDispatcher : IDisposable
+public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 {
     private readonly ILogger<AgentGrpcDispatcher> _logger;
     private readonly ConcurrentDictionary<string, AgentEndpoint> _agents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly ResiliencePipeline _resilience = new ResiliencePipelineBuilder()
+        .AddRetry(new RetryStrategyOptions
+        {
+            MaxRetryAttempts = 2,
+            Delay = TimeSpan.FromSeconds(1),
+            BackoffType = DelayBackoffType.Exponential,
+            ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
+                ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
+        })
+        .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(30),
+            MinimumThroughput = 3,
+            BreakDuration = TimeSpan.FromSeconds(15),
+        })
+        .AddTimeout(TimeSpan.FromMinutes(60))
+        .Build();
 
     /// <summary>Raised when execution output arrives.</summary>
     public event Action<string, string, string>? OutputReceived;  // agentName, line, kind
@@ -42,6 +66,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
         if (_agents.TryRemove(agentName, out var old))
             old.Dispose();
         _agents[agentName] = new AgentEndpoint(agentName, grpcAddress);
+        _healthStates[agentName] = new AgentHealthState { AgentName = agentName };
         _logger.LogInformation("Registered agent {Name} → {Address}", agentName, grpcAddress);
     }
 
@@ -50,6 +75,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
     /// </summary>
     public bool UnregisterAgent(string agentName)
     {
+        _healthStates.TryRemove(agentName, out _);
         if (_agents.TryRemove(agentName, out var ep))
         {
             ep.Dispose();
@@ -243,8 +269,6 @@ public sealed class AgentGrpcDispatcher : IDisposable
         return steps;
     }
 
-    public sealed record DiagnosticStep(string Name, bool Passed, string Detail, bool IsFatal = true);
-
     /// <summary>
     /// Quick ping — just checks if GetState responds within 3 seconds.
     /// </summary>
@@ -260,7 +284,7 @@ public sealed class AgentGrpcDispatcher : IDisposable
             await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);
             return true;
         }
-        catch { return false; }
+        catch (Exception ex) { _logger.LogDebug(ex, "Ping failed for {Agent}", agentName); return false; }
     }
 
     /// <summary>Gets the address of a registered agent.</summary>
@@ -290,94 +314,113 @@ public sealed class AgentGrpcDispatcher : IDisposable
 
         try
         {
-            var client = endpoint.GetClient();
-
-            // Timeout is in SECONDS in the WatchList XML. 0 = no limit.
-            CancellationTokenSource? timeoutCts = resolved.Timeout > 0
-                ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
-                : null;
-            using var _timeoutCtsDisposable = timeoutCts;
-            using var linked = timeoutCts is not null
-                ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
-                : CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-            // Send timeout to agent so it can enforce server-side (already in seconds)
-            var timeoutSeconds = resolved.Timeout;
-
-            using var call = client.RunCommandStreamed(new RunCommandRequest
+            return await _resilience.ExecuteAsync(async resilienceCt =>
             {
-                Command = resolved.Command,
-                Arguments = resolved.Parameters,
-                IsReboot = resolved.IsReboot,
-                UserName = resolved.UserName ?? "",
-                Password = resolved.Password ?? "",
-                TimeoutSeconds = timeoutSeconds,
-            }, cancellationToken: linked.Token);
+                var client = endpoint.GetClient();
 
-            int exitCode = 0;
-            string errorMessage = "";
-            var startTimestamp = Stopwatch.GetTimestamp();
-            var lastProgressLog = startTimestamp;
-            var progressInterval = TimeSpan.FromMinutes(5);
+                // Timeout is in SECONDS in the WatchList XML. 0 = no limit.
+                CancellationTokenSource? timeoutCts = resolved.Timeout > 0
+                    ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
+                    : null;
+                using var _timeoutCtsDisposable = timeoutCts;
+                using var linked = timeoutCts is not null
+                    ? CancellationTokenSource.CreateLinkedTokenSource(resilienceCt, timeoutCts.Token)
+                    : CancellationTokenSource.CreateLinkedTokenSource(resilienceCt);
 
-            await foreach (var evt in call.ResponseStream.ReadAllAsync(linked.Token))
-            {
-                switch (evt.EventType)
+                // Send timeout to agent so it can enforce server-side (already in seconds)
+                var timeoutSeconds = resolved.Timeout;
+
+                using var call = client.RunCommandStreamed(new RunCommandRequest
                 {
-                    case ExecutionEventType.EventStdoutLine:
-                        OutputReceived?.Invoke(agentName, evt.OutputLine, "stdout");
-                        break;
-                    case ExecutionEventType.EventStderrLine:
-                        OutputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
-                        break;
-                    case ExecutionEventType.EventProgress:
-                        OutputReceived?.Invoke(agentName,
-                            $"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}", "info");
-                        break;
-                    case ExecutionEventType.EventCompleted:
-                        exitCode = evt.ExitCode;
-                        break;
-                    case ExecutionEventType.EventFailed:
-                        errorMessage = evt.ErrorMessage;
-                        exitCode = -1;
-                        break;
+                    Command = resolved.Command,
+                    Arguments = resolved.Parameters,
+                    IsReboot = resolved.IsReboot,
+                    UserName = resolved.UserName ?? "",
+                    Password = resolved.Password ?? "",
+                    TimeoutSeconds = timeoutSeconds,
+                }, cancellationToken: linked.Token);
+
+                int exitCode = 0;
+                string errorMessage = "";
+                var startTimestamp = Stopwatch.GetTimestamp();
+                var lastProgressLog = startTimestamp;
+                var progressInterval = TimeSpan.FromMinutes(5);
+
+                await foreach (var evt in call.ResponseStream.ReadAllAsync(linked.Token))
+                {
+                    switch (evt.EventType)
+                    {
+                        case ExecutionEventType.EventStdoutLine:
+                            OutputReceived?.Invoke(agentName, evt.OutputLine, "stdout");
+                            break;
+                        case ExecutionEventType.EventStderrLine:
+                            OutputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
+                            break;
+                        case ExecutionEventType.EventProgress:
+                            OutputReceived?.Invoke(agentName,
+                                $"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}", "info");
+                            break;
+                        case ExecutionEventType.EventCompleted:
+                            exitCode = evt.ExitCode;
+                            break;
+                        case ExecutionEventType.EventFailed:
+                            errorMessage = evt.ErrorMessage;
+                            exitCode = -1;
+                            break;
+                    }
+
+                    // Periodic progress logging for long-running actions
+                    var now = Stopwatch.GetTimestamp();
+                    if (Stopwatch.GetElapsedTime(lastProgressLog, now) >= progressInterval)
+                    {
+                        var elapsed = Stopwatch.GetElapsedTime(startTimestamp, now);
+                        _logger.LogInformation(
+                            "Long-running action on {Agent}: {Command} running for {Elapsed}",
+                            agentName, resolved.Command, elapsed.ToString(@"hh\:mm\:ss"));
+                        StatusChanged?.Invoke(agentName,
+                            $"Running: {resolved.Command} ({elapsed:hh\\:mm\\:ss})");
+                        lastProgressLog = now;
+                    }
                 }
 
-                // Periodic progress logging for long-running actions
-                var now = Stopwatch.GetTimestamp();
-                if (Stopwatch.GetElapsedTime(lastProgressLog, now) >= progressInterval)
+                // Reboot handling: wait for agent to come back
+                if (resolved.IsReboot)
                 {
-                    var elapsed = Stopwatch.GetElapsedTime(startTimestamp, now);
-                    _logger.LogInformation(
-                        "Long-running action on {Agent}: {Command} running for {Elapsed}",
-                        agentName, resolved.Command, elapsed.ToString(@"hh\:mm\:ss"));
-                    StatusChanged?.Invoke(agentName,
-                        $"Running: {resolved.Command} ({elapsed:hh\\:mm\\:ss})");
-                    lastProgressLog = now;
+                    StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
+                    await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), resilienceCt);
                 }
-            }
 
-            // Reboot handling: wait for agent to come back
-            if (resolved.IsReboot)
-            {
-                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
-                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
-            }
+                var success = exitCode == 0 && string.IsNullOrEmpty(errorMessage);
+                StatusChanged?.Invoke(agentName, success ? "Ready" : $"Failed (exit {exitCode})");
 
-            var success = exitCode == 0 && string.IsNullOrEmpty(errorMessage);
-            StatusChanged?.Invoke(agentName, success ? "Ready" : $"Failed (exit {exitCode})");
-            return new ActionResult(success, exitCode, errorMessage);
+                RecordSuccess(agentName);
+                return new ActionResult(success, exitCode, errorMessage);
+            }, ct);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
         {
+            RecordFailure(agentName);
             if (resolved.IsReboot)
             {
                 StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                 var client = endpoint.GetClient();
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                RecordSuccess(agentName);
                 return new ActionResult(true, 0, "Reboot completed");
             }
             return new ActionResult(false, -1, $"Agent {agentName} unavailable: {ex.Status.Detail}");
+        }
+        catch (BrokenCircuitException)
+        {
+            RecordFailure(agentName);
+            return new ActionResult(false, -1,
+                $"Agent {agentName} circuit breaker is open — too many recent failures");
+        }
+        catch (TimeoutRejectedException)
+        {
+            RecordFailure(agentName);
+            return new ActionResult(false, -1,
+                $"Agent {agentName} hard timeout exceeded (60 min resilience limit)");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -385,10 +428,12 @@ public sealed class AgentGrpcDispatcher : IDisposable
         }
         catch (OperationCanceledException)
         {
+            RecordFailure(agentName);
             return new ActionResult(false, -1, $"Timed out ({resolved.Timeout}s)");
         }
         catch (Exception ex)
         {
+            RecordFailure(agentName);
             return new ActionResult(false, -1, ex.Message);
         }
     }
@@ -461,7 +506,8 @@ public sealed class AgentGrpcDispatcher : IDisposable
     {
         var cmd = command.Trim().Trim('"');
         var ext = "";
-        try { ext = System.IO.Path.GetExtension(cmd).ToLowerInvariant(); } catch { }
+        try { ext = System.IO.Path.GetExtension(cmd).ToLowerInvariant(); }
+        catch (ArgumentException) { /* cmd contains invalid path characters — treat as raw executable */ }
 
         return ext switch
         {
@@ -493,17 +539,55 @@ public sealed class AgentGrpcDispatcher : IDisposable
                     return;
                 }
             }
-            catch { /* agent still down */ }
+            catch (Exception ex) { _logger.LogDebug(ex, "Agent {Name} still rebooting", agentName); }
         }
     }
 
     public IEnumerable<string> RegisteredAgents => _agents.Keys;
+
+    /// <inheritdoc/>
+    public AgentHealthState? GetAgentHealth(string agentName)
+        => _healthStates.TryGetValue(agentName, out var state) ? state : null;
+
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, AgentHealthState> GetAllAgentHealth()
+        => _healthStates.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
     public void Dispose()
     {
         foreach (var ep in _agents.Values)
             ep.Dispose();
         _agents.Clear();
+        _healthStates.Clear();
+    }
+
+    // ── Health tracking helpers ────────────────────────────────────────
+
+    private void RecordSuccess(string agentName)
+    {
+        if (_healthStates.TryGetValue(agentName, out var state))
+        {
+            state.IsHealthy = true;
+            state.ConsecutiveFailures = 0;
+            state.LastSuccessUtc = DateTime.UtcNow;
+            state.CircuitOpenedUtc = null;
+        }
+    }
+
+    private void RecordFailure(string agentName)
+    {
+        if (_healthStates.TryGetValue(agentName, out var state))
+        {
+            state.ConsecutiveFailures++;
+            if (state.ConsecutiveFailures >= 3)
+            {
+                state.IsHealthy = false;
+                state.CircuitOpenedUtc ??= DateTime.UtcNow;
+                _logger.LogWarning(
+                    "Agent {Agent} marked unhealthy after {Failures} consecutive failures",
+                    agentName, state.ConsecutiveFailures);
+            }
+        }
     }
 
     // ── Inner types ────────────────────────────────────────────────────
@@ -540,5 +624,3 @@ public sealed class AgentGrpcDispatcher : IDisposable
         public void Dispose() => _channel.Dispose();
     }
 }
-
-public sealed record ActionResult(bool Success, int ExitCode, string ErrorMessage);

@@ -242,17 +242,24 @@ public sealed partial class MainViewModel
                 _config.FilePath = VocabFilePath;
 
                 _executor.LoadTemplates(_config.Templates);
-                Application.Current?.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
-                    TreeRoots.Clear();
-                    TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                    TemplateRoots.Clear();
-                    TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                    RebuildTemplateIds();
-                    RebuildFilterOptions();
-                    LoadTokensFromConfig(_config);
-                    ActiveWatchers = _watcherManager.ActiveWatcherCount;
-                    StatusMessage = $"{_config.WatchItems.Count} WatchItems, {_config.Templates.Count} Templates";
+                    try
+                    {
+                        TreeRoots.Clear();
+                        TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
+                        TemplateRoots.Clear();
+                        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                        RebuildTemplateIds();
+                        RebuildFilterOptions();
+                        LoadTokensFromConfig(_config);
+                        ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                        StatusMessage = $"{_config.WatchItems.Count} WatchItems, {_config.Templates.Count} Templates";
+                    }
+                    catch (Exception ex)
+                    {
+                        _appLogger.Error("UI", "Failed to rebuild tree from XML editor", ex);
+                    }
                 });
 
                 AddLog("? WatchList updated from XML editor.", LogSeverity.Success);

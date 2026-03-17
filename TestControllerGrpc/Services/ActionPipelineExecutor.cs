@@ -21,9 +21,9 @@ namespace TestControllerGrpc.Services;
 ///
 /// Respects FailAndContinue: if false, a failure stops the group.
 /// </summary>
-public sealed class ActionPipelineExecutor
+public sealed class ActionPipelineExecutor : IActionPipelineExecutor
 {
-    private readonly AgentGrpcDispatcher _dispatcher;
+    private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<ActionPipelineExecutor> _logger;
     private Dictionary<string, TemplateConfig> _templates = new();
@@ -38,7 +38,7 @@ public sealed class ActionPipelineExecutor
     public event Action<IActionNode, string>? NodeProgress;
 
     public ActionPipelineExecutor(
-        AgentGrpcDispatcher dispatcher,
+        IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager,
         ILogger<ActionPipelineExecutor> logger)
     {
@@ -596,5 +596,3 @@ public sealed class ActionPipelineExecutor
         _ => node
     };
 }
-
-public sealed record PipelineLogEntry(DateTime Timestamp, string Category, string Message);

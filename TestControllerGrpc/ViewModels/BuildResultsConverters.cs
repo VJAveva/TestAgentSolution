@@ -37,7 +37,7 @@ public class StringToColorConverter : IValueConverter
         if (value is string hex && !string.IsNullOrEmpty(hex))
         {
             try { return (Color)ColorConverter.ConvertFromString(hex); }
-            catch { }
+            catch (FormatException) { /* invalid hex color string — fall through to default Gray */ }
         }
         return Colors.Gray;
     }

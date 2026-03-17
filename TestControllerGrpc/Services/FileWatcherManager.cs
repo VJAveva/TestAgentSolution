@@ -12,9 +12,9 @@ namespace TestControllerGrpc.Services;
 /// Supports hot-reload: when vocabulary changes, tears down all
 /// watchers and recreates them from the new config.
 /// </summary>
-public sealed class FileWatcherManager : IDisposable
+public sealed class FileWatcherManager : IFileWatcherManager
 {
-    private readonly ActionPipelineExecutor _executor;
+    private readonly IActionPipelineExecutor _executor;
     private readonly ILogger<FileWatcherManager> _logger;
     private readonly List<ActiveWatcher> _watchers = new();
     private readonly object _lock = new();
@@ -30,7 +30,7 @@ public sealed class FileWatcherManager : IDisposable
     public event Action<string, Dictionary<string, string>>? TriggerParametersLoaded;  // watchItemTag, parameters
 
     public FileWatcherManager(
-        ActionPipelineExecutor executor,
+        IActionPipelineExecutor executor,
         ILogger<FileWatcherManager> logger)
     {
         _executor = executor;

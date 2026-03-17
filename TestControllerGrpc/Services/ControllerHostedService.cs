@@ -17,18 +17,18 @@ namespace TestControllerGrpc.Services;
 /// </summary>
 public sealed class ControllerHostedService : IHostedService
 {
-    private readonly VocabularyMonitor _vocabMonitor;
-    private readonly FileWatcherManager _watcherManager;
-    private readonly ActionPipelineExecutor _executor;
-    private readonly AgentGrpcDispatcher _dispatcher;
+    private readonly IVocabularyMonitor _vocabMonitor;
+    private readonly IFileWatcherManager _watcherManager;
+    private readonly IActionPipelineExecutor _executor;
+    private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IConfiguration _config;
     private readonly ILogger<ControllerHostedService> _logger;
 
     public ControllerHostedService(
-        VocabularyMonitor vocabMonitor,
-        FileWatcherManager watcherManager,
-        ActionPipelineExecutor executor,
-        AgentGrpcDispatcher dispatcher,
+        IVocabularyMonitor vocabMonitor,
+        IFileWatcherManager watcherManager,
+        IActionPipelineExecutor executor,
+        IAgentGrpcDispatcher dispatcher,
         IConfiguration config,
         ILogger<ControllerHostedService> logger)
     {

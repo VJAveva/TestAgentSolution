@@ -732,6 +732,6 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
                 _ => "A"
             };
         }
-        catch { return "A"; }
+        catch (ArgumentException) { return "A"; }
     }
 }

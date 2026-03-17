@@ -13,34 +13,22 @@ namespace TestControllerGrpc.Services;
 ///   • Push state changes and heartbeats
 ///   • Stream real-time execution events
 ///
-/// Raises events that the MainViewModel subscribes to for auto-adding
-/// agents to the UI and displaying live status.
+/// Publishes events via <see cref="IEventAggregator"/> so that the UI
+/// and other services can react without tight static-event coupling.
 /// </summary>
 public sealed class TestControllerGrpcService : TestControllerService.TestControllerServiceBase
 {
-    private readonly AgentGrpcDispatcher _dispatcher;
+    private readonly IAgentGrpcDispatcher _dispatcher;
+    private readonly IEventAggregator _events;
     private readonly ILogger<TestControllerGrpcService> _logger;
 
-    /// <summary>Fired when an agent registers itself. (agentName, agentAddress)</summary>
-    public static event Action<string, string>? AgentRegistered;
-
-    /// <summary>Fired when an agent unregisters. (agentName)</summary>
-    public static event Action<string>? AgentUnregistered;
-
-    /// <summary>Fired when an agent pushes a state change. (agentName, state)</summary>
-    public static event Action<string, AgentState>? AgentStateChanged;
-
-    /// <summary>Fired when heartbeat arrives. (agentName, state, metrics)</summary>
-    public static event Action<string, AgentState, ResourceMetrics?>? HeartbeatReceived;
-
-    /// <summary>Fired when an execution event is pushed. (event)</summary>
-    public static event Action<ExecutionEvent>? ExecutionEventReceived;
-
     public TestControllerGrpcService(
-        AgentGrpcDispatcher dispatcher,
+        IAgentGrpcDispatcher dispatcher,
+        IEventAggregator events,
         ILogger<TestControllerGrpcService> logger)
     {
         _dispatcher = dispatcher;
+        _events = events;
         _logger = logger;
     }
 
@@ -58,7 +46,7 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
         // Register under the friendly name so WatchList XML AgentName references resolve
         _dispatcher.RegisterAgent(request.Name, agentGrpcAddress);
 
-        AgentRegistered?.Invoke(request.Name, agentGrpcAddress);
+        _events.Publish(new AgentRegisteredEvent(request.Name, agentGrpcAddress));
         return Task.FromResult(new Empty());
     }
 
@@ -66,21 +54,21 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
     {
         _logger.LogInformation("Agent unregistered via gRPC: {Name}", request.Name);
         _dispatcher.UnregisterAgent(request.Name);
-        AgentUnregistered?.Invoke(request.Name);
+        _events.Publish(new AgentUnregisteredEvent(request.Name));
         return Task.FromResult(new Empty());
     }
 
     public override Task<Empty> UpdateClientState(TestAgentRef request, ServerCallContext context)
     {
         _logger.LogInformation("Agent {Name} state → {State}", request.Name, request.State);
-        AgentStateChanged?.Invoke(request.Name, request.State);
+        _events.Publish(new AgentStateChangedEvent(request.Name, request.State));
         return Task.FromResult(new Empty());
     }
 
     public override Task<Empty> Heartbeat(HeartbeatRequest request, ServerCallContext context)
     {
         _logger.LogDebug("Heartbeat from {Name}: {State}", request.AgentName, request.State);
-        HeartbeatReceived?.Invoke(request.AgentName, request.State, request.Metrics);
+        _events.Publish(new AgentHeartbeatEvent(request.AgentName, request.State, request.Metrics));
         return Task.FromResult(new Empty());
     }
 
@@ -93,7 +81,7 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
         {
             await foreach (var evt in requestStream.ReadAllAsync(context.CancellationToken))
             {
-                ExecutionEventReceived?.Invoke(evt);
+                _events.Publish(new ExecutionEventReceivedEvent(evt));
             }
 
             _logger.LogInformation("Agent event push stream closed from {Peer}", context.Peer);
@@ -117,7 +105,7 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
     /// when the agent does not send an explicit endpoint (legacy agents).
     /// Peer format: "ipv4:192.168.1.100:54321" or "ipv6:[::1]:54321".
     /// </summary>
-    private static string ExtractAgentAddress(string peer, string agentName)
+    private string ExtractAgentAddress(string peer, string agentName)
     {
         // If agent name already looks like an address, use it directly
         if (agentName.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
@@ -141,7 +129,11 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Peer string format unexpected — fall through to hostname default
+            _logger.LogDebug(ex, "Failed to parse agent address from peer string: {Peer}", peer);
+        }
 
         // Fallback: assume hostname:5200
         return $"http://{agentName}:5200";

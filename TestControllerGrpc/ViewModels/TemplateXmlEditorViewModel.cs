@@ -690,6 +690,6 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
                 _ => "A"
             };
         }
-        catch { return "A"; }
+        catch (ArgumentException) { return "A"; }
     }
 }

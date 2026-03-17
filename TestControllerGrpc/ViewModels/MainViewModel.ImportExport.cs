@@ -83,64 +83,71 @@ public sealed partial class MainViewModel
 
             // INCREMENTAL tree update — insert new nodes, update replaced nodes
             // WITHOUT destroying existing TreeNodeViewModels (preserves execution status)
-            Application.Current?.Dispatcher.Invoke(() =>
+            Application.Current?.Dispatcher.InvokeAsync(() =>
             {
-                if (WatchListRoot is null) return;
-
-                foreach (var item in imported)
+                try
                 {
-                    // Skip items that were skipped during import
-                    if (!_config.WatchItems.Contains(item)) continue;
+                    if (WatchListRoot is null) return;
 
-                    // Check if this item was a REPLACE (node already exists with same tag)
-                    var existingNode = WatchListRoot.Children
-                        .FirstOrDefault(c => string.Equals(c.Tag, item.Tag, StringComparison.OrdinalIgnoreCase));
+                    foreach (var item in imported)
+                    {
+                        // Skip items that were skipped during import
+                        if (!_config.WatchItems.Contains(item)) continue;
 
-                    if (existingNode is not null && !_sessionManager.HasActiveExecution(item.Tag))
-                    {
-                        // Replace the node in-place (remove old, insert new at same position)
-                        var idx = WatchListRoot.Children.IndexOf(existingNode);
-                        WatchListRoot.Children.Remove(existingNode);
-                        var newNode = TreeNodeViewModel.FromWatchItem(item);
-                        newNode.Parent = WatchListRoot;
-                        if (idx >= 0 && idx <= WatchListRoot.Children.Count)
-                            WatchListRoot.Children.Insert(idx, newNode);
-                        else
-                            WatchListRoot.Children.Add(newNode);
-                    }
-                    else if (existingNode is null)
-                    {
-                        // Brand new item — append to tree
-                        var newNode = TreeNodeViewModel.FromWatchItem(item);
-                        newNode.Parent = WatchListRoot;
-                        WatchListRoot.Children.Add(newNode);
-                    }
-                    // else: item is currently executing — already skipped above,
-                    // node stays as-is with its execution status
-                }
+                        // Check if this item was a REPLACE (node already exists with same tag)
+                        var existingNode = WatchListRoot.Children
+                            .FirstOrDefault(c => string.Equals(c.Tag, item.Tag, StringComparison.OrdinalIgnoreCase));
 
-                // Update template tree for any newly imported templates
-                if (importedConfig.Templates.Count > 0 && TemplateListRoot is not null)
-                {
-                    // Only add templates that don't already have nodes
-                    foreach (var t in importedConfig.Templates)
-                    {
-                        if (!TemplateListRoot.Children.Any(c =>
-                            string.Equals(c.Tag, t.ID, StringComparison.OrdinalIgnoreCase)))
+                        if (existingNode is not null && !_sessionManager.HasActiveExecution(item.Tag))
                         {
-                            var tNode = TreeNodeViewModel.FromTemplate(t);
-                            tNode.Parent = TemplateListRoot;
-                            TemplateListRoot.Children.Add(tNode);
+                            // Replace the node in-place (remove old, insert new at same position)
+                            var idx = WatchListRoot.Children.IndexOf(existingNode);
+                            WatchListRoot.Children.Remove(existingNode);
+                            var newNode = TreeNodeViewModel.FromWatchItem(item);
+                            newNode.Parent = WatchListRoot;
+                            if (idx >= 0 && idx <= WatchListRoot.Children.Count)
+                                WatchListRoot.Children.Insert(idx, newNode);
+                            else
+                                WatchListRoot.Children.Add(newNode);
                         }
+                        else if (existingNode is null)
+                        {
+                            // Brand new item — append to tree
+                            var newNode = TreeNodeViewModel.FromWatchItem(item);
+                            newNode.Parent = WatchListRoot;
+                            WatchListRoot.Children.Add(newNode);
+                        }
+                        // else: item is currently executing — already skipped above,
+                        // node stays as-is with its execution status
                     }
-                    TemplateListRoot.RefreshDisplayText();
-                }
 
-                WatchListRoot.RefreshDisplayText();
-                RebuildTemplateIds();
-                RebuildFilterOptions();
-                LoadTokensFromConfig(_config);
-                ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                    // Update template tree for any newly imported templates
+                    if (importedConfig.Templates.Count > 0 && TemplateListRoot is not null)
+                    {
+                        // Only add templates that don't already have nodes
+                        foreach (var t in importedConfig.Templates)
+                        {
+                            if (!TemplateListRoot.Children.Any(c =>
+                                string.Equals(c.Tag, t.ID, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                var tNode = TreeNodeViewModel.FromTemplate(t);
+                                tNode.Parent = TemplateListRoot;
+                                TemplateListRoot.Children.Add(tNode);
+                            }
+                        }
+                        TemplateListRoot.RefreshDisplayText();
+                    }
+
+                    WatchListRoot.RefreshDisplayText();
+                    RebuildTemplateIds();
+                    RebuildFilterOptions();
+                    LoadTokensFromConfig(_config);
+                    ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                }
+                catch (Exception ex)
+                {
+                    _appLogger.Error("UI", "Failed to update tree after WatchItem import", ex);
+                }
             });
 
             IsDirty = true;
@@ -277,11 +284,18 @@ public sealed partial class MainViewModel
             if (added > 0)
             {
                 _executor.LoadTemplates(_config.Templates);
-                Application.Current?.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
-                    TemplateRoots.Clear();
-                    TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                    RebuildTemplateIds();
+                    try
+                    {
+                        TemplateRoots.Clear();
+                        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                        RebuildTemplateIds();
+                    }
+                    catch (Exception ex)
+                    {
+                        _appLogger.Error("UI", "Failed to update tree after template import", ex);
+                    }
                 });
             }
 

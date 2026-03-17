@@ -11,7 +11,7 @@ namespace TestControllerGrpc.Services;
 ///
 /// Uses debouncing to avoid multiple reloads from rapid saves.
 /// </summary>
-public sealed class VocabularyMonitor : IDisposable
+public sealed class VocabularyMonitor : IVocabularyMonitor
 {
     private readonly ILogger<VocabularyMonitor> _logger;
     private FileSystemWatcher? _watcher;

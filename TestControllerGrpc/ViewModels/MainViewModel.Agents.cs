@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using System.Windows;
 using TestAgentGrpc;
 using TestControllerGrpc.Helpers;
@@ -248,7 +249,7 @@ public sealed partial class MainViewModel
                     }
                     agent.UpdateDetailLine();
                 }
-                catch { /* silent — background check */ }
+                catch (Exception ex) { _logger.LogDebug(ex, "Background health check failed for {Agent}", agent.Name); }
             }
         };
         _healthCheckTimer.Start();

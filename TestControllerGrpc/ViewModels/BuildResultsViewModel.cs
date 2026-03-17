@@ -795,7 +795,7 @@ public partial class BuildResultsViewModel : ObservableObject
                     $"*{tr.TrxFileName}*.trx", SearchOption.AllDirectories)
                     .FirstOrDefault() ?? "";
             }
-            catch { DetailTrxFilePath = ""; }
+            catch (IOException) { DetailTrxFilePath = ""; }
         }
         else
         {

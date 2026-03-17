@@ -331,7 +331,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         if (type == ActionType.SendMail) return "M";
         var ext = "";
-        try { if (command.Length > 0) ext = Path.GetExtension(command.Trim().Trim('"')).ToLowerInvariant(); } catch { }
+        try { if (command.Length > 0) ext = Path.GetExtension(command.Trim().Trim('"')).ToLowerInvariant(); }
+        catch (ArgumentException) { /* command contains invalid path characters — use default icon */ }
+
         return ext switch
         {
             ".exe" => "X", ".bat" or ".cmd" => "B", ".ps1" => "P", ".msi" => "I",

@@ -22,18 +22,21 @@ namespace TestControllerGrpc.Services;
 /// </summary>
 public sealed class ControllerGrpcServerHost : IHostedService, IDisposable
 {
-    private readonly AgentGrpcDispatcher _dispatcher;
+    private readonly IAgentGrpcDispatcher _dispatcher;
+    private readonly IEventAggregator _events;
     private readonly ILogger<ControllerGrpcServerHost> _logger;
     private readonly int _port;
     private WebApplication? _app;
     private Task? _serverTask;
 
     public ControllerGrpcServerHost(
-     AgentGrpcDispatcher dispatcher,
-     IConfiguration config,
-     ILogger<ControllerGrpcServerHost> logger)
+        IAgentGrpcDispatcher dispatcher,
+        IEventAggregator events,
+        IConfiguration config,
+        ILogger<ControllerGrpcServerHost> logger)
     {
         _dispatcher = dispatcher;
+        _events = events;
         _logger = logger;
         _port = config.GetValue<int>("ControllerGrpcPort", 5100);
     }
@@ -57,8 +60,9 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable
 
             builder.Services.AddGrpc();
 
-            // Share the dispatcher singleton from WPF DI
+            // Share singletons from WPF DI into the gRPC server's DI container
             builder.Services.AddSingleton(_dispatcher);
+            builder.Services.AddSingleton(_events);
 
             // Reduce Kestrel/ASP.NET noise
             builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -82,7 +86,8 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable
         if (_app is not null)
             await _app.StopAsync(ct);
         if (_serverTask is not null)
-            try { await _serverTask.WaitAsync(ct); } catch { }
+            try { await _serverTask.WaitAsync(ct); }
+            catch (Exception ex) { _logger.LogWarning(ex, "gRPC server stop interrupted"); }
     }
 
     public void Dispose()

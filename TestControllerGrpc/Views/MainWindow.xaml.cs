@@ -156,7 +156,7 @@ public partial class MainWindow : Window
         if (_inlineFoldingManager is not null && _inlineFoldingStrategy is not null && _inlineEditor is not null)
         {
             try { _inlineFoldingStrategy.UpdateFoldings(_inlineFoldingManager, _inlineEditor.Document); }
-            catch { /* ignore parse errors during editing */ }
+            catch (Exception) { /* XML parse errors expected during mid-edit — folding will retry on next keystroke */ }
         }
     }
 

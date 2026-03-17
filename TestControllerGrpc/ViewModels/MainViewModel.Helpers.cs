@@ -117,18 +117,25 @@ public sealed partial class MainViewModel
         _config = config;
         _executor.LoadTemplates(config.Templates);
         _watcherManager.ApplyConfig(config);
-        Application.Current?.Dispatcher.Invoke(() =>
+        Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            // Single WatchList — replace the root's children, keep one root
-            TreeRoots.Clear();
-            TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-            TemplateRoots.Clear();
-            TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-            RebuildTemplateIds();
-            RebuildFilterOptions();
-            LoadTokensFromConfig(config);
-            ActiveWatchers = _watcherManager.ActiveWatcherCount;
-            StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
+            try
+            {
+                // Single WatchList — replace the root's children, keep one root
+                TreeRoots.Clear();
+                TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
+                TemplateRoots.Clear();
+                TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                RebuildTemplateIds();
+                RebuildFilterOptions();
+                LoadTokensFromConfig(config);
+                ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
+            }
+            catch (Exception ex)
+            {
+                _appLogger.Error("UI", "Failed to rebuild tree after ApplyConfig", ex);
+            }
         });
     }
 
@@ -166,7 +173,10 @@ public sealed partial class MainViewModel
                             TreeNodeViewModel.TokenValues[key[1..]] = value;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _appLogger.Warn("Tokens", $"Failed to load parameter file '{init.ParameterFile}': {ex.Message}");
+                }
             }
             else if (child is ActionGroupConfig ag)
             {
@@ -268,17 +278,24 @@ public sealed partial class MainViewModel
             _watcherManager.ApplyDiff(config.WatchItems);
             _config = config;
             _executor.LoadTemplates(config.Templates);
-            Application.Current?.Dispatcher.Invoke(() =>
+            Application.Current?.Dispatcher.InvokeAsync(() =>
             {
-                TreeRoots.Clear();
-                TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                TemplateRoots.Clear();
-                TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                RebuildTemplateIds();
-                RebuildFilterOptions();
-                LoadTokensFromConfig(config);
-                ActiveWatchers = _watcherManager.ActiveWatcherCount;
-                StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates (diff reload)";
+                try
+                {
+                    TreeRoots.Clear();
+                    TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
+                    TemplateRoots.Clear();
+                    TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                    RebuildTemplateIds();
+                    RebuildFilterOptions();
+                    LoadTokensFromConfig(config);
+                    ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                    StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates (diff reload)";
+                }
+                catch (Exception ex)
+                {
+                    _appLogger.Error("UI", "Failed to rebuild tree during differential hot-reload", ex);
+                }
             });
         }
         else

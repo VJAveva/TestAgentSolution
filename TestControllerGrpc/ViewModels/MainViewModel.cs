@@ -24,13 +24,14 @@ namespace TestControllerGrpc.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly VocabularyMonitor _vocabMonitor;
-    private readonly FileWatcherManager _watcherManager;
-    private readonly ActionPipelineExecutor _executor;
-    private readonly AgentGrpcDispatcher _dispatcher;
+    private readonly IVocabularyMonitor _vocabMonitor;
+    private readonly IFileWatcherManager _watcherManager;
+    private readonly IActionPipelineExecutor _executor;
+    private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<MainViewModel> _logger;
     private readonly IAppLogger _appLogger;
+    private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
     [ObservableProperty] private TreeNodeViewModel? _selectedTemplateNode;
@@ -189,10 +190,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // ── Constructor ─────────────────────────────────────────────────
 
-    public MainViewModel(VocabularyMonitor vocabMonitor, FileWatcherManager watcherManager,
-        ActionPipelineExecutor executor, AgentGrpcDispatcher dispatcher,
+    public MainViewModel(IVocabularyMonitor vocabMonitor, IFileWatcherManager watcherManager,
+        IActionPipelineExecutor executor, IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
-        BuildResultsViewModel buildResultsVM, IAppLogger appLogger)
+        BuildResultsViewModel buildResultsVM, IAppLogger appLogger,
+        IEventAggregator events)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -211,10 +213,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _watcherManager.TriggerMetadataParsed += OnTriggerMetadataParsed;
         _watcherManager.TriggerParametersLoaded += OnTriggerParametersLoaded;
 
-        // Subscribe to gRPC server events (agents calling in)
-        Services.TestControllerGrpcService.AgentRegistered += OnAgentSelfRegistered;
-        Services.TestControllerGrpcService.AgentUnregistered += OnAgentSelfUnregistered;
-        Services.TestControllerGrpcService.HeartbeatReceived += OnAgentHeartbeat;
+        // Subscribe to gRPC server events via event aggregator (auto-cleanup on Dispose)
+        _subscriptions.Add(events.Subscribe<AgentRegisteredEvent>(
+            e => OnAgentSelfRegistered(e.AgentName, e.Address)));
+        _subscriptions.Add(events.Subscribe<AgentUnregisteredEvent>(
+            e => OnAgentSelfUnregistered(e.AgentName)));
+        _subscriptions.Add(events.Subscribe<AgentHeartbeatEvent>(
+            e => OnAgentHeartbeat(e.AgentName, e.State, e.Metrics)));
 
         // Always start with a single empty WatchList root
         InitializeEmptyWatchList();
@@ -277,10 +282,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _watcherManager.TriggerMetadataParsed -= OnTriggerMetadataParsed;
         _watcherManager.TriggerParametersLoaded -= OnTriggerParametersLoaded;
 
-        // Unsubscribe from static gRPC server events to prevent memory leak
-        Services.TestControllerGrpcService.AgentRegistered -= OnAgentSelfRegistered;
-        Services.TestControllerGrpcService.AgentUnregistered -= OnAgentSelfUnregistered;
-        Services.TestControllerGrpcService.HeartbeatReceived -= OnAgentHeartbeat;
+        // Dispose event aggregator subscriptions (replaces static event unsubscription)
+        foreach (var sub in _subscriptions) sub.Dispose();
+        _subscriptions.Clear();
 
         StopPeriodicHealthCheck();
         _executionCts?.Dispose();

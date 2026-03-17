@@ -30,11 +30,13 @@ public partial class App : Application
             })
             .ConfigureServices(services =>
             {
-                services.AddSingleton<VocabularyMonitor>();
-                services.AddSingleton<AgentGrpcDispatcher>();
+                services.AddSingleton<IEventAggregator, EventAggregator>();
+                services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
+                services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
                 services.AddSingleton<ExecutionSessionManager>();
-                services.AddSingleton<ActionPipelineExecutor>();
-                services.AddSingleton<FileWatcherManager>();
+                services.AddSingleton<IActionPipelineExecutor, ActionPipelineExecutor>();
+                services.AddSingleton<IFileWatcherManager, FileWatcherManager>();
+                services.AddSingleton<IWatchListXmlParser, WatchListXmlParserService>();
                 services.AddHostedService<ControllerHostedService>();
                 services.AddHostedService<ControllerGrpcServerHost>();
 

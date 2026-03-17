@@ -101,16 +101,23 @@ public sealed partial class MainViewModel
                 _executor.LoadTemplates(config.Templates);
                 _watcherManager.ApplyDiff(config.WatchItems);
 
-                Application.Current?.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
-                    TreeRoots.Clear();
-                    TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                    TemplateRoots.Clear();
-                    TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                    RebuildTemplateIds();
-                    RebuildFilterOptions();
-                    LoadTokensFromConfig(config);
-                    ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                    try
+                    {
+                        TreeRoots.Clear();
+                        TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
+                        TemplateRoots.Clear();
+                        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+                        RebuildTemplateIds();
+                        RebuildFilterOptions();
+                        LoadTokensFromConfig(config);
+                        ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                    }
+                    catch (Exception ex)
+                    {
+                        _appLogger.Error("UI", "Failed to rebuild tree during file refresh", ex);
+                    }
                 });
 
                 IsDirty = false;
