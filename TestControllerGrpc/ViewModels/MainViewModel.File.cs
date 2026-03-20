@@ -105,14 +105,7 @@ public sealed partial class MainViewModel
                 {
                     try
                     {
-                        TreeRoots.Clear();
-                        TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                        TemplateRoots.Clear();
-                        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                        RebuildTemplateIds();
-                        RebuildFilterOptions();
-                        LoadTokensFromConfig(config);
-                        ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                        RebuildAllTrees();
                     }
                     catch (Exception ex)
                     {

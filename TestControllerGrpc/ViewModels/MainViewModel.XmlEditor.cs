@@ -25,15 +25,15 @@ public sealed partial class MainViewModel
 
         WriteBackAll();
 
-        if (SelectedNode?.NodeKind == "WatchItem" && SelectedNode.ModelObject is WatchItemConfig wi)
+        if (SelectedNode?.NodeKind == NodeKinds.WatchItem && SelectedNode.ModelObject is WatchItemConfig wi)
         {
-            InlineXmlEditorScope = "WatchItem";
+            InlineXmlEditorScope = NodeKinds.WatchItem;
             InlineXmlEditorText = WatchListXmlParser.SerializeWatchItem(wi);
         }
         else
         {
             // Default: entire WatchList
-            InlineXmlEditorScope = "WatchList";
+            InlineXmlEditorScope = NodeKinds.WatchList;
             InlineXmlEditorText = WatchListXmlParser.SerializeWatchList(_config);
         }
 
@@ -46,9 +46,9 @@ public sealed partial class MainViewModel
     {
         try
         {
-            if (InlineXmlEditorScope == "WatchItem")
+            if (InlineXmlEditorScope == NodeKinds.WatchItem)
             {
-                if (SelectedNode?.NodeKind != "WatchItem") return;
+                if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
                 var oldWi = SelectedNode.ModelObject as WatchItemConfig;
                 if (oldWi is null) return;
 
@@ -107,7 +107,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void ToggleXmlEditor()
     {
-        if (SelectedNode?.NodeKind != "WatchItem") return;
+        if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         OpenRawXmlEditorWindow();
     }
 
@@ -115,7 +115,7 @@ public sealed partial class MainViewModel
     private void ApplyXmlEditor()
     {
         // Kept for backward compatibility — delegates to the window flow
-        if (SelectedNode?.NodeKind != "WatchItem") return;
+        if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         OpenRawXmlEditorWindow();
     }
 
@@ -128,14 +128,14 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void EditWatchItemXml()
     {
-        if (SelectedNode?.NodeKind != "WatchItem") return;
+        if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         OpenRawXmlEditorWindow();
     }
 
     /// <summary>Opens the standalone Raw XML Editor window for the selected WatchItem.</summary>
     private void OpenRawXmlEditorWindow()
     {
-        if (SelectedNode?.NodeKind != "WatchItem") return;
+        if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         if (SelectedNode.ModelObject is not WatchItemConfig oldWi) return;
 
         WriteBackAll();
@@ -246,14 +246,7 @@ public sealed partial class MainViewModel
                 {
                     try
                     {
-                        TreeRoots.Clear();
-                        TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                        TemplateRoots.Clear();
-                        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                        RebuildTemplateIds();
-                        RebuildFilterOptions();
-                        LoadTokensFromConfig(_config);
-                        ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                        RebuildAllTrees();
                         StatusMessage = $"{_config.WatchItems.Count} WatchItems, {_config.Templates.Count} Templates";
                     }
                     catch (Exception ex)

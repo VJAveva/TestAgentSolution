@@ -79,7 +79,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void DeleteTemplate()
     {
-        if (SelectedTemplateNode is null || SelectedTemplateNode.NodeKind == "TemplateList") return;
+        if (SelectedTemplateNode is null || SelectedTemplateNode.NodeKind == NodeKinds.TemplateList) return;
 
         // CRITICAL: Capture before Remove triggers SelectedItemChanged
         var target = SelectedTemplateNode;
@@ -107,8 +107,8 @@ public sealed partial class MainViewModel
     private void AddGroupToTemplate()
     {
         var t = SelectedTemplateNode;
-        if (t?.NodeKind is not ("Template" or "TemplateList" or "ActionGroup" or "Event")) return;
-        if (t.NodeKind == "TemplateList") { AddTemplate(); return; }
+        if (t?.NodeKind is not (NodeKinds.Template or NodeKinds.TemplateList or NodeKinds.ActionGroup or NodeKinds.Event)) return;
+        if (t.NodeKind == NodeKinds.TemplateList) { AddTemplate(); return; }
         AddChildT(t, new ActionGroupConfig { Tag = "NewGroup", ExecutionType = ExecutionMode.Sequential });
     }
 

@@ -10,7 +10,7 @@ namespace TestControllerGrpc.ViewModels;
 // ?? Execution: Trigger, Execute, Cancel, Reset, Retry ???????????????
 public sealed partial class MainViewModel
 {
-    private bool CanTriggerEvent => SelectedNode?.NodeKind == "Event" && !IsExecuting;
+    private bool CanTriggerEvent => SelectedNode?.NodeKind == NodeKinds.Event && !IsExecuting;
 
     /// <summary>Trigger a single Event node's pipeline.</summary>
     [RelayCommand(CanExecute = nameof(CanTriggerEvent))]
@@ -68,7 +68,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanTriggerWatchItem => SelectedNode?.NodeKind == "WatchItem" && !IsExecuting;
+    private bool CanTriggerWatchItem => SelectedNode?.NodeKind == NodeKinds.WatchItem && !IsExecuting;
 
     /// <summary>Trigger ALL events on the selected WatchItem.</summary>
     [RelayCommand(CanExecute = nameof(CanTriggerWatchItem))]
@@ -233,7 +233,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanExecuteGroup => SelectedNode?.NodeKind == "ActionGroup" && !IsExecuting;
+    private bool CanExecuteGroup => SelectedNode?.NodeKind == NodeKinds.ActionGroup && !IsExecuting;
 
     /// <summary>Execute a single ActionGroup and its children.</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteGroup))]
@@ -288,7 +288,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanExecuteSingleAction => SelectedNode?.NodeKind == "Action" && !IsExecuting;
+    private bool CanExecuteSingleAction => SelectedNode?.NodeKind == NodeKinds.Action && !IsExecuting;
 
     /// <summary>Execute a single Action node.</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteSingleAction))]
@@ -352,8 +352,8 @@ public sealed partial class MainViewModel
         // Find the WatchItem tag from the selected node
         var watchItemTag = SelectedNode?.NodeKind switch
         {
-            "WatchItem" => SelectedNode?.Tag,
-            "Event" => SelectedNode?.Parent?.Tag,
+            NodeKinds.WatchItem => SelectedNode?.Tag,
+            NodeKinds.Event => SelectedNode?.Parent?.Tag,
             _ => null
         };
 

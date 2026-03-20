@@ -1,5 +1,6 @@
 using System.IO;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
@@ -11,7 +12,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void BrowseParameterFile()
     {
-        if (ActiveEditNode?.NodeKind != "Initialize") return;
+        if (ActiveEditNode?.NodeKind != NodeKinds.Initialize) return;
 
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
@@ -40,7 +41,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void LoadParameterFileFromNode()
     {
-        if (ActiveEditNode?.NodeKind != "Initialize") return;
+        if (ActiveEditNode?.NodeKind != NodeKinds.Initialize) return;
         if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile)) return;
         LoadParameterFileEntries(ActiveEditNode.ParameterFile);
     }
@@ -106,7 +107,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void SaveParameterFile()
     {
-        if (ActiveEditNode?.NodeKind != "Initialize") return;
+        if (ActiveEditNode?.NodeKind != NodeKinds.Initialize) return;
         if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile))
         {
             ParameterFileStatus = "No parameter file path set. Use Browse to select a file.";

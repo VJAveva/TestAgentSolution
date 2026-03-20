@@ -179,13 +179,13 @@ public sealed partial class MainViewModel
         List<WatchItemConfig> itemsToExport;
         string defaultFileName;
 
-        if (SelectedNode?.NodeKind == "WatchList")
+        if (SelectedNode?.NodeKind == NodeKinds.WatchList)
         {
             WriteBackAll();
             itemsToExport = _config.WatchItems.ToList();
             defaultFileName = "WatchItems_All.xml";
         }
-        else if (SelectedNode?.NodeKind == "WatchItem" && SelectedNode.ModelObject is WatchItemConfig wi)
+        else if (SelectedNode?.NodeKind == NodeKinds.WatchItem && SelectedNode.ModelObject is WatchItemConfig wi)
         {
             WriteBackAll();
             itemsToExport = [wi];
@@ -324,7 +324,7 @@ public sealed partial class MainViewModel
         List<TemplateConfig> toExport;
         string defaultFileName;
 
-        if (SelectedTemplateNode?.NodeKind == "Template"
+        if (SelectedTemplateNode?.NodeKind == NodeKinds.Template
             && SelectedTemplateNode.ModelObject is TemplateConfig t)
         {
             toExport = [t];

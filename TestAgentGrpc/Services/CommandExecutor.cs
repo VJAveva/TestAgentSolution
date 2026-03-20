@@ -91,6 +91,7 @@ public sealed class CommandExecutor : IDisposable
         int timeoutMs = 0,
         string? executionId = null, string? userName = null, string? password = null,
         string? completionCheckCommand = null, int completionPollIntervalSeconds = 30,
+        bool enableInstallLog = false, int installLogPollSeconds = 5, string? installLogRoot = null,
         CancellationToken externalCt = default)
     {
         if (_state == AgentState.Running)
@@ -117,7 +118,10 @@ public sealed class CommandExecutor : IDisposable
                 await ExecuteAsync(execId, command, arguments, isReboot, ch.Writer, ct,
                     userName: userName, password: password,
                     completionCheckCommand: completionCheckCommand,
-                    completionPollIntervalSeconds: completionPollIntervalSeconds);
+                    completionPollIntervalSeconds: completionPollIntervalSeconds,
+                    enableInstallLog: enableInstallLog,
+                    installLogPollSeconds: installLogPollSeconds,
+                    installLogRoot: installLogRoot);
             }
             finally
             {
@@ -139,7 +143,10 @@ public sealed class CommandExecutor : IDisposable
         string? userName = null,
         string? password = null,
         string? completionCheckCommand = null,
-        int completionPollIntervalSeconds = 30)
+        int completionPollIntervalSeconds = 30,
+        bool enableInstallLog = false,
+        int installLogPollSeconds = 5,
+        string? installLogRoot = null)
     {
         // Acquire the execution lock — if cancelled here, we must NOT release in finally
         bool lockAcquired = false;
@@ -205,6 +212,16 @@ public sealed class CommandExecutor : IDisposable
 
             SetActivity($"Executing: {command} {arguments}");
             _lastError = string.Empty;
+
+            // ── START INSTALL PROGRESS MONITOR (if enabled) ────────
+            InstallProgressMonitor? installMonitor = null;
+            if (enableInstallLog && perCallChannel is not null)
+            {
+                installMonitor = new InstallProgressMonitor(perCallChannel, executionId);
+                installMonitor.Start(
+                    installRoot: string.IsNullOrEmpty(installLogRoot) ? null : installLogRoot,
+                    pollMs: Math.Max(installLogPollSeconds, 1) * 1000);
+            }
 
             // ── STREAM STDOUT + STDERR concurrently ────────────────
             var stdoutTask = StreamOutputAsync(executionId, _currentProcess.StandardOutput,
@@ -272,6 +289,28 @@ public sealed class CommandExecutor : IDisposable
                         break;
                     }
                 }
+            }
+
+            // ── FINALIZE INSTALL MONITOR ──────────────────────────
+            if (installMonitor is not null)
+            {
+                // Give the monitor one final poll cycle to catch last entries
+                try { await Task.Delay(3000, CancellationToken.None); }
+                catch { /* ignore */ }
+
+                var summary = installMonitor.GetSummary();
+                EmitEvent(executionId, ExecutionEventType.EventProgress,
+                    detail: summary, perCallChannel: perCallChannel);
+
+                if (installMonitor.FailedCount > 0 && _lastExitCode == 0)
+                {
+                    EmitEvent(executionId, ExecutionEventType.EventStderrLine,
+                        outputLine: $"WARNING: Process exited 0 but {installMonitor.FailedCount} component(s) failed in MSI log",
+                        outputKind: OutputKind.OutputStderr,
+                        perCallChannel: perCallChannel);
+                }
+
+                installMonitor.Dispose();
             }
 
             record.Complete(_lastExitCode);

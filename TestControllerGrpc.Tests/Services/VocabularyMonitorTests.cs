@@ -147,7 +147,8 @@ public class VocabularyMonitorTests : IDisposable
               </WatchItem>
             </WatchList>
             """);
-        await Task.Delay(1000);
+        // Wait long enough for suppression window (1s) + debounce (500ms) to fully elapse
+        await Task.Delay(2000);
 
         // Second change should NOT be suppressed
         File.WriteAllText(path, """
@@ -158,7 +159,7 @@ public class VocabularyMonitorTests : IDisposable
               </WatchItem>
             </WatchList>
             """);
-        await Task.Delay(1000);
+        await Task.Delay(1500);
 
         Assert.Single(reloadedConfigs);
         Assert.Equal("Reloaded", reloadedConfigs[0].WatchItems[0].Tag);

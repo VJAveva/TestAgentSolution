@@ -31,15 +31,15 @@ public sealed partial class MainViewModel
     private void AddChildNode()
     {
         if (SelectedNode is null) return;
-        if (SelectedNode.NodeKind == "WatchList") { AddWatchItem(); return; }
-        if (SelectedNode.NodeKind == "WatchItem")
+        if (SelectedNode.NodeKind == NodeKinds.WatchList) { AddWatchItem(); return; }
+        if (SelectedNode.NodeKind == NodeKinds.WatchItem)
         {
             var ev = new EventConfig { Type = "Renamed", ExecutionType = ExecutionMode.Sequential };
             if (SelectedNode.ModelObject is WatchItemConfig wi) wi.Events.Add(ev);
             var n = TreeNodeViewModel.FromEvent(ev); n.Parent = SelectedNode;
             SelectedNode.Children.Add(n);
         }
-        else if (SelectedNode.NodeKind is "Event" or "ActionGroup")
+        else if (SelectedNode.NodeKind is NodeKinds.Event or NodeKinds.ActionGroup)
         {
             var g = new ActionGroupConfig { Tag = "NewGroup", ExecutionType = ExecutionMode.Sequential };
             AddChild(SelectedNode, g);
@@ -49,14 +49,14 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void AddActionToGroup()
     {
-        if (SelectedNode?.NodeKind is not ("ActionGroup" or "Event")) return;
+        if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
         AddChild(SelectedNode, new ActionConfig { Type = ActionType.RunCommand, Command = "cmd", Parameters = "/c echo hello" });
     }
 
     [RelayCommand]
     private void AddRefToGroup()
     {
-        if (SelectedNode?.NodeKind is not ("ActionGroup" or "Event")) return;
+        if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
         AddChild(SelectedNode, new RefConfig { TemplateID = AvailableTemplateIds.Count > 0 ? AvailableTemplateIds[0] : "" });
     }
 
@@ -64,7 +64,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void AddInitializeToGroup()
     {
-        if (SelectedNode?.NodeKind is not ("ActionGroup" or "Event")) return;
+        if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
         AddChild(SelectedNode, new InitializeConfig { Tag = "Params", ParameterFile = "" });
         AddLog("Added Initialize node");
     }
@@ -74,7 +74,7 @@ public sealed partial class MainViewModel
     private void AddActionGroup()
     {
         if (SelectedNode is null) return;
-        if (SelectedNode.NodeKind is "WatchItem")
+        if (SelectedNode.NodeKind is NodeKinds.WatchItem)
         {
             // WatchItem cannot hold ActionGroup directly — it must go under an Event.
             // If the WatchItem has no events, create one first.
@@ -106,7 +106,7 @@ public sealed partial class MainViewModel
             }
             return;
         }
-        if (SelectedNode.NodeKind is "Event" or "ActionGroup")
+        if (SelectedNode.NodeKind is NodeKinds.Event or NodeKinds.ActionGroup)
         {
             var ag = new ActionGroupConfig { Tag = "NewActionGroup", ExecutionType = ExecutionMode.Sequential, FailAndContinue = true };
             AddChild(SelectedNode, ag);
@@ -114,7 +114,7 @@ public sealed partial class MainViewModel
             AddLog("Added ActionGroup");
             return;
         }
-        if (SelectedNode.NodeKind is "Template")
+        if (SelectedNode.NodeKind is NodeKinds.Template)
         {
             var ag = new ActionGroupConfig { Tag = "NewActionGroup", ExecutionType = ExecutionMode.Sequential, FailAndContinue = true };
             AddChildT(SelectedNode, ag);
@@ -128,7 +128,7 @@ public sealed partial class MainViewModel
     private void DeleteSelectedNode()
     {
         if (SelectedNode is null) return;
-        if (SelectedNode.NodeKind is "WatchList" or "TemplateList") return;
+        if (SelectedNode.NodeKind is NodeKinds.WatchList or NodeKinds.TemplateList) return;
 
         // CRITICAL: Capture references BEFORE Remove(), because Remove() triggers
         // WPF SelectedItemChanged which changes SelectedNode mid-flight.
@@ -204,7 +204,7 @@ public sealed partial class MainViewModel
     /// </summary>
     public static bool CanMoveNode(TreeNodeViewModel node, int dir)
     {
-        if (node.NodeKind is "WatchList" or "TemplateList" or "Initialize") return false;
+        if (node.NodeKind is NodeKinds.WatchList or NodeKinds.TemplateList or NodeKinds.Initialize) return false;
         if (node.Parent is null) return false;
         var siblings = node.Parent.Children;
         var idx = siblings.IndexOf(node);
@@ -260,7 +260,7 @@ public sealed partial class MainViewModel
 
     private void MoveNode(TreeNodeViewModel node, int dir)
     {
-        if (node.NodeKind is "WatchList" or "TemplateList") return;
+        if (node.NodeKind is NodeKinds.WatchList or NodeKinds.TemplateList) return;
         if (node.Parent is null) return;
         var siblings = node.Parent.Children;
         var idx = siblings.IndexOf(node);

@@ -786,6 +786,58 @@
                             </WrapPanel>
                         </Border>
                     </TabItem>
+                    <!-- ─── TOOLS TAB ─── -->
+                    <TabItem Header="TOOLS">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Theme:" FontSize="11" Foreground="{DynamicResource TextS}"
+                                                       VerticalAlignment="Center" Margin="4,0,8,0" />
+                                            <ComboBox ItemsSource="{Binding AvailableThemes}"
+                                                      SelectedItem="{Binding SelectedTheme}"
+                                                      Style="{StaticResource Cmb}" Width="140" Margin="0" />
+                                        </StackPanel>
+                                        <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenResultsCommand}"
+                                                    ToolTip="Open the Results Dashboard window">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Results Viewer" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="Results" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
+                                                    ToolTip="Open Help &amp; Feature Guide">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" Foreground="{DynamicResource Accent}" />
+                                                    <TextBlock Text="Help" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="Help" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
+                        </Border>
+                    </TabItem>
                 </TabControl>
             </DockPanel>
         </Border>
@@ -1190,6 +1242,24 @@
                                         <CheckBox Content="FailAndContinue" IsChecked="{Binding FailAndContinue}" Foreground="{DynamicResource TextP}" Margin="0,0,16,0" />
                                         <CheckBox Content="IsReboot" IsChecked="{Binding IsReboot}" Foreground="{DynamicResource TextP}" />
                                     </StackPanel>
+                                    <!-- Install Log Monitoring -->
+                                    <DockPanel Margin="0,4,0,2">
+                                        <CheckBox DockPanel.Dock="Right" Content="Enable Install Log"
+                                                  IsChecked="{Binding EnableInstallLog}"
+                                                  Foreground="{DynamicResource TextP}" FontSize="11"
+                                                  VerticalAlignment="Center" Margin="8,0,0,0"
+                                                  ToolTip="Monitor ILog + MSI log + EventViewer during execution" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Label Content="LOG POLL (sec)" Style="{StaticResource Lbl}"
+                                                   Padding="0" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                            <TextBox Text="{Binding InstallLogPollSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource Fld}" Width="50" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <TextBlock Text="Polls ILog + MSI log + EventViewer and streams per-component PASS/FAIL status."
+                                               FontSize="10" Foreground="{DynamicResource TextS}" FontStyle="Italic"
+                                               TextWrapping="Wrap" Margin="0,0,0,6"
+                                               Visibility="{Binding EnableInstallLog, Converter={StaticResource BoolVis}}" />
                                 </StackPanel>
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunRemoteCommand}">
                                     <TextBlock Text="REMOTE AGENT" Style="{StaticResource Sec}" />

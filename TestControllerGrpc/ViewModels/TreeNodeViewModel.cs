@@ -42,6 +42,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isReboot;
     [ObservableProperty] private string _completionCheckCommand = "";
     [ObservableProperty] private int _completionPollIntervalSeconds = 30;
+    [ObservableProperty] private bool _enableInstallLog;
+    [ObservableProperty] private int _installLogPollSeconds = 5;
+    [ObservableProperty] private string _installLogRoot = "";
     [ObservableProperty] private string _userName = "";
     [ObservableProperty] private string _password = "";
     [ObservableProperty] private string _from = "";
@@ -301,19 +304,19 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         return nodeKind switch
         {
-            "WatchList" or "TemplateList" => "\uE8B7", // Folder/List
-            "WatchItem" => "\uE7B3",                   // View/Eye
-            "Event" => "\uEA80",                       // LightningBolt
-            "Template" => "\uE8A5",                    // Document
-            "ActionGroup" => "\uE8CB",                 // BranchFork
-            "Initialize" => "\uE713",                  // Settings
-            "Action" => actionType switch
+            NodeKinds.WatchList or NodeKinds.TemplateList => "\uE8B7", // Folder/List
+            NodeKinds.WatchItem => "\uE7B3",                   // View/Eye
+            NodeKinds.Event => "\uEA80",                       // LightningBolt
+            NodeKinds.Template => "\uE8A5",                    // Document
+            NodeKinds.ActionGroup => "\uE8CB",                 // BranchFork
+            NodeKinds.Initialize => "\uE713",                  // Settings
+            NodeKinds.Action => actionType switch
             {
                 "RunRemoteCommand" => "\uE839",        // Remote/PC
                 "SendMail" => "\uE715",                // Mail
                 _ => "\uE768",                         // Play
             },
-            "Ref" => "\uE71B",                         // Link
+            NodeKinds.Ref => "\uE71B",                         // Link
             _ => "\uE8A5",                             // Document (fallback)
         };
     }
@@ -326,8 +329,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ? Path.GetFileName(config.FilePath) : "New WatchList";
         var root = new TreeNodeViewModel
         {
-            NodeKind = "WatchList", NodeIcon = "WL",
-            NodeIconGlyph = ResolveNodeIconGlyph("WatchList"),
+            NodeKind = NodeKinds.WatchList, NodeIcon = "WL",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.WatchList),
             DisplayText = $"WatchList  ({name}  \u2014  {config.WatchItems.Count} items)",
             ModelObject = config, IsExpanded = true,
             ChildCount = config.WatchItems.Count,
@@ -343,8 +346,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var root = new TreeNodeViewModel
         {
-            NodeKind = "TemplateList", NodeIcon = "TL",
-            NodeIconGlyph = ResolveNodeIconGlyph("TemplateList"),
+            NodeKind = NodeKinds.TemplateList, NodeIcon = "TL",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.TemplateList),
             DisplayText = $"Templates  ({templates.Count} templates)",
             ModelObject = templates, IsExpanded = true,
             ChildCount = templates.Count,
@@ -378,8 +381,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ? $"{wi.Tag}  ({wi.Path}{wi.Filter})" : $"{wi.Path}{wi.Filter}";
         var node = new TreeNodeViewModel
         {
-            NodeKind = "WatchItem", NodeIcon = "W",
-            NodeIconGlyph = ResolveNodeIconGlyph("WatchItem"),
+            NodeKind = NodeKinds.WatchItem, NodeIcon = "W",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.WatchItem),
             Tag = wi.Tag,
             WatchPath = wi.Path, Filter = wi.Filter, IsEnabled = wi.IsEnabled,
             BuildNumberField = wi.BuildNumberField,
@@ -396,8 +399,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var node = new TreeNodeViewModel
         {
-            NodeKind = "Event", NodeIcon = "E",
-            NodeIconGlyph = ResolveNodeIconGlyph("Event"),
+            NodeKind = NodeKinds.Event, NodeIcon = "E",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Event),
             EventType = ev.Type,
             ExecutionTypeText = ev.ExecutionType.ToString(),
             DisplayText = $"Event: {ev.Type} ({ev.ExecutionType})", ModelObject = ev,
@@ -410,8 +413,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var node = new TreeNodeViewModel
         {
-            NodeKind = "Template", NodeIcon = "T",
-            NodeIconGlyph = ResolveNodeIconGlyph("Template"),
+            NodeKind = NodeKinds.Template, NodeIcon = "T",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Template),
             TemplateName = t.ID, Tag = t.ID,
             DisplayText = $"Template: {t.ID}", ModelObject = t,
         };
@@ -432,9 +435,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var node = new TreeNodeViewModel
         {
-            NodeKind = "ActionGroup",
+            NodeKind = NodeKinds.ActionGroup,
             NodeIcon = ag.ExecutionType == ExecutionMode.Parallel ? "||" : ">>",
-            NodeIconGlyph = ResolveNodeIconGlyph("ActionGroup"),
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.ActionGroup),
             Tag = ag.Tag, ExecutionTypeText = ag.ExecutionType.ToString(),
             FailAndContinue = ag.FailAndContinue,
             DisplayText = $"[{ag.ExecutionType}] {ag.Tag}", ModelObject = ag,
@@ -459,8 +462,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         if (label.Length > 100) label = label[..100] + "\u2026";
         return new TreeNodeViewModel
         {
-            NodeKind = "Action", NodeIcon = icon,
-            NodeIconGlyph = ResolveNodeIconGlyph("Action", a.Type.ToString()),
+            NodeKind = NodeKinds.Action, NodeIcon = icon,
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Action, a.Type.ToString()),
             ActionTypeText = a.Type.ToString(),
             Tag = tag,
             AgentName = a.AgentName, Command = a.Command, Parameters = a.Parameters,
@@ -468,6 +471,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
             CompletionCheckCommand = a.CompletionCheckCommand,
             CompletionPollIntervalSeconds = a.CompletionPollIntervalSeconds,
+            EnableInstallLog = a.EnableInstallLog,
+            InstallLogPollSeconds = a.InstallLogPollSeconds,
+            InstallLogRoot = a.InstallLogRoot,
             UserName = a.UserName, Password = a.Password,
             From = a.From, To = a.To, Title = a.Title, Body = a.Body,
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
@@ -506,8 +512,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     public static TreeNodeViewModel FromInitialize(InitializeConfig init) => new()
     {
-        NodeKind = "Initialize", NodeIcon = "i",
-        NodeIconGlyph = ResolveNodeIconGlyph("Initialize"),
+        NodeKind = NodeKinds.Initialize, NodeIcon = "i",
+        NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Initialize),
         Tag = init.Tag,
         ParameterFile = init.ParameterFile,
         DisplayText = $"Initialize: {init.ParameterFile}", ModelObject = init,
@@ -515,8 +521,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     public static TreeNodeViewModel FromRef(RefConfig r) => new()
     {
-        NodeKind = "Ref", NodeIcon = ">",
-        NodeIconGlyph = ResolveNodeIconGlyph("Ref"),
+        NodeKind = NodeKinds.Ref, NodeIcon = ">",
+        NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Ref),
         TemplateID = r.TemplateID,
         DisplayText = $"Ref > {r.TemplateID}", ModelObject = r,
     };
@@ -547,6 +553,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 a.FailAndContinue = FailAndContinue; a.IsReboot = IsReboot;
                 a.CompletionCheckCommand = CompletionCheckCommand;
                 a.CompletionPollIntervalSeconds = CompletionPollIntervalSeconds;
+                a.EnableInstallLog = EnableInstallLog;
+                a.InstallLogPollSeconds = InstallLogPollSeconds;
+                a.InstallLogRoot = InstallLogRoot;
                 a.UserName = UserName; a.Password = Password;
                 a.From = From; a.To = To; a.Title = Title; a.Body = Body;
                 a.Attachment = Attachment; a.Embed = Embed; a.LargeFilesShare = LargeFilesShare; break;
@@ -564,42 +573,32 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         ChildCount = Children.Count;
         DisplayText = NodeKind switch
         {
-            "WatchList" => $"WatchList  ({Children.Count} items)",
-            "TemplateList" => $"Templates  ({Children.Count} templates)",
-            "WatchItem" => !string.IsNullOrWhiteSpace(Tag) ? $"{Tag}  ({WatchPath}{Filter})" : $"{WatchPath}{Filter}",
-            "Event" => $"Event: {EventType} ({ExecutionTypeText})",
-            "ActionGroup" => $"[{ExecutionTypeText}] {Tag}",
-            "Action" => FormatActionLabel(ActionTypeText, AgentName, Command, Parameters, To, Title),
-            "Initialize" => $"Initialize: {ParameterFile}",
-            "Ref" => $"Ref > {TemplateID}",
-            "Template" => $"Template: {TemplateName}",
+            NodeKinds.WatchList => $"WatchList  ({Children.Count} items)",
+            NodeKinds.TemplateList => $"Templates  ({Children.Count} templates)",
+            NodeKinds.WatchItem => !string.IsNullOrWhiteSpace(Tag) ? $"{Tag}  ({WatchPath}{Filter})" : $"{WatchPath}{Filter}",
+            NodeKinds.Event => $"Event: {EventType} ({ExecutionTypeText})",
+            NodeKinds.ActionGroup => $"[{ExecutionTypeText}] {Tag}",
+            NodeKinds.Action => FormatActionLabel(ActionTypeText, AgentName, Command, Parameters, To, Title),
+            NodeKinds.Initialize => $"Initialize: {ParameterFile}",
+            NodeKinds.Ref => $"Ref > {TemplateID}",
+            NodeKinds.Template => $"Template: {TemplateName}",
             _ => DisplayText,
         };
-        if (NodeKind == "Action" && Enum.TryParse<ActionType>(ActionTypeText, out var t))
-        {
-            NodeIcon = ResolveCommandIcon(Command, t);
-            NodeIconGlyph = ResolveNodeIconGlyph("Action", ActionTypeText);
-        }
     }
 
-    /// <summary>Formats a human-readable label for an Action node.</summary>
-    private static string FormatActionLabel(string actionTypeText, string agentName, string command, string parameters, string to, string title)
+    private static string FormatActionLabel(string actionType, string agent, string cmd, string param, string to, string title)
     {
-        if (!Enum.TryParse<ActionType>(actionTypeText, out var actionType))
-            return $"{command} {parameters}".TrimEnd();
-
         var label = actionType switch
         {
-            ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(agentName)
-                ? $"Remote Command on '{agentName}' \u2014 {command}"
-                : $"Remote Command \u2014 {command}",
-            ActionType.SendMail => $"Send Mail to {to}: {title}",
-            _ => $"Run \u2014 {command} {parameters}".TrimEnd(),
+            "RunRemoteCommand" => !string.IsNullOrWhiteSpace(agent)
+                ? $"Remote Command on '{agent}' \u2014 {cmd}"
+                : $"Remote Command \u2014 {cmd}",
+            "RunCommand" => $"Run \u2014 {cmd} {param}".TrimEnd(),
+            "SendMail" => $"Send Mail to {to}: {title}",
+            _ => cmd,
         };
         return label.Length > 100 ? label[..100] + "\u2026" : label;
     }
-
-    // ── Helpers for finding tree nodes by model object ───────────────
 
     /// <summary>Find the TreeNodeViewModel whose ModelObject matches the given IActionNode.</summary>
     public TreeNodeViewModel? FindByModel(object model)

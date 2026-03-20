@@ -133,6 +133,9 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             completionCheckCommand: request.CompletionCheckCommand,
             completionPollIntervalSeconds: request.CompletionPollIntervalSeconds > 0
                 ? request.CompletionPollIntervalSeconds : 30,
+            enableInstallLog: request.EnableInstallLog,
+            installLogPollSeconds: request.InstallLogPollSeconds > 0 ? request.InstallLogPollSeconds : 5,
+            installLogRoot: request.InstallLogRoot,
             externalCt: context.CancellationToken);
 
         if (!accepted || reader is null)
@@ -212,96 +215,24 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     public override Task<ExecutionHistoryReply> GetExecutionHistory(
         ExecutionHistoryRequest request, ServerCallContext context)
     {
-        var records = _tracker.GetHistory(request.MaxResults, request.FilterCommand);
         var reply = new ExecutionHistoryReply();
-        reply.Records.AddRange(records);
-        return Task.FromResult(reply);
-    }
-
-    /// <summary>
-    /// Returns a single snapshot of the agent's current state, running
-    /// command, and resource metrics. Useful for dashboard polling as a
-    /// lighter alternative to the streaming subscription.
-    /// </summary>
-    public override Task<AgentSnapshot> GetAgentSnapshot(Empty request, ServerCallContext context)
-    {
-        var snapshot = new AgentSnapshot
+        reply.Records.AddRange(_tracker.GetHistory().Select(r =>
         {
-            AgentName            = _settings.AgentName,
-            State                = _executor.CurrentState,
-            CurrentActivity      = _executor.Activity,
-            CurrentExecutionId   = _executor.CurrentExecutionId ?? "",
-            CurrentCommand       = _executor.CurrentCommand ?? "",
-            Metrics              = _metrics.Collect(),
-            ExecutionsCompleted  = _tracker.CompletedCount,
-            ExecutionsFailed     = _tracker.FailedCount,
-            AgentStarted         = Timestamp.FromDateTime(_agentStartedUtc),
-        };
-
-        if (_executor.ExecutionStartedUtc.HasValue)
-            snapshot.ExecutionStarted = Timestamp.FromDateTime(_executor.ExecutionStartedUtc.Value);
-
-        return Task.FromResult(snapshot);
-    }
-
-    /// <summary>
-    /// Returns audit log entries matching the request criteria.
-    /// Allows the Controller and Dashboard to query audit logs remotely.
-    /// </summary>
-    public override Task<AuditLogReply> GetAuditLog(AuditLogRequest request, ServerCallContext context)
-    {
-        var maxEntries = request.MaxEntries > 0 ? request.MaxEntries : 500;
-        var entries = _audit.ReadEntries(request.FromDate, request.ToDate,
-            request.EventFilter, maxEntries);
-
-        var reply = new AuditLogReply();
-        foreach (var e in entries)
-        {
-            reply.Entries.Add(new AuditLogEntry
+            var rec = new ExecutionRecord
             {
-                Timestamp   = e.Timestamp.ToString("O"),
-                Event       = e.Event,
-                Severity    = e.Severity,
-                ExecutionId = e.ExecutionId ?? "",
-                Source      = e.Source ?? "",
-                Command     = e.Command ?? "",
-                Detail      = e.Detail ?? "",
-                ExitCode    = e.ExitCode ?? 0,
-                DurationMs  = e.DurationMs ?? 0,
-            });
-        }
-
-        return Task.FromResult(reply);
-    }
-
-    /// <summary>
-    /// Returns the agent's view of connection health to the controller.
-    /// </summary>
-    public override Task<ConnectionHealthReply> GetConnectionHealth(
-        ConnectionHealthRequest request, ServerCallContext context)
-    {
-        var reply = new ConnectionHealthReply
-        {
-            ControllerName      = _healthMonitor.ControllerName ?? "",
-            ControllerAddress   = _healthMonitor.ControllerAddress ?? "",
-            IsConnected         = _healthMonitor.IsConnected,
-            ConsecutiveFailures = _healthMonitor.ConsecutiveFailures,
-            TotalHeartbeatsSent   = _healthMonitor.TotalHeartbeatsSent,
-            TotalHeartbeatsFailed = _healthMonitor.TotalHeartbeatsFailed,
-            CurrentSuccessStreak  = _healthMonitor.CurrentSuccessStreak,
-            EventStreamActive     = _broadcaster.SubscriberCount > 0,
-            LastDisconnectReason  = _healthMonitor.LastError ?? "",
-        };
-
-        if (_healthMonitor.LastSuccessfulHeartbeat is { } lastOk)
-            reply.LastSuccessfulHeartbeat = Timestamp.FromDateTime(DateTime.SpecifyKind(lastOk, DateTimeKind.Utc));
-        if (_healthMonitor.LastFailedHeartbeat is { } lastFail)
-            reply.LastFailedHeartbeat = Timestamp.FromDateTime(DateTime.SpecifyKind(lastFail, DateTimeKind.Utc));
-        if (_healthMonitor.RegistrationTimestamp is { } regTs)
-            reply.RegistrationTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(regTs, DateTimeKind.Utc));
-        if (_healthMonitor.DowntimeDuration is { } downtime)
-            reply.LastDowntimeDuration = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(downtime);
-
+                ExecutionId  = r.ExecutionId,
+                Command      = r.Command,
+                Arguments    = r.Arguments,
+                ExitCode     = r.ExitCode,
+                Started      = r.Started,
+                Finished     = r.Finished,
+                ErrorMessage = r.ErrorMessage,
+                Outcome      = r.Outcome,
+            };
+            rec.StdoutLines.AddRange(r.StdoutLines);
+            rec.StderrLines.AddRange(r.StderrLines);
+            return rec;
+        }));
         return Task.FromResult(reply);
     }
 }

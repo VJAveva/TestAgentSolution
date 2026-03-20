@@ -17,7 +17,7 @@ public sealed class VocabularyMonitor : IVocabularyMonitor
     private FileSystemWatcher? _watcher;
     private CancellationTokenSource? _debounceCts;
     private string _filePath = "";
-    private volatile bool _suppressNext;
+    private long _suppressUntilTicks;
 
     public event Action<WatchListConfig>? ConfigReloaded;
 
@@ -29,10 +29,17 @@ public sealed class VocabularyMonitor : IVocabularyMonitor
     }
 
     /// <summary>
-    /// Suppresses the next file-change reload. Call this before saving
+    /// Suppresses file-change reloads for a short window. Call this before saving
     /// to prevent a save → detect change → reload → rebuild cycle.
+    /// Uses a time window because FileSystemWatcher can fire multiple events per write.
     /// </summary>
-    public void SuppressNextReload() => _suppressNext = true;
+    public void SuppressNextReload()
+    {
+        // Suppress all events arriving within the next 1 second.
+        // FileSystemWatcher fires multiple events per write; this window covers them
+        // without bleeding into genuinely separate file modifications.
+        _suppressUntilTicks = DateTime.UtcNow.AddSeconds(1).Ticks;
+    }
 
     /// <summary>
     /// Loads the initial configuration and starts monitoring for changes.
@@ -79,12 +86,9 @@ public sealed class VocabularyMonitor : IVocabularyMonitor
     /// </summary>
     private void DebounceReload()
     {
-        // If we just saved ourselves, skip this reload cycle
-        if (_suppressNext)
-        {
-            _suppressNext = false;
+        // If we're within the suppression window (our own save), skip this reload cycle
+        if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _suppressUntilTicks))
             return;
-        }
 
         _debounceCts?.Cancel();
         _debounceCts = new CancellationTokenSource();

@@ -11,6 +11,24 @@ namespace TestControllerGrpc.ViewModels;
 // ?? Helpers: BuildTree, RebuildTreeFromConfig, utility methods ???????
 public sealed partial class MainViewModel
 {
+    // ?? Centralized tree rebuild ????????????????????????????????????
+
+    /// <summary>
+    /// Rebuilds both tree views and refreshes all dependent state.
+    /// Must be called on UI thread.
+    /// </summary>
+    private void RebuildAllTrees()
+    {
+        TreeRoots.Clear();
+        TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
+        TemplateRoots.Clear();
+        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+        RebuildTemplateIds();
+        RebuildFilterOptions();
+        LoadTokensFromConfig(_config);
+        ActiveWatchers = _watcherManager.ActiveWatcherCount;
+    }
+
     // ?? Tree search ????????????????????????????????????????????????
 
     [RelayCommand]
@@ -54,7 +72,7 @@ public sealed partial class MainViewModel
                 anyChildMatch = true;
         }
 
-        var visible = selfMatch || anyChildMatch || node.NodeKind is "WatchList";
+        var visible = selfMatch || anyChildMatch || node.NodeKind is NodeKinds.WatchList;
         node.IsFilterVisible = visible;
         if (anyChildMatch) node.IsExpanded = true;
         return visible;
@@ -121,15 +139,7 @@ public sealed partial class MainViewModel
         {
             try
             {
-                // Single WatchList — replace the root's children, keep one root
-                TreeRoots.Clear();
-                TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                TemplateRoots.Clear();
-                TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                RebuildTemplateIds();
-                RebuildFilterOptions();
-                LoadTokensFromConfig(config);
-                ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                RebuildAllTrees();
                 StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
             }
             catch (Exception ex)
@@ -302,14 +312,7 @@ public sealed partial class MainViewModel
             {
                 try
                 {
-                    TreeRoots.Clear();
-                    TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
-                    TemplateRoots.Clear();
-                    TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
-                    RebuildTemplateIds();
-                    RebuildFilterOptions();
-                    LoadTokensFromConfig(config);
-                    ActiveWatchers = _watcherManager.ActiveWatcherCount;
+                    RebuildAllTrees();
                     StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates (diff reload)";
                 }
                 catch (Exception ex)
@@ -397,7 +400,7 @@ public sealed partial class MainViewModel
             foreach (var child in WatchListRoot.Children)
             {
                 if (string.Equals(child.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase)
-                    && child.NodeKind == "WatchItem")
+                    && child.NodeKind == NodeKinds.WatchItem)
                 {
                     child.LastBuildNumber = buildNumber;
                     child.LastDropLocation = dropLocation;

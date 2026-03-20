@@ -277,6 +277,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _vocabMonitor.ConfigReloaded -= OnConfigReloaded;
         _executor.LogEntry -= OnLogEntry;
         _executor.NodeProgress -= OnNodeProgress;
+        _executor.NodeFailed -= OnNodeFailed;
         _dispatcher.OutputReceived -= OnOutputReceived;
         _dispatcher.StatusChanged -= OnStatusChanged;
         _watcherManager.TriggerFired -= OnTriggerFired;
@@ -305,25 +306,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (value is null) return;
 
         ActiveEditNode = value;
-        ActiveEditingContext = value.NodeKind is "Template" or "TemplateList" ? "Templates" : "WatchList";
+        ActiveEditingContext = value.NodeKind is NodeKinds.Template or NodeKinds.TemplateList ? "Templates" : "WatchList";
 
         // Context-sensitive execute button visibility
-        ShowExecuteAll = value.NodeKind == "WatchList" ? Visibility.Visible : Visibility.Collapsed;
-        ShowTriggerAllEvents = value.NodeKind == "WatchItem" ? Visibility.Visible : Visibility.Collapsed;
-        ShowTriggerEvent = value.NodeKind == "Event" ? Visibility.Visible : Visibility.Collapsed;
-        ShowExecuteGroup = value.NodeKind == "ActionGroup" ? Visibility.Visible : Visibility.Collapsed;
-        ShowExecuteAction = value.NodeKind == "Action" ? Visibility.Visible : Visibility.Collapsed;
+        ShowExecuteAll = value.NodeKind == NodeKinds.WatchList ? Visibility.Visible : Visibility.Collapsed;
+        ShowTriggerAllEvents = value.NodeKind == NodeKinds.WatchItem ? Visibility.Visible : Visibility.Collapsed;
+        ShowTriggerEvent = value.NodeKind == NodeKinds.Event ? Visibility.Visible : Visibility.Collapsed;
+        ShowExecuteGroup = value.NodeKind == NodeKinds.ActionGroup ? Visibility.Visible : Visibility.Collapsed;
+        ShowExecuteAction = value.NodeKind == NodeKinds.Action ? Visibility.Visible : Visibility.Collapsed;
 
         // Import/Export/EditXML visibility — only for WatchList-level operations
-        ShowImportButton = value.NodeKind is "WatchList"
+        ShowImportButton = value.NodeKind is NodeKinds.WatchList
             ? Visibility.Visible : Visibility.Collapsed;
-        ShowEditXmlButton = value.NodeKind is "WatchList"
+        ShowEditXmlButton = value.NodeKind is NodeKinds.WatchList
             ? Visibility.Visible : Visibility.Collapsed;
-        ShowExportButton = value.NodeKind is "WatchList" or "WatchItem"
+        ShowExportButton = value.NodeKind is NodeKinds.WatchList or NodeKinds.WatchItem
             ? Visibility.Visible : Visibility.Collapsed;
 
         // Load Initialize parameter file entries
-        if (value.NodeKind == "Initialize" && !string.IsNullOrWhiteSpace(value.ParameterFile))
+        if (value.NodeKind == NodeKinds.Initialize && !string.IsNullOrWhiteSpace(value.ParameterFile))
             LoadParameterFileEntries(value.ParameterFile);
         else
             ParameterFileEntries.Clear();
