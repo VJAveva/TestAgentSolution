@@ -48,6 +48,10 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     [ObservableProperty] private bool _isXmlValid = true;
     [ObservableProperty] private int _errorLine = -1;
     [ObservableProperty] private int _errorPosition = -1;
+    [ObservableProperty] private double _editorFontSize = 13.0;
+
+    public double[] AvailableFontSizes { get; } =
+        [9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32];
 
     // Summary panel
     [ObservableProperty] private string _watchItemSummary = "";

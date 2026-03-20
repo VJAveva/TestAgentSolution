@@ -90,6 +90,7 @@ public sealed class CommandExecutor : IDisposable
         string command, string arguments, bool isReboot,
         int timeoutMs = 0,
         string? executionId = null, string? userName = null, string? password = null,
+        string? completionCheckCommand = null, int completionPollIntervalSeconds = 30,
         CancellationToken externalCt = default)
     {
         if (_state == AgentState.Running)
@@ -114,7 +115,9 @@ public sealed class CommandExecutor : IDisposable
             try
             {
                 await ExecuteAsync(execId, command, arguments, isReboot, ch.Writer, ct,
-                    userName: userName, password: password);
+                    userName: userName, password: password,
+                    completionCheckCommand: completionCheckCommand,
+                    completionPollIntervalSeconds: completionPollIntervalSeconds);
             }
             finally
             {
@@ -134,7 +137,9 @@ public sealed class CommandExecutor : IDisposable
         ChannelWriter<ExecutionEvent>? perCallChannel,
         CancellationToken ct,
         string? userName = null,
-        string? password = null)
+        string? password = null,
+        string? completionCheckCommand = null,
+        int completionPollIntervalSeconds = 30)
     {
         // Acquire the execution lock — if cancelled here, we must NOT release in finally
         bool lockAcquired = false;
@@ -238,6 +243,37 @@ public sealed class CommandExecutor : IDisposable
             try { await heartbeatTask; } catch (OperationCanceledException) { }
 
             _lastExitCode = _currentProcess.ExitCode;
+
+            // ── COMPLETION POLLING (child process monitoring) ──────
+            if (!string.IsNullOrWhiteSpace(completionCheckCommand) && _lastExitCode == 0)
+            {
+                EmitEvent(executionId, ExecutionEventType.EventProgress,
+                    detail: "Main process exited. Polling for child process completion...",
+                    perCallChannel: perCallChannel);
+
+                var pollInterval = Math.Max(completionPollIntervalSeconds, 5);
+                while (!ct.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(pollInterval), ct);
+
+                    var checkResult = await RunCompletionCheckAsync(
+                        completionCheckCommand, TimeSpan.FromSeconds(30), ct);
+
+                    EmitEvent(executionId, ExecutionEventType.EventProgress,
+                        detail: $"Completion check: {checkResult.Output.Trim()}",
+                        perCallChannel: perCallChannel);
+
+                    // findstr returns exit 1 when pattern NOT found = process no longer running
+                    if (checkResult.ExitCode != 0 || checkResult.Output.Contains("DONE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        EmitEvent(executionId, ExecutionEventType.EventProgress,
+                            detail: "Child processes completed. Install finished.",
+                            perCallChannel: perCallChannel);
+                        break;
+                    }
+                }
+            }
+
             record.Complete(_lastExitCode);
 
             var durationMs = (long)(DateTime.UtcNow - _executionStartedUtc!.Value).TotalMilliseconds;
@@ -316,6 +352,50 @@ public sealed class CommandExecutor : IDisposable
 
             if (lockAcquired)
                 _executionLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Runs a quick command to check if child processes have completed.
+    /// Returns the exit code and captured stdout for decision-making.
+    /// </summary>
+    private async Task<(int ExitCode, string Output)> RunCompletionCheckAsync(
+        string command, TimeSpan timeout, CancellationToken ct)
+    {
+        try
+        {
+            var (resolvedFile, resolvedArgs) = ResolveInterpreter(command, "");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = resolvedFile,
+                Arguments = resolvedArgs,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+
+            using var checkProcess = Process.Start(psi);
+            if (checkProcess is null)
+                return (-1, "Failed to start check process");
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(timeout);
+
+            var output = await checkProcess.StandardOutput.ReadToEndAsync(cts.Token);
+            await checkProcess.WaitForExitAsync(cts.Token);
+
+            return (checkProcess.ExitCode, output);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Completion check command failed");
+            return (-1, $"Error: {ex.Message}");
         }
     }
 

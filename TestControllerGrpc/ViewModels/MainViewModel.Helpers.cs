@@ -261,6 +261,26 @@ public sealed partial class MainViewModel
         });
     }
 
+    private void OnNodeFailed(IActionNode node, int exitCode, string errorMessage)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            var treeNode = WatchListRoot?.FindByModel(node);
+            if (treeNode is not null)
+            {
+                treeNode.LastExitCode = exitCode;
+                treeNode.LastExecutionError = errorMessage;
+                return;
+            }
+            treeNode = TemplateListRoot?.FindByModel(node);
+            if (treeNode is not null)
+            {
+                treeNode.LastExitCode = exitCode;
+                treeNode.LastExecutionError = errorMessage;
+            }
+        });
+    }
+
     private void WriteBackAll()
     {
         void Recurse(TreeNodeViewModel n) { n.ApplyToModel(); foreach (var c in n.Children) Recurse(c); }

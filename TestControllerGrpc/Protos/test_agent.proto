@@ -64,6 +64,8 @@ message RunCommandRequest {
   int32  timeout_seconds = 5;
   string user_name      = 6;
   string password        = 7;
+  string completion_check_command = 8;
+  int32  completion_poll_interval_seconds = 9;
 }
 
 message RunCommandReply {

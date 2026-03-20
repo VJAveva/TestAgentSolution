@@ -338,6 +338,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     UserName = resolved.UserName ?? "",
                     Password = resolved.Password ?? "",
                     TimeoutSeconds = timeoutSeconds,
+                    CompletionCheckCommand = resolved.CompletionCheckCommand ?? "",
+                    CompletionPollIntervalSeconds = resolved.CompletionPollIntervalSeconds,
                 }, cancellationToken: linked.Token);
 
                 int exitCode = 0;
@@ -441,6 +443,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     /// <summary>
     /// Executes a local RunCommand on the controller machine.
     /// Automatically wraps .bat/.cmd via cmd.exe and .ps1 via powershell.exe.
+    /// Supports CompletionCheckCommand for child process monitoring after main process exits.
     /// </summary>
     public async Task<ActionResult> ExecuteLocalCommandAsync(
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
@@ -487,6 +490,43 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
             await process.WaitForExitAsync(ct);
             await Task.WhenAll(stdoutTask, stderrTask);
+
+            // Completion polling for child process monitoring
+            if (!string.IsNullOrWhiteSpace(resolved.CompletionCheckCommand) && process.ExitCode == 0)
+            {
+                OutputReceived?.Invoke("Controller",
+                    "Main process exited. Polling for child process completion...", "info");
+
+                var pollInterval = Math.Max(resolved.CompletionPollIntervalSeconds, 5);
+                while (!ct.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(pollInterval), ct);
+
+                    var (checkFile, checkArgs) = ResolveInterpreter(resolved.CompletionCheckCommand, "");
+                    using var checkProcess = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = checkFile,
+                        Arguments = checkArgs,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true,
+                    });
+
+                    if (checkProcess is null) break;
+
+                    var output = await checkProcess.StandardOutput.ReadToEndAsync(ct);
+                    await checkProcess.WaitForExitAsync(ct);
+
+                    OutputReceived?.Invoke("Controller", $"Completion check: {output.Trim()}", "info");
+
+                    if (checkProcess.ExitCode != 0 || output.Contains("DONE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        OutputReceived?.Invoke("Controller",
+                            "Child processes completed. Install finished.", "info");
+                        break;
+                    }
+                }
+            }
 
             return new ActionResult(process.ExitCode == 0, process.ExitCode, "");
         }

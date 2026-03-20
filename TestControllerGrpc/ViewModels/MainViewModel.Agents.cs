@@ -136,6 +136,28 @@ public sealed partial class MainViewModel
         RefreshAgentStatusSummary();
     }
 
+    [RelayCommand]
+    private void OpenAgentMonitor(AgentInfoViewModel? agent)
+    {
+        if (agent is null) return;
+
+        var address = _dispatcher.GetAgentAddress(agent.Name);
+        if (string.IsNullOrEmpty(address))
+        {
+            AddLog($"Agent '{agent.Name}' has no registered address.", LogSeverity.Warning);
+            return;
+        }
+
+        var vm = new AgentMonitorViewModel(agent.Name, address);
+        var window = new Views.AgentMonitorWindow { DataContext = vm };
+
+        if (Application.Current.MainWindow is { } main)
+            window.Owner = main;
+
+        window.Closed += (_, _) => vm.Dispose();
+        window.Show();
+    }
+
     private async Task TestSingleAgentAsync(AgentInfoViewModel agentVm)
     {
         agentVm.ConnectionStatus = "Testing";

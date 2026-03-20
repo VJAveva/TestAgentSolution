@@ -33,9 +33,14 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
 
     /// <summary>
     /// Raised when an IActionNode starts or finishes execution.
-    /// Status: "Running", "Success", "Failed".
+    /// Status: "Running", "Success", "Failed", "PartialFailure", "Cancelled".
     /// </summary>
     public event Action<IActionNode, string>? NodeProgress;
+
+    /// <summary>
+    /// Raised when an action node fails, providing exit code and error details.
+    /// </summary>
+    public event Action<IActionNode, int, string>? NodeFailed;
 
     public ActionPipelineExecutor(
         IAgentGrpcDispatcher dispatcher,
@@ -116,10 +121,17 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
                 _ => true,
             };
         }
+        catch (OperationCanceledException)
+        {
+            NodeProgress?.Invoke(node, "Cancelled");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Node execution error");
-            success = false;
+            NodeFailed?.Invoke(node, -1, ex.Message);
+            NodeProgress?.Invoke(node, "Failed");
+            return false;
         }
         NodeProgress?.Invoke(node, success ? "Success" : "Failed");
         return success;
@@ -172,7 +184,16 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
     {
         NodeProgress?.Invoke(action, "Running");
-        var success = await ExecuteActionAsync(action, ctx, ct);
+        bool success;
+        try
+        {
+            success = await ExecuteActionAsync(action, ctx, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            NodeProgress?.Invoke(action, "Cancelled");
+            return false;
+        }
         NodeProgress?.Invoke(action, success ? "Success" : "Failed");
         return success;
     }
@@ -206,7 +227,10 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         }
 
         if (!result.Success)
+        {
             Log("Action", $"✗ Failed: {result.ErrorMessage} (exit={result.ExitCode})");
+            NodeFailed?.Invoke(action, result.ExitCode, result.ErrorMessage);
+        }
         else
             Log("Action", $"✓ Success (exit={result.ExitCode})");
 

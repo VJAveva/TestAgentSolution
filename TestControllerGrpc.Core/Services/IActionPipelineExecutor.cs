@@ -14,9 +14,14 @@ public interface IActionPipelineExecutor
 
     /// <summary>
     /// Raised when an IActionNode starts or finishes execution.
-    /// Status: "Running", "Success", "Failed".
+    /// Status: "Running", "Success", "Failed", "PartialFailure", "Cancelled".
     /// </summary>
     event Action<IActionNode, string>? NodeProgress;
+
+    /// <summary>
+    /// Raised when an action node fails, providing exit code and error details.
+    /// </summary>
+    event Action<IActionNode, int, string>? NodeFailed;
 
     /// <summary>
     /// Loads the template dictionary for Ref resolution.

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using CommunityToolkit.Mvvm.Input;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Document;
@@ -57,6 +58,14 @@ public partial class RawXmlEditorWindow : Window
         // IntelliSense: trigger completion on typing
         XmlEditor.TextArea.TextEntering += OnTextEntering;
         XmlEditor.TextArea.TextEntered += OnTextEntered;
+
+        // Keyboard shortcuts for font size
+        InputBindings.Add(new KeyBinding(
+            new RelayCommand(() => IncreaseFontSize_Click(null, null!)),
+            new KeyGesture(Key.OemPlus, ModifierKeys.Control)));
+        InputBindings.Add(new KeyBinding(
+            new RelayCommand(() => DecreaseFontSize_Click(null, null!)),
+            new KeyGesture(Key.OemMinus, ModifierKeys.Control)));
 
         // Initial folding
         SetupFolding();
@@ -414,6 +423,22 @@ public partial class RawXmlEditorWindow : Window
         {
             return null;
         }
+    }
+
+    private void IncreaseFontSize_Click(object? sender, RoutedEventArgs e)
+    {
+        var sizes = _vm.AvailableFontSizes;
+        var current = _vm.EditorFontSize;
+        var next = sizes.FirstOrDefault(s => s > current);
+        if (next > 0) _vm.EditorFontSize = next;
+    }
+
+    private void DecreaseFontSize_Click(object? sender, RoutedEventArgs e)
+    {
+        var sizes = _vm.AvailableFontSizes;
+        var current = _vm.EditorFontSize;
+        var prev = sizes.LastOrDefault(s => s < current);
+        if (prev > 0) _vm.EditorFontSize = prev;
     }
 
     protected override void OnClosed(EventArgs e)

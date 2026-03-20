@@ -57,13 +57,15 @@ message StateReply {
 }
 
 message RunCommandRequest {
-  string command        = 1;
-  string arguments      = 2;
-  bool   is_reboot      = 3;
-  string execution_id   = 4;
-  int32  timeout_seconds = 5;
-  string user_name      = 6;
-  string password        = 7;
+  string command                    = 1;
+  string arguments                  = 2;
+  bool   is_reboot                  = 3;
+  string execution_id               = 4;
+  int32  timeout_seconds             = 5;
+  string user_name                  = 6;
+  string password                    = 7;
+  string completion_check_command    = 8;
+  int32  completion_poll_interval_seconds = 9;
 }
 
 message RunCommandReply {

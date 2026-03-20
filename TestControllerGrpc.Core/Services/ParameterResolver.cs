@@ -133,6 +133,8 @@ public static partial class ParameterResolver
         FailAndContinue = action.FailAndContinue,
         IsReboot = action.IsReboot,
         Order = action.Order,
+        CompletionCheckCommand = Resolve(action.CompletionCheckCommand, ctx),
+        CompletionPollIntervalSeconds = action.CompletionPollIntervalSeconds,
         UserName = Resolve(action.UserName, ctx),
         Password = Resolve(action.Password, ctx),
         From = Resolve(action.From, ctx),

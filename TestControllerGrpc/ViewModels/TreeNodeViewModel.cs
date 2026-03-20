@@ -40,6 +40,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private int _timeout;
     [ObservableProperty] private int _pollInterval = 1000;
     [ObservableProperty] private bool _isReboot;
+    [ObservableProperty] private string _completionCheckCommand = "";
+    [ObservableProperty] private int _completionPollIntervalSeconds = 30;
     [ObservableProperty] private string _userName = "";
     [ObservableProperty] private string _password = "";
     [ObservableProperty] private string _from = "";
@@ -76,12 +78,26 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isFilterVisible = true;
 
     // ── Execution status ────────────────────────────────────────────
-    // Values: "Idle", "Running", "Success", "Failed"
+    // Values: "Idle", "Running", "Success", "Failed", "PartialFailure", "Cancelled"
     [ObservableProperty] private string _executionStatus = "Idle";
     [ObservableProperty] private string _statusSymbol = "";
     [ObservableProperty] private string _statusColor = "Transparent";
     [ObservableProperty] private string _statusTooltip = "";
     [ObservableProperty] private string _failureMessage = "";
+
+    private string _lastExecutionError = "";
+    public string LastExecutionError
+    {
+        get => _lastExecutionError;
+        set => SetProperty(ref _lastExecutionError, value);
+    }
+
+    private int _lastExitCode;
+    public int LastExitCode
+    {
+        get => _lastExitCode;
+        set => SetProperty(ref _lastExitCode, value);
+    }
 
     partial void OnExecutionStatusChanged(string value)
     {
@@ -89,7 +105,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         {
             case "Running":
                 StatusSymbol = "\u25B6";  // ▶
-                StatusColor = "#FF89B4FA"; // Accent blue
+                StatusColor = "#FFF9E2AF"; // Amber
                 StatusTooltip = "Running...";
                 break;
             case "Success":
@@ -98,12 +114,22 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 StatusTooltip = "Completed successfully";
                 FailureMessage = "";
                 break;
-            case "Failed":
+            case var s when s is not null && s.StartsWith("Failed"):
                 StatusSymbol = "\u2716";  // ✖
                 StatusColor = "#FFF38BA8"; // Red
-                StatusTooltip = string.IsNullOrEmpty(FailureMessage)
+                StatusTooltip = string.IsNullOrEmpty(_lastExecutionError)
                     ? "Execution failed"
-                    : $"Failed: {FailureMessage}";
+                    : $"Failed: {_lastExecutionError}";
+                break;
+            case "PartialFailure":
+                StatusSymbol = "\u26A0";  // ⚠
+                StatusColor = "#FFF9E2AF"; // Amber
+                StatusTooltip = "Some actions failed";
+                break;
+            case "Cancelled":
+                StatusSymbol = "\u2298";  // ⊘
+                StatusColor = "#FF9399B2"; // Gray
+                StatusTooltip = "Cancelled";
                 break;
             default: // Idle
                 StatusSymbol = "";
@@ -146,7 +172,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 p.ExecutionStatus = aggregated;
 
             // Auto-expand parents on failure so the failed node is visible
-            if (ExecutionStatus == "Failed")
+            if (ExecutionStatus is "Failed" or "PartialFailure")
                 p.IsExpanded = true;
 
             p = p.Parent;
@@ -155,26 +181,31 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     /// <summary>
     /// Compute the aggregated status for a parent based on its children.
-    /// Priority: Failed > Running > Success > Idle.
+    /// Priority: Failed > Running > PartialFailure > Success > Idle.
     /// </summary>
     private static string ComputeAggregatedStatus(TreeNodeViewModel parent)
     {
         var hasFailed = false;
         var hasRunning = false;
         var hasSuccess = false;
+        var hasCancelled = false;
 
         foreach (var child in parent.Children)
         {
             switch (child.ExecutionStatus)
             {
-                case "Failed": hasFailed = true; break;
+                case "Failed" or "PartialFailure": hasFailed = true; break;
                 case "Running": hasRunning = true; break;
                 case "Success": hasSuccess = true; break;
+                case "Cancelled": hasCancelled = true; break;
             }
         }
 
-        if (hasFailed) return "Failed";
         if (hasRunning) return "Running";
+        if (hasFailed && hasSuccess) return "PartialFailure";
+        if (hasFailed) return "Failed";
+        if (hasCancelled && hasSuccess) return "PartialFailure";
+        if (hasCancelled) return "Cancelled";
         if (hasSuccess) return "Success";
         return "Idle";
     }
@@ -435,6 +466,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             AgentName = a.AgentName, Command = a.Command, Parameters = a.Parameters,
             Timeout = a.Timeout, PollInterval = a.PollInterval,
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
+            CompletionCheckCommand = a.CompletionCheckCommand,
+            CompletionPollIntervalSeconds = a.CompletionPollIntervalSeconds,
             UserName = a.UserName, Password = a.Password,
             From = a.From, To = a.To, Title = a.Title, Body = a.Body,
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
@@ -512,6 +545,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 a.AgentName = AgentName; a.Command = Command; a.Parameters = Parameters;
                 a.Timeout = Timeout; a.PollInterval = PollInterval;
                 a.FailAndContinue = FailAndContinue; a.IsReboot = IsReboot;
+                a.CompletionCheckCommand = CompletionCheckCommand;
+                a.CompletionPollIntervalSeconds = CompletionPollIntervalSeconds;
                 a.UserName = UserName; a.Password = Password;
                 a.From = From; a.To = To; a.Title = Title; a.Body = Body;
                 a.Attachment = Attachment; a.Embed = Embed; a.LargeFilesShare = LargeFilesShare; break;

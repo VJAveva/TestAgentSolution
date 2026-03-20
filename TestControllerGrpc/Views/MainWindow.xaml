@@ -786,59 +786,6 @@
                             </WrapPanel>
                         </Border>
                     </TabItem>
-
-                    <!-- ─── TOOLS TAB ─── -->
-                    <TabItem Header="TOOLS">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="Theme:" FontSize="11" Foreground="{DynamicResource TextS}"
-                                                       VerticalAlignment="Center" Margin="4,0,8,0" />
-                                            <ComboBox ItemsSource="{Binding AvailableThemes}"
-                                                      SelectedItem="{Binding SelectedTheme}"
-                                                      Style="{StaticResource Cmb}" Width="140" Margin="0" />
-                                        </StackPanel>
-                                        <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenResultsCommand}"
-                                                    ToolTip="Open the Results Dashboard window">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Results Viewer" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                        <TextBlock Text="Results" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
-                                                    ToolTip="Open Help &amp; Feature Guide">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" Foreground="{DynamicResource Accent}" />
-                                                    <TextBlock Text="Help" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                        <TextBlock Text="Help" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
-                            </WrapPanel>
-                        </Border>
-                    </TabItem>
                 </TabControl>
             </DockPanel>
         </Border>
@@ -1002,6 +949,18 @@
                                         Background="{DynamicResource FailedBadgeBg}"
                                         Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=Failed}">
                                     <TextBlock Text="FAILED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
+                                </Border>
+                                <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
+                                        Background="{DynamicResource RunningBadgeBg}"
+                                        Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=PartialFailure}">
+                                    <TextBlock Text="PARTIAL" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
+                                </Border>
+                                <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
+                                        Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=Cancelled}">
+                                    <Border.Background>
+                                        <SolidColorBrush Color="#339399B2" />
+                                    </Border.Background>
+                                    <TextBlock Text="CANCELLED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
                                 </Border>
                                 <TextBlock Text="{Binding NodeKind, StringFormat='[ {0} ]'}"
                                            Foreground="{DynamicResource AccMauve}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -1207,6 +1166,26 @@
                                             <TextBox Text="{Binding PollInterval, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
                                         </StackPanel>
                                     </Grid>
+                                    <Label Content="COMPLETION CHECK COMMAND" Style="{StaticResource Lbl}" />
+                                    <TextBox Text="{Binding CompletionCheckCommand, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"
+                                             TextWrapping="Wrap" AcceptsReturn="False"
+                                             ToolTip="Optional: command to poll after main process exits to detect child process completion. E.g. cmd /c tasklist | findstr msiexec || echo DONE" />
+                                    <Grid Margin="0,0,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="2*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <Label Content="CHECK INTERVAL (s)" Style="{StaticResource Lbl}" />
+                                            <TextBox Text="{Binding CompletionPollIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
+                                                     ToolTip="How often to run the check command (seconds). Default: 30" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,18,0,0">
+                                                <Run Text="&#x24D8;" FontWeight="Bold" />
+                                                <Run Text=" Polls after Setup.exe exits to wait for msiexec child processes. Stops when check returns exit 1 or output contains DONE." />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Grid>
                                     <StackPanel Orientation="Horizontal" Margin="0,5">
                                         <CheckBox Content="FailAndContinue" IsChecked="{Binding FailAndContinue}" Foreground="{DynamicResource TextP}" Margin="0,0,16,0" />
                                         <CheckBox Content="IsReboot" IsChecked="{Binding IsReboot}" Foreground="{DynamicResource TextP}" />
@@ -1235,7 +1214,7 @@
                                     </Grid>
                                 </StackPanel>
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=SendMail}">
-                                    <TextBlock Text="MAIL SETTINGS" Style="{StaticResource Sec}" />
+                                    <TextBlock Text="EMAIL SETTINGS" Style="{StaticResource Sec}" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" />
@@ -1249,14 +1228,17 @@
                                             <TextBox Text="{Binding To, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
                                         </StackPanel>
                                     </Grid>
-                                    <Label Content="SUBJECT" Style="{StaticResource Lbl}" />
+                                    <Label Content="TITLE" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
                                     <Label Content="BODY" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding Body, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
-                                             TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
+                                             TextWrapping="Wrap" AcceptsReturn="True" Height="60" VerticalScrollBarVisibility="Auto" />
                                     <Label Content="ATTACHMENT" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
-                                             TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
+                                    <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
+                                    <Label Content="EMBED" Style="{StaticResource Lbl}" />
+                                    <TextBox Text="{Binding Embed, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
+                                    <Label Content="LARGE FILES SHARE" Style="{StaticResource Lbl}" />
+                                    <TextBox Text="{Binding LargeFilesShare, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
                                 </StackPanel>
                             </StackPanel>
                             <!-- ===== Initialize ===== -->
@@ -1348,6 +1330,37 @@
                                     <Run Text=" This node expands to the children of the referenced Template at execution time." />
                                 </TextBlock>
                             </StackPanel>
+
+                            <!-- ══ Execution Error Panel ══ -->
+                            <Border Margin="0,12,0,0" Padding="8" CornerRadius="4"
+                                    Background="#20EF4444" BorderBrush="#40EF4444" BorderThickness="1">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LastExecutionError}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="&#x2716;" Foreground="#EF4444" FontWeight="Bold"
+                                                   FontSize="12" Margin="0,0,4,0" />
+                                        <TextBlock Text="LAST EXECUTION ERROR" FontSize="10"
+                                                   FontWeight="Bold" Foreground="#EF4444" />
+                                        <TextBlock Text="{Binding LastExitCode, StringFormat=' (exit {0})'}"
+                                                   FontSize="10" Foreground="{DynamicResource TextS}"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                    <TextBox Text="{Binding LastExecutionError, Mode=OneWay}"
+                                             IsReadOnly="True" TextWrapping="Wrap"
+                                             Background="Transparent" BorderThickness="0"
+                                             Foreground="#EF4444" FontFamily="Consolas" FontSize="11"
+                                             MaxHeight="100" VerticalScrollBarVisibility="Auto" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -1431,6 +1444,11 @@
                                 <Button Content="Diagnose" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
                                         Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic" />
+                                <Button Content="&#x1F4CA; Monitor" Style="{StaticResource SmBtn}"
+                                        Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                                        Command="{Binding OpenAgentMonitorCommand}"
+                                        CommandParameter="{Binding SelectedAgent}"
+                                        ToolTip="Open live execution monitor for selected agent" />
                                 <Button Content="Remove" Style="{StaticResource DangerBtn}"
                                         Command="{Binding UnregisterAgentCommand}" ToolTip="Remove selected agent" />
                             </WrapPanel>
@@ -1508,19 +1526,6 @@
                                     </Grid>
                                     <Border Background="{DynamicResource AlertErrorBg}" CornerRadius="3" Padding="6,4" Margin="0,4,0,0"
                                             BorderBrush="{DynamicResource AlertErrorBdr}" BorderThickness="1">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding ConnectionStatus}" Value="Error">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
                                         <TextBlock Text="{Binding ErrorDetail}" FontSize="9" FontFamily="Consolas"
                                                    Foreground="{DynamicResource AccRed}" TextWrapping="Wrap" />
                                     </Border>

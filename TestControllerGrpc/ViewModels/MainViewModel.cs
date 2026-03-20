@@ -207,6 +207,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
         _executor.NodeProgress += OnNodeProgress;
+        _executor.NodeFailed += OnNodeFailed;
         _dispatcher.OutputReceived += OnOutputReceived;
         _dispatcher.StatusChanged += OnStatusChanged;
         _watcherManager.TriggerFired += OnTriggerFired;

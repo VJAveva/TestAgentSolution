@@ -127,6 +127,32 @@
                             <TextBlock Text="Preview" />
                         </StackPanel>
                     </Button>
+
+                    <Border Width="1" Background="{DynamicResource Bdr}" Margin="6,4" />
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Font:" FontSize="11"
+                                   Foreground="{DynamicResource TextS}"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <ComboBox x:Name="FontSizeCombo" Width="55"
+                                  ItemsSource="{Binding AvailableFontSizes}"
+                                  SelectedItem="{Binding EditorFontSize}"
+                                  Background="{DynamicResource BgCard}"
+                                  Foreground="{DynamicResource TextP}"
+                                  BorderBrush="{DynamicResource Bdr}"
+                                  BorderThickness="1" Padding="4,2"
+                                  FontSize="11" />
+                        <Button Content="A+" Padding="4,2" Margin="2,0"
+                                Click="IncreaseFontSize_Click"
+                                ToolTip="Increase font size (Ctrl+Plus)"
+                                Background="Transparent" Foreground="{DynamicResource TextP}"
+                                BorderThickness="0" FontWeight="Bold" Cursor="Hand" FontSize="11" />
+                        <Button Content="A&#x2013;" Padding="4,2" Margin="2,0"
+                                Click="DecreaseFontSize_Click"
+                                ToolTip="Decrease font size (Ctrl+Minus)"
+                                Background="Transparent" Foreground="{DynamicResource TextP}"
+                                BorderThickness="0" FontWeight="Bold" Cursor="Hand" FontSize="11" />
+                    </StackPanel>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -165,7 +191,7 @@
                 Grid.Column="0"
                 x:Name="XmlEditor"
                 FontFamily="Consolas"
-                FontSize="13"
+                FontSize="{Binding EditorFontSize}"
                 ShowLineNumbers="True"
                 WordWrap="False"
                 HorizontalScrollBarVisibility="Auto"

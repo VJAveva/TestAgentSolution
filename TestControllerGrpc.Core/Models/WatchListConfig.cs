@@ -93,6 +93,18 @@ public sealed class ActionConfig : IActionNode
     public bool IsReboot { get; set; }
     public string Order { get; set; } = "";
 
+    /// <summary>
+    /// Optional command to run after the main process exits to check if child processes (e.g. msiexec)
+    /// have completed. The poll loop runs until this command returns exit code 1 or its output contains "DONE".
+    /// Example: <c>cmd /c tasklist | findstr msiexec || echo DONE</c>
+    /// </summary>
+    public string CompletionCheckCommand { get; set; } = "";
+
+    /// <summary>
+    /// How often (in seconds) to run the CompletionCheckCommand. Default is 30 seconds.
+    /// </summary>
+    public int CompletionPollIntervalSeconds { get; set; } = 30;
+
     // Credentials (RunRemoteCommand)
     public string UserName { get; set; } = "";
     public string Password { get; set; } = "";

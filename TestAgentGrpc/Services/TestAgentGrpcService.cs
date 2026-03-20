@@ -130,6 +130,9 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             timeoutMs: timeoutMs,
             executionId: request.ExecutionId,
             userName: request.UserName, password: request.Password,
+            completionCheckCommand: request.CompletionCheckCommand,
+            completionPollIntervalSeconds: request.CompletionPollIntervalSeconds > 0
+                ? request.CompletionPollIntervalSeconds : 30,
             externalCt: context.CancellationToken);
 
         if (!accepted || reader is null)
