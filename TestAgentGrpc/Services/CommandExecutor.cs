@@ -121,7 +121,8 @@ public sealed class CommandExecutor : IDisposable
                     completionPollIntervalSeconds: completionPollIntervalSeconds,
                     enableInstallLog: enableInstallLog,
                     installLogPollSeconds: installLogPollSeconds,
-                    installLogRoot: installLogRoot);
+                    installLogRoot: installLogRoot,
+                    timeoutMs: timeoutMs);
             }
             finally
             {
@@ -146,7 +147,8 @@ public sealed class CommandExecutor : IDisposable
         int completionPollIntervalSeconds = 30,
         bool enableInstallLog = false,
         int installLogPollSeconds = 5,
-        string? installLogRoot = null)
+        string? installLogRoot = null,
+        int timeoutMs = 0)
     {
         // Acquire the execution lock — if cancelled here, we must NOT release in finally
         bool lockAcquired = false;
@@ -230,10 +232,28 @@ public sealed class CommandExecutor : IDisposable
                 OutputKind.OutputStderr, record, perCallChannel);
 
             // ── HEARTBEAT for long-running silent processes ────────
+            // Track the last install event message from the monitor
+            string lastInstallEvent = "";
+            var lastInstallEventLock = new object();
+
+            // If install monitor is active, capture its events for the heartbeat line
+            if (installMonitor is not null)
+            {
+                installMonitor.OnProgress += (msg) =>
+                {
+                    lock (lastInstallEventLock) { lastInstallEvent = msg; }
+                };
+            }
+
+            var process = _currentProcess;
             var heartbeatTask = Task.Run(async () =>
             {
-                var started = DateTime.UtcNow;
-                while (!ct.IsCancellationRequested && !_currentProcess.HasExited)
+                var startTime = DateTime.UtcNow;
+                var timeoutTotal = timeoutMs > 0
+                    ? TimeSpan.FromMilliseconds(timeoutMs)
+                    : TimeSpan.FromHours(2);
+
+                while (!ct.IsCancellationRequested && !process.HasExited)
                 {
                     try
                     {
@@ -241,13 +261,41 @@ public sealed class CommandExecutor : IDisposable
                     }
                     catch (OperationCanceledException) { break; }
 
-                    if (!_currentProcess.HasExited)
+                    if (process.HasExited) break;
+
+                    var elapsed = DateTime.UtcNow - startTime;
+                    var percent = Math.Min(99, (int)(elapsed.TotalSeconds / timeoutTotal.TotalSeconds * 100));
+                    var elapsedStr = elapsed.ToString(@"mm\:ss");
+                    var totalStr = timeoutTotal.ToString(@"mm\:ss");
+
+                    // Use the last install event if available, otherwise generic message
+                    string detail;
+                    lock (lastInstallEventLock)
                     {
-                        var elapsed = DateTime.UtcNow - started;
-                        EmitEvent(executionId, ExecutionEventType.EventProgress,
-                            detail: $"Still running... (PID {_currentProcess.Id}, {elapsed:hh\\:mm\\:ss} elapsed)",
-                            perCallChannel: perCallChannel);
+                        if (!string.IsNullOrEmpty(lastInstallEvent))
+                        {
+                            detail = lastInstallEvent;
+                            lastInstallEvent = ""; // consume it
+                        }
+                        else
+                        {
+                            detail = $"Still running... (PID {process.Id}, {elapsedStr} / {totalStr})";
+                        }
                     }
+
+                    EmitEvent(executionId, ExecutionEventType.EventProgress,
+                        detail: detail, progressPct: percent,
+                        perCallChannel: perCallChannel);
+                }
+
+                // Final 100% when process exits
+                if (process.HasExited)
+                {
+                    var elapsed = DateTime.UtcNow - startTime;
+                    EmitEvent(executionId, ExecutionEventType.EventProgress,
+                        detail: $"Process exited (exit code {process.ExitCode}, {elapsed:mm\\:ss} elapsed)",
+                        progressPct: 100,
+                        perCallChannel: perCallChannel);
                 }
             }, ct);
 
@@ -631,10 +679,12 @@ public sealed class CommandExecutor : IDisposable
         int? exitCode = null, string? errorMessage = null,
         AgentState? agentState = null, string? command = null,
         string? arguments = null, string? detail = null,
+        double? progressPct = null,
         ChannelWriter<ExecutionEvent>? perCallChannel = null)
     {
         var evt = BuildEvent(executionId, type, outputLine, outputKind,
-            exitCode, errorMessage, agentState, command, arguments, detail);
+            exitCode, errorMessage, agentState, command, arguments, detail,
+            progressPct);
 
         _broadcaster.Publish(evt);
         perCallChannel?.TryWrite(evt);
@@ -644,7 +694,8 @@ public sealed class CommandExecutor : IDisposable
         string? outputLine = null, OutputKind? outputKind = null,
         int? exitCode = null, string? errorMessage = null,
         AgentState? agentState = null, string? command = null,
-        string? arguments = null, string? detail = null)
+        string? arguments = null, string? detail = null,
+        double? progressPct = null)
     {
         var evt = new ExecutionEvent
         {
@@ -661,6 +712,7 @@ public sealed class CommandExecutor : IDisposable
         if (command      is not null) evt.Command       = command;
         if (arguments    is not null) evt.Arguments     = arguments;
         if (detail       is not null) evt.Detail        = detail;
+        if (progressPct  is not null) evt.ProgressPct   = progressPct.Value;
         return evt;
     }
 

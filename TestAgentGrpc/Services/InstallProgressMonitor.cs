@@ -34,6 +34,12 @@ public sealed class InstallProgressMonitor : IDisposable
     public int InstalledCount => _installed.Count;
     public int FailedCount => _failed.Count;
 
+    /// <summary>
+    /// Fires with each meaningful install event message so external consumers
+    /// (e.g. the heartbeat task) can incorporate it into progress reporting.
+    /// </summary>
+    public event Action<string>? OnProgress;
+
     public InstallProgressMonitor(ChannelWriter<ExecutionEvent> channel, string executionId)
     {
         _channel = channel;
@@ -268,6 +274,9 @@ public sealed class InstallProgressMonitor : IDisposable
             Detail = message,
             Timestamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
         });
+
+        // Notify the heartbeat task of the latest install event
+        OnProgress?.Invoke(message);
     }
 
     private static string ExtractProduct(string msg)
