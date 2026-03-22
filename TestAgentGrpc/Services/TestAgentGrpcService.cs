@@ -235,4 +235,90 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         }));
         return Task.FromResult(reply);
     }
+
+    /// <summary>
+    /// Returns a one-shot snapshot of the agent's current state, activity,
+    /// resource metrics, and execution counters.
+    /// </summary>
+    public override Task<AgentSnapshot> GetAgentSnapshot(Empty request, ServerCallContext context)
+    {
+        var snapshot = new AgentSnapshot
+        {
+            AgentName          = _settings.AgentName,
+            State              = _executor.CurrentState,
+            CurrentActivity    = _executor.Activity,
+            CurrentExecutionId = _executor.CurrentExecutionId ?? "",
+            CurrentCommand     = _executor.CurrentCommand ?? "",
+            ExecutionsCompleted = _tracker.CompletedCount,
+            ExecutionsFailed    = _tracker.FailedCount,
+            AgentStarted       = Timestamp.FromDateTime(_agentStartedUtc),
+            Metrics            = _metrics.Collect(),
+        };
+
+        if (_executor.ExecutionStartedUtc is { } started)
+            snapshot.ExecutionStarted = Timestamp.FromDateTime(DateTime.SpecifyKind(started, DateTimeKind.Utc));
+
+        return Task.FromResult(snapshot);
+    }
+
+    /// <summary>
+    /// Returns audit log entries matching the requested date range and filters.
+    /// </summary>
+    public override Task<AuditLogReply> GetAuditLog(AuditLogRequest request, ServerCallContext context)
+    {
+        var entries = _audit.ReadEntries(
+            request.FromDate, request.ToDate,
+            request.EventFilter,
+            request.MaxEntries > 0 ? request.MaxEntries : 500);
+
+        var reply = new AuditLogReply();
+        reply.Entries.AddRange(entries.Select(e => new AuditLogEntry
+        {
+            Timestamp   = e.Timestamp.ToString("O"),
+            Event       = e.Event,
+            Severity    = e.Severity,
+            ExecutionId = e.ExecutionId ?? "",
+            Source      = e.Source ?? "",
+            Command     = e.Command ?? "",
+            Detail      = e.Detail ?? "",
+            ExitCode    = e.ExitCode ?? 0,
+            DurationMs  = e.DurationMs ?? 0,
+        }));
+
+        return Task.FromResult(reply);
+    }
+
+    /// <summary>
+    /// Returns connection health information for the agent's link to the controller.
+    /// </summary>
+    public override Task<ConnectionHealthReply> GetConnectionHealth(
+        ConnectionHealthRequest request, ServerCallContext context)
+    {
+        var reply = new ConnectionHealthReply
+        {
+            ControllerName    = _healthMonitor.ControllerName ?? "",
+            ControllerAddress = _healthMonitor.ControllerAddress ?? "",
+            IsConnected       = _healthMonitor.IsConnected,
+            ConsecutiveFailures = _healthMonitor.ConsecutiveFailures,
+            TotalHeartbeatsSent   = _healthMonitor.TotalHeartbeatsSent,
+            TotalHeartbeatsFailed = _healthMonitor.TotalHeartbeatsFailed,
+            CurrentSuccessStreak  = _healthMonitor.CurrentSuccessStreak,
+            EventStreamActive     = _healthMonitor.IsConnected,
+            LastDisconnectReason  = _healthMonitor.LastError ?? "",
+        };
+
+        if (_healthMonitor.LastSuccessfulHeartbeat is { } lastOk)
+            reply.LastSuccessfulHeartbeat = Timestamp.FromDateTime(DateTime.SpecifyKind(lastOk, DateTimeKind.Utc));
+
+        if (_healthMonitor.LastFailedHeartbeat is { } lastFail)
+            reply.LastFailedHeartbeat = Timestamp.FromDateTime(DateTime.SpecifyKind(lastFail, DateTimeKind.Utc));
+
+        if (_healthMonitor.RegistrationTimestamp is { } regTs)
+            reply.RegistrationTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(regTs, DateTimeKind.Utc));
+
+        if (_healthMonitor.DowntimeDuration is { } downtime)
+            reply.LastDowntimeDuration = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(downtime);
+
+        return Task.FromResult(reply);
+    }
 }

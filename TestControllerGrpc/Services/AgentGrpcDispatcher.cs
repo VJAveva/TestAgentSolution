@@ -27,25 +27,6 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     private readonly ConcurrentDictionary<string, AgentEndpoint> _agents = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly ResiliencePipeline _resilience = new ResiliencePipelineBuilder()
-        .AddRetry(new RetryStrategyOptions
-        {
-            MaxRetryAttempts = 2,
-            Delay = TimeSpan.FromSeconds(1),
-            BackoffType = DelayBackoffType.Exponential,
-            ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
-                ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
-        })
-        .AddCircuitBreaker(new CircuitBreakerStrategyOptions
-        {
-            FailureRatio = 0.5,
-            SamplingDuration = TimeSpan.FromSeconds(30),
-            MinimumThroughput = 3,
-            BreakDuration = TimeSpan.FromSeconds(15),
-        })
-        .AddTimeout(TimeSpan.FromMinutes(60))
-        .Build();
-
     /// <summary>Raised when execution output arrives.</summary>
     public event Action<string, string, string>? OutputReceived;  // agentName, line, kind
 
@@ -314,7 +295,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
         try
         {
-            return await _resilience.ExecuteAsync(async resilienceCt =>
+            return await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
             {
                 var client = endpoint.GetClient();
 
@@ -417,7 +398,12 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         }
         catch (BrokenCircuitException)
         {
-            RecordFailure(agentName);
+            // Don't call RecordFailure here — no real call was made, the circuit
+            // is already open.  Inflating ConsecutiveFailures would prevent recovery
+            // once the break duration expires.
+            _logger.LogWarning(
+                "Agent {Agent} circuit breaker is open — skipping call, will retry after break duration",
+                agentName);
             return new ActionResult(false, -1,
                 $"Agent {agentName} circuit breaker is open — too many recent failures");
         }
@@ -661,9 +647,29 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 DisposeHttpClient = true,
             });
             _client = new TestAgentService.TestAgentServiceClient(_channel);
+            Resilience = new ResiliencePipelineBuilder()
+                .AddRetry(new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = 3,
+                    Delay = TimeSpan.FromSeconds(1),
+                    BackoffType = DelayBackoffType.Exponential,
+                    ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
+                        ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
+                })
+                .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+                {
+                    FailureRatio = 0.5,
+                    SamplingDuration = TimeSpan.FromSeconds(30),
+                    MinimumThroughput = 5,
+                    BreakDuration = TimeSpan.FromSeconds(15),
+                })
+                .AddTimeout(TimeSpan.FromMinutes(60))
+                .Build();
         }
 
         public TestAgentService.TestAgentServiceClient GetClient() => _client;
         public void Dispose() => _channel.Dispose();
+
+        public ResiliencePipeline Resilience { get; }
     }
 }
