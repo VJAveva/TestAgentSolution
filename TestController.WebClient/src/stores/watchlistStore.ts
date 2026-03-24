@@ -5,6 +5,10 @@ interface WatchListState {
   config: WatchListConfig | null;
   treeRoots: TreeNode[];
   selectedNode: TreeNode | null;
+  loading: boolean;
+  error: string | null;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
   setConfig: (config: WatchListConfig) => void;
   selectNode: (node: TreeNode | null) => void;
   toggleExpand: (id: string) => void;
@@ -48,6 +52,13 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
       return {
         id: nextId(), nodeKind: 'Ref',
         displayText: `Ref ? ${node.templateID}`,
+        tag: '', executionStatus: 'Idle', children: [],
+        isExpanded: false, depth, model: node,
+      };
+    default:
+      return {
+        id: nextId(), nodeKind: 'Action',
+        displayText: `Unknown (${(node as any).nodeType})`,
         tag: '', executionStatus: 'Idle', children: [],
         isExpanded: false, depth, model: node,
       };
@@ -129,7 +140,11 @@ export const useWatchListStore = create<WatchListState>((set) => ({
   config: null,
   treeRoots: [],
   selectedNode: null,
-  setConfig: (config) => set({ config, treeRoots: buildTree(config) }),
+  loading: false,
+  error: null,
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+  setConfig: (config) => set({ config, treeRoots: buildTree(config), error: null }),
   selectNode: (node) => set({ selectedNode: node }),
   toggleExpand: (id) => set((s) => ({ treeRoots: toggleRecursive(s.treeRoots, id) })),
   updateNodeStatus: (tag, status) =>

@@ -31,9 +31,9 @@ export default function AppShell() {
   const { fetchStatus } = useExecution();
 
   useEffect(() => {
-    fetchConfig().catch(() => {});
-    fetchAgents().catch(() => {});
-    fetchStatus().catch(() => {});
+    fetchConfig().catch(err => console.error('Failed to load watchlist:', err));
+    fetchAgents().catch(err => console.error('Failed to load agents:', err));
+    fetchStatus().catch(err => console.error('Failed to load execution status:', err));
   }, [fetchConfig, fetchAgents, fetchStatus]);
 
   return (

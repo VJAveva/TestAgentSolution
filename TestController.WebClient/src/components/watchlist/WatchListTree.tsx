@@ -23,6 +23,16 @@ const statusDot: Record<string, string> = {
 
 export default function WatchListTree() {
   const treeRoots = useWatchListStore(s => s.treeRoots);
+  const loading = useWatchListStore(s => s.loading);
+  const error = useWatchListStore(s => s.error);
+
+  if (loading) {
+    return <p className="p-3 text-xs text-text-muted">Loading WatchList…</p>;
+  }
+
+  if (error) {
+    return <p className="p-3 text-xs text-red-400">{error}</p>;
+  }
 
   if (treeRoots.length === 0) {
     return <p className="p-3 text-xs text-text-muted">No WatchList loaded.</p>;
@@ -36,7 +46,9 @@ export default function WatchListTree() {
 }
 
 function TreeNodeRow({ node }: { node: TreeNode }) {
-  const { selectNode, toggleExpand, selectedNode } = useWatchListStore();
+  const selectNode = useWatchListStore(s => s.selectNode);
+  const toggleExpand = useWatchListStore(s => s.toggleExpand);
+  const selectedNode = useWatchListStore(s => s.selectedNode);
   const isSelected = selectedNode?.id === node.id;
   const hasChildren = node.children.length > 0;
 

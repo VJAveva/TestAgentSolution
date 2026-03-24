@@ -3,7 +3,8 @@ import { useExecution } from '../../hooks/useExecution';
 import { PlayCircle, XCircle } from 'lucide-react';
 
 export default function SessionList() {
-  const { isExecuting, activeCount } = useExecutionStore();
+  const isExecuting = useExecutionStore(s => s.isExecuting);
+  const activeCount = useExecutionStore(s => s.activeCount);
   const { triggerAll, cancelAll } = useExecution();
 
   return (

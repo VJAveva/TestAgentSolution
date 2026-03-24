@@ -4,7 +4,7 @@ using TestControllerGrpc.Models;
 namespace TestControllerGrpc.Services;
 
 /// <summary>
-/// Manages the lifecycle of execution sessions — tracks active and completed
+/// Manages the lifecycle of execution sessions ï¿½ tracks active and completed
 /// pipeline runs, records per-action results, and supports retry of failed actions.
 /// </summary>
 public sealed class ExecutionSessionManager
@@ -92,4 +92,28 @@ public sealed class ExecutionSessionManager
 
     public int ActiveExecutionCount => _active.Count;
     public bool HasAnyActiveExecution => !_active.IsEmpty;
+
+    /// <summary>Cancels all active sessions, moving them to history as cancelled.</summary>
+    public List<string> CancelAll()
+    {
+        var cancelledTags = new List<string>();
+        var ids = _active.Keys.ToList();
+        foreach (var id in ids)
+        {
+            if (_active.TryRemove(id, out var session))
+            {
+                session.CompletedUtc = DateTime.UtcNow;
+                session.State = SessionState.Failed;
+                cancelledTags.Add(session.WatchItemTag);
+
+                lock (_historyLock)
+                {
+                    _history.Insert(0, session);
+                    while (_history.Count > MaxHistory)
+                        _history.RemoveAt(_history.Count - 1);
+                }
+            }
+        }
+        return cancelledTags;
+    }
 }

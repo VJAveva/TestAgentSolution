@@ -4,7 +4,10 @@ import { useResultsStore } from '../stores/resultsStore';
 import type { BuildSummary, BuildNode, TrendReport, ConsecutiveFailureAlert } from '../types/api';
 
 export function useResults() {
-  const { setBuilds, setSelectedBuild, setTrends, setAlerts } = useResultsStore.getState();
+  const setBuilds = useResultsStore(s => s.setBuilds);
+  const setSelectedBuild = useResultsStore(s => s.setSelectedBuild);
+  const setTrends = useResultsStore(s => s.setTrends);
+  const setAlerts = useResultsStore(s => s.setAlerts);
 
   const fetchBuilds = useCallback(async () => {
     const { data } = await axios.get<BuildSummary[]>('/api/results/builds');

@@ -5,12 +5,29 @@ import type { WatchListConfig } from '../types/api';
 
 export function useWatchList() {
   const setConfig = useWatchListStore(s => s.setConfig);
+  const setLoading = useWatchListStore(s => s.setLoading);
+  const setError = useWatchListStore(s => s.setError);
 
   const fetchConfig = useCallback(async () => {
-    const { data } = await axios.get<WatchListConfig>('/api/watchlist');
-    setConfig(data);
-    return data;
-  }, [setConfig]);
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await axios.get<WatchListConfig>('/api/watchlist');
+      setConfig(data);
+      return data;
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? err.code === 'ERR_NETWORK'
+          ? 'Cannot reach backend server. Is it running on port 5050?'
+          : `Failed to load watchlist: ${err.response?.status ?? err.message}`
+        : 'Failed to load watchlist';
+      setError(message);
+      console.error('fetchConfig error:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setConfig, setLoading, setError]);
 
   const saveConfig = useCallback(async (config: WatchListConfig) => {
     const { data } = await axios.put<WatchListConfig>('/api/watchlist', config);

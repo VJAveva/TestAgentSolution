@@ -20,7 +20,7 @@ public static class ExecutionEndpoints
         return group;
     }
 
-    /// <summary>POST /api/execution/trigger-all — trigger all WatchItems.</summary>
+    /// <summary>POST /api/execution/trigger-all ï¿½ trigger all WatchItems.</summary>
     private static IResult TriggerAll(
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
@@ -72,7 +72,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger/{tag} — trigger specific WatchItem.</summary>
+    /// <summary>POST /api/execution/trigger/{tag} ï¿½ trigger specific WatchItem.</summary>
     private static IResult TriggerByTag(
         string tag,
         WatchListFileService fileService,
@@ -122,7 +122,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} — trigger specific event.</summary>
+    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} ï¿½ trigger specific event.</summary>
     private static IResult TriggerEvent(
         string tag,
         int eventIndex,
@@ -174,27 +174,30 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/cancel — cancel all running executions.</summary>
+    /// <summary>POST /api/execution/cancel ï¿½ cancel all running executions.</summary>
     private static IResult CancelAll(
         ExecutionSessionManager sessionManager,
         IHubContext<LiveHub> hub)
     {
-        // Note: In the WebApi model, actual cancellation requires CancellationTokenSource
-        // management per session. For now, we broadcast the cancel request.
+        var cancelledTags = sessionManager.CancelAll();
+
+        foreach (var tag in cancelledTags)
+            hub.Clients.All.SendAsync("NodeProgress", tag, "Idle");
+
         hub.Clients.All.SendAsync("ExecutionLog", new
         {
-            Message = "Cancel requested for all running executions.",
+            Message = $"Cancelled {cancelledTags.Count} active execution(s).",
             Timestamp = DateTime.UtcNow
         });
 
         return Results.Ok(new
         {
-            message = "Cancel broadcast sent.",
+            message = $"Cancelled {cancelledTags.Count} execution(s).",
             activeExecutions = sessionManager.ActiveExecutionCount
         });
     }
 
-    /// <summary>POST /api/execution/retry/{sessionId} — retry failed actions from a session.</summary>
+    /// <summary>POST /api/execution/retry/{sessionId} ï¿½ retry failed actions from a session.</summary>
     private static IResult RetrySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
@@ -206,7 +209,7 @@ public static class ExecutionEndpoints
 
         hub.Clients.All.SendAsync("ExecutionLog", new
         {
-            Message = $"Retry requested for session '{sessionId}' — {retryable.Count} action(s)",
+            Message = $"Retry requested for session '{sessionId}' ï¿½ {retryable.Count} action(s)",
             Timestamp = DateTime.UtcNow
         });
 
@@ -218,7 +221,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/status — current execution state overview.</summary>
+    /// <summary>GET /api/execution/status ï¿½ current execution state overview.</summary>
     private static IResult GetStatus(ExecutionSessionManager sessionManager)
     {
         return Results.Ok(new
@@ -228,7 +231,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/sessions — active + recent sessions.</summary>
+    /// <summary>GET /api/execution/sessions ï¿½ active + recent sessions.</summary>
     private static IResult GetSessions(ExecutionSessionManager sessionManager)
     {
         // The session manager exposes active sessions but not the full history publicly.
