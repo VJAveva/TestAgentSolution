@@ -102,13 +102,54 @@ public sealed partial class MainViewModel
         IsLogCollapsed = !IsLogCollapsed;
     }
 
-    /// <summary>Toggle pausing live log updates.</summary>
+    /// <summary>Toggle pin/auto-hide for the execution log pane.</summary>
     [RelayCommand]
-    private void ToggleLogPause()
+    private void ToggleLogPanePin()
     {
-        IsLogPaused = !IsLogPaused;
-        if (!IsLogPaused)
-            ApplyLogFilter(); // refresh filtered entries when resuming
+        IsLogPanePinned = !IsLogPanePinned;
+        if (IsLogPanePinned)
+        {
+            // Restore docked state
+            IsLogCollapsed = false;
+        }
+    }
+
+    /// <summary>Hide the log pane completely (restore via TOOLS ribbon).</summary>
+    [RelayCommand]
+    private void HideLogPane()
+    {
+        IsLogPanePinned = false;
+    }
+
+    /// <summary>Show and pin the log pane (restore from hidden state).</summary>
+    [RelayCommand]
+    private void ShowLogPane()
+    {
+        IsLogPanePinned = true;
+        IsLogCollapsed = false;
+    }
+
+    // ?? Agent pane dock commands ?????????????????????????????????????
+
+    /// <summary>Toggle pin/auto-hide for the agent pane.</summary>
+    [RelayCommand]
+    private void ToggleAgentPanePin()
+    {
+        IsAgentPanePinned = !IsAgentPanePinned;
+    }
+
+    /// <summary>Hide the agent pane completely (restore via ribbon checkbox).</summary>
+    [RelayCommand]
+    private void HideAgentPane()
+    {
+        IsAgentPanePinned = false;
+    }
+
+    /// <summary>Show and pin the agent pane.</summary>
+    [RelayCommand]
+    private void ShowAgentPane()
+    {
+        IsAgentPanePinned = true;
     }
 
     /// <summary>Export log entries to a text file.</summary>

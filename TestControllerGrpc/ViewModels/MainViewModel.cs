@@ -144,6 +144,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
     [ObservableProperty] private bool _isLogCollapsed;
 
+    // ── Dockable log pane state ─────────────────────────────────────
+    /// <summary>Log pane is pinned (docked) vs auto-hidden (collapsed to tab).</summary>
+    [ObservableProperty] private bool _isLogPanePinned = true;
+
+    // ── Dockable agent pane state ───────────────────────────────────
+    /// <summary>Agent pane is pinned (docked) vs auto-hidden.</summary>
+    [ObservableProperty] private bool _isAgentPanePinned = true;
+
     // ── Tree search/filter ──────────────────────────────────────────
     private string _treeSearchText = "";
     public string TreeSearchText
