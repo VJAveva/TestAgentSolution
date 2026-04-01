@@ -20,15 +20,19 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
 
-    // ?? Inline AvalonEdit editor ????????????????????????????????????
+    // ?? Inline AvalonEdit editor ?????????????????????????????????????
     private TextEditor? _inlineEditor;
     private FoldingManager? _inlineFoldingManager;
     private XmlFoldingStrategy? _inlineFoldingStrategy;
 
-    // ?? Drag-and-drop state ?????????????????????????????????????????
+    // ?? Drag-and-drop state ??????????????????????????????????????????
     private Point _dragStartPoint;
     private TreeNodeViewModel? _draggedNode;
     private bool _isDragging;
+
+    // ?? Dockable pane saved sizes ????????????????????????????????????
+    private GridLength _savedAgentColWidth = new(3, GridUnitType.Star);
+    private GridLength _savedLogRowHeight = new(2, GridUnitType.Star);
 
     public MainWindow()
     {
@@ -135,6 +139,52 @@ public partial class MainWindow : Window
         {
             if (_inlineEditor is not null && _inlineEditor.Text != _vm.InlineXmlEditorText)
                 _inlineEditor.Text = _vm.InlineXmlEditorText;
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsAgentPanePinned))
+        {
+            ApplyAgentPaneLayout(_vm.IsAgentPanePinned);
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsLogPanePinned))
+        {
+            ApplyLogPaneLayout(_vm.IsLogPanePinned);
+        }
+    }
+
+    private void ApplyAgentPaneLayout(bool pinned)
+    {
+        if (pinned)
+        {
+            ColAgentPanel.Width = _savedAgentColWidth;
+            ColAgentPanel.MinWidth = 280;
+            ColAgentSplitter.Width = GridLength.Auto;
+            ColNodeProperties.Width = new GridLength(3, GridUnitType.Star);
+        }
+        else
+        {
+            if (ColAgentPanel.Width.IsStar)
+                _savedAgentColWidth = ColAgentPanel.Width;
+
+            ColAgentPanel.Width = GridLength.Auto;
+            ColAgentPanel.MinWidth = 28;
+            ColAgentSplitter.Width = new GridLength(0);
+            ColNodeProperties.Width = new GridLength(1, GridUnitType.Star);
+        }
+    }
+
+    private void ApplyLogPaneLayout(bool pinned)
+    {
+        if (pinned)
+        {
+            RowLogPane.Height = _savedLogRowHeight;
+            RowLogPane.MinHeight = 120;
+        }
+        else
+        {
+            if (RowLogPane.Height.IsStar)
+                _savedLogRowHeight = RowLogPane.Height;
+
+            RowLogPane.Height = GridLength.Auto;
+            RowLogPane.MinHeight = 28;
         }
     }
 

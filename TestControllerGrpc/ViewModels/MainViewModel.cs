@@ -43,6 +43,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _newAgentName = "";
     [ObservableProperty] private string _newAgentAddress = "http://localhost:5200";
 
+    // ── Watermark visibility ────────────────────────────────────────
+    /// <summary>True when no meaningful node is selected (show watermark).</summary>
+    [ObservableProperty] private bool _showWatermark = true;
+
+    // ── Simplified layout toggle ────────────────────────────────────
+    /// <summary>When true, ribbon collapses to a single compact toolbar row.</summary>
+    [ObservableProperty] private bool _isSimplifiedLayout;
+
     // ── Inline XML Editor state ─────────────────────────────────────
     [ObservableProperty] private bool _isXmlEditorOpen;
     [ObservableProperty] private string _xmlEditorText = "";
@@ -339,6 +347,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Re-evaluate CanExecute for all execution commands since they depend on SelectedNode
         NotifyExecutionCanExecuteChanged();
+
+        // Update watermark visibility
+        ShowWatermark = false;
     }
 
     partial void OnSelectedTemplateNodeChanged(TreeNodeViewModel? value)
@@ -347,5 +358,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         ActiveEditNode = value;
         ActiveEditingContext = "Templates";
+
+        // Update watermark visibility
+        ShowWatermark = false;
     }
 }

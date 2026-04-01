@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- Window -->
     <SolidColorBrush x:Key="WindowBg"    Color="#FFF5F5F5" />
@@ -86,5 +87,8 @@
 
     <!-- Execution overlay -->
     <SolidColorBrush x:Key="OverlayBg"      Color="#44FFFFFF" />
+
+    <!-- Watermark -->
+    <sys:Double x:Key="WatermarkOpacity">0.04</sys:Double>
 
 </ResourceDictionary>

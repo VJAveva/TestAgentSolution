@@ -42,6 +42,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Resources\nextgen_watermark.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="..\Icons\**\*.svg" Link="Icons\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
