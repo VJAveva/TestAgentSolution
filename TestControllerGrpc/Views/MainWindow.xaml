@@ -1326,17 +1326,54 @@
                                         <Label Content="DROP LOCATION FIELD" Style="{StaticResource Lbl}" />
                                         <TextBox Text="{Binding DropLocationField, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" />
 
-                                        <!-- Last trigger values (read-only, populated from Filter file at runtime) -->
-                                        <StackPanel Visibility="{Binding LastBuildNumber, Converter={StaticResource EmptyVis}}">
-                                            <TextBlock Text="LAST TRIGGER VALUES" FontSize="10" FontWeight="Bold"
-                                                       Foreground="{DynamicResource AccGreen}" Margin="0,12,0,4" />
-                                            <Label Content="BUILD NUMBER" Style="{StaticResource Lbl}" />
-                                            <TextBox Text="{Binding LastBuildNumber, Mode=OneWay}" Style="{StaticResource Fld}"
-                                                     IsReadOnly="True" FontFamily="Consolas" Foreground="{DynamicResource AccGreen}" />
-                                            <Label Content="DROP LOCATION" Style="{StaticResource Lbl}" />
-                                            <TextBox Text="{Binding LastDropLocation, Mode=OneWay}" Style="{StaticResource Fld}"
-                                                     IsReadOnly="True" FontFamily="Consolas" Foreground="{DynamicResource AccGreen}" />
-                                        </StackPanel>
+                                        <!-- ══ Build Source ══ -->
+                                        <TextBlock Text="BUILD SOURCE" Style="{StaticResource Sec}" />
+
+                                        <Label Content="BUILD BASE PATH" Style="{StaticResource Lbl}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0"
+                                                     Text="{Binding BuildBasePath, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource Fld}"
+                                                     FontFamily="Consolas" FontSize="11"
+                                                     ToolTip="Network base path for builds (e.g., \\server\repl\Ado\SP\)" />
+                                            <Button Grid.Column="1" Content="📂 Browse Build"
+                                                    Style="{StaticResource SmBtn}" Margin="4,0,0,0"
+                                                    Padding="8,4"
+                                                    Background="{DynamicResource AccentBtnBg}"
+                                                    Foreground="{DynamicResource Accent}"
+                                                    Command="{Binding DataContext.BrowseBuildCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    ToolTip="Browse network path to select a build folder" />
+                                        </Grid>
+
+                                        <Label Content="SELECTED BUILD" Style="{StaticResource Lbl}"
+                                               Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}" />
+                                        <TextBox Text="{Binding SelectedBuildPath, Mode=OneWay}"
+                                                 Style="{StaticResource Fld}" IsReadOnly="True"
+                                                 FontFamily="Consolas" FontSize="11"
+                                                 Foreground="{DynamicResource AccGreen}"
+                                                 Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}"
+                                                 ToolTip="Full path to selected build" />
+
+                                        <!-- Select Build & Trigger button -->
+                                        <Button Margin="0,8,0,4" Padding="10,6" HorizontalAlignment="Left"
+                                                Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}"
+                                                Command="{Binding DataContext.SelectBuildAndTriggerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTip="Write build info to Variables.txt and rename trigger file to start execution">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource TriggerBtn}">
+                                                    <Setter Property="Background" Value="{DynamicResource GreenBtnBg}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                </Style>
+                                            </Button.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="▶" FontSize="12" Margin="0,0,6,0" />
+                                                <TextBlock Text="Select Build &amp; Trigger" FontSize="11" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
                                 </Expander>
                                 <!-- Action section -->

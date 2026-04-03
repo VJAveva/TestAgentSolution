@@ -31,6 +31,9 @@ public sealed class WatchItemConfig
     public string BuildNumberField { get; set; } = "BuildNumber";
     public string DropLocationField { get; set; } = "DropLocation";
 
+    /// <summary>Network base path for build browser (e.g., \\server\repl\Ado\SP\)</summary>
+    public string BuildBasePath { get; set; } = "";
+
     // Runtime-only: populated when trigger fires (not serialized to XML)
     [System.Xml.Serialization.XmlIgnore]
     public string? LastBuildNumber { get; set; }

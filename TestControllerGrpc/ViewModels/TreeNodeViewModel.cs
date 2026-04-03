@@ -33,6 +33,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _dropLocationField = "DropLocation";
     [ObservableProperty] private string _lastBuildNumber = "";
     [ObservableProperty] private string _lastDropLocation = "";
+    [ObservableProperty] private string _buildBasePath = "";
+    [ObservableProperty] private string _selectedBuildPath = "";
     [ObservableProperty] private string _actionTypeText = "RunCommand";
     [ObservableProperty] private string _agentName = "";
     [ObservableProperty] private string _command = "";
@@ -387,6 +389,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             WatchPath = wi.Path, Filter = wi.Filter, IsEnabled = wi.IsEnabled,
             BuildNumberField = wi.BuildNumberField,
             DropLocationField = wi.DropLocationField,
+            BuildBasePath = wi.BuildBasePath,
             LastBuildNumber = wi.LastBuildNumber ?? "",
             LastDropLocation = wi.LastDropLocation ?? "",
             DisplayText = label, ModelObject = wi,
@@ -537,6 +540,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 wi.Tag = Tag; wi.Path = WatchPath; wi.Filter = Filter; wi.IsEnabled = IsEnabled;
                 wi.BuildNumberField = BuildNumberField;
                 wi.DropLocationField = DropLocationField;
+                wi.BuildBasePath = BuildBasePath;
                 break;
             case EventConfig ev:
                 ev.Type = EventType;
