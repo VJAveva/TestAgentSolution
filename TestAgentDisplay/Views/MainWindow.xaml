@@ -71,24 +71,27 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="260" MinWidth="200" />
+            <ColumnDefinition Width="260" MinWidth="160" MaxWidth="500" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- LEFT SIDEBAR -->
         <Border Grid.Column="0" Background="{StaticResource BgPanelBrush}">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="??  Agent Nodes"
+                <TextBlock DockPanel.Dock="Top" Text="🖥  Agent Nodes"
                            FontSize="16" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"
                            Margin="14,14,14,6" />
 
                 <Border DockPanel.Dock="Top" Margin="8,4" Padding="6" CornerRadius="4"
                         Background="{StaticResource BgCardBrush}">
                     <StackPanel>
-                        <TextBox Text="{Binding NewAgentAddress, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBlock Text="Node Name" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,0,0,3" />
+                        <TextBox Text="{Binding NewAgentName, UpdateSourceTrigger=PropertyChanged}"
                                  FontSize="11" Padding="4" Background="#11FFFFFF" Foreground="White"
                                  BorderBrush="#33FFFFFF" />
-                        <Button Content="? Connect" Margin="0,6,0,0"
+                        <Button Content="🔗 Connect" Margin="0,6,0,0"
                                 Style="{StaticResource PrimaryButton}"
                                 Command="{Binding ConnectAgentCommand}" />
                     </StackPanel>
@@ -125,8 +128,8 @@
                                            FontSize="10" Foreground="#FF607D8B" Margin="18,1,0,0">
                                     <Run Text="CPU " /><Run Text="{Binding CpuUsage, StringFormat='{}{0:F0}%', Mode=OneWay}" />
                                     <Run Text="  Mem " /><Run Text="{Binding MemoryUsedMb, StringFormat='{}{0:F0}MB', Mode=OneWay}" />
-                                    <Run Text="  ?" /><Run Text="{Binding CompletedCount, Mode=OneWay}" />
-                                    <Run Text=" ?" /><Run Text="{Binding FailedCount, Mode=OneWay}" />
+                                    <Run Text="  ✓" /><Run Text="{Binding CompletedCount, Mode=OneWay}" />
+                                    <Run Text=" ✗" /><Run Text="{Binding FailedCount, Mode=OneWay}" />
                                 </TextBlock>
                             </Grid>
                         </DataTemplate>
@@ -135,15 +138,20 @@
             </DockPanel>
         </Border>
 
+        <!-- SPLITTER between sidebar and main area -->
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center"
+                      VerticalAlignment="Stretch" Background="{StaticResource BgPanelBrush}"
+                      Cursor="SizeWE" ResizeBehavior="PreviousAndNext" />
+
         <!-- RIGHT PANEL — TabControl -->
-        <TabControl Grid.Column="1" Background="Transparent" BorderThickness="0"
+        <TabControl Grid.Column="2" Background="Transparent" BorderThickness="0"
                     Padding="0">
             <TabControl.Resources>
                 <Style TargetType="TabItem" BasedOn="{StaticResource DarkTabItem}" />
             </TabControl.Resources>
 
             <!-- ??? TAB 1: Agent Monitor ??? -->
-            <TabItem Header="?? Agent Monitor">
+            <TabItem Header="📡 Agent Monitor">
                 <Grid DataContext="{Binding SelectedAgent}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -184,10 +192,10 @@
                                 <Run Text="  Mem " /><Run Text="{Binding MemoryUsedMb, StringFormat='{}{0:F0}MB', Mode=OneWay}" Foreground="{StaticResource AccentBrush}" />
                                 <Run Text="  Disk " /><Run Text="{Binding DiskFreeGb, StringFormat='{}{0:F1}GB', Mode=OneWay}" Foreground="{StaticResource AccentBrush}" />
                             </TextBlock>
-                            <Button Grid.Column="2" Content="?? Export Report" FontSize="11" Padding="10,4" Margin="4,0"
+                            <Button Grid.Column="2" Content="📋 Export Report" FontSize="11" Padding="10,4" Margin="4,0"
                                     Background="#22FFFFFF" Foreground="White" BorderThickness="0" Cursor="Hand"
                                     Command="{Binding DataContext.ExportReportCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                            <Button Grid.Column="3" Content="? Disconnect" FontSize="11" Padding="10,4"
+                            <Button Grid.Column="3" Content="⏏ Disconnect" FontSize="11" Padding="10,4"
                                     Background="#33EF5350" Foreground="#FFEF5350" BorderThickness="0" Cursor="Hand"
                                     Command="{Binding DataContext.DisconnectAgentCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                         </Grid>
@@ -201,22 +209,38 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" Margin="0,0,6,0" Padding="6,4"
-                                     Text="{Binding DataContext.CommandText, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}"
-                                     Background="#11FFFFFF" Foreground="White" BorderBrush="#33FFFFFF"
-                                     FontFamily="Consolas" FontSize="12" />
-                            <TextBox Grid.Column="1" Margin="0,0,6,0" Padding="6,4"
-                                     Text="{Binding DataContext.CommandArgs, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}"
-                                     Background="#11FFFFFF" Foreground="White" BorderBrush="#33FFFFFF"
-                                     FontFamily="Consolas" FontSize="12" />
-                            <Button Grid.Column="2" Content="? Run" Margin="0,0,4,0"
+                            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                <TextBlock Text="Remote Command" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,0,0,2" />
+                                <TextBox Padding="6,4"
+                                         Text="{Binding DataContext.CommandText, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}"
+                                         Background="#11FFFFFF" Foreground="White" BorderBrush="#33FFFFFF"
+                                         FontFamily="Consolas" FontSize="12" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="0,0,6,0">
+                                <TextBlock Text="Parameters" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,0,0,2" />
+                                <TextBox Padding="6,4"
+                                         Text="{Binding DataContext.CommandArgs, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}"
+                                         Background="#11FFFFFF" Foreground="White" BorderBrush="#33FFFFFF"
+                                         FontFamily="Consolas" FontSize="12" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="▶ Run" Margin="0,0,4,0"
                                     Style="{StaticResource PrimaryButton}" FontSize="12" Padding="12,4"
+                                    VerticalAlignment="Bottom"
                                     Command="{Binding DataContext.RunCommandCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                            <Button Grid.Column="3" Content="? Kill" Padding="12,4"
+                            <Button Grid.Column="3" Content="⊘ Kill" Padding="12,4" Margin="0,0,4,0"
                                     Background="#33EF5350" Foreground="#FFEF5350" BorderThickness="0"
                                     FontSize="12" FontWeight="SemiBold" Cursor="Hand"
+                                    VerticalAlignment="Bottom"
                                     Command="{Binding DataContext.TerminateExecutionCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                            <Button Grid.Column="4" Content="🗑 Clear" Padding="12,4"
+                                    Background="#22FFFFFF" Foreground="{StaticResource TextSecondaryBrush}" BorderThickness="0"
+                                    FontSize="12" Cursor="Hand"
+                                    VerticalAlignment="Bottom"
+                                    Command="{Binding DataContext.ClearCommandInputsCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                         </Grid>
                     </Border>
 
@@ -224,8 +248,14 @@
                     <Border Grid.Row="2" Margin="8,4" CornerRadius="4" Background="#FF0D0D0D">
                         <DockPanel>
                             <Border DockPanel.Dock="Top" Background="#FF1B1B1B" Padding="10,5" CornerRadius="4,4,0,0">
-                                <TextBlock Text="? Live Execution Output" FontSize="12" FontWeight="SemiBold"
-                                           Foreground="{StaticResource AccentBrush}" />
+                                <DockPanel>
+                                    <TextBlock Text="📺 Live Execution Output" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <Button DockPanel.Dock="Right" Content="🗑 Clear" FontSize="11"
+                                            Padding="8,2" Background="#22FFFFFF" Foreground="{StaticResource TextSecondaryBrush}"
+                                            BorderThickness="0" Cursor="Hand" HorizontalAlignment="Right"
+                                            Command="{Binding DataContext.ClearOutputCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </DockPanel>
                             </Border>
                             <ListBox ItemsSource="{Binding OutputLines}"
                                      Background="Transparent" BorderThickness="0"
@@ -265,8 +295,8 @@
                         <DockPanel>
                             <Border DockPanel.Dock="Top" Background="#FF1B1B1B" Padding="10,5" CornerRadius="4,4,0,0">
                                 <DockPanel>
-                                    <TextBlock Text="?? Execution History" FontSize="12" FontWeight="SemiBold" Foreground="White" />
-                                    <Button DockPanel.Dock="Right" Content="? Refresh" FontSize="11"
+                                    <TextBlock Text="📜 Execution History" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                    <Button DockPanel.Dock="Right" Content="🔄 Refresh" FontSize="11"
                                             Padding="8,2" Background="#22FFFFFF" Foreground="White"
                                             BorderThickness="0" Cursor="Hand" HorizontalAlignment="Right"
                                             Command="{Binding DataContext.RefreshHistoryCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
@@ -308,7 +338,7 @@
 
                     <!-- No-agent placeholder -->
                     <TextBlock Grid.Row="0" Grid.RowSpan="6"
-                               Text="? Select or connect an agent to begin monitoring"
+                               Text="👈 Select or connect an agent to begin monitoring"
                                FontSize="16" Foreground="#FF455A64"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock.Style>
@@ -326,7 +356,7 @@
             </TabItem>
 
             <!-- ??? TAB 2: Audit Timeline ??? -->
-            <TabItem Header="?? Timeline" DataContext="{Binding DataContext.Timeline, RelativeSource={RelativeSource AncestorType=Window}}">
+            <TabItem Header="📅 Timeline" DataContext="{Binding DataContext.Timeline, RelativeSource={RelativeSource AncestorType=Window}}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -366,7 +396,7 @@
                                      Background="#11FFFFFF" Foreground="White" BorderBrush="#33FFFFFF" />
 
                             <!-- Refresh -->
-                            <Button Content="? Refresh" Margin="12,0,0,0" Padding="10,4"
+                            <Button Content="🔄 Refresh" Margin="12,0,0,0" Padding="10,4"
                                     Background="#22FFFFFF" Foreground="White" BorderThickness="0"
                                     FontSize="11" Cursor="Hand"
                                     Command="{Binding RefreshCommand}" />

@@ -16,7 +16,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly AgentConnectionManager _connectionManager;
     private readonly AuditTimelineViewModel _timeline;
 
-    [ObservableProperty] private string _newAgentAddress = "http://localhost:5200";
+    [ObservableProperty] private string _newAgentName = "";
     [ObservableProperty] private AgentNodeViewModel? _selectedAgent;
     [ObservableProperty] private string _statusMessage = "No agents connected.";
     [ObservableProperty] private string _commandText = "";
@@ -33,31 +33,80 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _connectionManager.ConnectionStateChanged += OnConnectionChanged;
     }
 
+    private const int DefaultGrpcPort = 5200;
+
     [RelayCommand]
     private async Task ConnectAgentAsync()
     {
-        var addr = NewAgentAddress.Trim();
-        if (string.IsNullOrEmpty(addr)) return;
-        if (Agents.Any(a => a.Address == addr)) return;
+        var nodeName = NewAgentName.Trim();
+        if (string.IsNullOrEmpty(nodeName)) return;
+
+        // Resolve the gRPC endpoint from the node name
+        string addr;
+        try
+        {
+            addr = ResolveAgentEndpoint(nodeName);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Unable to resolve agent endpoint for node '{nodeName}': {ex.Message}";
+            return;
+        }
+
+        if (Agents.Any(a => a.Address == addr))
+        {
+            StatusMessage = $"Agent '{nodeName}' is already connected.";
+            SelectedAgent = Agents.First(a => a.Address == addr);
+            return;
+        }
 
         var vm = new AgentNodeViewModel
         {
             Address = addr,
-            DisplayName = new Uri(addr).Host,
+            DisplayName = nodeName,
         };
         Agents.Add(vm);
         SelectedAgent = vm;
-        StatusMessage = $"Connecting to {addr}…";
+        StatusMessage = $"Connecting to {nodeName} ({addr})…";
 
-        await _connectionManager.ConnectAsync(addr);
+        try
+        {
+            await _connectionManager.ConnectAsync(addr);
 
-        var snap = await _connectionManager.GetSnapshotAsync(addr);
-        if (snap is not null)
-            Application.Current?.Dispatcher.Invoke(() => vm.ApplySnapshot(snap));
+            var snap = await _connectionManager.GetSnapshotAsync(addr);
+            if (snap is not null)
+                Application.Current?.Dispatcher.Invoke(() => vm.ApplySnapshot(snap));
 
-        var hist = await _connectionManager.GetHistoryAsync(addr);
-        if (hist is not null)
-            Application.Current?.Dispatcher.Invoke(() => vm.ApplyHistory(hist));
+            var hist = await _connectionManager.GetHistoryAsync(addr);
+            if (hist is not null)
+                Application.Current?.Dispatcher.Invoke(() => vm.ApplyHistory(hist));
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Unable to resolve agent endpoint for node '{nodeName}': {ex.Message}";
+            Agents.Remove(vm);
+            SelectedAgent = Agents.FirstOrDefault();
+        }
+    }
+
+    /// <summary>
+    /// Resolves a gRPC endpoint address from a node name.
+    /// If the input is already a full URI (http:// or https://), it is used as-is.
+    /// Otherwise, the node name is treated as a hostname and combined with the default gRPC port.
+    /// </summary>
+    private static string ResolveAgentEndpoint(string nodeName)
+    {
+        // If user typed a full URI, use it directly
+        if (nodeName.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            nodeName.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            // Validate it parses as a URI
+            _ = new Uri(nodeName);
+            return nodeName;
+        }
+
+        // Treat as hostname — build the gRPC address
+        return $"http://{nodeName}:{DefaultGrpcPort}";
     }
 
     [RelayCommand]
@@ -97,6 +146,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var hist = await _connectionManager.GetHistoryAsync(SelectedAgent.Address);
         if (hist is not null)
             Application.Current?.Dispatcher.Invoke(() => SelectedAgent.ApplyHistory(hist));
+    }
+
+    [RelayCommand]
+    private void ClearCommandInputs()
+    {
+        CommandText = "";
+        CommandArgs = "";
+    }
+
+    [RelayCommand]
+    private void ClearOutput()
+    {
+        SelectedAgent?.OutputLines.Clear();
     }
 
     [RelayCommand]

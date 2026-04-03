@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -28,6 +29,7 @@ public sealed partial class MainViewModel
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:{ev.Type}]",
+            Parameters = CollectInitializeParameters(SelectedNode),
         };
 
         var eventNode = SelectedNode;
@@ -250,6 +252,7 @@ public sealed partial class MainViewModel
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:Group:{ag.Tag}]",
+            Parameters = CollectInitializeParameters(SelectedNode),
         };
 
         var groupNode = SelectedNode;
@@ -304,6 +307,7 @@ public sealed partial class MainViewModel
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:Action:{action.Command}]",
+            Parameters = CollectInitializeParameters(SelectedNode),
         };
 
         var actionNode = SelectedNode;
@@ -418,6 +422,69 @@ public sealed partial class MainViewModel
             current = current.Parent;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Walks up the tree from the selected node to find the WatchItem root,
+    /// then collects parameters from all Initialize nodes in that subtree.
+    /// This ensures tokens are resolved even when executing mid-tree.
+    /// </summary>
+    private Dictionary<string, string> CollectInitializeParameters(TreeNodeViewModel node)
+    {
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Walk up to find the WatchItem root
+        var current = node;
+        TreeNodeViewModel? watchItemNode = null;
+        while (current != null)
+        {
+            if (current.NodeKind == NodeKinds.WatchItem)
+            {
+                watchItemNode = current;
+                break;
+            }
+            current = current.Parent;
+        }
+
+        if (watchItemNode == null) return parameters;
+
+        // Use a temporary context to leverage the existing ParameterResolver
+        var tempCtx = new PipelineExecutionContext();
+        GatherInitializeParams(watchItemNode, tempCtx);
+
+        if (tempCtx.Parameters.Count > 0)
+        {
+            AddLog($"Pre-loaded {tempCtx.Parameters.Count} parameters from Initialize nodes", LogSeverity.Info);
+        }
+
+        return tempCtx.Parameters;
+    }
+
+    /// <summary>
+    /// Recursively walks the tree to find Initialize nodes and loads their
+    /// parameter files into the execution context.
+    /// </summary>
+    private void GatherInitializeParams(TreeNodeViewModel node, PipelineExecutionContext ctx)
+    {
+        if (node.NodeKind == NodeKinds.Initialize
+            && node.ModelObject is InitializeConfig init
+            && !string.IsNullOrEmpty(init.ParameterFile))
+        {
+            var path = ParameterResolver.Resolve(init.ParameterFile, ctx);
+            try
+            {
+                ParameterResolver.LoadParameterFile(ctx, path);
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Failed to pre-load parameters from {path}: {ex.Message}", LogSeverity.Warning);
+            }
+        }
+
+        foreach (var child in node.Children)
+        {
+            GatherInitializeParams(child, ctx);
+        }
     }
 
     /// <summary>Changes the ExecutionType of the selected Event or ActionGroup node.</summary>
