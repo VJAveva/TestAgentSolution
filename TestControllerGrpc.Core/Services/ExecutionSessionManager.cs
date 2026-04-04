@@ -31,11 +31,11 @@ public sealed class ExecutionSessionManager
         return session;
     }
 
-    /// <summary>Records a per-action result into the active session.</summary>
+    /// <summary>Records a per-action result into the active session. Thread-safe for parallel execution.</summary>
     public void RecordResult(string sessionId, ActionExecutionResult result)
     {
         if (_active.TryGetValue(sessionId, out var session))
-            session.ActionResults.Add(result);
+            session.AddResult(result);
     }
 
     /// <summary>Marks a session complete and archives it into history.</summary>

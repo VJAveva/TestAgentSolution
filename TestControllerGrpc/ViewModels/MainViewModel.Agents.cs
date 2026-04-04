@@ -13,6 +13,29 @@ public sealed partial class MainViewModel
 {
     [ObservableProperty] private AgentInfoViewModel? _selectedAgent;
 
+    // GAP 5 fix: O(1) agent lookup by name instead of O(n) FirstOrDefault scans.
+    // With 100 agents sending heartbeats every 15s, this eliminates ~700 linear
+    // scans per minute from the UI thread.
+    private readonly Dictionary<string, AgentInfoViewModel> _agentIndex = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>O(1) lookup of agent by name. Returns null if not found.</summary>
+    private AgentInfoViewModel? FindAgent(string name)
+        => _agentIndex.TryGetValue(name, out var vm) ? vm : null;
+
+    /// <summary>Adds an agent to both the ObservableCollection and the index.</summary>
+    private void IndexAgent(AgentInfoViewModel vm)
+    {
+        _agentIndex[vm.Name] = vm;
+        RegisteredAgents.Add(vm);
+    }
+
+    /// <summary>Removes an agent from both the ObservableCollection and the index.</summary>
+    private void UnindexAgent(AgentInfoViewModel vm)
+    {
+        _agentIndex.Remove(vm.Name);
+        RegisteredAgents.Remove(vm);
+    }
+
     [RelayCommand]
     private async Task RegisterAgent()
     {
@@ -33,9 +56,8 @@ public sealed partial class MainViewModel
         var addr = NewAgentAddress.Trim();
 
         // Remove existing if re-registering
-        var existing = RegisteredAgents.FirstOrDefault(a =>
-            string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null) RegisteredAgents.Remove(existing);
+        var existing = FindAgent(name);
+        if (existing is not null) UnindexAgent(existing);
 
         // Register in dispatcher
         _dispatcher.RegisterAgent(name, addr);
@@ -46,7 +68,7 @@ public sealed partial class MainViewModel
             Name = name, Address = addr, ConnectionStatus = "Testing"
         };
         agentVm.UpdateDetailLine();
-        RegisteredAgents.Add(agentVm);
+        IndexAgent(agentVm);
         AddLog($"{LogIcons.Info} Registering agent: {name} {LogIcons.Arrow} {addr}...");
         NewAgentName = "";
 
@@ -130,7 +152,7 @@ public sealed partial class MainViewModel
         if (SelectedAgent is null) return;
         var name = SelectedAgent.Name;
         _dispatcher.UnregisterAgent(name);
-        RegisteredAgents.Remove(SelectedAgent);
+        UnindexAgent(SelectedAgent);
         SelectedAgent = null;
         AddLog($"Unregistered agent: {name}");
         RefreshAgentStatusSummary();
@@ -228,59 +250,100 @@ public sealed partial class MainViewModel
         AgentStatusSummary = $"{online}/{RegisteredAgents.Count} online";
     }
 
-    // ?? Periodic agent health check (runs every 30s) ????????????????
+    // ?? Background agent health check (GAP 2 fix) ????????????????????
+    // Replaced DispatcherTimer (UI-thread sequential) with a background
+    // Task that pings all agents in parallel via Task.WhenAll, then
+    // marshals only the UI property updates to the Dispatcher.
+    // With 100 agents × 5s timeout, worst case = 5s (parallel) vs 500s (sequential).
 
-    private System.Windows.Threading.DispatcherTimer? _healthCheckTimer;
+    private CancellationTokenSource? _healthCheckCts;
 
     /// <summary>Starts background health-check polling for all registered agents.</summary>
     public void StartPeriodicHealthCheck(int intervalSeconds = 30)
     {
-        _healthCheckTimer?.Stop();
-        _healthCheckTimer = new System.Windows.Threading.DispatcherTimer
+        StopPeriodicHealthCheck();
+        _healthCheckCts = new CancellationTokenSource();
+        var ct = _healthCheckCts.Token;
+        var interval = TimeSpan.FromSeconds(intervalSeconds);
+
+        _ = Task.Run(async () =>
         {
-            Interval = TimeSpan.FromSeconds(intervalSeconds)
-        };
-        _healthCheckTimer.Tick += async (_, _) =>
-        {
-            if (RegisteredAgents.Count == 0) return;
-            foreach (var agent in RegisteredAgents.ToList())
+            while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    var (snapshot, _) = await _dispatcher.TestConnectionAsync(agent.Name);
-                    if (snapshot is not null)
-                    {
-                        agent.AgentState = snapshot.State switch
-                        {
-                            AgentState.Ready => "Ready",
-                            AgentState.Running => "Running",
-                            _ => "Inactive"
-                        };
-                        if (snapshot.Metrics is not null)
-                        {
-                            agent.CpuUsage = $"{snapshot.Metrics.CpuUsagePct:F0}%";
-                            agent.MemoryUsage = $"{snapshot.Metrics.MemoryUsedMb:F0}MB";
-                            agent.DiskFree = $"{snapshot.Metrics.DiskFreeGb:F1}GB";
-                        }
-                        agent.ConnectionStatus = "Online";
-                        agent.ErrorDetail = "";
-                    }
-                    else
-                    {
-                        agent.ConnectionStatus = "Offline";
-                    }
-                    agent.UpdateDetailLine();
+                    await Task.Delay(interval, ct);
                 }
-                catch (Exception ex) { _logger.LogDebug(ex, "Background health check failed for {Agent}", agent.Name); }
+                catch (OperationCanceledException) { break; }
+
+                // Snapshot the agent list on the UI thread
+                List<AgentInfoViewModel> agents = [];
+                try
+                {
+                    agents = await Application.Current!.Dispatcher.InvokeAsync(
+                        () => RegisteredAgents.ToList());
+                }
+                catch { break; }
+
+                if (agents.Count == 0) continue;
+
+                // Ping ALL agents in parallel on background threads
+                var tasks = agents.Select(async agent =>
+                {
+                    try
+                    {
+                        var (snapshot, _) = await _dispatcher.TestConnectionAsync(agent.Name, ct);
+
+                        // Marshal UI updates to dispatcher
+                        await Application.Current!.Dispatcher.InvokeAsync(() =>
+                        {
+                            if (snapshot is not null)
+                            {
+                                agent.AgentState = snapshot.State switch
+                                {
+                                    AgentState.Ready => "Ready",
+                                    AgentState.Running => "Running",
+                                    _ => "Inactive"
+                                };
+                                if (snapshot.Metrics is not null)
+                                {
+                                    agent.CpuUsage = $"{snapshot.Metrics.CpuUsagePct:F0}%";
+                                    agent.MemoryUsage = $"{snapshot.Metrics.MemoryUsedMb:F0}MB";
+                                    agent.DiskFree = $"{snapshot.Metrics.DiskFreeGb:F1}GB";
+                                }
+                                agent.ConnectionStatus = "Online";
+                                agent.ErrorDetail = "";
+                            }
+                            else
+                            {
+                                agent.ConnectionStatus = "Offline";
+                            }
+                            agent.UpdateDetailLine();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Background health check failed for {Agent}", agent.Name);
+                    }
+                });
+
+                await Task.WhenAll(tasks);
+
+                // Update summary on UI thread
+                try
+                {
+                    await Application.Current!.Dispatcher.InvokeAsync(RefreshAgentStatusSummary);
+                }
+                catch { /* app shutting down */ }
             }
-        };
-        _healthCheckTimer.Start();
+        }, ct);
     }
 
     public void StopPeriodicHealthCheck()
     {
-        _healthCheckTimer?.Stop();
-        _healthCheckTimer = null;
+        _healthCheckCts?.Cancel();
+        _healthCheckCts?.Dispose();
+        _healthCheckCts = null;
     }
 
     // ?? Agent self-registration via gRPC server events ??????????????
@@ -290,8 +353,7 @@ public sealed partial class MainViewModel
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             // If already in list, update address; else add new
-            var existing = RegisteredAgents.FirstOrDefault(a =>
-                string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            var existing = FindAgent(name);
             if (existing is not null)
             {
                 existing.Address = address;
@@ -307,7 +369,7 @@ public sealed partial class MainViewModel
                     ConnectionStatus = "Online", AgentState = "Ready"
                 };
                 vm.UpdateDetailLine();
-                RegisteredAgents.Add(vm);
+                IndexAgent(vm);
                 AddLog($"{LogIcons.Success} Agent self-registered: {name} {LogIcons.Arrow} {address}", LogSeverity.Success);
             }
             RefreshAgentStatusSummary();
@@ -318,8 +380,7 @@ public sealed partial class MainViewModel
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            var existing = RegisteredAgents.FirstOrDefault(a =>
-                string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            var existing = FindAgent(name);
             if (existing is not null)
             {
                 existing.ConnectionStatus = "Offline";
@@ -335,8 +396,7 @@ public sealed partial class MainViewModel
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            var existing = RegisteredAgents.FirstOrDefault(a =>
-                string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            var existing = FindAgent(name);
 
             if (existing is null)
             {
@@ -345,7 +405,7 @@ public sealed partial class MainViewModel
                 if (address is null) return;
 
                 existing = new AgentInfoViewModel { Name = name, Address = address };
-                RegisteredAgents.Add(existing);
+                IndexAgent(existing);
                 AddLog($"{LogIcons.Info} Agent discovered via heartbeat: {name} {LogIcons.Arrow} {address}");
             }
 

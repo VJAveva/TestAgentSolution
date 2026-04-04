@@ -201,7 +201,19 @@ public sealed class ExecutionSession
     public DateTime StartedUtc { get; init; } = DateTime.UtcNow;
     public DateTime? CompletedUtc { get; set; }
     public SessionState State { get; set; } = SessionState.Running;
-    public List<ActionExecutionResult> ActionResults { get; } = [];
+
+    // GAP 10 fix: Thread-safe collection for parallel action groups.
+    // Parallel ExecuteChildrenAsync calls RecordResult from multiple threads
+    // simultaneously. A plain List<T>.Add is not thread-safe and can corrupt
+    // data (lost items, IndexOutOfRangeException). ConcurrentBag<T> is
+    // lock-free for concurrent Add and safe for enumeration (snapshot).
+    private readonly System.Collections.Concurrent.ConcurrentBag<ActionExecutionResult> _actionResults = new();
+
+    /// <summary>Thread-safe access to all recorded action results.</summary>
+    public IReadOnlyCollection<ActionExecutionResult> ActionResults => _actionResults;
+
+    /// <summary>Thread-safe: adds a result from any thread during parallel execution.</summary>
+    public void AddResult(ActionExecutionResult result) => _actionResults.Add(result);
 
     /// <summary>Frozen context for retry — same tokens, same Initialize params.</summary>
     public Dictionary<string, string> ResolvedParameters { get; init; } = new();
@@ -210,11 +222,11 @@ public sealed class ExecutionSession
     public List<IActionNode> SnapshotNodes { get; init; } = [];
 
     public IEnumerable<ActionExecutionResult> FailedActions
-        => ActionResults.Where(r => r.IsRetryable);
+        => _actionResults.Where(r => r.IsRetryable);
 
-    public int TotalActions => ActionResults.Count;
-    public int SucceededCount => ActionResults.Count(r => r.Outcome == ActionOutcome.Success);
-    public int FailedCount => ActionResults.Count(r => r.IsRetryable);
+    public int TotalActions => _actionResults.Count;
+    public int SucceededCount => _actionResults.Count(r => r.Outcome == ActionOutcome.Success);
+    public int FailedCount => _actionResults.Count(r => r.IsRetryable);
 
     public string SummaryText => State switch
     {

@@ -165,7 +165,12 @@ public sealed partial class MainViewModel
 
     private bool CanTriggerAllWatchItems => !IsExecuting;
 
-    /// <summary>Trigger ALL WatchItems simultaneously (parallel or sequential per config).</summary>
+    /// <summary>
+    /// Trigger ALL WatchItems in parallel (GAP 7 fix).
+    /// Each WatchItem runs on its own Task so actions targeting different
+    /// agents execute concurrently, leveraging all 100 agents at once
+    /// instead of running them sequentially.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems))]
     private async Task TriggerAllWatchItems()
     {
@@ -176,18 +181,23 @@ public sealed partial class MainViewModel
         _executionCts = new CancellationTokenSource();
 
         WatchListRoot?.SetStatusRecursive("Running");
-        AddLog($"Triggered ALL WatchItems ({_config.WatchItems.Count} items)");
+
+        var enabledItems = _config.WatchItems.Where(wi => wi.IsEnabled).ToList();
+        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) — parallel");
 
         var allSuccess = true;
         try
         {
-            foreach (var wi in _config.WatchItems)
+            // Execute all WatchItems in parallel — each targeting different agents
+            var tasks = enabledItems.Select(async wi =>
             {
-                if (!wi.IsEnabled) continue;
-
                 var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
                     ReferenceEquals(c.ModelObject, wi));
-                if (wiNode is not null) wiNode.SetStatusRecursive("Running");
+
+                await Application.Current!.Dispatcher.InvokeAsync(() =>
+                {
+                    if (wiNode is not null) wiNode.SetStatusRecursive("Running");
+                });
 
                 var wiSuccess = true;
                 foreach (var ev in wi.Events)
@@ -199,7 +209,7 @@ public sealed partial class MainViewModel
                     };
                     try
                     {
-                        await _executor.ExecuteEventAsync(ev, ctx, _executionCts.Token);
+                        await _executor.ExecuteEventAsync(ev, ctx, _executionCts!.Token);
                     }
                     catch (Exception ex)
                     {
@@ -207,14 +217,22 @@ public sealed partial class MainViewModel
                         AddLog($"Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
                     }
                 }
-                if (wiNode is not null)
+
+                await Application.Current!.Dispatcher.InvokeAsync(() =>
                 {
-                    wiNode.ExecutionStatus = wiSuccess ? "Success" : "Failed";
-                    if (!wiSuccess) wiNode.FailureMessage = "One or more events failed";
-                    wiNode.PropagateStatusUp();
-                }
-                if (!wiSuccess) allSuccess = false;
-            }
+                    if (wiNode is not null)
+                    {
+                        wiNode.ExecutionStatus = wiSuccess ? "Success" : "Failed";
+                        if (!wiSuccess) wiNode.FailureMessage = "One or more events failed";
+                        wiNode.PropagateStatusUp();
+                    }
+                });
+
+                return wiSuccess;
+            });
+
+            var results = await Task.WhenAll(tasks);
+            allSuccess = results.All(r => r);
 
             if (WatchListRoot is not null)
                 WatchListRoot.ExecutionStatus = allSuccess ? "Success" : "Failed";

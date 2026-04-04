@@ -1067,11 +1067,35 @@
                 <RowDefinition x:Name="RowLogPane" Height="2*" MinHeight="120" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="200" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition x:Name="ColNodeProperties" Width="3*" MinWidth="280" />
-                <ColumnDefinition x:Name="ColAgentSplitter" Width="Auto" />
-                <ColumnDefinition x:Name="ColAgentPanel" Width="3*" MinWidth="280" />
+                <ColumnDefinition Width="2.5*" MinWidth="220" />    <!-- Col 0: Tree -->
+                <ColumnDefinition Width="Auto" />                    <!-- Col 1: Splitter -->
+                <ColumnDefinition x:Name="ColNodeProperties" MinWidth="300"> <!-- Col 2: Node Props -->
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="5*" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsAgentPanePinned}" Value="False">
+                                    <Setter Property="Width" Value="*" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
+                <ColumnDefinition x:Name="ColAgentSplitter" Width="Auto" /> <!-- Col 3: Splitter -->
+                <ColumnDefinition x:Name="ColAgentPanel" MinWidth="0">      <!-- Col 4: Agents -->
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="2*" />
+                            <Setter Property="MinWidth" Value="240" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsAgentPanePinned}" Value="False">
+                                    <Setter Property="Width" Value="Auto" />
+                                    <Setter Property="MinWidth" Value="28" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
             </Grid.ColumnDefinitions>
 
             <!-- ═══════════════════════════════════════════════════════ -->
@@ -2047,10 +2071,17 @@
                         </WrapPanel>
                     </Border>
 
-                    <!-- Row 2: Log Output -->
+                    <!-- Row 2: Log Output (GAP 9 fix: virtualization enabled)
+                         VirtualizingStackPanel ensures WPF only creates ListBoxItem containers
+                         for visible rows, not all 10K entries. Recycling reuses discarded
+                         containers. ScrollUnit=Pixel gives smooth scrolling. -->
                     <ListBox Grid.Row="2" x:Name="LogListBox" ItemsSource="{Binding FilteredLogEntries}" Background="Transparent"
                              BorderThickness="0" FontFamily="Consolas" FontSize="11" Padding="4,2"
                              SelectionMode="Extended"
+                             VirtualizingStackPanel.IsVirtualizing="True"
+                             VirtualizingStackPanel.VirtualizationMode="Recycling"
+                             ScrollViewer.CanContentScroll="True"
+                             VirtualizingPanel.ScrollUnit="Pixel"
                              Visibility="{Binding IsLogCollapsed, Converter={StaticResource InvBoolVis}}">
                         <ListBox.ContextMenu>
                             <ContextMenu Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"

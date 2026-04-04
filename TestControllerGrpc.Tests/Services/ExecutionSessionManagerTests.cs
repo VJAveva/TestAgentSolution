@@ -211,10 +211,10 @@ public class ExecutionSessionManagerTests
     public void ExecutionSession_Should_CountRetryableActions_When_HasFailedAndTimedOut()
     {
         var session = new ExecutionSession { WatchItemTag = "Test" };
-        session.ActionResults.Add(new ActionExecutionResult { Outcome = ActionOutcome.Success });
-        session.ActionResults.Add(new ActionExecutionResult { Outcome = ActionOutcome.Failed });
-        session.ActionResults.Add(new ActionExecutionResult { Outcome = ActionOutcome.TimedOut });
-        session.ActionResults.Add(new ActionExecutionResult { Outcome = ActionOutcome.Terminated });
+        session.AddResult(new ActionExecutionResult { Outcome = ActionOutcome.Success });
+        session.AddResult(new ActionExecutionResult { Outcome = ActionOutcome.Failed });
+        session.AddResult(new ActionExecutionResult { Outcome = ActionOutcome.TimedOut });
+        session.AddResult(new ActionExecutionResult { Outcome = ActionOutcome.Terminated });
 
         Assert.Equal(4, session.TotalActions);
         Assert.Equal(1, session.SucceededCount);

@@ -23,35 +23,42 @@ public sealed partial class MainViewModel
     /// <summary>Applies tag/agent/severity/search filters to the execution log.</summary>
     private void ApplyLogFilter()
     {
-        FilteredLogEntries.Clear();
-
         var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
         var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
         var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
         var hasSeverityFilter = LogLevelFilter != "All";
+        var anyFilter = hasTagFilter || hasAgentFilter || hasSearchFilter || hasSeverityFilter;
 
-        foreach (var entry in LogEntries)
-        {
-            if (PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter))
-                FilteredLogEntries.Add(entry);
-        }
+        // Capture filter values for the predicate closure
+        var tagVal = LogFilterTag;
+        var agentVal = LogFilterAgent;
+        var searchVal = LogSearchText;
+        var levelVal = LogLevelFilter;
+
+        _logBuffer?.SetFilter(anyFilter
+            ? entry => PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter,
+                                    tagVal, agentVal, searchVal, levelVal)
+            : null);
+        _logBuffer?.ReapplyFilter();
     }
 
-    private bool PassesFilter(LogEntryViewModel entry,
-        bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter)
+    /// <summary>Pure filter predicate — no field access, fully parameterized for thread safety.</summary>
+    private static bool PassesFilter(LogEntryViewModel entry,
+        bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter,
+        string tagVal, string agentVal, string searchVal, string levelVal)
     {
         var msg = entry.Message;
 
-        if (hasTagFilter && !msg.Contains(LogFilterTag, StringComparison.OrdinalIgnoreCase))
+        if (hasTagFilter && !msg.Contains(tagVal, StringComparison.OrdinalIgnoreCase))
             return false;
-        if (hasAgentFilter && !msg.Contains(LogFilterAgent, StringComparison.OrdinalIgnoreCase))
+        if (hasAgentFilter && !msg.Contains(agentVal, StringComparison.OrdinalIgnoreCase))
             return false;
-        if (hasSearchFilter && !msg.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase)
-            && !entry.Timestamp.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase))
+        if (hasSearchFilter && !msg.Contains(searchVal, StringComparison.OrdinalIgnoreCase)
+            && !entry.Timestamp.Contains(searchVal, StringComparison.OrdinalIgnoreCase))
             return false;
         if (hasSeverityFilter)
         {
-            var requiredSeverity = LogLevelFilter switch
+            var requiredSeverity = levelVal switch
             {
                 "Info" => LogSeverity.Info,
                 "Success" => LogSeverity.Success,
@@ -63,6 +70,14 @@ public sealed partial class MainViewModel
                 return false;
         }
         return true;
+    }
+
+    /// <summary>Overload used by AddToFilteredLog for the live path.</summary>
+    private bool PassesFilter(LogEntryViewModel entry,
+        bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter)
+    {
+        return PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter,
+                            LogFilterTag, LogFilterAgent, LogSearchText, LogLevelFilter);
     }
 
     /// <summary>Copy all log entries to clipboard.</summary>
@@ -93,6 +108,7 @@ public sealed partial class MainViewModel
     {
         LogEntries.Clear();
         FilteredLogEntries.Clear();
+        _logBuffer?.SetFilter(null);
     }
 
     /// <summary>Toggle the log panel collapsed/expanded state.</summary>
@@ -203,36 +219,12 @@ public sealed partial class MainViewModel
             Severity = severity
         };
 
-        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        // Enqueue into the high-performance buffer (lock-free, any thread).
+        // The buffer drains in batches on the UI thread every 100ms.
+        if (_logBuffer is not null)
         {
-            LogEntries.Add(entry);
-            while (LogEntries.Count > 5000) LogEntries.RemoveAt(0);
-            AddToFilteredLog(entry);
-        }
-        else
-        {
-            Application.Current?.Dispatcher.InvokeAsync(() =>
-            {
-                LogEntries.Add(entry);
-                while (LogEntries.Count > 5000) LogEntries.RemoveAt(0);
-                AddToFilteredLog(entry);
-            });
-        }
-    }
-
-    private void AddToFilteredLog(LogEntryViewModel entry)
-    {
-        if (IsLogPaused) return;
-
-        var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
-        var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
-        var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
-        var hasSeverityFilter = LogLevelFilter != "All";
-
-        if (PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter))
-        {
-            FilteredLogEntries.Add(entry);
-            while (FilteredLogEntries.Count > 5000) FilteredLogEntries.RemoveAt(0);
+            _logBuffer.IsPaused = IsLogPaused;
+            _logBuffer.Enqueue(entry);
         }
     }
 

@@ -189,8 +189,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>TreeRoots[0] is the single "WatchList" root node — always present.</summary>
     public ObservableCollection<TreeNodeViewModel> TreeRoots { get; } = new();
     public ObservableCollection<TreeNodeViewModel> TemplateRoots { get; } = new();
-    public ObservableCollection<LogEntryViewModel> LogEntries { get; } = new();
-    public ObservableCollection<LogEntryViewModel> FilteredLogEntries { get; } = new();
+
+    // ── High-performance log collections (GAP 1 + 4 fix) ────────────
+    // RangeObservableCollection supports batch Add/Remove with single
+    // Reset notification, reducing WPF layout passes from O(n) to O(1).
+    // LogBufferService decouples log producers from the UI thread via
+    // a Channel<T>, draining in batches every 100ms.
+    public RangeObservableCollection<LogEntryViewModel> LogEntries { get; } = new();
+    public RangeObservableCollection<LogEntryViewModel> FilteredLogEntries { get; } = new();
+    private LogBufferService? _logBuffer;
+
+    /// <summary>
+    /// Exposes the log buffer to the View for auto-scroll subscription.
+    /// The View subscribes to <see cref="LogBufferService.BatchFlushed"/>
+    /// instead of per-item CollectionChanged for efficient scrolling.
+    /// </summary>
+    public LogBufferService? LogBuffer => _logBuffer;
+
     public ObservableCollection<AgentInfoViewModel> RegisteredAgents { get; } = new();
     public ObservableCollection<string> AvailableTemplateIds { get; } = new();
     public ObservableCollection<string> AvailableWatchItemTags { get; } = new();
@@ -240,6 +255,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Always start with a single empty WatchList root
         InitializeEmptyWatchList();
+
+        // Initialize high-performance log buffer (GAP 1 + 4 fix)
+        // Decouples log producers from the UI thread via Channel<T>.
+        _logBuffer = new LogBufferService(LogEntries, FilteredLogEntries);
     }
 
     /// <summary>Creates the single WatchList + TemplateList root nodes on startup.</summary>
@@ -263,13 +282,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         foreach (var name in _dispatcher.RegisteredAgents)
         {
-            if (RegisteredAgents.All(a => !string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
+            if (FindAgent(name) is null)
             {
                 var addr = _dispatcher.GetAgentAddress(name) ?? "";
-                RegisteredAgents.Add(new AgentInfoViewModel
+                var vm = new AgentInfoViewModel
                 {
                     Name = name, Address = addr, ConnectionStatus = "Unknown"
-                });
+                };
+                IndexAgent(vm);
             }
         }
         if (_vocabMonitor.CurrentConfig is { } cfg && !string.IsNullOrEmpty(cfg.FilePath))
@@ -305,6 +325,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _subscriptions.Clear();
 
         StopPeriodicHealthCheck();
+        _logBuffer?.Dispose();
         _executionCts?.Dispose();
     }
 

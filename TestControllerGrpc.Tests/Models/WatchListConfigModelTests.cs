@@ -232,8 +232,8 @@ public class WatchListConfigModelTests
         SessionState state, string expectedSubstring)
     {
         var session = new ExecutionSession { State = state };
-        session.ActionResults.Add(new ActionExecutionResult { Outcome = ActionOutcome.Success });
-        session.ActionResults.Add(new ActionExecutionResult { Outcome = ActionOutcome.Failed });
+        session.AddResult(new ActionExecutionResult { Outcome = ActionOutcome.Success });
+        session.AddResult(new ActionExecutionResult { Outcome = ActionOutcome.Failed });
 
         Assert.Contains(expectedSubstring, session.SummaryText, StringComparison.OrdinalIgnoreCase);
     }

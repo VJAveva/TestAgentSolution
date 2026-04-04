@@ -24,6 +24,11 @@ public interface IEventAggregator
 /// Thread-safe in-process event aggregator.
 /// Uses a snapshot iteration pattern so publishing is safe even if
 /// handlers subscribe/unsubscribe during dispatch.
+///
+/// GAP 6 fix: Handlers are invoked via <see cref="ThreadPool.QueueUserWorkItem"/>
+/// so that gRPC server threads (which call <see cref="Publish{TEvent}"/>) are
+/// never blocked by slow subscribers (e.g. Dispatcher.InvokeAsync in the UI).
+/// With 100 agents sending heartbeats, this prevents gRPC thread starvation.
 /// </summary>
 public sealed class EventAggregator : IEventAggregator
 {
@@ -36,7 +41,14 @@ public sealed class EventAggregator : IEventAggregator
             Delegate[] snapshot;
             lock (handlers) { snapshot = [.. handlers]; }
             foreach (var h in snapshot)
-                ((Action<TEvent>)h)(evt);
+            {
+                var handler = (Action<TEvent>)h;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { handler(evt); }
+                    catch { /* subscriber errors must not crash the publisher */ }
+                });
+            }
         }
     }
 
