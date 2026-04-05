@@ -246,22 +246,22 @@ public partial class MainWindow : Window
         // ?? Execution commands ??????????????????????????????????????
         if (node.NodeKind is "WatchItem")
         {
-            menu.Items.Add(CreateMenuItem("? Trigger All Events", _vm.TriggerWatchItemCommand));
+            menu.Items.Add(CreateMenuItem("Trigger All Events", _vm.TriggerWatchItemCommand));
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "Event")
         {
-            menu.Items.Add(CreateMenuItem("? Trigger Event", _vm.TriggerEventCommand));
+            menu.Items.Add(CreateMenuItem("Trigger Event", _vm.TriggerEventCommand));
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "ActionGroup")
         {
-            menu.Items.Add(CreateMenuItem("? Execute Group", _vm.ExecuteGroupCommand));
+            menu.Items.Add(CreateMenuItem("Execute Group", _vm.ExecuteGroupCommand));
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "Action")
         {
-            menu.Items.Add(CreateMenuItem("? Execute Action", _vm.ExecuteSingleActionCommand));
+            menu.Items.Add(CreateMenuItem("Execute Action", _vm.ExecuteSingleActionCommand));
             menu.Items.Add(new Separator());
         }
 
@@ -273,7 +273,7 @@ public partial class MainWindow : Window
             menu.Items.Add(CreateMenuItem("Import WatchItems…", _vm.ImportWatchItemsCommand));
             menu.Items.Add(CreateMenuItem("Export All WatchItems…", _vm.ExportWatchItemsCommand));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("? Edit WatchList XML…", _vm.OpenWatchListEditorCommand));
+            menu.Items.Add(CreateMenuItem("Edit WatchList XML…", _vm.OpenWatchListEditorCommand));
         }
         else if (node.NodeKind is "WatchItem")
         {
@@ -317,7 +317,7 @@ public partial class MainWindow : Window
                     menu.Items.Add(new Separator());
                     var retryItem = new MenuItem
                     {
-                        Header = $"? Retry Failed ({lastSession.FailedCount} action{(lastSession.FailedCount > 1 ? "s" : "")})",
+                        Header = $"Retry Failed ({lastSession.FailedCount} action{(lastSession.FailedCount > 1 ? "s" : "")})",
                         Command = _vm.RetryFailedCommand
                     };
                     menu.Items.Add(retryItem);

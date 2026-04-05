@@ -163,7 +163,7 @@ public sealed partial class MainViewModel
         AddLog("Execution status reset");
     }
 
-    private bool CanTriggerAllWatchItems => !IsExecuting;
+    private bool CanTriggerAllWatchItems => SelectedNode?.NodeKind == NodeKinds.WatchList && !IsExecuting;
 
     /// <summary>
     /// Trigger ALL WatchItems in parallel (GAP 7 fix).

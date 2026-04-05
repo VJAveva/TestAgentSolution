@@ -78,6 +78,52 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                 // Snapshot not available — proceed to streaming
             }
 
+            // Load recent execution history so the monitor shows past activities
+            try
+            {
+                using var historyCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+                historyCts.CancelAfter(TimeSpan.FromSeconds(5));
+                var historyReply = await client.GetExecutionHistoryAsync(
+                    new TestAgentGrpc.ExecutionHistoryRequest { MaxResults = 50 },
+                    cancellationToken: historyCts.Token);
+                UpdateOnUiThread(() =>
+                {
+                    foreach (var record in historyReply.Records)
+                    {
+                        var row = new AgentActionRow
+                        {
+                            StartTime = record.Started?.ToDateTime().ToLocalTime() ?? DateTime.MinValue,
+                            Command = $"{record.Command} {record.Arguments}".Trim(),
+                            ExitCode = record.ExitCode,
+                            Duration = (record.Finished is not null && record.Started is not null)
+                                ? record.Finished.ToDateTime() - record.Started.ToDateTime()
+                                : TimeSpan.Zero,
+                            StatusText = record.Outcome switch
+                            {
+                                TestAgentGrpc.ExecutionOutcome.OutcomeSuccess => "Success",
+                                TestAgentGrpc.ExecutionOutcome.OutcomeFailed => "Failed",
+                                TestAgentGrpc.ExecutionOutcome.OutcomeTerminated => "Killed",
+                                TestAgentGrpc.ExecutionOutcome.OutcomeTimedOut => "Timeout",
+                                _ => "Unknown"
+                            },
+                            StatusColor = record.Outcome switch
+                            {
+                                TestAgentGrpc.ExecutionOutcome.OutcomeSuccess => "#A6E3A1",
+                                TestAgentGrpc.ExecutionOutcome.OutcomeFailed => "#F38BA8",
+                                TestAgentGrpc.ExecutionOutcome.OutcomeTerminated => "#F38BA8",
+                                TestAgentGrpc.ExecutionOutcome.OutcomeTimedOut => "#F38BA8",
+                                _ => "#9399B2"
+                            },
+                        };
+                        ActionHistory.Add(row);
+                    }
+                });
+            }
+            catch
+            {
+                // History not available — proceed with live streaming only
+            }
+
             // Stream reconnect loop
             while (!_cts.Token.IsCancellationRequested)
             {
