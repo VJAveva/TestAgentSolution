@@ -103,6 +103,10 @@ public static class WatchListXmlParser
                         Attachment = Attr(el, "Attachment"),
                         Embed = Attr(el, "Embed"),
                         LargeFilesShare = Attr(el, "LargeFilesShare"),
+                        MaxRetries = AttrInt(el, "MaxRetries"),
+                        RetryDelaySeconds = AttrInt(el, "RetryDelaySeconds", 10),
+                        RetryBackoff = Attr(el, "RetryBackoff", "Exponential"),
+                        RetryOnExitCodes = Attr(el, "RetryOnExitCodes"),
                     });
                     break;
 
@@ -211,6 +215,12 @@ public static class WatchListXmlParser
                     AddIfNotEmpty(aEl, "Attachment", a.Attachment);
                     AddIfNotEmpty(aEl, "Embed", a.Embed);
                     AddIfNotEmpty(aEl, "LargeFilesShare", a.LargeFilesShare);
+                    if (a.MaxRetries > 0) aEl.Add(new XAttribute("MaxRetries", a.MaxRetries));
+                    if (a.MaxRetries > 0 && a.RetryDelaySeconds != 10)
+                        aEl.Add(new XAttribute("RetryDelaySeconds", a.RetryDelaySeconds));
+                    if (a.MaxRetries > 0 && !string.Equals(a.RetryBackoff, "Exponential", StringComparison.OrdinalIgnoreCase))
+                        aEl.Add(new XAttribute("RetryBackoff", a.RetryBackoff));
+                    AddIfNotEmpty(aEl, "RetryOnExitCodes", a.RetryOnExitCodes);
                     parent.Add(aEl);
                     break;
 

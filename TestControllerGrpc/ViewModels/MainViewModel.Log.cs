@@ -118,6 +118,23 @@ public sealed partial class MainViewModel
         IsLogCollapsed = !IsLogCollapsed;
     }
 
+    /// <summary>Toggle log pause on/off.</summary>
+    [RelayCommand]
+    private void ToggleLogPause()
+    {
+        IsLogPaused = !IsLogPaused;
+    }
+
+    /// <summary>Focus the log search box (Ctrl+L shortcut).</summary>
+    [RelayCommand]
+    private void FocusLogSearch()
+    {
+        FocusLogSearchRequested?.Invoke();
+    }
+
+    /// <summary>Raised when Ctrl+L is pressed to focus log search.</summary>
+    public event Action? FocusLogSearchRequested;
+
     /// <summary>Toggle pin/auto-hide for the execution log pane.</summary>
     [RelayCommand]
     private void ToggleLogPanePin()

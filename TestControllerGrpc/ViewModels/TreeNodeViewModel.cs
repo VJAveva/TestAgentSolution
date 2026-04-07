@@ -56,6 +56,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _attachment = "";
     [ObservableProperty] private string _embed = "";
     [ObservableProperty] private string _largeFilesShare = "";
+    [ObservableProperty] private int _maxRetries;
+    [ObservableProperty] private int _retryDelaySeconds = 10;
+    [ObservableProperty] private string _retryBackoff = "Exponential";
+    [ObservableProperty] private string _retryOnExitCodes = "";
     [ObservableProperty] private string _parameterFile = "";
     [ObservableProperty] private string _templateID = "";
     [ObservableProperty] private string _templateName = "";
@@ -480,6 +484,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             UserName = a.UserName, Password = a.Password,
             From = a.From, To = a.To, Title = a.Title, Body = a.Body,
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
+            MaxRetries = a.MaxRetries, RetryDelaySeconds = a.RetryDelaySeconds,
+            RetryBackoff = a.RetryBackoff, RetryOnExitCodes = a.RetryOnExitCodes,
             DisplayText = label, ModelObject = a,
         };
     }
@@ -562,7 +568,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 a.InstallLogRoot = InstallLogRoot;
                 a.UserName = UserName; a.Password = Password;
                 a.From = From; a.To = To; a.Title = Title; a.Body = Body;
-                a.Attachment = Attachment; a.Embed = Embed; a.LargeFilesShare = LargeFilesShare; break;
+                a.Attachment = Attachment; a.Embed = Embed; a.LargeFilesShare = LargeFilesShare;
+                a.MaxRetries = MaxRetries; a.RetryDelaySeconds = RetryDelaySeconds;
+                a.RetryBackoff = RetryBackoff; a.RetryOnExitCodes = RetryOnExitCodes; break;
             case InitializeConfig init:
                 init.Tag = Tag; init.ParameterFile = ParameterFile; break;
             case RefConfig r:

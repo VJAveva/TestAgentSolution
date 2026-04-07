@@ -67,9 +67,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isExecuting;
     private CancellationTokenSource? _executionCts;
 
+    // ── Execution Dashboard state ───────────────────────────────────
+    /// <summary>Per-agent execution progress for the dashboard.</summary>
+    public ObservableCollection<AgentExecutionProgress> AgentProgress { get; } = new();
+
+    /// <summary>True when execution dashboard should be shown instead of normal properties.</summary>
+    [ObservableProperty] private bool _showExecutionDashboard;
+
+    /// <summary>Total actions across all agents in current execution.</summary>
+    [ObservableProperty] private string _executionTotals = "";
+
+    /// <summary>Overall execution elapsed time.</summary>
+    [ObservableProperty] private string _executionElapsed = "";
+
+    private DateTime _executionStartTime;
+    private System.Windows.Threading.DispatcherTimer? _elapsedTimer;
+
     partial void OnIsExecutingChanged(bool value)
     {
         NotifyExecutionCanExecuteChanged();
+
+        if (value)
+        {
+            ShowExecutionDashboard = true;
+            _executionStartTime = DateTime.Now;
+            BuildAgentProgressList();
+            StartElapsedTimer();
+        }
+        else
+        {
+            StopElapsedTimer();
+            UpdateExecutionTotals();
+        }
     }
 
     /// <summary>Notifies all execution-related commands to re-evaluate their CanExecute state.</summary>

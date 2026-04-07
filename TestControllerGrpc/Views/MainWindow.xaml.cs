@@ -62,6 +62,9 @@ public partial class MainWindow : Window
         // ?? Inline AvalonEdit setup ?????????????????????????????????
         SetupInlineXmlEditor();
         _vm.PropertyChanged += OnViewModelPropertyChanged;
+
+        // ?? Keyboard shortcut support ????????????????????????????????
+        _vm.FocusLogSearchRequested += OnFocusLogSearchRequested;
     }
 
     // ???????????????????????????????????????????????????????????????
@@ -246,62 +249,70 @@ public partial class MainWindow : Window
         // ?? Execution commands ??????????????????????????????????????
         if (node.NodeKind is "WatchItem")
         {
-            menu.Items.Add(CreateMenuItem("Trigger All Events", _vm.TriggerWatchItemCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Trigger All Events", _vm.TriggerWatchItemCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "Event")
         {
-            menu.Items.Add(CreateMenuItem("Trigger Event", _vm.TriggerEventCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Trigger Event", _vm.TriggerEventCommand, "\uEA80", "AccGreen"));
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "ActionGroup")
         {
-            menu.Items.Add(CreateMenuItem("Execute Group", _vm.ExecuteGroupCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Execute Group", _vm.ExecuteGroupCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "Action")
         {
-            menu.Items.Add(CreateMenuItem("Execute Action", _vm.ExecuteSingleActionCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
         }
 
         // ?? Add commands (context-sensitive) ??????????????????????????
         if (node.NodeKind is "WatchList")
         {
-            menu.Items.Add(CreateMenuItem("Add WatchItem", _vm.AddWatchItemCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Add WatchItem", _vm.AddWatchItemCommand, "\uE710", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Import WatchItems…", _vm.ImportWatchItemsCommand));
-            menu.Items.Add(CreateMenuItem("Export All WatchItems…", _vm.ExportWatchItemsCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems…", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Edit WatchList XML…", _vm.OpenWatchListEditorCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML…", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
         }
         else if (node.NodeKind is "WatchItem")
         {
-            menu.Items.Add(CreateMenuItem("Add Event", _vm.AddChildNodeCommand));
-            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddActionGroupCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Event", _vm.AddChildNodeCommand, "\uEA80", "AccYellow"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddActionGroupCommand, "\uE8F1", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Export WatchItem…", _vm.ExportWatchItemsCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Export WatchItem…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
         }
         else if (node.NodeKind is "Event" or "ActionGroup")
         {
-            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddActionGroupCommand));
-            menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToGroupCommand));
-            menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToGroupCommand));
-            menu.Items.Add(CreateMenuItem("Add Initialize", _vm.AddInitializeToGroupCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddActionGroupCommand, "\uE8F1", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToGroupCommand, "\uE7C8", "AccPeach"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToGroupCommand, "\uE71B", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Initialize", _vm.AddInitializeToGroupCommand, "\uE713", "AccYellow"));
         }
 
         // ?? Change ExecutionType submenu (Event / ActionGroup) ??????
         if (node.NodeKind is "Event" or "ActionGroup")
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(BuildExecutionTypeSubmenu(node));
+            var execTypeSubmenu = BuildExecutionTypeSubmenu(node);
+            execTypeSubmenu.Icon = new System.Windows.Controls.TextBlock
+            {
+                Text = "\uE8AB",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 14,
+                Foreground = (Brush)FindResource("TextS"),
+            };
+            menu.Items.Add(execTypeSubmenu);
         }
 
         // ?? Delete ??????????????????????????????????????????????????
         if (node.NodeKind is not "WatchList")
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Delete", _vm.ConfirmDeleteSelectedNodeCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.ConfirmDeleteSelectedNodeCommand, "\uE74D", "AccRed"));
         }
 
         // ?? Retry Failed (WatchItem/Event with previous failed session) ??
@@ -315,11 +326,9 @@ public partial class MainWindow : Window
                 if (lastSession?.FailedCount > 0)
                 {
                     menu.Items.Add(new Separator());
-                    var retryItem = new MenuItem
-                    {
-                        Header = $"Retry Failed ({lastSession.FailedCount} action{(lastSession.FailedCount > 1 ? "s" : "")})",
-                        Command = _vm.RetryFailedCommand
-                    };
+                    var retryItem = CreateMenuItemWithIcon(
+                        $"Retry Failed ({lastSession.FailedCount} action{(lastSession.FailedCount > 1 ? "s" : "")})",
+                        _vm.RetryFailedCommand, "\uE72C", "AccPeach");
                     menu.Items.Add(retryItem);
                 }
             }
@@ -332,7 +341,8 @@ public partial class MainWindow : Window
 
             if (MainViewModel.CanMoveNode(node, -1))
             {
-                var moveUp = new MenuItem { Header = "Move Up" };
+                var moveUp = CreateMenuItemWithIcon("Move Up", null!, "\uE74A", "TextS");
+                moveUp.Command = null;
                 var capturedNode = node;
                 moveUp.Click += (_, _) => _vm.MoveNodeUp(capturedNode);
                 menu.Items.Add(moveUp);
@@ -340,7 +350,8 @@ public partial class MainWindow : Window
 
             if (MainViewModel.CanMoveNode(node, +1))
             {
-                var moveDown = new MenuItem { Header = "Move Down" };
+                var moveDown = CreateMenuItemWithIcon("Move Down", null!, "\uE74B", "TextS");
+                moveDown.Command = null;
                 var capturedNode = node;
                 moveDown.Click += (_, _) => _vm.MoveNodeDown(capturedNode);
                 menu.Items.Add(moveDown);
@@ -375,37 +386,45 @@ public partial class MainWindow : Window
 
         if (node.NodeKind is "TemplateList")
         {
-            menu.Items.Add(CreateMenuItem("Add Template", _vm.AddTemplateCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Template", _vm.AddTemplateCommand, "\uE710", "AccMauve"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Edit Template XML", _vm.EditTemplateXmlCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit Template XML", _vm.EditTemplateXmlCommand, "\uE70F", "AccMauve"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Import Templates…", _vm.ImportTemplatesCommand));
-            menu.Items.Add(CreateMenuItem("Export All Templates…", _vm.ExportTemplatesCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Import Templates\u2026", _vm.ImportTemplatesCommand, "\uE8B5", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export All Templates\u2026", _vm.ExportTemplatesCommand, "\uE898", "AccMauve"));
         }
         else if (node.NodeKind is "Template")
         {
-            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddGroupToTemplateCommand));
-            menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToTemplateCommand));
-            menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToTemplateCommand));
-            menu.Items.Add(CreateMenuItem("Add Initialize", _vm.AddInitializeToTemplateCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToTemplateCommand, "\uE71B", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Initialize", _vm.AddInitializeToTemplateCommand, "\uE713", "AccYellow"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Export Template…", _vm.ExportTemplatesCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Export Template\u2026", _vm.ExportTemplatesCommand, "\uE898", "AccMauve"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
         }
         else if (node.NodeKind is "ActionGroup")
         {
-            menu.Items.Add(CreateMenuItem("Add Action", _vm.AddActionToTemplateCommand));
-            menu.Items.Add(CreateMenuItem("Add ActionGroup", _vm.AddGroupToTemplateCommand));
-            menu.Items.Add(CreateMenuItem("Add Ref", _vm.AddRefToTemplateCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToTemplateCommand, "\uE71B", "AccMauve"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(BuildExecutionTypeSubmenu(node));
+            var execTypeSubmenu = BuildExecutionTypeSubmenu(node);
+            execTypeSubmenu.Icon = new System.Windows.Controls.TextBlock
+            {
+                Text = "\uE8AB",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 14,
+                Foreground = (Brush)FindResource("TextS"),
+            };
+            menu.Items.Add(execTypeSubmenu);
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
         }
         else if (node.NodeKind is not "TemplateList")
         {
-            menu.Items.Add(CreateMenuItem("Delete", _vm.DeleteTemplateCommand));
+            menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
         }
 
         // ?? Move Up / Down for templates ????????????????????????????
@@ -415,7 +434,8 @@ public partial class MainWindow : Window
 
             if (MainViewModel.CanMoveNode(node, -1))
             {
-                var moveUp = new MenuItem { Header = "Move Up" };
+                var moveUp = CreateMenuItemWithIcon("Move Up", null!, "\uE74A", "TextS");
+                moveUp.Command = null;
                 var capturedNode = node;
                 moveUp.Click += (_, _) => _vm.MoveNodeUp(capturedNode);
                 menu.Items.Add(moveUp);
@@ -423,7 +443,8 @@ public partial class MainWindow : Window
 
             if (MainViewModel.CanMoveNode(node, +1))
             {
-                var moveDown = new MenuItem { Header = "Move Down" };
+                var moveDown = CreateMenuItemWithIcon("Move Down", null!, "\uE74B", "TextS");
+                moveDown.Command = null;
                 var capturedNode = node;
                 moveDown.Click += (_, _) => _vm.MoveNodeDown(capturedNode);
                 menu.Items.Add(moveDown);
@@ -443,6 +464,19 @@ public partial class MainWindow : Window
     private static MenuItem CreateMenuItem(string header, ICommand command)
     {
         return new MenuItem { Header = header, Command = command };
+    }
+
+    private MenuItem CreateMenuItemWithIcon(string header, ICommand command, string iconGlyph, string resourceColorKey)
+    {
+        var item = new MenuItem { Header = header, Command = command };
+        item.Icon = new System.Windows.Controls.TextBlock
+        {
+            Text = iconGlyph,
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14,
+            Foreground = (Brush)FindResource(resourceColorKey),
+        };
+        return item;
     }
 
     /// <summary>Builds a "Change Execution Type" submenu with Sequential/Parallel options.</summary>
@@ -702,12 +736,23 @@ public partial class MainWindow : Window
     }
 
     // ???????????????????????????????????????????????????????????????
+    // KEYBOARD SHORTCUT SUPPORT
+    // ???????????????????????????????????????????????????????????????
+
+    private void OnFocusLogSearchRequested()
+    {
+        LogSearchBox.Focus();
+        LogSearchBox.SelectAll();
+    }
+
+    // ???????????????????????????????????????????????????????????????
     // CLEANUP
     // ???????????????????????????????????????????????????????????????
 
     protected override void OnClosed(EventArgs e)
     {
         _vm.ScrollToLogEntry -= OnScrollToLogEntry;
+        _vm.FocusLogSearchRequested -= OnFocusLogSearchRequested;
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
 
         if (_vm.LogBuffer is not null)

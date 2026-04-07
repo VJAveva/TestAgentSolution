@@ -9,6 +9,34 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}">
 
+    <Window.InputBindings>
+        <!-- File operations -->
+        <KeyBinding Key="O" Modifiers="Ctrl" Command="{Binding LoadVocabularyCommand}" />
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveVocabularyCommand}" />
+        <KeyBinding Key="S" Modifiers="Ctrl+Shift" Command="{Binding SaveVocabularyAsCommand}" />
+        <KeyBinding Key="R" Modifiers="Ctrl" Command="{Binding RefreshWatchListCommand}" />
+
+        <!-- Execution -->
+        <KeyBinding Key="F5" Command="{Binding TriggerAllWatchItemsCommand}" />
+        <KeyBinding Key="F5" Modifiers="Shift" Command="{Binding CancelExecutionCommand}" />
+        <KeyBinding Key="R" Modifiers="Ctrl+Shift" Command="{Binding RetryFailedCommand}" />
+
+        <!-- Log -->
+        <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding FocusLogSearchCommand}" />
+        <KeyBinding Key="L" Modifiers="Ctrl+Shift" Command="{Binding ClearLogCommand}" />
+        <KeyBinding Key="E" Modifiers="Ctrl" Command="{Binding ExportLogCommand}" />
+        <KeyBinding Key="P" Modifiers="Ctrl+Shift" Command="{Binding ToggleLogPauseCommand}" />
+        <KeyBinding Key="C" Modifiers="Ctrl+Shift" Command="{Binding CopyLogCommand}" />
+
+        <!-- Tree CRUD -->
+        <KeyBinding Key="Delete" Command="{Binding ConfirmDeleteSelectedNodeCommand}" />
+        <KeyBinding Key="A" Modifiers="Ctrl+Shift" Command="{Binding AddActionToGroupCommand}" />
+        <KeyBinding Key="G" Modifiers="Ctrl+Shift" Command="{Binding AddActionGroupCommand}" />
+
+        <!-- Help -->
+        <KeyBinding Key="F1" Command="{Binding OpenHelpCommand}" />
+    </Window.InputBindings>
+
     <Window.Icon>
         <DrawingImage>
             <DrawingImage.Drawing>
@@ -25,6 +53,7 @@
         <vm:StringEmptyToVisibilityConverter x:Key="EmptyVis" />
         <vm:EditingContextToVisibilityConverter x:Key="CtxVis" />
         <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <vm:ProgressPercentToWidthConverter x:Key="ProgressPercentToWidth" />
 
         <x:Array x:Key="EventTypes" Type="{x:Type sys:String}">
             <sys:String>Renamed</sys:String><sys:String>Created</sys:String><sys:String>Changed</sys:String>
@@ -100,7 +129,7 @@
             </Style.Triggers>
         </Style>
         <Style x:Key="Sec" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="{DynamicResource Accent}" /><Setter Property="Margin" Value="0,10,0,4" />
         </Style>
         <Style x:Key="TVI" TargetType="TreeViewItem">
@@ -109,6 +138,77 @@
             <Setter Property="Visibility" Value="{Binding IsFilterVisible, Converter={StaticResource BoolVis}}" />
             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
             <Setter Property="Padding" Value="2,3" /><Setter Property="Margin" Value="0,1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <ToggleButton x:Name="Expander" Grid.Column="0" Grid.Row="0"
+                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press" Background="Transparent" BorderThickness="0"
+                                          Width="16" Height="16" Padding="0" Cursor="Hand">
+                                <ToggleButton.Style>
+                                    <Style TargetType="ToggleButton">
+                                        <Setter Property="Focusable" Value="False" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ToggleButton">
+                                                    <Border Background="Transparent" Width="16" Height="16">
+                                                        <Path x:Name="Arrow" Fill="{DynamicResource TextS}"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                              Data="M 4,0 L 8,4 L 4,8 Z" Width="10" Height="10"
+                                                              Stretch="Uniform" />
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter TargetName="Arrow" Property="Data" Value="M 0,4 L 8,4 L 4,8 Z" />
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ToggleButton.Style>
+                            </ToggleButton>
+                            <Border x:Name="Bd" Grid.Column="1" Grid.Row="0"
+                                    Background="{TemplateBinding Background}"
+                                    Padding="{TemplateBinding Padding}"
+                                    CornerRadius="3" SnapsToDevicePixels="True">
+                                <ContentPresenter x:Name="PART_Header" ContentSource="Header"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            </Border>
+                            <ItemsPresenter x:Name="ItemsHost" Grid.Column="1" Grid.Row="1" Margin="12,0,0,0" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedItemBg}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsSelected" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverItemBg}" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- ── Left-panel tab style ── -->
@@ -380,7 +480,7 @@
                     </Ellipse>
                 </Grid>
                 <!-- Node text with status-aware styling -->
-                <TextBlock Text="{Binding ResolvedDisplayText}" FontSize="11.5" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ResolvedDisplayText}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
@@ -486,19 +586,19 @@
                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- File -->
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding LoadVocabularyCommand}"
-                                ToolTip="Open" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="Open (Ctrl+O)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8E5;" FontSize="14" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding SaveVocabularyCommand}"
-                                ToolTip="Save" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="Save (Ctrl+S)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74E;" FontSize="14" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding SaveVocabularyAsCommand}"
-                                ToolTip="Save As" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="Save As (Ctrl+Shift+S)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE792;" FontSize="14" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding RefreshWatchListCommand}"
-                                ToolTip="Refresh" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="Refresh (Ctrl+R)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE72C;" FontSize="14" />
                         </Button>
                         <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -531,7 +631,7 @@
                                 <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE70F;" FontSize="14" Foreground="{DynamicResource Accent}" />
                             </Button>
                             <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding ConfirmDeleteSelectedNodeCommand}"
-                                    ToolTip="Delete" Height="28" MinWidth="28" Padding="4,2">
+                                    ToolTip="Delete (Delete)" Height="28" MinWidth="28" Padding="4,2">
                                 <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74D;" FontSize="14" Foreground="{DynamicResource AccRed}" />
                             </Button>
                             <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -565,7 +665,7 @@
 
                         <!-- Execute -->
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
-                                ToolTip="Execute All WatchItems" Height="28" Padding="8,2">
+                                ToolTip="Execute All WatchItems (F5)" Height="28" Padding="8,2">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                                 <TextBlock Text="Run All" FontSize="10" VerticalAlignment="Center" Margin="4,0,0,0" />
@@ -574,7 +674,7 @@
                         <Border Background="{DynamicResource DangerBtnBg}" CornerRadius="4" Margin="2"
                                 Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}">
                             <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CancelExecutionCommand}"
-                                    ToolTip="Cancel" Height="28" Padding="8,2">
+                                    ToolTip="Cancel Execution (Shift+F5)" Height="28" Padding="8,2">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE71A;" FontSize="14" Foreground="{DynamicResource AccRed}" />
                                     <TextBlock Text="Cancel" FontSize="10" VerticalAlignment="Center" Margin="4,0,0,0" />
@@ -589,7 +689,7 @@
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
-                                ToolTip="Help" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="Help (F1)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" FontSize="14" Foreground="{DynamicResource Accent}" />
                         </Button>
 
@@ -642,21 +742,21 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding LoadVocabularyCommand}"
-                                                    ToolTip="Open a WatchList vocabulary file">
+                                                    ToolTip="Open a WatchList vocabulary file (Ctrl+O)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8E5;" />
                                                     <TextBlock Text="Open" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding SaveVocabularyCommand}"
-                                                    ToolTip="Save to current file">
+                                                    ToolTip="Save to current file (Ctrl+S)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74E;" />
                                                     <TextBlock Text="Save" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnLarge}" Command="{Binding SaveVocabularyAsCommand}"
-                                                    ToolTip="Save to a new file">
+                                                    ToolTip="Save to a new file (Ctrl+Shift+S)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE792;" />
                                                     <TextBlock Text="Save As" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -747,7 +847,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding ConfirmDeleteSelectedNodeCommand}"
-                                                    ToolTip="Delete selected node (with confirmation)">
+                                                    ToolTip="Delete selected node (Delete)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE74D;" Foreground="{DynamicResource AccRed}" />
                                                     <TextBlock Text="Delete" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
@@ -837,7 +937,7 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
-                                                    ToolTip="Execute all enabled WatchItems">
+                                                    ToolTip="Execute all enabled WatchItems (F5)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Execute All" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -890,7 +990,7 @@
                                             <Border Background="{DynamicResource DangerBtnBg}" CornerRadius="4" Padding="0" Margin="2"
                                                     Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}">
                                                 <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CancelExecutionCommand}"
-                                                        ToolTip="Cancel the running execution">
+                                                        ToolTip="Cancel the running execution (Shift+F5)">
                                                     <StackPanel HorizontalAlignment="Center">
                                                         <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE71A;" Foreground="{DynamicResource AccRed}" />
                                                         <TextBlock Text="Cancel" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -898,7 +998,7 @@
                                                 </Button>
                                             </Border>
                                             <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding RetryFailedCommand}"
-                                                    ToolTip="Retry only the failed actions from the last execution">
+                                                    ToolTip="Retry only the failed actions from the last execution (Ctrl+Shift+R)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE72C;" Foreground="{DynamicResource AccPeach}" />
                                                     <TextBlock Text="Retry Failed" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -914,7 +1014,7 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding CopyLogCommand}"
-                                                    ToolTip="Copy all log entries to clipboard">
+                                                    ToolTip="Copy all log entries to clipboard (Ctrl+Shift+C)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8C8;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Copy Log" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
@@ -928,7 +1028,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding ClearLogCommand}"
-                                                    ToolTip="Clear all log entries">
+                                                    ToolTip="Clear all log entries (Ctrl+Shift+L)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE894;" Foreground="{DynamicResource AccYellow}" />
                                                     <TextBlock Text="Clear Log" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
@@ -1000,7 +1100,7 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
-                                                    ToolTip="Open Help &amp; Feature Guide">
+                                                    ToolTip="Open Help &amp; Feature Guide (F1)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Help" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -1180,6 +1280,121 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- CENTER PANEL (Col 2, Row 0): Node Properties          -->
             <!-- ═══════════════════════════════════════════════════════ -->
+
+            <!-- EXECUTION DASHBOARD (overlays Node Properties during execution) -->
+            <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1" Panel.ZIndex="10"
+                    Visibility="{Binding ShowExecutionDashboard, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Dismiss" Style="{StaticResource SmBtn}"
+                                    Command="{Binding DismissExecutionDashboardCommand}"
+                                    Foreground="{DynamicResource TextS}" Padding="8,2" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Execution Dashboard" FontSize="14" FontWeight="Bold"
+                                           Foreground="{DynamicResource Accent}" Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding ExecutionElapsed}" FontSize="12" FontFamily="Consolas"
+                                           Foreground="{DynamicResource AccGreen}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Totals bar at bottom -->
+                    <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource BgCard}"
+                            CornerRadius="0,0,6,6" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
+                        <TextBlock Text="{Binding ExecutionTotals}" FontSize="11" FontFamily="Consolas"
+                                   Foreground="{DynamicResource TextS}" />
+                    </Border>
+
+                    <!-- Agent progress list -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                        <ItemsControl ItemsSource="{Binding AgentProgress}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource BgCard}" CornerRadius="6" Padding="12,8"
+                                            Margin="4,3" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                                        <StackPanel>
+                                            <!-- Row 1: Agent name + percentage + ETA -->
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock DockPanel.Dock="Right" FontSize="11" FontFamily="Consolas"
+                                                           Foreground="{DynamicResource TextS}" VerticalAlignment="Center">
+                                                    <Run Text="{Binding EtaText, Mode=OneWay}" />
+                                                </TextBlock>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding AgentName}" FontSize="13" FontWeight="Bold"
+                                                               Foreground="{DynamicResource TextP}" Margin="0,0,12,0" />
+                                                    <TextBlock FontSize="12" FontWeight="Bold" VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Status}" Value="Running">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                        <Run Text="{Binding ProgressPercent, StringFormat={}{0:F0}%, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </DockPanel>
+
+                                            <!-- Row 2: Progress bar -->
+                                            <Grid Height="6" Margin="0,0,0,6">
+                                                <Border Background="{DynamicResource BgSurface}" CornerRadius="3" />
+                                                <Border CornerRadius="3" HorizontalAlignment="Left"
+                                                        Width="{Binding ProgressPercent, Converter={StaticResource ProgressPercentToWidth}}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{DynamicResource Accent}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccGreen}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccRed}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                            </Grid>
+
+                                            <!-- Row 3: Stats -->
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding ElapsedText, Mode=OneWay}"
+                                                           FontSize="10" FontFamily="Consolas"
+                                                           Foreground="{DynamicResource TextS}" />
+                                                <TextBlock FontSize="10" Foreground="{DynamicResource TextS}">
+                                                    <Run Text="{Binding CompletedActions, Mode=OneWay}" />/<Run Text="{Binding TotalActions, Mode=OneWay}" /> actions  |
+                                                    <Run Text="{Binding PassedActions, Mode=OneWay}" Foreground="{DynamicResource AccGreen}" /> pass
+                                                    <Run Text="{Binding FailedActions, Mode=OneWay}" Foreground="{DynamicResource AccRed}" /> fail
+                                                </TextBlock>
+                                            </DockPanel>
+
+                                            <!-- Row 4: Current action -->
+                                            <TextBlock Text="{Binding CurrentAction, Mode=OneWay}" FontSize="9.5"
+                                                       FontFamily="Consolas" Foreground="{DynamicResource TextS}"
+                                                       Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                                       Opacity="0.7" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Node Properties panel -->
             <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
                     BorderBrush="{DynamicResource Bdr}" BorderThickness="1" DataContext="{Binding ActiveEditNode}">
                 <DockPanel>
@@ -1516,11 +1731,42 @@
                                                      Style="{StaticResource Fld}" Width="50" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </DockPanel>
-                                    <TextBlock Text="Polls ILog + MSI log + EventViewer and streams per-component PASS/FAIL status."
-                                               FontSize="10" Foreground="{DynamicResource TextS}" FontStyle="Italic"
-                                               TextWrapping="Wrap" Margin="0,0,0,6"
-                                               Visibility="{Binding EnableInstallLog, Converter={StaticResource BoolVis}}" />
-                                </StackPanel>
+                                         <TextBlock Text="Polls ILog + MSI log + EventViewer and streams per-component PASS/FAIL status."
+                                                   FontSize="10" Foreground="{DynamicResource TextS}" FontStyle="Italic"
+                                                   TextWrapping="Wrap" Margin="0,0,0,6"
+                                                   Visibility="{Binding EnableInstallLog, Converter={StaticResource BoolVis}}" />
+                                        <!-- Smart Retry -->
+                                        <TextBlock Text="SMART RETRY" Style="{StaticResource Sec}" />
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" /><ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" /><ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <Label Content="MAX RETRIES" Style="{StaticResource Lbl}" />
+                                                <TextBox Text="{Binding MaxRetries, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource Fld}"
+                                                         ToolTip="0 = no retry. 1-5 = retry on failure. Each retry waits longer." />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <Label Content="RETRY DELAY (s)" Style="{StaticResource Lbl}" />
+                                                <TextBox Text="{Binding RetryDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource Fld}"
+                                                         ToolTip="Initial delay in seconds before first retry. Default: 10" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="4">
+                                                <Label Content="BACKOFF" Style="{StaticResource Lbl}" />
+                                                <TextBox Text="{Binding RetryBackoff, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource Fld}"
+                                                         ToolTip="Exponential = delay doubles each retry. Fixed = same delay every time." />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Label Content="RETRY ON EXIT CODES" Style="{StaticResource Lbl}" />
+                                        <TextBox Text="{Binding RetryOnExitCodes, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Fld}"
+                                                 ToolTip="Comma-separated exit codes to retry on. Empty = retry on any failure. Example: -1,1,2" />
+                                    </StackPanel>
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunRemoteCommand}">
                                     <TextBlock Text="REMOTE AGENT" Style="{StaticResource Sec}" />
                                     <Label Content="AGENT NAME" Style="{StaticResource Lbl}" />
@@ -2059,9 +2305,9 @@
                                       ToolTip="Filter by log severity level" />
                             <TextBlock Text="Search:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
                                        VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBox Width="140" Text="{Binding LogSearchText, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox x:Name="LogSearchBox" Width="140" Text="{Binding LogSearchText, UpdateSourceTrigger=PropertyChanged}"
                                      Style="{StaticResource Fld}" Margin="0,0,5,0" Padding="5,3"
-                                     ToolTip="Search log messages" />
+                                     ToolTip="Search log messages (Ctrl+L)" />
                             <Button Content="Clear" Style="{StaticResource SmBtn}" Padding="6,3"
                                     Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
                                     Command="{Binding ClearLogFilterCommand}" ToolTip="Clear all filters" />
@@ -2146,7 +2392,7 @@
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Style="{StaticResource SmBtn}" Command="{Binding ToggleLogPauseCommand}"
-                                        ToolTip="Pause/Resume live log updates">
+                                        ToolTip="Pause/Resume live log updates (Ctrl+Shift+P)">
                                     <TextBlock VerticalAlignment="Center" Margin="0,0,4,0">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
@@ -2162,13 +2408,13 @@
                                 </Button>
                                 <Button Content="Clear" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource YellowBtnBg}" Foreground="{DynamicResource AccYellow}"
-                                        Command="{Binding ClearLogCommand}" ToolTip="Clear all log entries" />
+                                        Command="{Binding ClearLogCommand}" ToolTip="Clear all log entries (Ctrl+Shift+L)" />
                                 <Button Content="Copy All" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                        Command="{Binding CopyLogCommand}" ToolTip="Copy all log entries to clipboard" />
+                                        Command="{Binding CopyLogCommand}" ToolTip="Copy all log entries to clipboard (Ctrl+Shift+C)" />
                                 <Button Content="Export" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                                        Command="{Binding ExportLogCommand}" ToolTip="Export log to text file" />
+                                        Command="{Binding ExportLogCommand}" ToolTip="Export log to text file (Ctrl+E)" />
                             </StackPanel>
                             <TextBlock/>
                         </DockPanel>

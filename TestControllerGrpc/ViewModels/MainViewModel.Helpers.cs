@@ -252,21 +252,58 @@ public sealed partial class MainViewModel
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            // Search in WatchList tree
+            // Update tree node status
             var treeNode = WatchListRoot?.FindByModel(node);
             if (treeNode is not null)
             {
                 treeNode.ExecutionStatus = status;
-                // Propagate aggregated status upward through parents
                 treeNode.PropagateStatusUp();
-                return;
             }
-            // Search in Template tree (for Ref expansions)
-            treeNode = TemplateListRoot?.FindByModel(node);
-            if (treeNode is not null)
+            else
             {
-                treeNode.ExecutionStatus = status;
-                treeNode.PropagateStatusUp();
+                treeNode = TemplateListRoot?.FindByModel(node);
+                if (treeNode is not null)
+                {
+                    treeNode.ExecutionStatus = status;
+                    treeNode.PropagateStatusUp();
+                }
+            }
+
+            // Update Execution Dashboard progress
+            if (node is ActionConfig action)
+            {
+                var agentName = string.IsNullOrEmpty(action.AgentName) ? "Controller" : action.AgentName;
+                var progress = AgentProgress.FirstOrDefault(a =>
+                    string.Equals(a.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+
+                if (progress is not null)
+                {
+                    switch (status)
+                    {
+                        case "Running":
+                            progress.Status = "Running";
+                            progress.CurrentAction = action.Command;
+                            if (progress.StartedAt == default)
+                                progress.StartedAt = DateTime.Now;
+                            break;
+                        case "Success":
+                            progress.RecordPass();
+                            progress.CurrentAction = progress.CompletedActions >= progress.TotalActions
+                                ? "Complete" : "Waiting for next action...";
+                            if (progress.CompletedActions >= progress.TotalActions)
+                                progress.Status = progress.FailedActions > 0 ? "Failed" : "Success";
+                            break;
+                        case "Failed":
+                            progress.RecordFail();
+                            progress.CurrentAction = progress.CompletedActions >= progress.TotalActions
+                                ? "Complete (with failures)" : "Continuing...";
+                            if (progress.CompletedActions >= progress.TotalActions)
+                                progress.Status = "Failed";
+                            break;
+                    }
+
+                    UpdateExecutionTotals();
+                }
             }
         });
     }
@@ -344,6 +381,12 @@ public sealed partial class MainViewModel
     {
         var severity = kind == "stderr" ? LogSeverity.Error : LogSeverity.Info;
         AddLog($"[{agent}:{kind}] {line}", severity);
+
+        // Update dashboard last output
+        var agentProgress = AgentProgress.FirstOrDefault(a =>
+            string.Equals(a.AgentName, agent, StringComparison.OrdinalIgnoreCase));
+        if (agentProgress is not null && !string.IsNullOrWhiteSpace(line))
+            agentProgress.CurrentAction = line.Length > 80 ? line[..80] + "…" : line;
     }
 
     private readonly Dictionary<string, string> _lastAgentStatus = new(StringComparer.OrdinalIgnoreCase);

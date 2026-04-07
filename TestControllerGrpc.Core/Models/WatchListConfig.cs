@@ -130,6 +130,22 @@ public sealed class ActionConfig : IActionNode
     public string Attachment { get; set; } = "";
     public string Embed { get; set; } = "";
     public string LargeFilesShare { get; set; } = "";
+
+    // Smart Retry
+    /// <summary>Max retry attempts after initial failure. 0 = no retry (default).</summary>
+    public int MaxRetries { get; set; }
+
+    /// <summary>Initial delay in seconds before first retry. Default: 10.</summary>
+    public int RetryDelaySeconds { get; set; } = 10;
+
+    /// <summary>Backoff strategy: "Fixed" = same delay each time, "Exponential" = delay doubles. Default: Exponential.</summary>
+    public string RetryBackoff { get; set; } = "Exponential";
+
+    /// <summary>
+    /// Comma-separated exit codes that trigger retry. Empty = retry on any non-zero exit.
+    /// Example: "-1,1,2" retries only on those exit codes.
+    /// </summary>
+    public string RetryOnExitCodes { get; set; } = "";
 }
 
 // =============================================================================

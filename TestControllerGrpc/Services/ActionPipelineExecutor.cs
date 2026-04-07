@@ -202,39 +202,113 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
     {
         var resolved = ParameterResolver.ResolveAction(action, ctx);
-        ActionResult result;
+        int maxAttempts = 1 + Math.Max(0, action.MaxRetries);
+        int delaySeconds = Math.Max(1, action.RetryDelaySeconds > 0 ? action.RetryDelaySeconds : 10);
+        bool isExponential = !string.Equals(action.RetryBackoff, "Fixed", StringComparison.OrdinalIgnoreCase);
+        var retryExitCodes = ParseRetryExitCodes(action.RetryOnExitCodes);
 
-        switch (action.Type)
+        ActionResult result = new ActionResult(false, -1, "Not executed");
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            case ActionType.RunRemoteCommand:
-                Log("Action", $"RunRemoteCommand → {resolved.AgentName}: {resolved.Command} {resolved.Parameters}");
-                result = await _dispatcher.ExecuteRemoteCommandAsync(action, ctx, ct);
-                break;
+            if (ct.IsCancellationRequested) break;
 
-            case ActionType.RunCommand:
-                Log("Action", $"RunCommand (local): {resolved.Command} {resolved.Parameters}");
-                result = await _dispatcher.ExecuteLocalCommandAsync(action, ctx, ct);
-                break;
+            if (attempt > 1)
+            {
+                int currentDelay = isExponential
+                    ? delaySeconds * (int)Math.Pow(2, attempt - 2)
+                    : delaySeconds;
 
-            case ActionType.SendMail:
-                Log("Action", $"SendMail: To={resolved.To}, Title={resolved.Title}");
-                result = ExecuteSendMail(resolved);
-                break;
+                // Cap at 5 minutes max
+                currentDelay = Math.Min(currentDelay, 300);
 
-            default:
-                result = new ActionResult(false, -1, $"Unknown type: {action.Type}");
-                break;
+                Log("Retry", $"Attempt {attempt}/{maxAttempts} in {currentDelay}s " +
+                    $"(backoff={action.RetryBackoff}, last exit={result.ExitCode})");
+
+                try { await Task.Delay(currentDelay * 1000, ct); }
+                catch (TaskCanceledException) { break; }
+            }
+
+            switch (action.Type)
+            {
+                case ActionType.RunRemoteCommand:
+                    if (attempt == 1)
+                        Log("Action", $"RunRemoteCommand → {resolved.AgentName}: {resolved.Command} {resolved.Parameters}");
+                    else
+                        Log("Retry", $"RunRemoteCommand → {resolved.AgentName} (attempt {attempt})");
+                    result = await _dispatcher.ExecuteRemoteCommandAsync(action, ctx, ct);
+                    break;
+
+                case ActionType.RunCommand:
+                    if (attempt == 1)
+                        Log("Action", $"RunCommand (local): {resolved.Command} {resolved.Parameters}");
+                    else
+                        Log("Retry", $"RunCommand (local) (attempt {attempt})");
+                    result = await _dispatcher.ExecuteLocalCommandAsync(action, ctx, ct);
+                    break;
+
+                case ActionType.SendMail:
+                    Log("Action", $"SendMail: To={resolved.To}, Title={resolved.Title}");
+                    result = ExecuteSendMail(resolved);
+                    break;
+
+                default:
+                    result = new ActionResult(false, -1, $"Unknown type: {action.Type}");
+                    break;
+            }
+
+            if (result.Success)
+            {
+                if (attempt > 1)
+                    Log("Retry", $"✓ Succeeded on attempt {attempt} of {maxAttempts}");
+                else
+                    Log("Action", $"✓ Success (exit={result.ExitCode})");
+                return true;
+            }
+
+            // Check if we should retry this specific failure
+            if (attempt < maxAttempts && ShouldRetry(result, retryExitCodes))
+            {
+                Log("Action", $"✗ Failed (exit={result.ExitCode}): {result.ErrorMessage} -- will retry");
+                continue;
+            }
+
+            break;
         }
 
-        if (!result.Success)
-        {
-            Log("Action", $"✗ Failed: {result.ErrorMessage} (exit={result.ExitCode})");
-            NodeFailed?.Invoke(action, result.ExitCode, result.ErrorMessage);
-        }
+        // All attempts exhausted
+        if (maxAttempts > 1)
+            Log("Action", $"✗ FAILED after {maxAttempts} attempts: {result.ErrorMessage} (exit={result.ExitCode})");
         else
-            Log("Action", $"✓ Success (exit={result.ExitCode})");
+            Log("Action", $"✗ Failed: {result.ErrorMessage} (exit={result.ExitCode})");
 
-        return result.Success || action.FailAndContinue;
+        NodeFailed?.Invoke(action, result.ExitCode, result.ErrorMessage);
+        return action.FailAndContinue;
+    }
+
+    /// <summary>
+    /// Determines if a failed result should be retried based on exit code filters.
+    /// </summary>
+    private static bool ShouldRetry(ActionResult result, HashSet<int>? retryExitCodes)
+    {
+        if (retryExitCodes == null || retryExitCodes.Count == 0)
+            return true;
+        return retryExitCodes.Contains(result.ExitCode);
+    }
+
+    /// <summary>
+    /// Parses comma-separated exit codes. Returns null if empty (= retry all).
+    /// </summary>
+    private static HashSet<int>? ParseRetryExitCodes(string? spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec)) return null;
+        var codes = new HashSet<int>();
+        foreach (var part in spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (int.TryParse(part, out int code))
+                codes.Add(code);
+        }
+        return codes.Count > 0 ? codes : null;
     }
 
     // ── SendMail ───────────────────────────────────────────────────────

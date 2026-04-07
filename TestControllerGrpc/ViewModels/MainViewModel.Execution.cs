@@ -513,4 +513,92 @@ public sealed partial class MainViewModel
         node.RefreshDisplayText();
         AddLog($"Changed ExecutionType of '{node.DisplayText}' to {newMode}");
     }
+
+    // ?? Execution Dashboard helpers ?????????????????????????????????
+
+    /// <summary>Dismiss the dashboard overlay and return to the Node Properties view.</summary>
+    [RelayCommand]
+    private void DismissExecutionDashboard()
+    {
+        ShowExecutionDashboard = false;
+    }
+
+    /// <summary>
+    /// Scans the current pipeline tree to find all unique agent names
+    /// and count total actions per agent.
+    /// </summary>
+    private void BuildAgentProgressList()
+    {
+        AgentProgress.Clear();
+        var agentCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        void CountActions(TreeNodeViewModel node)
+        {
+            if (node.NodeKind == NodeKinds.Action)
+            {
+                var agent = !string.IsNullOrEmpty(node.ResolvedAgentName)
+                    ? node.ResolvedAgentName
+                    : !string.IsNullOrEmpty(node.AgentName)
+                        ? node.AgentName
+                        : "Controller";
+                agentCounts[agent] = agentCounts.GetValueOrDefault(agent) + 1;
+            }
+            foreach (var child in node.Children)
+                CountActions(child);
+        }
+
+        // Walk the tree from the appropriate root
+        var root = SelectedNode;
+        if (root is not null)
+        {
+            while (root.Parent is not null && root.NodeKind is not NodeKinds.WatchList)
+                root = root.Parent;
+            CountActions(root);
+        }
+        else if (WatchListRoot is not null)
+        {
+            CountActions(WatchListRoot);
+        }
+
+        foreach (var kvp in agentCounts.OrderBy(k => k.Key))
+        {
+            AgentProgress.Add(new AgentExecutionProgress
+            {
+                AgentName = kvp.Key,
+                TotalActions = kvp.Value,
+                Status = "Queued",
+                StartedAt = DateTime.Now,
+            });
+        }
+    }
+
+    private void StartElapsedTimer()
+    {
+        _elapsedTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _elapsedTimer.Tick += (_, _) =>
+        {
+            var elapsed = DateTime.Now - _executionStartTime;
+            ExecutionElapsed = elapsed.ToString(@"hh\:mm\:ss");
+            UpdateExecutionTotals();
+        };
+        _elapsedTimer.Start();
+    }
+
+    private void StopElapsedTimer()
+    {
+        _elapsedTimer?.Stop();
+        _elapsedTimer = null;
+    }
+
+    private void UpdateExecutionTotals()
+    {
+        var total = AgentProgress.Sum(a => a.TotalActions);
+        var done = AgentProgress.Sum(a => a.CompletedActions);
+        var pass = AgentProgress.Sum(a => a.PassedActions);
+        var fail = AgentProgress.Sum(a => a.FailedActions);
+        ExecutionTotals = $"{done}/{total} actions | {pass} passed | {fail} failed | Elapsed: {ExecutionElapsed}";
+    }
 }

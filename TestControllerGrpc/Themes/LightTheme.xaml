@@ -35,6 +35,7 @@
     <SolidColorBrush x:Key="TabHoverBg"     Color="#08000000" />
     <SolidColorBrush x:Key="GroupBg"        Color="#08000000" />
     <SolidColorBrush x:Key="SelectedItemBg" Color="#222563EB" />
+    <SolidColorBrush x:Key="HoverItemBg"    Color="#112563EB" />
     <SolidColorBrush x:Key="TreeBadgeFg"    Color="#FFFFFFFF" />
 
     <!-- Accent button backgrounds -->
