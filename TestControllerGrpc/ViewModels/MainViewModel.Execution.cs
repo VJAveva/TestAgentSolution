@@ -516,11 +516,11 @@ public sealed partial class MainViewModel
 
     // ?? Execution Dashboard helpers ?????????????????????????????????
 
-    /// <summary>Dismiss the dashboard overlay and return to the Node Properties view.</summary>
+    /// <summary>Toggle the execution dashboard overlay on/off.</summary>
     [RelayCommand]
-    private void DismissExecutionDashboard()
+    private void ToggleExecutionDashboard()
     {
-        ShowExecutionDashboard = false;
+        ShowExecutionDashboard = !ShowExecutionDashboard;
     }
 
     /// <summary>

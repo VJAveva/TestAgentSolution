@@ -1013,6 +1013,22 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding ToggleExecutionDashboardCommand}"
+                                                    ToolTip="Show/Hide Execution Dashboard">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" Foreground="{DynamicResource Accent}" />
+                                                    <TextBlock Text="Dashboard" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="View" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding CopyLogCommand}"
                                                     ToolTip="Copy all log entries to clipboard (Ctrl+Shift+C)">
                                                 <StackPanel HorizontalAlignment="Center">
@@ -1290,7 +1306,7 @@
                     <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="Dismiss" Style="{StaticResource SmBtn}"
-                                    Command="{Binding DismissExecutionDashboardCommand}"
+                                    Command="{Binding ToggleExecutionDashboardCommand}"
                                     Foreground="{DynamicResource TextS}" Padding="8,2" />
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Execution Dashboard" FontSize="14" FontWeight="Bold"
