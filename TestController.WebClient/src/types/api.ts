@@ -193,6 +193,25 @@ export interface ExecutionStatus {
   activeCount: number;
 }
 
+export interface SessionInfo {
+  sessionId: string;
+  watchItemTag: string;
+  eventType: string;
+  state: string;
+  startedUtc: string;
+  totalActions: number;
+  completedActions: number;
+  passedActions: number;
+  failedActions: number;
+  progressPercent: number;
+}
+
+export interface SessionsResponse {
+  activeCount: number;
+  hasActive: boolean;
+  sessions: SessionInfo[];
+}
+
 export interface LogEntry {
   message: string;
   agent?: string;

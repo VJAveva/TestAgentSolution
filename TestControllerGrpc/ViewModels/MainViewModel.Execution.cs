@@ -11,103 +11,111 @@ namespace TestControllerGrpc.ViewModels;
 // ?? Execution: Trigger, Execute, Cancel, Reset, Retry ???????????????
 public sealed partial class MainViewModel
 {
-    private bool CanTriggerEvent => SelectedNode?.NodeKind == NodeKinds.Event && !IsExecuting;
+    private bool CanTriggerEvent => SelectedNode?.NodeKind == NodeKinds.Event;
 
     /// <summary>Trigger a single Event node's pipeline.</summary>
     [RelayCommand(CanExecute = nameof(CanTriggerEvent))]
     private async Task TriggerEvent()
     {
         if (SelectedNode?.ModelObject is not EventConfig ev) return;
-        if (IsExecuting) { AddLog("Execution already in progress"); return; }
+
+        var wiNode = SelectedNode.Parent;
+        var wiConfig = wiNode?.ModelObject as WatchItemConfig;
+        var tag = wiConfig?.Tag ?? "Event";
+
+        if (IsWatchItemRunning(tag))
+        {
+            AddLog($"WatchItem '{tag}' is already running");
+            return;
+        }
 
         WriteBackAll();
 
-        // Find parent WatchItem for context
-        var wiNode = SelectedNode.Parent;
-        var wiConfig = wiNode?.ModelObject as WatchItemConfig;
+        var session = CreateSession(tag);
+        var eventNode = SelectedNode;
+
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:{ev.Type}]",
             Parameters = CollectInitializeParameters(SelectedNode),
+            SessionId = session.SessionId,
         };
 
-        var eventNode = SelectedNode;
-        IsExecuting = true;
-        _executionCts = new CancellationTokenSource();
-
-        // Mark event subtree as Running
         eventNode.SetStatusRecursive("Running");
         eventNode.PropagateStatusUp();
-        AddLog($"Triggered Event: {ev.Type} on {wiConfig?.Tag ?? "?"}");
+        AddLog($"[{session.SessionId}] Triggered Event: {ev.Type} on {tag}");
 
         try
         {
-            await _executor.ExecuteEventAsync(ev, ctx, _executionCts.Token);
+            await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
             eventNode.ExecutionStatus = "Success";
             eventNode.PropagateStatusUp();
-            AddLog($"Event completed: {ev.Type}", LogSeverity.Success);
+            AddLog($"[{session.SessionId}] Event completed: {ev.Type}", LogSeverity.Success);
         }
         catch (OperationCanceledException)
         {
             eventNode.SetFailed("Cancelled by user");
             eventNode.PropagateStatusUp();
-            AddLog($"Event cancelled: {ev.Type}", LogSeverity.Warning);
+            AddLog($"[{session.SessionId}] Event cancelled: {ev.Type}", LogSeverity.Warning);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Event execution failed: {EventType}", ev.Type);
             eventNode.SetFailed(ex.Message);
             eventNode.PropagateStatusUp();
-            AddLog($"Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
         }
         finally
         {
-            IsExecuting = false;
-            _executionCts?.Dispose();
-            _executionCts = null;
+            CompleteSession(session);
         }
     }
 
-    private bool CanTriggerWatchItem => SelectedNode?.NodeKind == NodeKinds.WatchItem && !IsExecuting;
+    private bool CanTriggerWatchItem => SelectedNode?.NodeKind == NodeKinds.WatchItem;
 
     /// <summary>Trigger ALL events on the selected WatchItem.</summary>
     [RelayCommand(CanExecute = nameof(CanTriggerWatchItem))]
     private async Task TriggerWatchItem()
     {
         if (SelectedNode?.ModelObject is not WatchItemConfig wi) return;
-        if (IsExecuting) { AddLog("Execution already in progress"); return; }
+
+        if (IsWatchItemRunning(wi.Tag))
+        {
+            AddLog($"WatchItem '{wi.Tag}' is already running");
+            return;
+        }
 
         WriteBackAll();
 
+        var session = CreateSession(wi.Tag);
         var wiNode = SelectedNode;
-        IsExecuting = true;
-        _executionCts = new CancellationTokenSource();
 
-        // Mark entire WatchItem subtree as Running
         wiNode.SetStatusRecursive("Running");
         wiNode.PropagateStatusUp();
-        AddLog($"Triggered WatchItem: {wi.Tag} ({wi.Events.Count} events)");
+        AddLog($"[{session.SessionId}] Triggered WatchItem: {wi.Tag} ({wi.Events.Count} events)");
 
         var allSuccess = true;
         try
         {
             foreach (var ev in wi.Events)
             {
+                if (session.Cts.IsCancellationRequested) break;
+
                 var ctx = new PipelineExecutionContext
                 {
                     WatchItemPath = wi.Path,
                     TriggerFileName = $"[ManualTrigger:{ev.Type}]",
+                    SessionId = session.SessionId,
                 };
-                // Find event node in tree to mark individually
                 var evNode = wiNode.Children.FirstOrDefault(c =>
                     ReferenceEquals(c.ModelObject, ev));
                 if (evNode is not null) evNode.SetStatusRecursive("Running");
 
                 try
                 {
-                    await _executor.ExecuteEventAsync(ev, ctx, _executionCts.Token);
+                    await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
                     if (evNode is not null)
                     {
                         evNode.ExecutionStatus = "Success";
@@ -122,12 +130,12 @@ public sealed partial class MainViewModel
                         evNode.SetFailed(ex.Message);
                         evNode.PropagateStatusUp();
                     }
-                    AddLog($"Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
                 }
             }
             wiNode.ExecutionStatus = allSuccess ? "Success" : "Failed";
             wiNode.PropagateStatusUp();
-            AddLog($"WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}",
+            AddLog($"[{session.SessionId}] WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}",
                 allSuccess ? LogSeverity.Success : LogSeverity.Error);
             if (!allSuccess) ScrollLogToLastError();
         }
@@ -135,24 +143,35 @@ public sealed partial class MainViewModel
         {
             wiNode.SetFailed("Cancelled by user");
             wiNode.PropagateStatusUp();
-            AddLog($"WatchItem cancelled: {wi.Tag}", LogSeverity.Warning);
+            AddLog($"[{session.SessionId}] WatchItem cancelled: {wi.Tag}", LogSeverity.Warning);
         }
         finally
         {
-            IsExecuting = false;
-            _executionCts?.Dispose();
-            _executionCts = null;
+            CompleteSession(session);
         }
     }
 
-    private bool CanCancelExecution => IsExecuting;
+    private bool CanCancelExecution => ActiveSessions.Any(s => s.Status == "Running");
 
-    /// <summary>Cancel running execution.</summary>
+    /// <summary>Cancel all running executions.</summary>
     [RelayCommand(CanExecute = nameof(CanCancelExecution))]
     private void CancelExecution()
     {
+        foreach (var session in ActiveSessions.Where(s => s.Status == "Running").ToList())
+        {
+            session.Cancel();
+            AddLog($"[{session.SessionId}] Cancellation requested for {session.WatchItemTag}");
+        }
         _executionCts?.Cancel();
-        AddLog("Cancellation requested");
+    }
+
+    /// <summary>Cancel a specific pipeline session.</summary>
+    [RelayCommand]
+    private void CancelSession(PipelineSession? session)
+    {
+        if (session is null) return;
+        session.Cancel();
+        AddLog($"[{session.SessionId}] Cancelled: {session.WatchItemTag}");
     }
 
     /// <summary>Reset all execution status indicators to Idle.</summary>
@@ -163,13 +182,11 @@ public sealed partial class MainViewModel
         AddLog("Execution status reset");
     }
 
-    private bool CanTriggerAllWatchItems => SelectedNode?.NodeKind == NodeKinds.WatchList && !IsExecuting;
+    private bool CanTriggerAllWatchItems => SelectedNode?.NodeKind == NodeKinds.WatchList;
 
     /// <summary>
-    /// Trigger ALL WatchItems in parallel (GAP 7 fix).
-    /// Each WatchItem runs on its own Task so actions targeting different
-    /// agents execute concurrently, leveraging all 100 agents at once
-    /// instead of running them sequentially.
+    /// Trigger ALL WatchItems in parallel.
+    /// Each WatchItem gets its own PipelineSession and runs concurrently.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems))]
     private async Task TriggerAllWatchItems()
@@ -177,44 +194,50 @@ public sealed partial class MainViewModel
         if (_config.WatchItems.Count == 0) { AddLog("No WatchItems to execute"); return; }
 
         WriteBackAll();
-        IsExecuting = true;
-        _executionCts = new CancellationTokenSource();
 
         WatchListRoot?.SetStatusRecursive("Running");
 
         var enabledItems = _config.WatchItems.Where(wi => wi.IsEnabled).ToList();
         AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) — parallel");
 
-        var allSuccess = true;
-        try
+        var tasks = enabledItems.Select(async wi =>
         {
-            // Execute all WatchItems in parallel — each targeting different agents
-            var tasks = enabledItems.Select(async wi =>
+            if (IsWatchItemRunning(wi.Tag))
             {
-                var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
-                    ReferenceEquals(c.ModelObject, wi));
+                AddLog($"WatchItem '{wi.Tag}' is already running — skipping");
+                return true;
+            }
 
-                await Application.Current!.Dispatcher.InvokeAsync(() =>
-                {
-                    if (wiNode is not null) wiNode.SetStatusRecursive("Running");
-                });
+            var session = CreateSession(wi.Tag);
+            var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
+                ReferenceEquals(c.ModelObject, wi));
 
-                var wiSuccess = true;
+            await Application.Current!.Dispatcher.InvokeAsync(() =>
+            {
+                if (wiNode is not null) wiNode.SetStatusRecursive("Running");
+            });
+
+            var wiSuccess = true;
+            try
+            {
                 foreach (var ev in wi.Events)
                 {
+                    if (session.Cts.IsCancellationRequested) break;
+
                     var ctx = new PipelineExecutionContext
                     {
                         WatchItemPath = wi.Path,
                         TriggerFileName = $"[ManualTriggerAll:{ev.Type}]",
+                        SessionId = session.SessionId,
                     };
                     try
                     {
-                        await _executor.ExecuteEventAsync(ev, ctx, _executionCts!.Token);
+                        await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
                     }
                     catch (Exception ex)
                     {
                         wiSuccess = false;
-                        AddLog($"Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
+                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
                     }
                 }
 
@@ -227,140 +250,145 @@ public sealed partial class MainViewModel
                         wiNode.PropagateStatusUp();
                     }
                 });
+            }
+            catch (OperationCanceledException)
+            {
+                await Application.Current!.Dispatcher.InvokeAsync(() =>
+                {
+                    if (wiNode is not null) wiNode.SetFailed("Cancelled");
+                });
+            }
+            finally
+            {
+                Application.Current?.Dispatcher.Invoke(() => CompleteSession(session));
+            }
 
-                return wiSuccess;
-            });
+            return wiSuccess;
+        });
 
-            var results = await Task.WhenAll(tasks);
-            allSuccess = results.All(r => r);
+        var results = await Task.WhenAll(tasks);
+        var allSuccess = results.All(r => r);
 
-            if (WatchListRoot is not null)
-                WatchListRoot.ExecutionStatus = allSuccess ? "Success" : "Failed";
-            AddLog($"All WatchItems {(allSuccess ? "completed" : "completed with errors")}",
-                allSuccess ? LogSeverity.Success : LogSeverity.Error);
-            if (!allSuccess) ScrollLogToLastError();
-        }
-        catch (OperationCanceledException)
-        {
-            WatchListRoot?.SetStatusRecursive("Failed");
-            AddLog("Execute All cancelled", LogSeverity.Warning);
-        }
-        finally
-        {
-            IsExecuting = false;
-            _executionCts?.Dispose();
-            _executionCts = null;
-        }
+        if (WatchListRoot is not null)
+            WatchListRoot.ExecutionStatus = allSuccess ? "Success" : "Failed";
+        AddLog($"All WatchItems {(allSuccess ? "completed" : "completed with errors")}",
+            allSuccess ? LogSeverity.Success : LogSeverity.Error);
+        if (!allSuccess) ScrollLogToLastError();
     }
 
-    private bool CanExecuteGroup => SelectedNode?.NodeKind == NodeKinds.ActionGroup && !IsExecuting;
+    private bool CanExecuteGroup => SelectedNode?.NodeKind == NodeKinds.ActionGroup;
 
     /// <summary>Execute a single ActionGroup and its children.</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteGroup))]
     private async Task ExecuteGroup()
     {
         if (SelectedNode?.ModelObject is not ActionGroupConfig ag) return;
-        if (IsExecuting) { AddLog("Execution already in progress"); return; }
+
+        var tag = FindWatchItemTag(SelectedNode) ?? ag.Tag;
+        if (IsWatchItemRunning(tag))
+        {
+            AddLog($"WatchItem '{tag}' is already running");
+            return;
+        }
 
         WriteBackAll();
 
-        // Walk up to find the parent WatchItem for context
+        var session = CreateSession(tag);
         var wiConfig = FindAncestorModel<WatchItemConfig>(SelectedNode);
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:Group:{ag.Tag}]",
             Parameters = CollectInitializeParameters(SelectedNode),
+            SessionId = session.SessionId,
         };
 
         var groupNode = SelectedNode;
-        IsExecuting = true;
-        _executionCts = new CancellationTokenSource();
-
         groupNode.SetStatusRecursive("Running");
         groupNode.PropagateStatusUp();
-        AddLog($"Triggered ActionGroup: {ag.Tag}");
+        AddLog($"[{session.SessionId}] Triggered ActionGroup: {ag.Tag}");
 
         try
         {
-            await _executor.ExecuteGroupAsync(ag, ctx, _executionCts.Token);
+            await _executor.ExecuteGroupAsync(ag, ctx, session.Cts.Token);
             groupNode.ExecutionStatus = "Success";
             groupNode.PropagateStatusUp();
-            AddLog($"ActionGroup completed: {ag.Tag}", LogSeverity.Success);
+            AddLog($"[{session.SessionId}] ActionGroup completed: {ag.Tag}", LogSeverity.Success);
         }
         catch (OperationCanceledException)
         {
             groupNode.SetFailed("Cancelled by user");
             groupNode.PropagateStatusUp();
-            AddLog($"ActionGroup cancelled: {ag.Tag}", LogSeverity.Warning);
+            AddLog($"[{session.SessionId}] ActionGroup cancelled: {ag.Tag}", LogSeverity.Warning);
         }
         catch (Exception ex)
         {
             groupNode.SetFailed(ex.Message);
             groupNode.PropagateStatusUp();
-            AddLog($"ActionGroup failed: {ag.Tag} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} — {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
         }
         finally
         {
-            IsExecuting = false;
-            _executionCts?.Dispose();
-            _executionCts = null;
+            CompleteSession(session);
         }
     }
 
-    private bool CanExecuteSingleAction => SelectedNode?.NodeKind == NodeKinds.Action && !IsExecuting;
+    private bool CanExecuteSingleAction => SelectedNode?.NodeKind == NodeKinds.Action;
 
     /// <summary>Execute a single Action node.</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteSingleAction))]
     private async Task ExecuteSingleAction()
     {
         if (SelectedNode?.ModelObject is not ActionConfig action) return;
-        if (IsExecuting) { AddLog("Execution already in progress"); return; }
+
+        var tag = FindWatchItemTag(SelectedNode) ?? action.Command;
+        if (IsWatchItemRunning(tag))
+        {
+            AddLog($"WatchItem '{tag}' is already running");
+            return;
+        }
 
         WriteBackAll();
 
+        var session = CreateSession(tag);
         var wiConfig = FindAncestorModel<WatchItemConfig>(SelectedNode);
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:Action:{action.Command}]",
             Parameters = CollectInitializeParameters(SelectedNode),
+            SessionId = session.SessionId,
         };
 
         var actionNode = SelectedNode;
-        IsExecuting = true;
-        _executionCts = new CancellationTokenSource();
-
         actionNode.ExecutionStatus = "Running";
         actionNode.PropagateStatusUp();
-        AddLog($"Triggered Action: {action.Type} — {action.Command}");
+        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} — {action.Command}");
 
         try
         {
-            await _executor.ExecuteSingleActionAsync(action, ctx, _executionCts.Token);
+            await _executor.ExecuteSingleActionAsync(action, ctx, session.Cts.Token);
             actionNode.ExecutionStatus = "Success";
             actionNode.PropagateStatusUp();
-            AddLog($"Action completed: {action.Command}", LogSeverity.Success);
+            AddLog($"[{session.SessionId}] Action completed: {action.Command}", LogSeverity.Success);
         }
         catch (OperationCanceledException)
         {
             actionNode.SetFailed("Cancelled by user");
             actionNode.PropagateStatusUp();
-            AddLog($"Action cancelled: {action.Command}", LogSeverity.Warning);
+            AddLog($"[{session.SessionId}] Action cancelled: {action.Command}", LogSeverity.Warning);
         }
         catch (Exception ex)
         {
             actionNode.SetFailed(ex.Message);
             actionNode.PropagateStatusUp();
-            AddLog($"Action failed: {action.Command} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Action failed: {action.Command} — {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
         }
         finally
         {
-            IsExecuting = false;
-            _executionCts?.Dispose();
-            _executionCts = null;
+            CompleteSession(session);
         }
     }
 
@@ -371,7 +399,6 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private async Task RetryFailed()
     {
-        // Find the WatchItem tag from the selected node
         var watchItemTag = SelectedNode?.NodeKind switch
         {
             NodeKinds.WatchItem => SelectedNode?.Tag,
@@ -382,6 +409,12 @@ public sealed partial class MainViewModel
         if (string.IsNullOrEmpty(watchItemTag))
         {
             AddLog("Select a WatchItem or Event to retry failed actions.");
+            return;
+        }
+
+        if (IsWatchItemRunning(watchItemTag))
+        {
+            AddLog($"WatchItem '{watchItemTag}' is already running");
             return;
         }
 
@@ -398,35 +431,30 @@ public sealed partial class MainViewModel
             return;
         }
 
-        if (IsExecuting) { AddLog("Execution already in progress"); return; }
-
-        IsExecuting = true;
-        _executionCts = new CancellationTokenSource();
-        AddLog($"{LogIcons.Info} Retrying {lastSession.FailedCount} failed action(s) for '{watchItemTag}'...");
+        var session = CreateSession(watchItemTag);
+        AddLog($"[{session.SessionId}] {LogIcons.Info} Retrying {lastSession.FailedCount} failed action(s) for '{watchItemTag}'...");
 
         try
         {
-            await _executor.RetryFailedAsync(lastSession, _executionCts.Token);
+            await _executor.RetryFailedAsync(lastSession, session.Cts.Token);
 
             var retrySession = _sessionManager.GetLastSession(watchItemTag);
             if (retrySession?.FailedCount == 0)
-                AddLog($"{LogIcons.Success} Retry complete: all actions succeeded.", LogSeverity.Success);
+                AddLog($"[{session.SessionId}] {LogIcons.Success} Retry complete: all actions succeeded.", LogSeverity.Success);
             else
-                AddLog($"{LogIcons.Warning} Retry complete: {retrySession?.FailedCount} action(s) still failing.", LogSeverity.Warning);
+                AddLog($"[{session.SessionId}] {LogIcons.Warning} Retry complete: {retrySession?.FailedCount} action(s) still failing.", LogSeverity.Warning);
         }
         catch (OperationCanceledException)
         {
-            AddLog("Retry cancelled by user.", LogSeverity.Warning);
+            AddLog($"[{session.SessionId}] Retry cancelled by user.", LogSeverity.Warning);
         }
         catch (Exception ex)
         {
-            AddLog($"{LogIcons.Error} Retry failed: {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] {LogIcons.Error} Retry failed: {ex.Message}", LogSeverity.Error);
         }
         finally
         {
-            IsExecuting = false;
-            _executionCts?.Dispose();
-            _executionCts = null;
+            CompleteSession(session);
         }
     }
 

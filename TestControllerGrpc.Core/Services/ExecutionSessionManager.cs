@@ -93,6 +93,28 @@ public sealed class ExecutionSessionManager
     public int ActiveExecutionCount => _active.Count;
     public bool HasAnyActiveExecution => !_active.IsEmpty;
 
+    /// <summary>Returns a snapshot of all active sessions for API consumers.</summary>
+    public List<ExecutionSession> GetActiveSessions()
+        => _active.Values.ToList();
+
+    /// <summary>Cancels a single active session by ID, moving it to history.</summary>
+    public bool CancelSession(string sessionId)
+    {
+        if (!_active.TryRemove(sessionId, out var session))
+            return false;
+
+        session.CompletedUtc = DateTime.UtcNow;
+        session.State = SessionState.Failed;
+
+        lock (_historyLock)
+        {
+            _history.Insert(0, session);
+            while (_history.Count > MaxHistory)
+                _history.RemoveAt(_history.Count - 1);
+        }
+        return true;
+    }
+
     /// <summary>Cancels all active sessions, moving them to history as cancelled.</summary>
     public List<string> CancelAll()
     {

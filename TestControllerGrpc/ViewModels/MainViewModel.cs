@@ -67,6 +67,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isExecuting;
     private CancellationTokenSource? _executionCts;
 
+    /// <summary>All currently running pipeline sessions.</summary>
+    public ObservableCollection<PipelineSession> ActiveSessions { get; } = new();
+
+    /// <summary>Count of active sessions for display.</summary>
+    [ObservableProperty] private int _activeSessionCount;
+
     // ── Execution Dashboard state ───────────────────────────────────
     /// <summary>Per-agent execution progress for the dashboard.</summary>
     public ObservableCollection<AgentExecutionProgress> AgentProgress { get; } = new();
@@ -288,6 +294,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Initialize high-performance log buffer (GAP 1 + 4 fix)
         // Decouples log producers from the UI thread via Channel<T>.
         _logBuffer = new LogBufferService(LogEntries, FilteredLogEntries);
+
+        // Track active sessions for concurrent execution
+        ActiveSessions.CollectionChanged += (_, _) =>
+        {
+            ActiveSessionCount = ActiveSessions.Count;
+            IsExecuting = ActiveSessions.Count > 0;
+        };
     }
 
     /// <summary>Creates the single WatchList + TemplateList root nodes on startup.</summary>
@@ -356,6 +369,55 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         StopPeriodicHealthCheck();
         _logBuffer?.Dispose();
         _executionCts?.Dispose();
+
+        // Cancel all active sessions
+        foreach (var session in ActiveSessions.ToList())
+            session.Cts.Dispose();
+    }
+
+    // ── Concurrent session helpers ──────────────────────────────────
+
+    /// <summary>
+    /// Checks if a specific WatchItem is already executing.
+    /// Different WatchItems can run concurrently.
+    /// </summary>
+    private bool IsWatchItemRunning(string watchItemTag)
+    {
+        return ActiveSessions.Any(s =>
+            string.Equals(s.WatchItemTag, watchItemTag, StringComparison.OrdinalIgnoreCase)
+            && s.Status == "Running");
+    }
+
+    /// <summary>Creates a new session and adds it to the active list.</summary>
+    private PipelineSession CreateSession(string watchItemTag)
+    {
+        var session = new PipelineSession { WatchItemTag = watchItemTag };
+        Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Add(session));
+        return session;
+    }
+
+    /// <summary>Completes a session and removes it from the active list after a delay.</summary>
+    private void CompleteSession(PipelineSession session)
+    {
+        session.Complete();
+        // Keep in list for 30 seconds for visibility, then remove
+        _ = Task.Delay(30_000).ContinueWith(_ =>
+        {
+            Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+        });
+    }
+
+    /// <summary>Finds the WatchItem tag for an arbitrary tree node by walking up the tree.</summary>
+    private static string? FindWatchItemTag(TreeNodeViewModel? node)
+    {
+        var current = node;
+        while (current is not null)
+        {
+            if (current.NodeKind == NodeKinds.WatchItem)
+                return current.Tag;
+            current = current.Parent;
+        }
+        return null;
     }
 
     /// <summary>Auto-populate gRPC address from agent name for convenience.</summary>

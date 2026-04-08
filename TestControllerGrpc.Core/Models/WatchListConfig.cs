@@ -204,6 +204,9 @@ public sealed class PipelineExecutionContext
     public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public CancellationToken CancellationToken { get; set; }
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Short session ID for log prefixing in concurrent execution.</summary>
+    public string SessionId { get; set; } = "";
 }
 
 // =============================================================================

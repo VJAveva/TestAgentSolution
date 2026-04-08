@@ -56,6 +56,20 @@ export function useSignalR(): HubConnection | null {
       });
     });
 
+    conn.on('SessionProgress', (session: {
+      sessionId?: string; watchItemTag?: string; state?: string;
+      completedActions?: number; totalActions?: number;
+      passedActions?: number; failedActions?: number; progressPercent?: number;
+    }) => {
+      const store = useExecutionStore.getState();
+      const updated = store.sessions.map(s =>
+        s.sessionId === session.sessionId
+          ? { ...s, ...session } as typeof s
+          : s
+      );
+      useExecutionStore.setState({ sessions: updated });
+    });
+
     conn.on('TriggerFired', (path: string, file: string) => {
       useExecutionStore.getState().addLog({
         message: `Trigger: ${path} > ${file}`,

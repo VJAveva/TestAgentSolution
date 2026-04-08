@@ -14,13 +14,14 @@ public static class ExecutionEndpoints
         group.MapPost("/trigger/{tag}", TriggerByTag);
         group.MapPost("/trigger-event/{tag}/{eventIndex:int}", TriggerEvent);
         group.MapPost("/cancel", CancelAll);
+        group.MapPost("/cancel/{sessionId}", CancelBySession);
         group.MapPost("/retry/{sessionId}", RetrySession);
         group.MapGet("/status", GetStatus);
         group.MapGet("/sessions", GetSessions);
         return group;
     }
 
-    /// <summary>POST /api/execution/trigger-all ï¿½ trigger all WatchItems.</summary>
+    /// <summary>POST /api/execution/trigger-all — trigger all WatchItems.</summary>
     private static IResult TriggerAll(
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
@@ -72,7 +73,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger/{tag} ï¿½ trigger specific WatchItem.</summary>
+    /// <summary>POST /api/execution/trigger/{tag} — trigger specific WatchItem.</summary>
     private static IResult TriggerByTag(
         string tag,
         WatchListFileService fileService,
@@ -122,7 +123,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} ï¿½ trigger specific event.</summary>
+    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} — trigger specific event.</summary>
     private static IResult TriggerEvent(
         string tag,
         int eventIndex,
@@ -174,7 +175,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/cancel ï¿½ cancel all running executions.</summary>
+    /// <summary>POST /api/execution/cancel — cancel all running executions.</summary>
     private static IResult CancelAll(
         ExecutionSessionManager sessionManager,
         IHubContext<LiveHub> hub)
@@ -197,7 +198,32 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/retry/{sessionId} ï¿½ retry failed actions from a session.</summary>
+    /// <summary>POST /api/execution/cancel/{sessionId} — cancel a specific session.</summary>
+    private static IResult CancelBySession(
+        string sessionId,
+        ExecutionSessionManager sessionManager,
+        IHubContext<LiveHub> hub)
+    {
+        var cancelled = sessionManager.CancelSession(sessionId);
+        if (!cancelled)
+            return Results.NotFound($"Session '{sessionId}' not found or already completed.");
+
+        hub.Clients.All.SendAsync("ExecutionLog", new
+        {
+            Message = $"Session '{sessionId}' cancelled.",
+            SessionId = sessionId,
+            Timestamp = DateTime.UtcNow
+        });
+
+        return Results.Ok(new
+        {
+            message = $"Session '{sessionId}' cancelled.",
+            sessionId,
+            activeExecutions = sessionManager.ActiveExecutionCount
+        });
+    }
+
+    /// <summary>POST /api/execution/retry/{sessionId} — retry failed actions from a session.</summary>
     private static IResult RetrySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
@@ -209,7 +235,7 @@ public static class ExecutionEndpoints
 
         hub.Clients.All.SendAsync("ExecutionLog", new
         {
-            Message = $"Retry requested for session '{sessionId}' ï¿½ {retryable.Count} action(s)",
+            Message = $"Retry requested for session '{sessionId}' — {retryable.Count} action(s)",
             Timestamp = DateTime.UtcNow
         });
 
@@ -221,7 +247,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/status ï¿½ current execution state overview.</summary>
+    /// <summary>GET /api/execution/status — current execution state overview.</summary>
     private static IResult GetStatus(ExecutionSessionManager sessionManager)
     {
         return Results.Ok(new
@@ -231,15 +257,29 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/sessions ï¿½ active + recent sessions.</summary>
+    /// <summary>GET /api/execution/sessions — active sessions with per-session detail.</summary>
     private static IResult GetSessions(ExecutionSessionManager sessionManager)
     {
-        // The session manager exposes active sessions but not the full history publicly.
-        // We return active execution count and any session that can be queried by tag.
+        var active = sessionManager.GetActiveSessions();
         return Results.Ok(new
         {
             activeCount = sessionManager.ActiveExecutionCount,
-            hasActive = sessionManager.HasAnyActiveExecution
+            hasActive = sessionManager.HasAnyActiveExecution,
+            sessions = active.Select(s => new
+            {
+                sessionId = s.SessionId,
+                watchItemTag = s.WatchItemTag,
+                eventType = s.EventType,
+                state = s.State.ToString(),
+                startedUtc = s.StartedUtc,
+                totalActions = s.SnapshotNodes.Count,
+                completedActions = s.ActionResults.Count,
+                passedActions = s.SucceededCount,
+                failedActions = s.FailedCount,
+                progressPercent = s.SnapshotNodes.Count > 0
+                    ? (double)s.ActionResults.Count / s.SnapshotNodes.Count * 100
+                    : 0,
+            })
         });
     }
 }

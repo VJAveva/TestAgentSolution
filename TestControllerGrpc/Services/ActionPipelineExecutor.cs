@@ -471,6 +471,16 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         LogEntry?.Invoke(new PipelineLogEntry(DateTime.Now, category, message));
     }
 
+    /// <summary>Log with session ID prefix for concurrent execution tracing.</summary>
+    private void Log(string category, string message, PipelineExecutionContext ctx)
+    {
+        var prefixed = !string.IsNullOrEmpty(ctx.SessionId)
+            ? $"[{ctx.SessionId}] {message}"
+            : message;
+        _logger.LogInformation("[{Category}] {Message}", category, prefixed);
+        LogEntry?.Invoke(new PipelineLogEntry(DateTime.Now, category, prefixed));
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // SESSION-TRACKED EXECUTION (snapshot isolation + per-action results)
     // ═══════════════════════════════════════════════════════════════════

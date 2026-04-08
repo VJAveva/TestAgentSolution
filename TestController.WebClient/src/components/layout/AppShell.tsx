@@ -28,13 +28,13 @@ export default function AppShell() {
   const [activeTab, setActiveTab] = useState<Tab>('watchlist');
   const { fetchConfig } = useWatchList();
   const { fetchAgents } = useAgents();
-  const { fetchStatus } = useExecution();
+  const { fetchSessions } = useExecution();
 
   useEffect(() => {
     fetchConfig().catch(err => console.error('Failed to load watchlist:', err));
     fetchAgents().catch(err => console.error('Failed to load agents:', err));
-    fetchStatus().catch(err => console.error('Failed to load execution status:', err));
-  }, [fetchConfig, fetchAgents, fetchStatus]);
+    fetchSessions().catch(err => console.error('Failed to load execution sessions:', err));
+  }, [fetchConfig, fetchAgents, fetchSessions]);
 
   return (
     <div className="flex flex-col h-screen bg-bg">
