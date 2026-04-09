@@ -53,6 +53,49 @@ public class BuildTrendAnalyzer
         };
     }
 
+    /// <summary>
+    /// Generates per-UseCase trend data across builds.
+    /// Shows how each test suite trends independently.
+    /// </summary>
+    public Dictionary<string, List<UseCaseTrendEntry>> AnalyzePerUseCaseTrends(
+        string resultsRootPath, TrxResultsParser parser, int maxBuilds = 20)
+    {
+        var builds = parser.DiscoverBuilds(resultsRootPath);
+        var useCaseTrends = new Dictionary<string, List<UseCaseTrendEntry>>();
+
+        foreach (var (buildNumber, path, modified) in builds.Take(maxBuilds))
+        {
+            try
+            {
+                var node = parser.ParseBuildFolder(path);
+                foreach (var uc in node.UseCases)
+                {
+                    if (!useCaseTrends.ContainsKey(uc.UseCaseName))
+                        useCaseTrends[uc.UseCaseName] = new();
+
+                    useCaseTrends[uc.UseCaseName].Add(new UseCaseTrendEntry
+                    {
+                        BuildNumber = buildNumber,
+                        Date = modified,
+                        Total = uc.Total,
+                        Passed = uc.Passed,
+                        Failed = uc.Failed,
+                        PassRate = uc.PassRate,
+                    });
+                }
+            }
+            catch
+            {
+                // Skip builds that fail to parse
+            }
+        }
+
+        foreach (var key in useCaseTrends.Keys.ToList())
+            useCaseTrends[key] = useCaseTrends[key].OrderBy(e => e.Date).ToList();
+
+        return useCaseTrends;
+    }
+
     private List<PeriodSummary> GroupByWeek(List<BuildTrendEntry> builds)
     {
         return builds
@@ -115,4 +158,14 @@ public record PeriodSummary
     public int TotalPassed { get; init; }
     public int TotalFailed { get; init; }
     public double AvgPassRate { get; init; }
+}
+
+public record UseCaseTrendEntry
+{
+    public string BuildNumber { get; init; } = "";
+    public DateTime Date { get; init; }
+    public int Total { get; init; }
+    public int Passed { get; init; }
+    public int Failed { get; init; }
+    public double PassRate { get; init; }
 }

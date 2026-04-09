@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Helpers;
@@ -16,46 +17,119 @@ public sealed partial class MainViewModel
     {
         LogFilterTag = "";
         LogFilterAgent = "";
+        LogFilterSession = "";
         LogLevelFilter = "All";
         LogSearchText = "";
+        IsRegexSearch = false;
+        ShowErrorsOnly = false;
     }
 
-    /// <summary>Applies tag/agent/severity/search filters to the execution log.</summary>
+    private void RebuildSearchRegex()
+    {
+        _searchRegex = null;
+        if (IsRegexSearch && !string.IsNullOrWhiteSpace(LogSearchText))
+        {
+            try
+            {
+                _searchRegex = new Regex(
+                    LogSearchText,
+                    RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            }
+            catch
+            {
+                // Invalid regex — fall back to plain text
+                _searchRegex = null;
+            }
+        }
+        ApplyLogFilter();
+    }
+
+    /// <summary>Applies tag/agent/session/severity/search filters to the execution log.</summary>
     private void ApplyLogFilter()
     {
         var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
         var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
+        var hasSessionFilter = !string.IsNullOrWhiteSpace(LogFilterSession);
         var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
         var hasSeverityFilter = LogLevelFilter != "All";
-        var anyFilter = hasTagFilter || hasAgentFilter || hasSearchFilter || hasSeverityFilter;
+        var errorsOnly = ShowErrorsOnly;
+        var regexSearch = IsRegexSearch;
+        var searchRegex = _searchRegex;
+        var anyFilter = hasTagFilter || hasAgentFilter || hasSessionFilter
+                     || hasSearchFilter || hasSeverityFilter || errorsOnly;
 
         // Capture filter values for the predicate closure
         var tagVal = LogFilterTag;
         var agentVal = LogFilterAgent;
+        var sessionVal = LogFilterSession;
         var searchVal = LogSearchText;
         var levelVal = LogLevelFilter;
 
         _logBuffer?.SetFilter(anyFilter
-            ? entry => PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter,
-                                    tagVal, agentVal, searchVal, levelVal)
+            ? entry => PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSessionFilter,
+                                    hasSearchFilter, hasSeverityFilter, errorsOnly, regexSearch, searchRegex,
+                                    tagVal, agentVal, sessionVal, searchVal, levelVal)
             : null);
         _logBuffer?.ReapplyFilter();
+
+        // Update search match count
+        if (hasSearchFilter)
+            SearchMatchCount = FilteredLogEntries.Count;
+        else
+            SearchMatchCount = 0;
     }
 
     /// <summary>Pure filter predicate — no field access, fully parameterized for thread safety.</summary>
     private static bool PassesFilter(LogEntryViewModel entry,
-        bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter,
-        string tagVal, string agentVal, string searchVal, string levelVal)
+        bool hasTagFilter, bool hasAgentFilter, bool hasSessionFilter,
+        bool hasSearchFilter, bool hasSeverityFilter,
+        bool errorsOnly, bool regexSearch, Regex? searchRegex,
+        string tagVal, string agentVal, string sessionVal, string searchVal, string levelVal)
     {
-        var msg = entry.Message;
+        // Quick error-only toggle
+        if (errorsOnly && entry.Severity != LogSeverity.Error)
+            return false;
 
-        if (hasTagFilter && !msg.Contains(tagVal, StringComparison.OrdinalIgnoreCase))
+        // Session filter
+        if (hasSessionFilter && !string.Equals(entry.SessionId, sessionVal, StringComparison.OrdinalIgnoreCase))
             return false;
-        if (hasAgentFilter && !msg.Contains(agentVal, StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (hasSearchFilter && !msg.Contains(searchVal, StringComparison.OrdinalIgnoreCase)
-            && !entry.Timestamp.Contains(searchVal, StringComparison.OrdinalIgnoreCase))
-            return false;
+
+        // Tag filter (check dedicated field first, then message text)
+        if (hasTagFilter)
+        {
+            var matchTag = !string.IsNullOrEmpty(entry.WatchItemTag)
+                ? entry.WatchItemTag.Contains(tagVal, StringComparison.OrdinalIgnoreCase)
+                : entry.Message.Contains(tagVal, StringComparison.OrdinalIgnoreCase);
+            if (!matchTag) return false;
+        }
+
+        // Agent filter (check dedicated field first, then message text)
+        if (hasAgentFilter)
+        {
+            var matchAgent = !string.IsNullOrEmpty(entry.AgentName)
+                ? entry.AgentName.Contains(agentVal, StringComparison.OrdinalIgnoreCase)
+                : entry.Message.Contains(agentVal, StringComparison.OrdinalIgnoreCase);
+            if (!matchAgent) return false;
+        }
+
+        // Search (regex or plain text)
+        if (hasSearchFilter)
+        {
+            if (regexSearch && searchRegex is not null)
+            {
+                if (!searchRegex.IsMatch(entry.Message) &&
+                    !searchRegex.IsMatch(entry.Timestamp))
+                    return false;
+            }
+            else
+            {
+                if (!entry.Message.Contains(searchVal, StringComparison.OrdinalIgnoreCase) &&
+                    !entry.Timestamp.Contains(searchVal, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+        }
+
+        // Severity filter
         if (hasSeverityFilter)
         {
             var requiredSeverity = levelVal switch
@@ -69,6 +143,7 @@ public sealed partial class MainViewModel
             if (requiredSeverity.HasValue && entry.Severity != requiredSeverity.Value)
                 return false;
         }
+
         return true;
     }
 
@@ -76,8 +151,11 @@ public sealed partial class MainViewModel
     private bool PassesFilter(LogEntryViewModel entry,
         bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter)
     {
-        return PassesFilter(entry, hasTagFilter, hasAgentFilter, hasSearchFilter, hasSeverityFilter,
-                            LogFilterTag, LogFilterAgent, LogSearchText, LogLevelFilter);
+        return PassesFilter(entry, hasTagFilter, hasAgentFilter,
+            !string.IsNullOrWhiteSpace(LogFilterSession),
+            hasSearchFilter, hasSeverityFilter,
+            ShowErrorsOnly, IsRegexSearch, _searchRegex,
+            LogFilterTag, LogFilterAgent, LogFilterSession, LogSearchText, LogLevelFilter);
     }
 
     /// <summary>Copy all log entries to clipboard.</summary>
@@ -86,7 +164,7 @@ public sealed partial class MainViewModel
     {
         var sb = new StringBuilder();
         foreach (var e in LogEntries)
-            sb.AppendLine($"[{e.Timestamp}] {e.Message}");
+            sb.AppendLine(e.FullText);
         if (sb.Length > 0)
             Clipboard.SetText(sb.ToString());
     }
@@ -95,11 +173,12 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void CopyFailedLog()
     {
-        var sb = new StringBuilder();
-        foreach (var e in LogEntries.Where(e => e.Severity == LogSeverity.Error))
-            sb.AppendLine($"[{e.Timestamp}] {e.Message}");
-        if (sb.Length > 0)
-            Clipboard.SetText(sb.ToString());
+        var lines = LogEntries
+            .Where(e => e.Severity == LogSeverity.Error)
+            .Select(e => e.FullText);
+        var text = string.Join(Environment.NewLine, lines);
+        if (!string.IsNullOrEmpty(text))
+            Clipboard.SetText(text);
     }
 
     /// <summary>Clear all log entries.</summary>
@@ -109,6 +188,11 @@ public sealed partial class MainViewModel
         LogEntries.Clear();
         FilteredLogEntries.Clear();
         _logBuffer?.SetFilter(null);
+        LogErrorCount = 0;
+        LogWarningCount = 0;
+        SearchMatchCount = 0;
+        AvailableSessionIds.Clear();
+        AvailableSessionIds.Add("");
     }
 
     /// <summary>Toggle the log panel collapsed/expanded state.</summary>
@@ -185,26 +269,39 @@ public sealed partial class MainViewModel
         IsAgentPanePinned = true;
     }
 
-    /// <summary>Export log entries to a text file.</summary>
+    /// <summary>Export log entries to a file (text, log, or CSV).</summary>
     [RelayCommand]
     private void ExportLog()
     {
         var dlg = new Microsoft.Win32.SaveFileDialog
         {
-            Filter = "Text Files|*.txt|Log Files|*.log|All Files|*.*",
-            FileName = $"ExecutionLog_{DateTime.Now:yyyyMMdd_HHmmss}.txt",
+            Filter = "Log files (*.log)|*.log|Text files (*.txt)|*.txt|CSV files (*.csv)|*.csv",
+            FileName = $"ExecutionLog_{DateTime.Now:yyyyMMdd_HHmmss}",
             Title = "Export Execution Log"
         };
         if (dlg.ShowDialog() != true) return;
 
-        var sb = new StringBuilder();
-        foreach (var e in LogEntries)
-            sb.AppendLine($"[{e.Timestamp}] [{e.Severity}] {e.Message}");
-        File.WriteAllText(dlg.FileName, sb.ToString());
+        var ext = Path.GetExtension(dlg.FileName).ToLower();
+        IEnumerable<string> lines;
+
+        if (ext == ".csv")
+        {
+            lines = new[] { "Timestamp,Session,Severity,Agent,WatchItem,Message" }
+                .Concat(LogEntries.Select(e =>
+                    $"\"{e.Timestamp}\",\"{e.SessionId}\",\"{e.SeverityText}\",\"{e.AgentName}\",\"{e.WatchItemTag}\",\"{e.Message.Replace("\"", "\"\"")}\""
+                ));
+        }
+        else
+        {
+            lines = LogEntries.Select(e => e.FullText);
+        }
+
+        File.WriteAllLines(dlg.FileName, lines);
         AddLog($"Log exported to {dlg.FileName}", LogSeverity.Success);
     }
 
-    private void AddLog(string msg, LogSeverity severity = LogSeverity.Info)
+    private void AddLog(string msg, LogSeverity severity = LogSeverity.Info,
+        string sessionId = "", string agentName = "", string watchItemTag = "")
     {
         // Auto-detect severity from message content when using default
         if (severity == LogSeverity.Info)
@@ -233,8 +330,25 @@ public sealed partial class MainViewModel
         {
             Timestamp = DateTime.Now.ToString("HH:mm:ss"),
             Message = msg,
-            Severity = severity
+            Severity = severity,
+            SessionId = sessionId,
+            AgentName = agentName,
+            WatchItemTag = watchItemTag,
         };
+
+        // Track error/warning counts and session IDs on the UI thread
+        void TrackCounts()
+        {
+            if (entry.Severity == LogSeverity.Error) LogErrorCount++;
+            if (entry.Severity == LogSeverity.Warning) LogWarningCount++;
+            if (!string.IsNullOrEmpty(sessionId) && !AvailableSessionIds.Contains(sessionId))
+                AvailableSessionIds.Add(sessionId);
+        }
+
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+            TrackCounts();
+        else
+            Application.Current?.Dispatcher.InvokeAsync(TrackCounts);
 
         // Enqueue into the high-performance buffer (lock-free, any thread).
         // The buffer drains in batches on the UI thread every 100ms.

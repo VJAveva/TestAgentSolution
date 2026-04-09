@@ -752,6 +752,17 @@
                                                      MaxHeight="200" VerticalScrollBarVisibility="Auto" />
                                         </Border>
 
+                                        <!-- Debug Trace -->
+                                        <TextBlock Text="DEBUG TRACE" FontSize="10" FontWeight="Bold"
+                                                   Foreground="{DynamicResource AccMauve}" Margin="0,0,0,4" />
+                                        <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                            <TextBox Text="{Binding DetailDebugTrace, Mode=OneWay}"
+                                                     IsReadOnly="True" TextWrapping="Wrap"
+                                                     Background="Transparent" BorderThickness="0"
+                                                     Foreground="{DynamicResource TextP}" FontFamily="Consolas" FontSize="10"
+                                                     MaxHeight="200" VerticalScrollBarVisibility="Auto" />
+                                        </Border>
+
                                         <!-- Execution Steps (from TRX InnerResults) -->
                                         <TextBlock Text="EXECUTION STEPS" FontSize="10" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}" Margin="0,0,0,4"

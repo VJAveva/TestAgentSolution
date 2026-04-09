@@ -54,6 +54,8 @@
         <vm:EditingContextToVisibilityConverter x:Key="CtxVis" />
         <BooleanToVisibilityConverter x:Key="BoolVis" />
         <vm:ProgressPercentToWidthConverter x:Key="ProgressPercentToWidth" />
+        <vm:IntToVisibilityConverter x:Key="IntToVis" />
+        <vm:NonEmptyToVisibilityConverter x:Key="NonEmptyVis" />
 
         <x:Array x:Key="EventTypes" Type="{x:Type sys:String}">
             <sys:String>Renamed</sys:String><sys:String>Created</sys:String><sys:String>Changed</sys:String>
@@ -2316,8 +2318,27 @@
                                            Foreground="{DynamicResource AccGreen}"
                                            VerticalAlignment="Center" Margin="0,0,8,0" />
                                 <TextBlock FontSize="11" Foreground="{DynamicResource TextS}" VerticalAlignment="Center">
-                                    <Run Text="(" /><Run Text="{Binding FilteredLogEntries.Count, Mode=OneWay}" FontWeight="Bold" /><Run Text=" entries)" />
+                                    <Run Text="(" /><Run Text="{Binding FilteredLogEntries.Count, Mode=OneWay}" FontWeight="Bold" /><Run Text=" entries" />
                                 </TextBlock>
+                                <!-- Error count badge -->
+                                <Border CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                        Background="#33EF4444"
+                                        Visibility="{Binding LogErrorCount, Converter={StaticResource IntToVis}}">
+                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#EF4444">
+                                        <Run Text="{Binding LogErrorCount, Mode=OneWay}" />
+                                        <Run Text=" errors" />
+                                    </TextBlock>
+                                </Border>
+                                <!-- Warning count badge -->
+                                <Border CornerRadius="8" Padding="6,1" Margin="4,0,0,0"
+                                        Background="#33F59E0B"
+                                        Visibility="{Binding LogWarningCount, Converter={StaticResource IntToVis}}">
+                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#F59E0B">
+                                        <Run Text="{Binding LogWarningCount, Mode=OneWay}" />
+                                        <Run Text=" warn" />
+                                    </TextBlock>
+                                </Border>
+                                <TextBlock Text=")" FontSize="11" Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="4,0,0,0" />
                                 <TextBlock Text=" PAUSED" FontSize="10" FontWeight="Bold"
                                            Foreground="{DynamicResource AccYellow}"
                                            VerticalAlignment="Center" Margin="8,0,0,0"
@@ -2326,41 +2347,81 @@
                         </DockPanel>
                     </Border>
 
-                    <!-- Row 1: Filter Bar -->
-                    <Border Grid.Row="1" Background="{DynamicResource InfoBoxBg}" Padding="8,5"
+                    <!-- Row 1: Enhanced Filter Bar -->
+                    <Border Grid.Row="1" Background="{DynamicResource InfoBoxBg}" Padding="8,4"
                             Visibility="{Binding IsLogCollapsed, Converter={StaticResource InvBoolVis}}">
                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Tag:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
-                                       VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <ComboBox Width="120" ItemsSource="{Binding AvailableWatchItemTags}"
+                            <!-- Session filter -->
+                            <TextBlock Text="Session:" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <ComboBox Width="80" ItemsSource="{Binding AvailableSessionIds}"
+                                      SelectedItem="{Binding LogFilterSession}"
+                                      Style="{StaticResource Cmb}" Margin="0,0,8,0"
+                                      ToolTip="Filter by execution session" />
+
+                            <!-- Tag filter -->
+                            <TextBlock Text="Tag:" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <ComboBox Width="100" ItemsSource="{Binding AvailableWatchItemTags}"
                                       SelectedItem="{Binding LogFilterTag}" IsEditable="True"
                                       Text="{Binding LogFilterTag, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource Cmb}" Margin="0,0,8,0"
-                                      ToolTip="Filter by WatchItem Tag" />
-                            <TextBlock Text="Agent:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
-                                       VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <ComboBox Width="120" ItemsSource="{Binding AvailableAgentNames}"
+                                      Style="{StaticResource Cmb}" Margin="0,0,8,0" />
+
+                            <!-- Agent filter -->
+                            <TextBlock Text="Agent:" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <ComboBox Width="100" ItemsSource="{Binding AvailableAgentNames}"
                                       SelectedItem="{Binding LogFilterAgent}" IsEditable="True"
                                       Text="{Binding LogFilterAgent, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource Cmb}" Margin="0,0,8,0"
-                                      ToolTip="Filter by Agent name" />
-                            <TextBlock Text="Level:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
-                                       VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <ComboBox Width="100" ItemsSource="{Binding LogLevelOptions}"
+                                      Style="{StaticResource Cmb}" Margin="0,0,8,0" />
+
+                            <!-- Level filter -->
+                            <TextBlock Text="Level:" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <ComboBox Width="80" ItemsSource="{Binding LogLevelOptions}"
                                       SelectedItem="{Binding LogLevelFilter}"
-                                      Style="{StaticResource Cmb}" Margin="0,0,8,0"
-                                      ToolTip="Filter by log severity level" />
-                            <TextBlock Text="Search:" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextS}"
-                                       VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBox x:Name="LogSearchBox" Width="140" Text="{Binding LogSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource Fld}" Margin="0,0,5,0" Padding="5,3"
-                                     ToolTip="Search log messages (Ctrl+L)" />
-                            <Button Content="Clear" Style="{StaticResource SmBtn}" Padding="6,3"
-                                    Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
-                                    Command="{Binding ClearLogFilterCommand}" ToolTip="Clear all filters" />
+                                      Style="{StaticResource Cmb}" Margin="0,0,8,0" />
+
+                            <!-- Search with regex toggle -->
+                            <TextBlock Text="Search:" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBox x:Name="LogSearchBox" Width="150"
+                                     Text="{Binding LogSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource Fld}" Margin="0,0,2,0" Padding="5,3"
+                                     ToolTip="Search text or regex pattern (Ctrl+L to focus)" />
+                            <ToggleButton IsChecked="{Binding IsRegexSearch}"
+                                          Content=".*" FontFamily="Consolas" FontSize="10"
+                                          Padding="4,3" MinWidth="28"
+                                          ToolTip="Toggle regex search mode"
+                                          Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
+                                          BorderThickness="1" BorderBrush="{DynamicResource Bdr}" Cursor="Hand" />
+
+                            <!-- Search match count -->
+                            <TextBlock FontSize="9" Foreground="{DynamicResource TextS}" VerticalAlignment="Center"
+                                       Margin="4,0,0,0"
+                                       Visibility="{Binding LogSearchText, Converter={StaticResource NonEmptyVis}}">
+                                <Run Text="{Binding SearchMatchCount, Mode=OneWay}" />
+                                <Run Text=" matches" />
+                            </TextBlock>
+
                             <Border Width="1" Background="{DynamicResource Bdr}" Margin="8,4" />
+
+                            <!-- Quick toggles -->
+                            <ToggleButton IsChecked="{Binding ShowErrorsOnly}"
+                                          Padding="6,3" Margin="0,0,4,0"
+                                          ToolTip="Show only errors"
+                                          Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
+                                          BorderThickness="1" BorderBrush="{DynamicResource Bdr}" Cursor="Hand">
+                                <TextBlock Text="Errors Only" FontSize="10" />
+                            </ToggleButton>
+
+                            <Button Content="Reset" Style="{StaticResource SmBtn}" Padding="6,3"
+                                    Command="{Binding ClearLogFilterCommand}" ToolTip="Reset all filters" />
+
+                            <Border Width="1" Background="{DynamicResource Bdr}" Margin="8,4" />
+
                             <CheckBox Content="Auto-scroll" IsChecked="{Binding IsAutoScrollEnabled}"
-                                      Foreground="{DynamicResource TextS}" FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                      Foreground="{DynamicResource TextS}" FontSize="10" VerticalAlignment="Center" />
                         </WrapPanel>
                     </Border>
 
@@ -2408,26 +2469,54 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:LogEntryViewModel}">
-                                <TextBlock FontFamily="Consolas" FontSize="11" TextWrapping="NoWrap">
-                                    <Run Text="[" /><Run Text="{Binding Timestamp, Mode=OneWay}" /><Run Text="] " /><Run Text="{Binding Message, Mode=OneWay}" />
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Error">
-                                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                                    <Setter Property="FontWeight" Value="SemiBold" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Success">
-                                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                                                    <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                <StackPanel Orientation="Horizontal" Margin="0,0.5">
+                                    <!-- Session color dot -->
+                                    <Ellipse Width="6" Height="6" Margin="0,0,4,0" VerticalAlignment="Center"
+                                             Visibility="{Binding SessionId, Converter={StaticResource NonEmptyVis}}">
+                                        <Ellipse.Fill>
+                                            <SolidColorBrush Color="{Binding SessionColor}" />
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <!-- Timestamp -->
+                                    <TextBlock FontFamily="Consolas" FontSize="10"
+                                               Foreground="{DynamicResource TextS}" Margin="0,0,6,0">
+                                        <Run Text="[" /><Run Text="{Binding Timestamp, Mode=OneWay}" /><Run Text="]" />
+                                    </TextBlock>
+                                    <!-- Session ID badge -->
+                                    <Border CornerRadius="2" Padding="3,0" Margin="0,0,4,0"
+                                            Visibility="{Binding SessionId, Converter={StaticResource NonEmptyVis}}">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="{Binding SessionColor}" Opacity="0.15" />
+                                        </Border.Background>
+                                        <TextBlock Text="{Binding SessionId}" FontFamily="Consolas" FontSize="9"
+                                                   FontWeight="Bold">
+                                            <TextBlock.Foreground>
+                                                <SolidColorBrush Color="{Binding SessionColor}" />
+                                            </TextBlock.Foreground>
+                                        </TextBlock>
+                                    </Border>
+                                    <!-- Message with severity coloring -->
+                                    <TextBlock Text="{Binding Message}" FontFamily="Consolas" FontSize="11"
+                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Error">
+                                                        <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                                                        <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Success">
+                                                        <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -2459,9 +2548,12 @@
                                 <Button Content="Copy All" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
                                         Command="{Binding CopyLogCommand}" ToolTip="Copy all log entries to clipboard (Ctrl+Shift+C)" />
+                                <Button Content="Copy Errors" Style="{StaticResource SmBtn}"
+                                        Foreground="{DynamicResource AccRed}"
+                                        Command="{Binding CopyFailedLogCommand}" ToolTip="Copy only error lines to clipboard" />
                                 <Button Content="Export" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                                        Command="{Binding ExportLogCommand}" ToolTip="Export log to text file (Ctrl+E)" />
+                                        Command="{Binding ExportLogCommand}" ToolTip="Export to file (.log, .csv) (Ctrl+E)" />
                             </StackPanel>
                             <TextBlock/>
                         </DockPanel>

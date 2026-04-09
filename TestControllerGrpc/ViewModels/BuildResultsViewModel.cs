@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -26,6 +27,7 @@ public partial class BuildResultsViewModel : ObservableObject
     public ObservableCollection<BuildNode> LoadedBuildNodes { get; } = new();
 
     private readonly Dictionary<string, bool> _expandState = new();
+    private readonly ConcurrentDictionary<string, BuildNode> _buildCache = new();
 
     // ?? Core state ??
     [ObservableProperty] private BuildListItem? _selectedBuild;
@@ -49,6 +51,13 @@ public partial class BuildResultsViewModel : ObservableObject
     [ObservableProperty] private ObservableCollection<ConsecutiveFailureAlert> _failureAlerts = new();
     [ObservableProperty] private string _alertStatusText = "";
 
+    // ?? Flaky test detection ??
+    [ObservableProperty] private ObservableCollection<FlakyTestAlert> _flakyTests = new();
+    [ObservableProperty] private string _flakyTestSummary = "";
+
+    // ?? Per-UseCase trends ??
+    [ObservableProperty] private ObservableCollection<UseCaseTrendViewModel> _useCaseTrends = new();
+
     // ?? Consolidated reporting ??
     [ObservableProperty] private ReportScope _currentScope = ReportScope.SingleBuild;
     [ObservableProperty] private TimeRangeFilter _selectedTimeRange = TimeRangeFilter.OneWeek;
@@ -70,6 +79,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [ObservableProperty] private string _detailErrorMessage = "";
     [ObservableProperty] private string _detailStackTrace = "";
     [ObservableProperty] private string _detailStdOut = "";
+    [ObservableProperty] private string _detailDebugTrace = "";
     [ObservableProperty] private string _detailTrxFileName = "";
     [ObservableProperty] private string _detailTrxFilePath = "";
     [ObservableProperty] private bool _hasDetailSelected;
@@ -221,14 +231,11 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAllBuilds()
     {
+        RefreshBuilds();
         if (AvailableBuilds.Count == 0)
         {
-            RefreshBuilds();
-            if (AvailableBuilds.Count == 0)
-            {
-                StatusMessage = "No builds found. Set the results root path first.";
-                return;
-            }
+            StatusMessage = "No builds found. Set the results root path first.";
+            return;
         }
 
         IsLoading = true;
@@ -490,6 +497,95 @@ public partial class BuildResultsViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private async Task LoadFlakyTests()
+    {
+        if (string.IsNullOrWhiteSpace(ResultsRootPath))
+        {
+            StatusMessage = "Set a results root path first.";
+            return;
+        }
+
+        IsLoading = true;
+        StatusMessage = "Analyzing flaky tests...";
+
+        try
+        {
+            var detector = new FlakyTestDetector();
+            var alerts = await Task.Run(() =>
+                detector.DetectFlakyTests(ResultsRootPath, _parser, recentBuilds: 5, minFailures: 2));
+
+            FlakyTests = new ObservableCollection<FlakyTestAlert>(alerts);
+
+            var consistent = alerts.Count(a => a.Classification == "Consistent");
+            var frequent = alerts.Count(a => a.Classification == "Frequent");
+            var intermittent = alerts.Count(a => a.Classification == "Intermittent");
+            FlakyTestSummary = $"{alerts.Count} flaky tests: {consistent} consistent, {frequent} frequent, {intermittent} intermittent";
+            StatusMessage = FlakyTestSummary;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Flaky test analysis failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadUseCaseTrends()
+    {
+        if (string.IsNullOrWhiteSpace(ResultsRootPath))
+        {
+            StatusMessage = "Set a results root path first.";
+            return;
+        }
+
+        IsLoading = true;
+        StatusMessage = "Building per-UseCase trends...";
+
+        try
+        {
+            var analyzer = new BuildTrendAnalyzer(_aggregator, _config);
+            var trends = await Task.Run(() =>
+                analyzer.AnalyzePerUseCaseTrends(ResultsRootPath, _parser, maxBuilds: 10));
+
+            UseCaseTrends.Clear();
+            foreach (var (ucName, entries) in trends)
+            {
+                UseCaseTrends.Add(new UseCaseTrendViewModel
+                {
+                    UseCaseName = ucName,
+                    Entries = entries,
+                    LatestPassRate = entries.LastOrDefault()?.PassRate ?? 0,
+                    Trend = CalculateTrend(entries),
+                });
+            }
+
+            StatusMessage = $"Trends loaded for {UseCaseTrends.Count} use cases";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Trend analysis failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private static string CalculateTrend(List<UseCaseTrendEntry> entries)
+    {
+        if (entries.Count < 2) return "Stable";
+        var recent = entries.TakeLast(3).Average(e => e.PassRate);
+        var older = entries.Take(3).Average(e => e.PassRate);
+        var diff = recent - older;
+        if (diff > 5) return "Improving";
+        if (diff < -5) return "Declining";
+        return "Stable";
+    }
+
     // ???????????????????????????????????????????????????????????????
     // Commands — Consolidated Reporting
     // ???????????????????????????????????????????????????????????????
@@ -512,14 +608,11 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadConsolidatedBuilds()
     {
+        RefreshBuilds();
         if (AvailableBuilds.Count == 0)
         {
-            RefreshBuilds();
-            if (AvailableBuilds.Count == 0)
-            {
-                StatusMessage = "No builds found. Set the results root path first.";
-                return;
-            }
+            StatusMessage = "No builds found. Set the results root path first.";
+            return;
         }
 
         var cutoff = GetTimeRangeCutoff();
@@ -783,6 +876,7 @@ public partial class BuildResultsViewModel : ObservableObject
         DetailErrorMessage = tr.ErrorMessage ?? "(no error message)";
         DetailStackTrace = tr.StackTrace ?? "(no stack trace)";
         DetailStdOut = tr.StdOut ?? "(no stdout captured)";
+        DetailDebugTrace = tr.DebugTrace ?? "(no debug trace)";
         DetailTrxFileName = tr.TrxFileName;
 
         var buildPath = LoadedBuildNodes
@@ -836,6 +930,7 @@ public partial class BuildResultsViewModel : ObservableObject
             ? $"{node.Failed} test(s) failed" : "All tests passed";
         DetailStackTrace = "";
         DetailStdOut = "";
+        DetailDebugTrace = "";
         DetailTrxFileName = "";
         DetailTrxFilePath = "";
         DetailExecutionSteps.Clear();
@@ -1053,14 +1148,70 @@ public partial class BuildResultsViewModel : ObservableObject
 
     private async Task ParseBuildsAsync(IEnumerable<BuildListItem> builds)
     {
-        foreach (var build in builds)
+        var buildList = builds.ToList();
+        var total = buildList.Count;
+        var done = 0;
+
+        var semaphore = new SemaphoreSlim(4);
+        var tasks = buildList.Select(async build =>
         {
-            StatusMessage = $"Parsing {build.BuildNumber}...";
-            var node = await Task.Run(() => _parser.ParseBuildFolder(build.Path));
-            node = _aggregator.EvaluateBuildHealth(node);
-            LoadedBuildNodes.Add(node);
-            build.HasBeenLoaded = true;
-        }
+            await semaphore.WaitAsync();
+            try
+            {
+                if (!Directory.Exists(build.Path))
+                {
+                    Interlocked.Increment(ref done);
+                    Application.Current?.Dispatcher.Invoke(() =>
+                        StatusMessage = $"Skipped {build.BuildNumber} (folder no longer exists).");
+                    return;
+                }
+
+                BuildNode node;
+                if (_buildCache.TryGetValue(build.Path, out var cached))
+                {
+                    node = cached;
+                }
+                else
+                {
+                    node = await Task.Run(() => _parser.ParseBuildFolder(build.Path));
+                    node = _aggregator.EvaluateBuildHealth(node);
+                    _buildCache[build.Path] = node;
+                }
+
+                var current = Interlocked.Increment(ref done);
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    LoadedBuildNodes.Add(node);
+                    build.HasBeenLoaded = true;
+                    StatusMessage = $"Parsing builds: {current}/{total} ({node.BuildNumber}: {node.TotalTests} tests)";
+                });
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Increment(ref done);
+                Application.Current?.Dispatcher.Invoke(() =>
+                    StatusMessage = $"Skipped {build.BuildNumber}: {ex.Message}");
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+
+        // Sort by date after all loaded
+        var sorted = LoadedBuildNodes.OrderByDescending(b => b.LatestRun).ToList();
+        LoadedBuildNodes.Clear();
+        foreach (var n in sorted)
+            LoadedBuildNodes.Add(n);
+    }
+
+    [RelayCommand]
+    private void ClearCache()
+    {
+        _buildCache.Clear();
+        StatusMessage = "Cache cleared. Next LoadAll will re-parse all builds.";
     }
 
     private static void OpenInBrowser(string filePath)

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.Concurrent;
 using System.Xml.Linq;
 using TestControllerGrpc.Models;
 
@@ -25,6 +26,10 @@ public class TrxResultsParser
     private static readonly XName StackTraceName = TrxNs + "StackTrace";
     private static readonly XName ErrorInfoName = TrxNs + "ErrorInfo";
     private static readonly XName ResultsName = TrxNs + "Results";
+    private static readonly XName StdErrName = TrxNs + "StdErr";
+    private static readonly XName DebugTraceName = TrxNs + "DebugTrace";
+
+    private readonly ConcurrentDictionary<string, TrxTestRun> _fileCache = new();
 
     /// <summary>
     /// Scans a build folder with structure: [BuildFolder] > [UseCaseFolder] > *.trx
@@ -34,6 +39,18 @@ public class TrxResultsParser
     public BuildNode ParseBuildFolder(string buildFolderPath)
     {
         var buildNumber = Path.GetFileName(buildFolderPath);
+
+        if (!Directory.Exists(buildFolderPath))
+        {
+            return new BuildNode
+            {
+                BuildNumber = buildNumber,
+                RootPath = buildFolderPath,
+                UseCases = [],
+                AllFailedTests = [],
+            };
+        }
+
         var useCases = new List<UseCaseNode>();
         DateTime? earliest = null, latest = null;
 
@@ -108,9 +125,14 @@ public class TrxResultsParser
         };
     }
 
-    /// <summary>Parse a single .trx file.</summary>
+    /// <summary>Parse a single .trx file (cached by path + last-write timestamp).</summary>
     public TrxTestRun ParseFile(string trxFilePath)
     {
+        var lastWrite = File.GetLastWriteTimeUtc(trxFilePath);
+        var cacheKey = $"{trxFilePath}|{lastWrite:O}";
+        if (_fileCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
         var doc = XDocument.Load(trxFilePath);
         var root = doc.Root!;
 
@@ -172,14 +194,27 @@ public class TrxResultsParser
                 var errorMessage = errorInfoEl?.Element(MessageName)?.Value;
                 var stackTrace = errorInfoEl?.Element(StackTraceName)?.Value;
 
-                // TextMessages > Message (MSTest debug trace)
+                // DebugTrace element (System.Diagnostics.Trace output)
+                var debugTraceEl = outputEl?.Element(DebugTraceName)?.Value ?? "";
+
+                // StdErr
+                var stdErr = outputEl?.Element(StdErrName)?.Value ?? "";
+
+                // TextMessages > Message (additional diagnostic output)
                 var textMessagesEl = outputEl?.Element(TextMessagesName);
-                var debugTrace = "";
-                if (textMessagesEl is not null)
-                {
-                    var messages = textMessagesEl.Elements(MessageName);
-                    debugTrace = string.Join("\n", messages.Select(m => m.Value));
-                }
+                var textMessages = textMessagesEl is not null
+                    ? string.Join("\n", textMessagesEl.Elements(MessageName).Select(m => m.Value))
+                    : "";
+
+                // Merge all trace sources
+                var debugTrace = string.Join(Environment.NewLine,
+                    new[] { debugTraceEl, textMessages }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+                // Merge StdErr into StdOut if present
+                var combinedStdOut = string.Join(Environment.NewLine,
+                    new[] { mainStdOut, stdErr }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
 
                 var duration = TimeSpan.TryParse(r.Attribute("duration")?.Value, out var d) ? d : TimeSpan.Zero;
                 totalDurationTicks += duration.Ticks;
@@ -191,7 +226,7 @@ public class TrxResultsParser
                     Duration = duration,
                     ErrorMessage = errorMessage,
                     StackTrace = stackTrace,
-                    StdOut = mainStdOut,
+                    StdOut = combinedStdOut,
                     TrxFileName = fileName,
                     ExecutionSteps = innerResults,
                     DebugTrace = debugTrace,
@@ -199,7 +234,7 @@ public class TrxResultsParser
             }
         }
 
-        return new TrxTestRun
+        var result = new TrxTestRun
         {
             FileName = fileName,
             FeatureName = featureName,
@@ -213,6 +248,9 @@ public class TrxResultsParser
             Duration = TimeSpan.FromTicks(totalDurationTicks),
             TestCases = testCases,
         };
+
+        _fileCache[cacheKey] = result;
+        return result;
     }
 
     /// <summary>Parse all .trx files in a build results directory.</summary>
@@ -228,6 +266,10 @@ public class TrxResultsParser
     /// <summary>
     /// Discover all build directories under the results root.
     /// Returns build numbers sorted by most recent first.
+    /// The modified date is resolved from the folder name when possible
+    /// (e.g. "OAK_main_20260401.7" ? 2026-04-01) because
+    /// <see cref="Directory.GetLastWriteTime"/> can be unreliable on
+    /// network shares. Falls back to the directory timestamp otherwise.
     /// </summary>
     public List<(string BuildNumber, string Path, DateTime Modified)>
         DiscoverBuilds(string resultsRootPath)
@@ -237,10 +279,32 @@ public class TrxResultsParser
             .Select(d => (
                 BuildNumber: Path.GetFileName(d),
                 Path: d,
-                Modified: Directory.GetLastWriteTime(d)
+                Modified: ResolveBuildDate(d)
             ))
             .OrderByDescending(b => b.Modified)
             .ToList();
+    }
+
+    /// <summary>
+    /// Attempts to extract a date from the folder name (pattern: *_yyyyMMdd*).
+    /// Falls back to <see cref="Directory.GetLastWriteTime"/>.
+    /// </summary>
+    private static DateTime ResolveBuildDate(string directoryPath)
+    {
+        var name = Path.GetFileName(directoryPath);
+        // Look for an 8-digit segment that parses as yyyyMMdd
+        foreach (var segment in name.Split('_', '.'))
+        {
+            if (segment.Length == 8 &&
+                DateTime.TryParseExact(segment, "yyyyMMdd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return Directory.GetLastWriteTime(directoryPath);
     }
 
     /// <summary>Extract feature name from .trx filename.</summary>

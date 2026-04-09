@@ -3,6 +3,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -121,4 +122,25 @@ public class StepRowVM
     public TimeSpan Duration { get; set; }
     public string OutcomeIcon { get; set; } = "\u25CB";
     public string DurationText { get; set; } = "";
+}
+
+/// <summary>ViewModel for per-UseCase trend data across builds.</summary>
+public class UseCaseTrendViewModel
+{
+    public string UseCaseName { get; set; } = "";
+    public List<UseCaseTrendEntry> Entries { get; set; } = new();
+    public double LatestPassRate { get; set; }
+    public string Trend { get; set; } = "Stable";
+    public string TrendIcon => Trend switch
+    {
+        "Improving" => "\u25B2",
+        "Declining" => "\u25BC",
+        _ => "\u2014"
+    };
+    public string TrendColor => Trend switch
+    {
+        "Improving" => "#10B981",
+        "Declining" => "#EF4444",
+        _ => "#94A3B8"
+    };
 }

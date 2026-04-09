@@ -187,6 +187,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
     [ObservableProperty] private bool _isLogCollapsed;
 
+    // ── Enhanced log filter properties ───────────────────────────────
+    /// <summary>Filter by session ID. Empty = show all sessions.</summary>
+    private string _logFilterSession = "";
+    public string LogFilterSession
+    {
+        get => _logFilterSession;
+        set { if (SetProperty(ref _logFilterSession, value)) ApplyLogFilter(); }
+    }
+
+    /// <summary>When true, search uses regex. When false, plain text.</summary>
+    [ObservableProperty] private bool _isRegexSearch;
+    partial void OnIsRegexSearchChanged(bool value) => RebuildSearchRegex();
+
+    /// <summary>Quick toggle: show only errors.</summary>
+    [ObservableProperty] private bool _showErrorsOnly;
+    partial void OnShowErrorsOnlyChanged(bool value) => ApplyLogFilter();
+
+    /// <summary>Error count for display badge.</summary>
+    [ObservableProperty] private int _logErrorCount;
+
+    /// <summary>Warning count for display badge.</summary>
+    [ObservableProperty] private int _logWarningCount;
+
+    /// <summary>Search match count for display.</summary>
+    [ObservableProperty] private int _searchMatchCount;
+
+    /// <summary>Available session IDs for the filter dropdown.</summary>
+    public ObservableCollection<string> AvailableSessionIds { get; } = new() { "" };
+
+    /// <summary>Pre-compiled regex for search (null if plain text mode).</summary>
+    private System.Text.RegularExpressions.Regex? _searchRegex;
+
     // ── Dockable log pane state ─────────────────────────────────────
     /// <summary>Log pane is pinned (docked) vs auto-hidden (collapsed to tab).</summary>
     [ObservableProperty] private bool _isLogPanePinned = true;
