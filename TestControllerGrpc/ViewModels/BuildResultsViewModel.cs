@@ -65,6 +65,14 @@ public partial class BuildResultsViewModel : ObservableObject
     [ObservableProperty] private int _filteredBuildCount;
     [ObservableProperty] private string _consolidatedFolderSummary = "";
 
+    // ?? Trend range selector ??
+    private TrendRangeFilter _selectedTrendRange = TrendRangeFilter.Last10;
+    public TrendRangeFilter SelectedTrendRange
+    {
+        get => _selectedTrendRange;
+        set => SetProperty(ref _selectedTrendRange, value);
+    }
+
     public bool IsSingleBuildMode => CurrentScope == ReportScope.SingleBuild;
     public bool IsConsolidatedMode => CurrentScope == ReportScope.Consolidated;
 
@@ -543,13 +551,19 @@ public partial class BuildResultsViewModel : ObservableObject
         }
 
         IsLoading = true;
-        StatusMessage = "Building per-UseCase trends...";
+        var maxBuilds = SelectedTrendRange switch
+        {
+            TrendRangeFilter.Last5 => 5,
+            TrendRangeFilter.Last20 => 20,
+            _ => 10,
+        };
+        StatusMessage = $"Building per-UseCase trends (last {maxBuilds} builds)...";
 
         try
         {
             var analyzer = new BuildTrendAnalyzer(_aggregator, _config);
             var trends = await Task.Run(() =>
-                analyzer.AnalyzePerUseCaseTrends(ResultsRootPath, _parser, maxBuilds: 10));
+                analyzer.AnalyzePerUseCaseTrends(ResultsRootPath, _parser, maxBuilds: maxBuilds));
 
             UseCaseTrends.Clear();
             foreach (var (ucName, entries) in trends)
@@ -563,7 +577,7 @@ public partial class BuildResultsViewModel : ObservableObject
                 });
             }
 
-            StatusMessage = $"Trends loaded for {UseCaseTrends.Count} use cases";
+            StatusMessage = $"Trends loaded for {UseCaseTrends.Count} use cases (last {maxBuilds} builds)";
         }
         catch (Exception ex)
         {
@@ -604,6 +618,15 @@ public partial class BuildResultsViewModel : ObservableObject
 
     [RelayCommand]
     private void SetRange1M() => SelectedTimeRange = TimeRangeFilter.OneMonth;
+
+    [RelayCommand]
+    private void SetTrendRange5() { SelectedTrendRange = TrendRangeFilter.Last5; _ = LoadUseCaseTrends(); }
+
+    [RelayCommand]
+    private void SetTrendRange10() { SelectedTrendRange = TrendRangeFilter.Last10; _ = LoadUseCaseTrends(); }
+
+    [RelayCommand]
+    private void SetTrendRange20() { SelectedTrendRange = TrendRangeFilter.Last20; _ = LoadUseCaseTrends(); }
 
     [RelayCommand]
     private async Task LoadConsolidatedBuilds()

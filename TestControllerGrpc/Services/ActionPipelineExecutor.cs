@@ -258,29 +258,39 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
             }
 
             if (result.Success)
+                {
+                    if (attempt > 1)
+                        Log("Retry", $"✓ Succeeded on attempt {attempt} of {maxAttempts}");
+                    else
+                        Log("Action", $"✓ Success (exit={result.ExitCode})");
+                    return true;
+                }
+
+                // Check if we should retry this specific failure
+                if (attempt < maxAttempts && ShouldRetry(result, retryExitCodes))
+                {
+                    var agentCtx = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
+                    Log("Action", $"✗ Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} — will retry");
+                    continue;
+                }
+
+                break;
+            }
+
+            // All attempts exhausted — log with full context
             {
-                if (attempt > 1)
-                    Log("Retry", $"✓ Succeeded on attempt {attempt} of {maxAttempts}");
+                var agentInfo = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
+                var cmdInfo = $"{resolved.Command} {resolved.Parameters}".Trim();
+                if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "…";
+
+                if (maxAttempts > 1)
+                    Log("Action", $"✗ FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
                 else
-                    Log("Action", $"✓ Success (exit={result.ExitCode})");
-                return true;
+                    Log("Action", $"✗ FAILED on {agentInfo}: {cmdInfo}");
+
+                Log("Action", $"  Exit code: {result.ExitCode}");
+                Log("Action", $"  Error: {result.ErrorMessage}");
             }
-
-            // Check if we should retry this specific failure
-            if (attempt < maxAttempts && ShouldRetry(result, retryExitCodes))
-            {
-                Log("Action", $"✗ Failed (exit={result.ExitCode}): {result.ErrorMessage} -- will retry");
-                continue;
-            }
-
-            break;
-        }
-
-        // All attempts exhausted
-        if (maxAttempts > 1)
-            Log("Action", $"✗ FAILED after {maxAttempts} attempts: {result.ErrorMessage} (exit={result.ExitCode})");
-        else
-            Log("Action", $"✗ Failed: {result.ErrorMessage} (exit={result.ExitCode})");
 
         NodeFailed?.Invoke(action, result.ExitCode, result.ErrorMessage);
         return action.FailAndContinue;

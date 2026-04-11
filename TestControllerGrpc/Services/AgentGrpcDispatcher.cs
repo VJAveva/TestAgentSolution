@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -40,9 +41,12 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
     /// <summary>
     /// Registers an agent name → gRPC address mapping.
+    /// Normalizes the address to ensure a valid URI scheme is present.
     /// </summary>
     public void RegisterAgent(string agentName, string grpcAddress)
     {
+        grpcAddress = NormalizeAddress(grpcAddress);
+
         // Dispose old endpoint if re-registering same name
         if (_agents.TryRemove(agentName, out var old))
             old.Dispose();
@@ -328,6 +332,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
                 int exitCode = 0;
                 string errorMessage = "";
+                var stderrLines = new List<string>();
+                bool receivedCompleted = false;
                 var startTimestamp = Stopwatch.GetTimestamp();
                 var lastProgressLog = startTimestamp;
                 var progressInterval = TimeSpan.FromMinutes(5);
@@ -341,6 +347,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                             break;
                         case ExecutionEventType.EventStderrLine:
                             OutputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
+                            stderrLines.Add(evt.OutputLine);
+                            if (stderrLines.Count > 20) stderrLines.RemoveAt(0);
                             break;
                         case ExecutionEventType.EventProgress:
                             OutputReceived?.Invoke(agentName,
@@ -348,6 +356,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                             break;
                         case ExecutionEventType.EventCompleted:
                             exitCode = evt.ExitCode;
+                            receivedCompleted = true;
                             break;
                         case ExecutionEventType.EventFailed:
                             errorMessage = evt.ErrorMessage;
@@ -376,8 +385,30 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), resilienceCt);
                 }
 
+                // Build comprehensive error report
+                if (!receivedCompleted && string.IsNullOrEmpty(errorMessage))
+                {
+                    exitCode = -1;
+                    errorMessage = $"Agent '{agentName}' did not report completion. " +
+                        "Process may have crashed, been killed, or gRPC connection was lost.";
+                }
+
+                if (exitCode != 0 && string.IsNullOrEmpty(errorMessage))
+                {
+                    errorMessage = stderrLines.Count > 0
+                        ? $"Process exited with code {exitCode}. Last stderr: " +
+                          string.Join(" | ", stderrLines.TakeLast(5))
+                        : $"Process exited with code {exitCode}. No error output captured. " +
+                          "Check if the process requires user interaction (security dialogs, UAC prompts).";
+                }
+
+                var exitDetail = ClassifyExitCode(exitCode, resolved.Command, errorMessage);
+                if (!string.IsNullOrEmpty(exitDetail))
+                    errorMessage = $"{exitDetail} {errorMessage}";
+
                 var success = exitCode == 0 && string.IsNullOrEmpty(errorMessage);
-                StatusChanged?.Invoke(agentName, success ? "Ready" : $"Failed (exit {exitCode})");
+                var statusMsg = success ? "Ready" : $"Failed (exit {exitCode}): {Truncate(errorMessage, 100)}";
+                StatusChanged?.Invoke(agentName, statusMsg);
 
                 RecordSuccess(agentName);
                 return new ActionResult(success, exitCode, errorMessage);
@@ -459,6 +490,21 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             if (!string.IsNullOrEmpty(resolved.UserName))
                 _logger.LogInformation("Local exec with credential hint: {User}", resolved.UserName);
 
+            // Unblock files from network paths (prevents "Open File Security Warning")
+            if (fileName.StartsWith(@"\\") || arguments.Contains(@"\\"))
+            {
+                try
+                {
+                    var zoneFile = fileName + ":Zone.Identifier";
+                    if (File.Exists(zoneFile))
+                    {
+                        File.Delete(zoneFile);
+                        _logger.LogInformation("Unblocked security zone on {File}", fileName);
+                    }
+                }
+                catch { /* best-effort — don't fail the action for this */ }
+            }
+
             using var process = System.Diagnostics.Process.Start(psi);
             if (process is null)
                 return new ActionResult(false, -1, "Failed to start process");
@@ -517,7 +563,14 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 }
             }
 
-            return new ActionResult(process.ExitCode == 0, process.ExitCode, "");
+            if (process.ExitCode != 0)
+            {
+                var errDetail = ClassifyExitCode(process.ExitCode, resolved.Command, "");
+                var errMsg = $"Local command failed: {fileName} {arguments}. {errDetail}".TrimEnd();
+                OutputReceived?.Invoke("Controller", $"[FAIL] Exit code {process.ExitCode}: {errDetail}", "stderr");
+                return new ActionResult(false, process.ExitCode, errMsg);
+            }
+            return new ActionResult(true, 0, "");
         }
         catch (Exception ex)
         {
@@ -548,6 +601,36 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 (command, arguments),
         };
     }
+
+    /// <summary>
+    /// Maps known exit codes to human-readable explanations.
+    /// </summary>
+    internal static string ClassifyExitCode(int exitCode, string command, string errorMsg)
+    {
+        return exitCode switch
+        {
+            0 => "",
+            1 => "[GENERAL ERROR]",
+            2 => "[FILE NOT FOUND] The command or script path may be incorrect.",
+            3 => "[PATH NOT FOUND] A directory in the path does not exist.",
+            5 => "[ACCESS DENIED] Insufficient permissions or file locked.",
+            -1 => "[ABNORMAL EXIT]",
+            -1073741510 => "[CTRL+C / KILLED] Process was terminated externally.",
+            -1073741819 => "[ACCESS VIOLATION] Process crashed with memory error.",
+            -532462766 => "[.NET UNHANDLED EXCEPTION] Application crashed.",
+            259 => "[STILL RUNNING] Process timeout — may be waiting for user input (security dialog, UAC).",
+            1603 => "[MSI INSTALL FAILED] Windows Installer reported failure. Check install logs.",
+            3010 => "[REBOOT REQUIRED] Installation succeeded but requires restart.",
+            _ => errorMsg.Contains("security", StringComparison.OrdinalIgnoreCase)
+                ? "[SECURITY BLOCKED] File may be blocked by Windows security policy."
+                : errorMsg.Contains("not recognized", StringComparison.OrdinalIgnoreCase)
+                ? "[COMMAND NOT FOUND] The command or executable was not found."
+                : ""
+        };
+    }
+
+    private static string Truncate(string s, int max)
+        => s.Length <= max ? s : s[..max] + "…";
 
     private async Task WaitForAgentReady(
         TestAgentService.TestAgentServiceClient client,
@@ -671,5 +754,29 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         public void Dispose() => _channel.Dispose();
 
         public ResiliencePipeline Resilience { get; }
+    }
+
+    /// <summary>
+    /// Ensures the address has an http:// or https:// scheme.
+    /// Defaults to http:// with port 5200 when not specified.
+    /// </summary>
+    private static string NormalizeAddress(string address)
+    {
+        address = address?.Trim() ?? "";
+        if (string.IsNullOrEmpty(address)) return address;
+
+        if (!address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            address = "http://" + address;
+        }
+
+        if (Uri.TryCreate(address, UriKind.Absolute, out var uri) &&
+            uri.Port is -1 or 80 && uri.Scheme == "http")
+        {
+            address = $"http://{uri.Host}:5200";
+        }
+
+        return address;
     }
 }

@@ -294,3 +294,29 @@ public sealed class ActionExecutionResult
 }
 
 public enum ActionOutcome { Unknown, Success, Failed, Terminated, TimedOut }
+
+/// <summary>
+/// Documents common Windows/MSI/PowerShell exit codes
+/// for diagnostic display in the execution log.
+/// </summary>
+public static class ExitCodeReference
+{
+    public static string Describe(int code) => code switch
+    {
+        0 => "Success",
+        1 => "General error",
+        2 => "File not found",
+        3 => "Path not found",
+        5 => "Access denied",
+        259 => "Process still running (timeout or waiting for input)",
+        1603 => "MSI install fatal error",
+        1618 => "Another MSI install in progress",
+        1641 => "MSI: reboot initiated",
+        3010 => "MSI: reboot required to complete",
+        -1 => "Abnormal termination",
+        -1073741510 => "Process killed (Ctrl+C or TaskKill)",
+        -1073741819 => "Access violation (crash)",
+        -532462766 => ".NET unhandled exception",
+        _ => $"Unknown exit code {code}"
+    };
+}

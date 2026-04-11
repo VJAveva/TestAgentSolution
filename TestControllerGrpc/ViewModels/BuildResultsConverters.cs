@@ -159,3 +159,22 @@ public class EnumEqualsToBoolConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// Converts a flaky classification string (Consistent, Frequent, Intermittent)
+/// to the corresponding Color for display in the flaky tests panel.
+/// </summary>
+public class FlakyClassificationColorConverter : IValueConverter
+{
+    public static readonly FlakyClassificationColorConverter Instance = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var hex = FlakyClassificationHelper.GetColor(value as string ?? "");
+        try { return (Color)ColorConverter.ConvertFromString(hex); }
+        catch { return Colors.Gray; }
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

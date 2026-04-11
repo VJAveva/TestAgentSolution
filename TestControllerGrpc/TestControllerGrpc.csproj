@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TestControllerGrpc.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Required for hosting gRPC server (Kestrel) alongside WPF -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>

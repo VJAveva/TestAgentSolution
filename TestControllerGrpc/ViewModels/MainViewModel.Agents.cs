@@ -36,6 +36,34 @@ public sealed partial class MainViewModel
         RegisteredAgents.Remove(vm);
     }
 
+    /// <summary>
+    /// Normalizes a user-supplied agent address:
+    ///   "jvkbak:5200"          ? "http://jvkbak:5200"
+    ///   "jvkbak"               ? "http://jvkbak:5200"
+    ///   "http://jvkbak:5200"   ? "http://jvkbak:5200"  (no change)
+    ///   "https://jvkbak:5200"  ? "https://jvkbak:5200" (no change)
+    /// </summary>
+    internal static string NormalizeAgentAddress(string raw, int defaultPort = 5200)
+    {
+        var address = raw?.Trim() ?? "";
+        if (string.IsNullOrEmpty(address)) return address;
+
+        if (!address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            address = "http://" + address;
+        }
+
+        if (Uri.TryCreate(address, UriKind.Absolute, out var uri))
+        {
+            // Port -1 means no port in URI; port 80 is the http default (unlikely for gRPC)
+            if (uri.Port is -1 or 80 && uri.Scheme == "http")
+                address = $"{uri.Scheme}://{uri.Host}:{defaultPort}";
+        }
+
+        return address;
+    }
+
     [RelayCommand]
     private async Task RegisterAgent()
     {
@@ -45,15 +73,15 @@ public sealed partial class MainViewModel
             return;
         }
 
-        if (!Uri.TryCreate(NewAgentAddress, UriKind.Absolute, out var uri)
-            || uri.Scheme != "http" || uri.Port == 0)
+        var name = NewAgentName.Trim();
+        var addr = NormalizeAgentAddress(NewAgentAddress);
+        NewAgentAddress = addr;
+
+        if (!Uri.TryCreate(addr, UriKind.Absolute, out _))
         {
             AddLog($"Invalid address: {NewAgentAddress}. Use http://hostname:port");
             return;
         }
-
-        var name = NewAgentName.Trim();
-        var addr = NewAgentAddress.Trim();
 
         // Remove existing if re-registering
         var existing = FindAgent(name);
@@ -352,6 +380,8 @@ public sealed partial class MainViewModel
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            address = NormalizeAgentAddress(address);
+
             // If already in list, update address; else add new
             var existing = FindAgent(name);
             if (existing is not null)

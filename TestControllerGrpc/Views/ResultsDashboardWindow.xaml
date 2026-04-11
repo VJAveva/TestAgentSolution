@@ -242,6 +242,20 @@
                                     <TextBlock Text="Alerts" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                 </StackPanel>
                             </Button>
+                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding LoadFlakyTestsCommand}"
+                                    ToolTip="Detect tests that fail intermittently (flaky)">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE783;" Foreground="{DynamicResource AccYellow}" />
+                                    <TextBlock Text="Flaky" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding LoadUseCaseTrendsCommand}"
+                                    ToolTip="Per-UseCase pass rate trends across builds">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8A1;" Foreground="{DynamicResource AccMauve}" />
+                                    <TextBlock Text="UC Trends" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                         <TextBlock Text="Export &amp; Analysis" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
@@ -341,68 +355,233 @@
                     </WrapPanel>
                 </Border>
 
-                <!-- ??? FAILURE ALERTS PANEL ??? -->
-                <Border DockPanel.Dock="Bottom" Background="#15EF4444" Padding="10,8" Margin="8,0,8,8"
-                        CornerRadius="6"
-                        Visibility="{Binding FailureAlerts.Count, Converter={x:Static vm:GreaterThanZeroToVisConverter.Instance}}">
-                    <DockPanel>
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                            <TextBlock Text="&#xEA39;" FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                       Foreground="#EF4444" VerticalAlignment="Center" Margin="0,0,6,0" />
-                            <TextBlock FontSize="11" FontWeight="Bold" Foreground="#EF4444" VerticalAlignment="Center">
-                                <Run Text="PRIORITY INVESTIGATION" />
-                                <Run Text=" (" /><Run Text="{Binding FailureAlerts.Count, Mode=OneWay}" />
-                                <Run Text=" tests failing consecutively)" />
-                            </TextBlock>
-                            <Button Content="Send QA Alert" Style="{StaticResource SmBtn}" Command="{Binding SendQaAlertCommand}"
-                                    Background="#EF4444" Foreground="#FFFFFF" FontSize="10" Padding="8,3" Margin="12,0,0,0" />
-                            <Button Content="Copy Alerts" Style="{StaticResource SmBtn}" Command="{Binding CopyAlertListCommand}"
-                                    Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}" FontSize="10" Padding="8,3" Margin="4,0,0,0" />
-                        </StackPanel>
-                        <ItemsControl ItemsSource="{Binding FailureAlerts}" MaxHeight="120">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#10EF4444" CornerRadius="3" Padding="8,3" Margin="0,1">
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left" FontSize="10" FontWeight="Bold" Width="65" VerticalAlignment="Center"
-                                                       Margin="0,0,8,0">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="#F59E0B" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Priority}" Value="CRITICAL">
-                                                                <Setter Property="Foreground" Value="#EF4444" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Priority}" Value="HIGH">
-                                                                <Setter Property="Foreground" Value="#EA580C" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                                <Run Text="{Binding Priority, Mode=OneWay}" />
-                                            </TextBlock>
-                                            <TextBlock DockPanel.Dock="Right" FontSize="9" Foreground="{DynamicResource TextS}"
-                                                       VerticalAlignment="Center" Margin="8,0,0,0">
-                                                <Run Text="{Binding ConsecutiveFailCount, Mode=OneWay}" />
-                                                <Run Text=" builds" />
-                                            </TextBlock>
-                                            <TextBlock FontSize="11" Foreground="#EF4444" TextTrimming="CharacterEllipsis"
-                                                       VerticalAlignment="Center" ToolTip="{Binding LastError}">
-                                                <Run Text="{Binding TestName, Mode=OneWay}" FontWeight="SemiBold" />
-                                                <Run Text=" &#x2014; " Foreground="{DynamicResource TextS}" />
-                                                <Run Text="{Binding UseCaseName, Mode=OneWay}" Foreground="{DynamicResource TextS}" FontSize="10" />
-                                            </TextBlock>
-                                        </DockPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </DockPanel>
+                <!-- ??? ANALYSIS TABS (replaces 3 stacked panels) ??? -->
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource BgPanel}" CornerRadius="6"
+                        BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                        Margin="8,0,8,8" MinHeight="200">
+                    <TabControl Background="Transparent" BorderThickness="0" Padding="0">
+                        <TabControl.Resources>
+                            <Style TargetType="TabItem">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                <Setter Property="Padding" Value="12,6" />
+                                <Setter Property="FontSize" Value="11" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TabItem">
+                                            <Border x:Name="TabBd" Background="{TemplateBinding Background}"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    BorderThickness="0,0,0,2" BorderBrush="Transparent"
+                                                    Cursor="Hand">
+                                                <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="TabBd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="TabBd" Property="Background" Value="{DynamicResource TabHoverBg}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TabControl.Resources>
+
+                        <!-- TAB 1: Per-UseCase Trends -->
+                        <TabItem>
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="UC Trends" />
+                                    <TextBlock Text="{Binding UseCaseTrends.Count, StringFormat=' ({0})'}"
+                                               Foreground="{DynamicResource TextS}" FontSize="10"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </TabItem.Header>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,8,8,4">
+                                    <TextBlock Text="Range:" FontSize="10" Foreground="{DynamicResource TextS}"
+                                               VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <Button Content="5" Style="{StaticResource SmBtn}" FontSize="9" Padding="6,2" Margin="1"
+                                            Command="{Binding SetTrendRange5Command}" ToolTip="Last 5 builds" />
+                                    <Button Content="10" Style="{StaticResource SmBtn}" FontSize="9" Padding="6,2" Margin="1"
+                                            Command="{Binding SetTrendRange10Command}" ToolTip="Last 10 builds" />
+                                    <Button Content="20" Style="{StaticResource SmBtn}" FontSize="9" Padding="6,2" Margin="1"
+                                            Command="{Binding SetTrendRange20Command}" ToolTip="Last 20 builds" />
+                                </StackPanel>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
+                                    <ItemsControl ItemsSource="{Binding UseCaseTrends}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#08FFFFFF" CornerRadius="3" Padding="8,4" Margin="0,1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="30" />
+                                                            <ColumnDefinition Width="160" />
+                                                            <ColumnDefinition Width="60" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="50" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding TrendIcon}" FontSize="12" FontWeight="Bold"
+                                                                   VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                            <TextBlock.Foreground>
+                                                                <SolidColorBrush Color="{Binding TrendColor, Converter={x:Static vm:StringToColorConverter.Instance}}" />
+                                                            </TextBlock.Foreground>
+                                                        </TextBlock>
+                                                        <TextBlock Grid.Column="1" Text="{Binding UseCaseName}" FontSize="11" FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource TextP}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding LatestPassRateFormatted}" FontSize="11" FontWeight="Bold"
+                                                                   VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                            <TextBlock.Foreground>
+                                                                <SolidColorBrush Color="{Binding TrendColor, Converter={x:Static vm:StringToColorConverter.Instance}}" />
+                                                            </TextBlock.Foreground>
+                                                        </TextBlock>
+                                                        <TextBlock Grid.Column="3" Text="{Binding SparklineText}" FontSize="9" FontFamily="Consolas"
+                                                                   Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="4" FontSize="9" Foreground="{DynamicResource TextS}"
+                                                                   VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                            <Run Text="{Binding BuildCount, Mode=OneWay}" /><Run Text=" builds" />
+                                                        </TextBlock>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </TabItem>
+
+                        <!-- TAB 2: Flaky Tests -->
+                        <TabItem>
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Flaky Tests" />
+                                    <TextBlock Text="{Binding FlakyTests.Count, StringFormat=' ({0})'}"
+                                               Foreground="{DynamicResource AccYellow}" FontSize="10"
+                                               FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </TabItem.Header>
+                            <DockPanel>
+                                <Border DockPanel.Dock="Top" Background="{DynamicResource InfoBoxBg}"
+                                        Padding="8,6" Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding FlakyTestSummary}" FontSize="11"
+                                               Foreground="{DynamicResource AccYellow}" />
+                                </Border>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
+                                    <ItemsControl ItemsSource="{Binding FlakyTests}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border CornerRadius="3" Padding="8,3" Margin="0,1">
+                                                    <Border.Background>
+                                                        <SolidColorBrush Color="{Binding Classification,
+                                                            Converter={x:Static vm:FlakyClassificationColorConverter.Instance}}" Opacity="0.1" />
+                                                    </Border.Background>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" FontSize="10" FontWeight="Bold" Width="85"
+                                                                   VerticalAlignment="Center" Margin="0,0,8,0">
+                                                            <TextBlock.Foreground>
+                                                                <SolidColorBrush Color="{Binding Classification,
+                                                                    Converter={x:Static vm:FlakyClassificationColorConverter.Instance}}" />
+                                                            </TextBlock.Foreground>
+                                                            <Run Text="{Binding Classification, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                        <TextBlock DockPanel.Dock="Right" FontSize="9" Foreground="{DynamicResource TextS}"
+                                                                   VerticalAlignment="Center" Margin="8,0,0,0">
+                                                            <Run Text="{Binding FailureCount, Mode=OneWay}" /><Run Text="/" /><Run Text="{Binding TotalRuns, Mode=OneWay}" />
+                                                            <Run Text=" (" /><Run Text="{Binding FlakyRate, StringFormat='{}{0:F0}%', Mode=OneWay}" /><Run Text=")" />
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="11" TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" ToolTip="{Binding LastError}">
+                                                            <TextBlock.Foreground>
+                                                                <SolidColorBrush Color="{Binding Classification,
+                                                                    Converter={x:Static vm:FlakyClassificationColorConverter.Instance}}" />
+                                                            </TextBlock.Foreground>
+                                                            <Run Text="{Binding TestName, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text=" &#x2014; " Foreground="{DynamicResource TextS}" />
+                                                            <Run Text="{Binding UseCaseName, Mode=OneWay}" Foreground="{DynamicResource TextS}" FontSize="10" />
+                                                        </TextBlock>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </TabItem>
+
+                        <!-- TAB 3: Priority Investigation -->
+                        <TabItem>
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Priority" />
+                                    <TextBlock Text="{Binding FailureAlerts.Count, StringFormat=' ({0})'}"
+                                               Foreground="{DynamicResource AccRed}" FontSize="10"
+                                               FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </TabItem.Header>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,8,8,4">
+                                    <TextBlock FontSize="11" FontWeight="Bold" Foreground="#EF4444"
+                                               VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Run Text="{Binding FailureAlerts.Count, Mode=OneWay}" />
+                                        <Run Text=" tests failing consecutively" />
+                                    </TextBlock>
+                                    <Button Content="Send QA Alert" Style="{StaticResource SmBtn}" Command="{Binding SendQaAlertCommand}"
+                                            Background="#EF4444" Foreground="#FFFFFF" FontSize="10" Padding="8,3" Margin="0,0,4,0" />
+                                    <Button Content="Copy Alerts" Style="{StaticResource SmBtn}" Command="{Binding CopyAlertListCommand}"
+                                            Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}" FontSize="10" Padding="8,3" />
+                                </StackPanel>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
+                                    <ItemsControl ItemsSource="{Binding FailureAlerts}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#10EF4444" CornerRadius="3" Padding="8,3" Margin="0,1">
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" FontSize="10" FontWeight="Bold" Width="65" VerticalAlignment="Center"
+                                                                   Margin="0,0,8,0">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="#F59E0B" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Priority}" Value="CRITICAL">
+                                                                            <Setter Property="Foreground" Value="#EF4444" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Priority}" Value="HIGH">
+                                                                            <Setter Property="Foreground" Value="#EA580C" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                            <Run Text="{Binding Priority, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                        <TextBlock DockPanel.Dock="Right" FontSize="9" Foreground="{DynamicResource TextS}"
+                                                                   VerticalAlignment="Center" Margin="8,0,0,0">
+                                                            <Run Text="{Binding ConsecutiveFailCount, Mode=OneWay}" />
+                                                            <Run Text=" builds" />
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="11" Foreground="#EF4444" TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" ToolTip="{Binding LastError}">
+                                                            <Run Text="{Binding TestName, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text=" &#x2014; " Foreground="{DynamicResource TextS}" />
+                                                            <Run Text="{Binding UseCaseName, Mode=OneWay}" Foreground="{DynamicResource TextS}" FontSize="10" />
+                                                        </TextBlock>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </TabItem>
+
+                    </TabControl>
                 </Border>
 
-                <!-- ??????????????????????????????????????????????????? -->
-                <!-- SPLIT: LEFT GRID + RIGHT DETAIL PANEL              -->
-                <!-- ??????????????????????????????????????????????????? -->
                 <Grid Margin="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*" MinWidth="400" />

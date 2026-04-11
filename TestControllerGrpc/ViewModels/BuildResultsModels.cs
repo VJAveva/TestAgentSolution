@@ -13,6 +13,9 @@ public enum ReportScope { SingleBuild, Consolidated }
 /// <summary>Predefined time range filters for consolidated reporting.</summary>
 public enum TimeRangeFilter { OneDay, OneWeek, OneMonth, Custom }
 
+/// <summary>Number of recent builds to analyze for per-UseCase trends.</summary>
+public enum TrendRangeFilter { Last5, Last10, Last20 }
+
 /// <summary>Item shown in the build dropdown list.</summary>
 public partial class BuildListItem : ObservableObject
 {
@@ -142,5 +145,32 @@ public class UseCaseTrendViewModel
         "Improving" => "#10B981",
         "Declining" => "#EF4444",
         _ => "#94A3B8"
+    };
+    public string LatestPassRateFormatted => $"{LatestPassRate:F1}%";
+    public int BuildCount => Entries.Count;
+
+    /// <summary>Compact sparkline text: shows pass rate per build (e.g. "95 ? 93 ? 90").</summary>
+    public string SparklineText => Entries.Count > 0
+        ? string.Join(" \u2192 ", Entries.TakeLast(5).Select(e => $"{e.PassRate:F0}"))
+        : "";
+}
+
+/// <summary>Helper to map flaky classification to display color.</summary>
+public static class FlakyClassificationHelper
+{
+    public static string GetColor(string classification) => classification switch
+    {
+        "Consistent" => "#EF4444",
+        "Frequent" => "#F59E0B",
+        "Intermittent" => "#60A5FA",
+        _ => "#94A3B8"
+    };
+
+    public static string GetIcon(string classification) => classification switch
+    {
+        "Consistent" => "\u2717",   // ?
+        "Frequent" => "\u26A0",     // ?
+        "Intermittent" => "\u223C", // ?
+        _ => "\u25CB"
     };
 }
