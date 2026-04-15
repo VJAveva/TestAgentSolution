@@ -56,6 +56,7 @@ public partial class App : Application
                     return rc;
                 });
                 services.AddSingleton<BuildResultsAggregator>();
+                services.AddSingleton<BuildReportHtmlGenerator>();
                 services.AddSingleton<BuildResultsViewModel>();
             })
             .Build();

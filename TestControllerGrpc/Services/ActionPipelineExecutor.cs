@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Mail;
 using System.Net.Mime;
@@ -26,6 +27,9 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<ActionPipelineExecutor> _logger;
+    private readonly TrxResultsParser _parser;
+    private readonly BuildResultsAggregator _aggregator;
+    private readonly BuildReportHtmlGenerator _htmlGenerator;
     private Dictionary<string, TemplateConfig> _templates = new();
 
     /// <summary>Raised for every action/event in the pipeline.</summary>
@@ -45,11 +49,17 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
     public ActionPipelineExecutor(
         IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager,
-        ILogger<ActionPipelineExecutor> logger)
+        ILogger<ActionPipelineExecutor> logger,
+        TrxResultsParser parser,
+        BuildResultsAggregator aggregator,
+        BuildReportHtmlGenerator htmlGenerator)
     {
         _dispatcher = dispatcher;
         _sessionManager = sessionManager;
         _logger = logger;
+        _parser = parser;
+        _aggregator = aggregator;
+        _htmlGenerator = htmlGenerator;
     }
 
     /// <summary>
@@ -249,7 +259,7 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
 
                 case ActionType.SendMail:
                     Log("Action", $"SendMail: To={resolved.To}, Title={resolved.Title}");
-                    result = ExecuteSendMail(resolved);
+                    result = ExecuteSendMail(resolved, ctx);
                     break;
 
                 default:
@@ -328,8 +338,9 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
     ///   • Comma-separated attachment paths → copied to LargeFilesShare and linked in body
     ///   • Comma-separated embed file paths → inlined as HTML body content
     ///   • Files exceeding 500 KB are also redirected to LargeFilesShare as links
+    ///   • [ResultsEmail] token in Body → auto-generates HTML email from parsed .trx results
     /// </summary>
-    private ActionResult ExecuteSendMail(ActionConfig resolved)
+    private ActionResult ExecuteSendMail(ActionConfig resolved, PipelineExecutionContext ctx)
     {
         if (string.IsNullOrWhiteSpace(resolved.From) || string.IsNullOrWhiteSpace(resolved.To))
             return new ActionResult(false, -1, "SendMail: From and To addresses are required.");
@@ -347,6 +358,47 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
             var body = resolved.Body ?? "";
             int linkCount = 0;
             bool isHtml = false;
+
+            // ── [ResultsEmail] token → auto-generate HTML email from .trx results ──
+            if (body.Contains("[ResultsEmail]"))
+            {
+                try
+                {
+                    var resultsPath = ctx.Parameters.GetValueOrDefault("_ResultsPath")
+                        ?? ctx.Parameters.GetValueOrDefault("ResultsPath")
+                        ?? "";
+                    if (string.IsNullOrWhiteSpace(resultsPath))
+                        resultsPath = resolved.Parameters; // fallback: use Parameters field as results path
+
+                    if (!string.IsNullOrWhiteSpace(resultsPath) && Directory.Exists(resultsPath))
+                    {
+                        var buildNode = _parser.ParseBuildFolder(resultsPath);
+                        buildNode = _aggregator.EvaluateBuildHealth(buildNode);
+
+                        var product = ctx.Parameters.GetValueOrDefault("_Product")
+                            ?? ctx.Parameters.GetValueOrDefault("Product")
+                            ?? "AVEVA System Platform";
+                        var machine = Environment.MachineName;
+                        var buildPath = resultsPath;
+                        var reportLink = ctx.Parameters.GetValueOrDefault("_ReportLink")
+                            ?? ctx.Parameters.GetValueOrDefault("ReportLink")
+                            ?? "";
+
+                        body = _htmlGenerator.GenerateEmailHtml(buildNode, product, machine, buildPath, reportLink);
+                        isHtml = true;
+                        Log("SendMail", $"Generated results email from: {resultsPath} ({buildNode.TotalTests} tests, {buildNode.PassRate:F1}% pass rate)");
+                    }
+                    else
+                    {
+                        Log("SendMail", $"⚠ [ResultsEmail] token found but results path not found or empty: '{resultsPath}'");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SendMail: Failed to generate results email");
+                    Log("SendMail", $"⚠ Failed to generate results email: {ex.Message} — falling back to plain body");
+                }
+            }
 
             // ── Attachments → copy to LargeFilesShare and add links ────
             if (!string.IsNullOrWhiteSpace(resolved.Attachment))

@@ -16,10 +16,14 @@ public class ActionPipelineExecutorTests
     {
         _dispatcher = new Mock<IAgentGrpcDispatcher>();
         _sessionManager = new ExecutionSessionManager();
+        var config = new BuildResultsConfig();
         _executor = new ActionPipelineExecutor(
             _dispatcher.Object,
             _sessionManager,
-            NullLogger<ActionPipelineExecutor>.Instance);
+            NullLogger<ActionPipelineExecutor>.Instance,
+            new TrxResultsParser(),
+            new BuildResultsAggregator(config),
+            new BuildReportHtmlGenerator(config));
     }
 
     private static PipelineExecutionContext CreateContext() => new();

@@ -100,12 +100,12 @@ public partial class BuildResultsViewModel : ObservableObject
     // Constructor
     // ???????????????????????????????????????????????????????????????
 
-    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config)
+    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator)
     {
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
-        _htmlGenerator = new BuildReportHtmlGenerator(config);
+        _htmlGenerator = htmlGenerator;
         _goodThreshold = config.GoodThreshold;
         _warningThreshold = config.WarningThreshold;
         _resultsRootPath = config.ResultsRootPath;
