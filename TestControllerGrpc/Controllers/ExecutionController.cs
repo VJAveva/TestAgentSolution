@@ -1,10 +1,20 @@
+using System.IO;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
 using TestControllerGrpc.Hubs;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Controllers;
+
+/// <summary>Request body for triggering with parameters.</summary>
+public record TriggerRequest
+{
+    public string? BuildNumber { get; init; }
+    public string? DropLocation { get; init; }
+    public Dictionary<string, string>? Parameters { get; init; }
+}
 
 [ApiController]
 [Route("api/execution")]
@@ -52,11 +62,14 @@ public class ExecutionController : ControllerBase
 
     /// <summary>
     /// POST /api/execution/trigger/{watchItemTag}?eventType=Renamed — trigger a WatchItem.
+    /// Accepts an optional JSON body with build number, drop location, and custom parameters.
     /// Uses a lock to prevent TOCTOU race between concurrent trigger requests.
     /// </summary>
     [HttpPost("trigger/{watchItemTag}")]
     public async Task<IActionResult> TriggerWatchItem(
-        string watchItemTag, [FromQuery] string? eventType = null)
+        string watchItemTag,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TriggerRequest? request = null,
+        [FromQuery] string? eventType = null)
     {
         var config = _vocabMonitor.CurrentConfig;
         var watchItem = config?.WatchItems
@@ -84,11 +97,61 @@ public class ExecutionController : ControllerBase
                 return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });
         }
 
+        // Build parameters: load from Initialize node's file, then merge request overrides
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var paramFile = FindInitializeFile(watchItem);
+        if (paramFile != null && System.IO.File.Exists(paramFile))
+        {
+            var entries = ParameterResolver.ParseParameterFile(paramFile);
+            foreach (var (key, value) in entries)
+            {
+                parameters[key] = value;
+                if (key.StartsWith('_'))
+                    parameters[key[1..]] = value;
+            }
+        }
+
+        // Override with request parameters
+        if (!string.IsNullOrEmpty(request?.BuildNumber))
+        {
+            parameters["_BuildNumber"] = request.BuildNumber;
+            parameters["BuildNumber"] = request.BuildNumber;
+        }
+        if (!string.IsNullOrEmpty(request?.DropLocation))
+        {
+            parameters["_DropLocation"] = request.DropLocation;
+            parameters["DropLocation"] = request.DropLocation;
+        }
+        if (request?.Parameters != null)
+        {
+            foreach (var kvp in request.Parameters)
+            {
+                parameters[kvp.Key] = kvp.Value;
+                if (kvp.Key.StartsWith('_'))
+                    parameters[kvp.Key[1..]] = kvp.Value;
+            }
+        }
+
+        // Write updated parameters back to Variables.txt so WPF also sees them
+        if (paramFile != null && parameters.Count > 0)
+        {
+            try
+            {
+                var lines = parameters
+                    .Where(kvp => kvp.Key.StartsWith('_'))
+                    .Select(kvp => $"{kvp.Key},{kvp.Value}");
+                await System.IO.File.WriteAllLinesAsync(paramFile, lines);
+            }
+            catch { /* best effort — file may be locked */ }
+        }
+
+        var sessionId = Guid.NewGuid().ToString("N")[..12];
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = watchItem.Path,
-            SessionId = Guid.NewGuid().ToString("N")[..12],
+            SessionId = sessionId,
             StartedUtc = DateTime.UtcNow,
+            Parameters = parameters,
         };
 
         // Fire and forget — ExecuteEventTrackedAsync handles session lifecycle
@@ -97,21 +160,55 @@ public class ExecutionController : ControllerBase
             try
             {
                 await _executor.ExecuteEventTrackedAsync(watchItemTag, evt, ctx, CancellationToken.None);
+
+                // Read the actual session state set by CompleteSession —
+                // the executor doesn't throw on partial failure (FailAndContinue),
+                // so we must read the session's final state rather than assuming success.
+                var completedSession = _sessionManager.GetSession(sessionId)
+                    ?? _sessionManager.GetLastSession(watchItemTag);
+                var finalState = completedSession?.State switch
+                {
+                    SessionState.Completed => "Success",
+                    SessionState.PartialFailure => "PartialFailure",
+                    SessionState.Failed => "Failed",
+                    _ => "Success",
+                };
+
+                await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
+                {
+                    sessionId,
+                    watchItemTag,
+                    state = finalState,
+                    passed = completedSession?.SucceededCount ?? 0,
+                    failed = completedSession?.FailedCount ?? 0,
+                    total = completedSession?.TotalActions ?? 0,
+                    timestamp = DateTime.UtcNow.ToString("o"),
+                });
             }
             catch (OperationCanceledException)
             {
-                await _hub.Clients.Group("global").SendAsync("ExecutionCancelled", new
+                await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
+                    sessionId,
                     watchItemTag,
+                    state = "Cancelled",
+                    passed = 0,
+                    failed = 0,
+                    total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
                 });
             }
             catch (Exception ex)
             {
-                await _hub.Clients.Group("global").SendAsync("ExecutionError", new
+                await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
+                    sessionId,
                     watchItemTag,
+                    state = "Failed",
                     error = ex.Message,
+                    passed = 0,
+                    failed = 0,
+                    total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
                 });
             }
@@ -119,6 +216,7 @@ public class ExecutionController : ControllerBase
 
         await _hub.Clients.Group("global").SendAsync("ExecutionStarted", new
         {
+            sessionId,
             watchItemTag,
             eventType = evt.Type,
             startTime = DateTime.UtcNow.ToString("o"),
@@ -127,8 +225,33 @@ public class ExecutionController : ControllerBase
 
         return Accepted(new
         {
+            sessionId,
             message = $"WatchItem '{watchItemTag}' triggered (event: {evt.Type})",
         });
+    }
+
+    /// <summary>GET /api/execution/available-builds?basePath=... — list builds from a network path.</summary>
+    [HttpGet("available-builds")]
+    public IActionResult GetAvailableBuilds([FromQuery] string? basePath)
+    {
+        if (string.IsNullOrEmpty(basePath))
+            return Ok(new { builds = Array.Empty<object>() });
+
+        if (!Directory.Exists(basePath))
+            return NotFound(new { error = $"Path not found: {basePath}" });
+
+        var builds = Directory.GetDirectories(basePath)
+            .Select(d => new
+            {
+                name = Path.GetFileName(d),
+                path = d,
+                modified = Directory.GetLastWriteTime(d),
+            })
+            .OrderByDescending(b => b.modified)
+            .Take(50)
+            .ToList();
+
+        return Ok(new { builds });
     }
 
     /// <summary>POST /api/execution/{sessionId}/cancel — cancel a running session.</summary>
@@ -161,4 +284,33 @@ public class ExecutionController : ControllerBase
         failedCount = s.FailedCount,
         summary = s.SummaryText,
     };
+
+    /// <summary>
+    /// Finds the first Initialize node's ParameterFile in a WatchItem's event tree.
+    /// Returns the resolved file path, or null if none found.
+    /// </summary>
+    private static string? FindInitializeFile(WatchItemConfig watchItem)
+    {
+        foreach (var ev in watchItem.Events)
+        {
+            var file = FindInitializeFileInChildren(ev.Children);
+            if (file != null) return file;
+        }
+        return null;
+    }
+
+    private static string? FindInitializeFileInChildren(List<IActionNode> children)
+    {
+        foreach (var child in children)
+        {
+            if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
+                return init.ParameterFile;
+            if (child is ActionGroupConfig group)
+            {
+                var file = FindInitializeFileInChildren(group.Children);
+                if (file != null) return file;
+            }
+        }
+        return null;
+    }
 }

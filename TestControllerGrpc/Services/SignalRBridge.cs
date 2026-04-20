@@ -69,10 +69,37 @@ public sealed class SignalRBridge : IDisposable
 
     private void OnLogEntry(PipelineLogEntry entry)
     {
+        // Extract sessionId from message prefix pattern: [sessionId] ...
+        var sessionId = "";
+        var message = entry.Message;
+        if (message.StartsWith('[') && message.IndexOf(']') is > 0 and var endBracket)
+        {
+            sessionId = message[1..endBracket];
+        }
+
+        // Infer severity from message content
+        var severity = message.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("?", StringComparison.Ordinal)
+            ? "Error"
+            : message.Contains("Success", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("?", StringComparison.Ordinal)
+              ? "Success"
+              : message.Contains("?", StringComparison.Ordinal)
+                    || message.Contains("Warning", StringComparison.OrdinalIgnoreCase)
+                ? "Warning"
+                : "Info";
+
+        // Infer agent name from category when available
+        var agentName = entry.Category == "Action" || entry.Category == "Retry"
+            ? "Controller" : "";
+
         SendSafe("LogEntry", new
         {
             timestamp = entry.Timestamp.ToString("HH:mm:ss.fff"),
+            sessionId,
+            severity,
             category = entry.Category,
+            agentName,
             message = entry.Message,
         });
     }
@@ -89,6 +116,7 @@ public sealed class SignalRBridge : IDisposable
                 agentName,
                 command = action.Command,
                 status,
+                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
             });
         }
         else if (node is ActionGroupConfig group)
@@ -98,18 +126,31 @@ public sealed class SignalRBridge : IDisposable
                 groupTag = group.Tag,
                 executionType = group.ExecutionType.ToString(),
                 status,
+                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
             });
         }
     }
 
     private void OnOutputReceived(string agentName, string line, string kind)
     {
+        // Broadcast as AgentOutput for execution monitor
         SendSafe("AgentOutput", new
         {
             agentName,
             line,
             kind,
             timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+        });
+
+        // Also broadcast as LogEntry for the unified log viewer
+        SendSafe("LogEntry", new
+        {
+            timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+            sessionId = "",
+            severity = kind == "stderr" ? "Error" : "Info",
+            category = "Output",
+            agentName,
+            message = $"[{agentName}:{kind}] {line}",
         });
     }
 
