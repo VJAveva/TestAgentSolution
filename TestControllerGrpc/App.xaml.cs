@@ -39,6 +39,7 @@ public partial class App : Application
                 services.AddSingleton<IWatchListXmlParser, WatchListXmlParserService>();
                 services.AddHostedService<ControllerHostedService>();
                 services.AddHostedService<ControllerGrpcServerHost>();
+                services.AddHostedService<ControllerWebApiHost>();
 
                 // Application logger (file + in-memory ring buffer)
                 services.AddSingleton<IAppLogger>(sp =>

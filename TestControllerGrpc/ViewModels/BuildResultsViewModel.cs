@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -1184,7 +1183,7 @@ public partial class BuildResultsViewModel : ObservableObject
                 if (!Directory.Exists(build.Path))
                 {
                     Interlocked.Increment(ref done);
-                    Application.Current?.Dispatcher.Invoke(() =>
+                    Application.Current?.Dispatcher.InvokeAsync(() =>
                         StatusMessage = $"Skipped {build.BuildNumber} (folder no longer exists).");
                     return;
                 }
@@ -1202,7 +1201,7 @@ public partial class BuildResultsViewModel : ObservableObject
                 }
 
                 var current = Interlocked.Increment(ref done);
-                Application.Current?.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
                     LoadedBuildNodes.Add(node);
                     build.HasBeenLoaded = true;
@@ -1212,7 +1211,7 @@ public partial class BuildResultsViewModel : ObservableObject
             catch (Exception ex)
             {
                 Interlocked.Increment(ref done);
-                Application.Current?.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher.InvokeAsync(() =>
                     StatusMessage = $"Skipped {build.BuildNumber}: {ex.Message}");
             }
             finally

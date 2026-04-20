@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import axios from 'axios';
 import { useWatchListStore } from '../stores/watchlistStore';
 import { useAgentStore } from '../stores/agentStore';
 import { useExecutionStore } from '../stores/executionStore';
-import type { NodeStatus } from '../types/api';
+import { useConnectionStore } from '../stores/connectionStore';
+import type { NodeStatus, WatchListConfig } from '../types/api';
 
 export function useSignalR(): HubConnection | null {
   const [connection, setConnection] = useState<HubConnection | null>(null);
@@ -13,11 +15,17 @@ export function useSignalR(): HubConnection | null {
     if (started.current) return;
     started.current = true;
 
+    useConnectionStore.getState().setStatus('connecting');
+
     const conn = new HubConnectionBuilder()
       .withUrl('/hub/live')
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(LogLevel.Warning)
       .build();
+
+    conn.onreconnecting(() => useConnectionStore.getState().setStatus('connecting'));
+    conn.onreconnected(() => useConnectionStore.getState().setStatus('connected'));
+    conn.onclose(() => useConnectionStore.getState().setStatus('disconnected'));
 
     conn.on('Connected', (id: string) => {
       console.log('[SignalR] Connected:', id);
@@ -78,12 +86,29 @@ export function useSignalR(): HubConnection | null {
       });
     });
 
-    conn.start().then(() => setConnection(conn)).catch(err => {
+    // WatchList hot-reload: refetch tree when server signals config change
+    conn.on('WatchListReloaded', async () => {
+      try {
+        const { data } = await axios.get<WatchListConfig>('/api/watchlist');
+        useWatchListStore.getState().setConfig(data);
+      } catch (err) {
+        console.error('[SignalR] WatchListReloaded refetch failed:', err);
+      }
+    });
+
+    conn.start().then(() => {
+      setConnection(conn);
+      useConnectionStore.getState().setConnection(conn);
+      useConnectionStore.getState().setStatus('connected');
+    }).catch(err => {
       console.error('[SignalR] Connection failed:', err);
+      useConnectionStore.getState().setStatus('disconnected');
     });
 
     return () => {
       started.current = false;
+      useConnectionStore.getState().setConnection(null);
+      useConnectionStore.getState().setStatus('disconnected');
       conn.stop().catch(err => console.error('[SignalR] Stop error:', err));
     };
   }, []);

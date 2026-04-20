@@ -221,6 +221,16 @@ public sealed class ExecutionSession
     public DateTime? CompletedUtc { get; set; }
     public SessionState State { get; set; } = SessionState.Running;
 
+    /// <summary>
+    /// Cancellation token source for this session. Call <see cref="RequestCancellation"/>
+    /// to signal the running pipeline to stop. The token is passed through to the executor.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public CancellationTokenSource Cts { get; } = new();
+
+    /// <summary>Signals cancellation to the running pipeline.</summary>
+    public void RequestCancellation() => Cts.Cancel();
+
     // GAP 10 fix: Thread-safe collection for parallel action groups.
     // Parallel ExecuteChildrenAsync calls RecordResult from multiple threads
     // simultaneously. A plain List<T>.Add is not thread-safe and can corrupt

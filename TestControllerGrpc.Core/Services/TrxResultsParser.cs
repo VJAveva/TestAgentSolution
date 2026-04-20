@@ -30,6 +30,7 @@ public class TrxResultsParser
     private static readonly XName DebugTraceName = TrxNs + "DebugTrace";
 
     private readonly ConcurrentDictionary<string, TrxTestRun> _fileCache = new();
+    private const int MaxFileCacheSize = 500;
 
     /// <summary>
     /// Scans a build folder with structure: [BuildFolder] > [UseCaseFolder] > *.trx
@@ -250,6 +251,16 @@ public class TrxResultsParser
         };
 
         _fileCache[cacheKey] = result;
+
+        // Evict oldest entries when cache exceeds max size to prevent unbounded memory growth.
+        // Simple eviction: clear half the cache when limit is reached.
+        if (_fileCache.Count > MaxFileCacheSize)
+        {
+            var keysToRemove = _fileCache.Keys.Take(_fileCache.Count / 2).ToList();
+            foreach (var key in keysToRemove)
+                _fileCache.TryRemove(key, out _);
+        }
+
         return result;
     }
 

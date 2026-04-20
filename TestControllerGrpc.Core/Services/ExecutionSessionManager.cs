@@ -69,6 +69,19 @@ public sealed class ExecutionSessionManager
         }
     }
 
+    /// <summary>Gets a session by ID (active or history).</summary>
+    public ExecutionSession? GetSession(string sessionId)
+    {
+        if (_active.TryGetValue(sessionId, out var active)) return active;
+        lock (_historyLock) { return _history.FirstOrDefault(s => s.SessionId == sessionId); }
+    }
+
+    /// <summary>Returns the N most recent completed sessions.</summary>
+    public IReadOnlyList<ExecutionSession> GetHistory(int count)
+    {
+        lock (_historyLock) { return _history.Take(count).ToList(); }
+    }
+
     /// <summary>Returns the retryable (failed) action nodes from a given session.</summary>
     public List<IActionNode> GetRetryableNodes(string sessionId)
     {
@@ -103,6 +116,7 @@ public sealed class ExecutionSessionManager
         if (!_active.TryRemove(sessionId, out var session))
             return false;
 
+        session.RequestCancellation();
         session.CompletedUtc = DateTime.UtcNow;
         session.State = SessionState.Failed;
 
@@ -124,6 +138,7 @@ public sealed class ExecutionSessionManager
         {
             if (_active.TryRemove(id, out var session))
             {
+                session.RequestCancellation();
                 session.CompletedUtc = DateTime.UtcNow;
                 session.State = SessionState.Failed;
                 cancelledTags.Add(session.WatchItemTag);

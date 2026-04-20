@@ -26,8 +26,11 @@ export function useExecution() {
     return data;
   }, [fetchSessions]);
 
-  const triggerByTag = useCallback(async (tag: string) => {
-    const { data } = await axios.post(`/api/execution/trigger/${encodeURIComponent(tag)}`);
+  const triggerByTag = useCallback(async (
+    tag: string,
+    params?: { buildNumber?: string; dropLocation?: string; parameters?: Record<string, string> }
+  ) => {
+    const { data } = await axios.post(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
     await fetchSessions();
     return data;
   }, [fetchSessions]);

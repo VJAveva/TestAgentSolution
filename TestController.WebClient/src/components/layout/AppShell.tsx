@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Eye, Server, Play, BarChart3 } from 'lucide-react';
+import { Eye, Server, Play, BarChart3, Activity, ScrollText } from 'lucide-react';
 import WatchListTree from '../watchlist/WatchListTree';
 import NodeProperties from '../watchlist/NodeProperties';
 import WatchListToolbar from '../watchlist/WatchListToolbar';
@@ -7,20 +7,25 @@ import AgentList from '../agents/AgentList';
 import AgentDetail from '../agents/AgentDetail';
 import LiveLogger from '../execution/LiveLogger';
 import SessionList from '../execution/SessionList';
+import ExecutionMonitor from '../execution/ExecutionMonitor';
+import LogViewer from '../execution/LogViewer';
 import BuildList from '../results/BuildList';
 import BuildDetail from '../results/BuildDetail';
 import TrendCharts from '../results/TrendCharts';
 import Sidebar from './Sidebar';
+import ConnectionStatus from './ConnectionStatus';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useAgents } from '../../hooks/useAgents';
 import { useExecution } from '../../hooks/useExecution';
 
-type Tab = 'watchlist' | 'agents' | 'execution' | 'results';
+type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results';
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'watchlist', label: 'WatchList', icon: <Eye size={16} /> },
   { id: 'agents',    label: 'Agents',    icon: <Server size={16} /> },
   { id: 'execution', label: 'Execution', icon: <Play size={16} /> },
+  { id: 'monitor',   label: 'Monitor',   icon: <Activity size={16} /> },
+  { id: 'logs',      label: 'Logs',      icon: <ScrollText size={16} /> },
   { id: 'results',   label: 'Results',   icon: <BarChart3 size={16} /> },
 ];
 
@@ -55,6 +60,9 @@ export default function AppShell() {
             </button>
           ))}
         </nav>
+        <div className="ml-auto">
+          <ConnectionStatus />
+        </div>
       </header>
 
       {/* Tab content */}
@@ -62,6 +70,8 @@ export default function AppShell() {
         {activeTab === 'watchlist' && <WatchListPage />}
         {activeTab === 'agents'    && <AgentsPage />}
         {activeTab === 'execution' && <ExecutionPage />}
+        {activeTab === 'monitor'   && <MonitorPage />}
+        {activeTab === 'logs'      && <LogsPage />}
         {activeTab === 'results'   && <ResultsPage />}
       </div>
     </div>
@@ -119,5 +129,21 @@ function ResultsPage() {
         <TrendCharts />
       </main>
     </>
+  );
+}
+
+function MonitorPage() {
+  return (
+    <main className="flex-1 overflow-hidden">
+      <ExecutionMonitor />
+    </main>
+  );
+}
+
+function LogsPage() {
+  return (
+    <main className="flex-1 overflow-hidden">
+      <LogViewer />
+    </main>
   );
 }

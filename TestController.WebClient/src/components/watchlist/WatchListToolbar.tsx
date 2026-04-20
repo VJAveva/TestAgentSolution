@@ -3,12 +3,14 @@ import { PlayCircle, XCircle, Upload, Download, RefreshCw } from 'lucide-react';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useExecution } from '../../hooks/useExecution';
 import { useWatchListStore } from '../../stores/watchlistStore';
+import TriggerDialog from '../execution/TriggerDialog';
 
 export default function WatchListToolbar() {
   const { refresh, importXml, exportXml } = useWatchList();
   const { triggerAll, triggerByTag, cancelAll } = useExecution();
   const selectedNode = useWatchListStore(s => s.selectedNode);
   const [busy, setBusy] = useState(false);
+  const [showTriggerDialog, setShowTriggerDialog] = useState(false);
 
   const wrap = (fn: () => Promise<unknown>) => async () => {
     setBusy(true);
@@ -43,9 +45,23 @@ export default function WatchListToolbar() {
 
   const handleTrigger = () => {
     if (selectedNode?.nodeKind === 'WatchItem' && selectedNode.tag) {
-      return triggerByTag(selectedNode.tag);
+      setShowTriggerDialog(true);
+      return Promise.resolve();
     }
     return triggerAll();
+  };
+
+  const handleTriggerWithParams = async (buildNumber: string, dropLocation: string) => {
+    if (!selectedNode?.tag) return;
+    try {
+      await triggerByTag(selectedNode.tag, {
+        buildNumber: buildNumber || undefined,
+        dropLocation: dropLocation || undefined,
+      });
+    } catch (e) {
+      console.error('Trigger failed:', e);
+    }
+    setShowTriggerDialog(false);
   };
 
   return (
@@ -56,6 +72,15 @@ export default function WatchListToolbar() {
       <ToolBtn icon={<Upload size={14} />} label="Import" onClick={handleImport} disabled={busy} />
       <ToolBtn icon={<Download size={14} />} label="Export" onClick={wrap(handleExport)} disabled={busy} />
       <ToolBtn icon={<RefreshCw size={14} />} label="Refresh" onClick={wrap(refresh)} disabled={busy} />
+
+      {showTriggerDialog && selectedNode?.tag && (
+        <TriggerDialog
+          watchItemTag={selectedNode.tag}
+          isOpen={showTriggerDialog}
+          onClose={() => setShowTriggerDialog(false)}
+          onTrigger={handleTriggerWithParams}
+        />
+      )}
     </div>
   );
 }
