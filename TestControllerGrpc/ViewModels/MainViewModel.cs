@@ -31,6 +31,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<MainViewModel> _logger;
     private readonly IAppLogger _appLogger;
+    private readonly IEventAggregator _events;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
@@ -301,6 +302,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _sessionManager = sessionManager;
         _logger = logger;
         _appLogger = appLogger;
+        _events = events;
         BuildResultsVM = buildResultsVM;
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;

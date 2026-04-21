@@ -20,7 +20,7 @@ public class WatchListController : ControllerBase
         _sessionManager = sessionManager;
     }
 
-    /// <summary>GET /api/watchlist — full WatchList tree with execution status.</summary>
+    /// <summary>GET /api/watchlist — full WatchListConfig for the React WebClient tree builder.</summary>
     [HttpGet]
     public IActionResult GetWatchList()
     {
@@ -32,37 +32,18 @@ public class WatchListController : ControllerBase
                 return Ok(new
                 {
                     watchItems = Array.Empty<object>(),
+                    templates = Array.Empty<object>(),
+                    filePath = config?.FilePath ?? "",
                     warning = config == null
                         ? "WatchList is not loaded. Check if WatchList.xml path is configured."
                         : "WatchList is empty — no WatchItems defined.",
-                    configPath = config?.FilePath ?? "(not set)",
                 });
             }
 
-            return Ok(new
-            {
-                watchItems = config.WatchItems.Select(wi =>
-                {
-                    var isRunning = _sessionManager.HasActiveExecution(wi.Tag);
-                    var lastSession = _sessionManager.GetLastSession(wi.Tag);
-                    var executionStatus = isRunning ? "Running"
-                        : lastSession?.State == SessionState.Completed ? "Success"
-                        : lastSession?.State == SessionState.Failed ? "Failed"
-                        : lastSession?.State == SessionState.PartialFailure ? "Failed"
-                        : "Idle";
-
-                    return new
-                    {
-                        tag = wi.Tag,
-                        nodeKind = "WatchItem",
-                        filter = wi.Filter,
-                        isEnabled = wi.IsEnabled,
-                        buildBasePath = wi.BuildBasePath,
-                        executionStatus,
-                        children = wi.Events.Select(e => SerializeEvent(e)).ToList(),
-                    };
-                }),
-            });
+            // Return the raw WatchListConfig model — the React WebClient's
+            // watchlistStore.buildTree() expects the full model shape with
+            // watchItems[].events[].children[] using the polymorphic nodeType discriminator.
+            return Ok(config);
         }
         catch (Exception ex)
         {

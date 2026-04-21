@@ -34,10 +34,10 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
       const a = node;
       const label = a.type === 'RunRemoteCommand' && a.agentName
         ? `Remote on '${a.agentName}' → ${a.command}`
-        : a.type === 'SendMail' ? `SendMail ? ${a.to}` : a.command || 'Action';
+        : a.type === 'SendMail' ? `SendMail → ${a.to}` : a.command || 'Action';
       return {
         id: nextId(), nodeKind: 'Action', displayText: label,
-        tag: '', executionStatus: 'Idle', children: [],
+        tag: a.order || a.command || '', executionStatus: 'Idle', children: [],
         isExpanded: false, depth, model: node,
       };
     }

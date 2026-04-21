@@ -16,3 +16,9 @@ public sealed record AgentHeartbeatEvent(string AgentName, AgentState State, Res
 
 /// <summary>Fired when a remote agent pushes an execution event via gRPC streaming.</summary>
 public sealed record ExecutionEventReceivedEvent(ExecutionEvent Event);
+
+/// <summary>Fired when a WatchItem execution starts (from WPF or WebApi).</summary>
+public sealed record ExecutionStartedEvent(string SessionId, string WatchItemTag, string EventType, string Source);
+
+/// <summary>Fired when a WatchItem execution completes (from WPF or WebApi).</summary>
+public sealed record ExecutionCompletedEvent(string SessionId, string WatchItemTag, string State, int Passed, int Failed, int Total);

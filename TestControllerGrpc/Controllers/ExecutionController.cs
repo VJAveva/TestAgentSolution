@@ -40,15 +40,42 @@ public class ExecutionController : ControllerBase
         _hub = hub;
     }
 
-    /// <summary>GET /api/execution/sessions — list active and recent sessions.</summary>
+    /// <summary>GET /api/execution/sessions — list active sessions (matches WebClient SessionsResponse).</summary>
     [HttpGet("sessions")]
     public IActionResult GetSessions()
     {
-        var active = _sessionManager.GetActiveSessions()
-            .Select(ToSessionDto);
-        var history = _sessionManager.GetHistory(20)
-            .Select(ToSessionDto);
-        return Ok(new { active, history });
+        var active = _sessionManager.GetActiveSessions();
+        return Ok(new
+        {
+            activeCount = _sessionManager.ActiveExecutionCount,
+            hasActive = _sessionManager.HasAnyActiveExecution,
+            sessions = active.Select(s => new
+            {
+                sessionId = s.SessionId,
+                watchItemTag = s.WatchItemTag,
+                eventType = s.EventType,
+                state = s.State.ToString(),
+                startedUtc = s.StartedUtc,
+                totalActions = s.SnapshotNodes.Count,
+                completedActions = s.ActionResults.Count,
+                passedActions = s.SucceededCount,
+                failedActions = s.FailedCount,
+                progressPercent = s.SnapshotNodes.Count > 0
+                    ? (double)s.ActionResults.Count / s.SnapshotNodes.Count * 100
+                    : 0,
+            }),
+        });
+    }
+
+    /// <summary>GET /api/execution/status — current execution state overview.</summary>
+    [HttpGet("status")]
+    public IActionResult GetStatus()
+    {
+        return Ok(new
+        {
+            isExecuting = _sessionManager.HasAnyActiveExecution,
+            activeCount = _sessionManager.ActiveExecutionCount,
+        });
     }
 
     /// <summary>GET /api/execution/{sessionId} — detailed session info.</summary>
@@ -252,6 +279,27 @@ public class ExecutionController : ControllerBase
             .ToList();
 
         return Ok(new { builds });
+    }
+
+    /// <summary>POST /api/execution/cancel — cancel all running sessions.</summary>
+    [HttpPost("cancel")]
+    public async Task<IActionResult> CancelAll()
+    {
+        var cancelledTags = _sessionManager.CancelAll();
+        foreach (var tag in cancelledTags)
+        {
+            await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
+            {
+                watchItemTag = tag,
+                state = "Cancelled",
+                timestamp = DateTime.UtcNow.ToString("o"),
+            });
+        }
+        return Ok(new
+        {
+            message = $"Cancelled {cancelledTags.Count} execution(s).",
+            activeExecutions = _sessionManager.ActiveExecutionCount,
+        });
     }
 
     /// <summary>POST /api/execution/{sessionId}/cancel — cancel a running session.</summary>

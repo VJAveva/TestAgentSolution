@@ -46,18 +46,22 @@ public sealed partial class MainViewModel
         eventNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered Event: {ev.Type} on {tag}");
 
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, ev.Type, "WPF"));
+
         try
         {
             await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
             eventNode.ExecutionStatus = "Success";
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event completed: {ev.Type}", LogSeverity.Success);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success", 0, 0, 0));
         }
         catch (OperationCanceledException)
         {
             eventNode.SetFailed("Cancelled by user");
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event cancelled: {ev.Type}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
         }
         catch (Exception ex)
         {
@@ -66,6 +70,7 @@ public sealed partial class MainViewModel
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
         finally
         {
@@ -95,6 +100,8 @@ public sealed partial class MainViewModel
         wiNode.SetStatusRecursive("Running");
         wiNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered WatchItem: {wi.Tag} ({wi.Events.Count} events)");
+
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, wi.Tag, "All", "WPF"));
 
         var allSuccess = true;
         try
@@ -138,12 +145,14 @@ public sealed partial class MainViewModel
             AddLog($"[{session.SessionId}] WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}",
                 allSuccess ? LogSeverity.Success : LogSeverity.Error);
             if (!allSuccess) ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, allSuccess ? "Success" : "Failed", 0, 0, 0));
         }
         catch (OperationCanceledException)
         {
             wiNode.SetFailed("Cancelled by user");
             wiNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] WatchItem cancelled: {wi.Tag}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, "Cancelled", 0, 0, 0));
         }
         finally
         {

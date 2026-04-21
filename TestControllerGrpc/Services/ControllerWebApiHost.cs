@@ -112,6 +112,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                             "http://localhost:3000",
                             "http://localhost:5173",
                             "http://localhost:8081",
+                            $"http://{Environment.MachineName}:3000",
                             $"http://{Environment.MachineName}:8081",
                             $"http://{Environment.MachineName}")
                         .AllowAnyHeader()

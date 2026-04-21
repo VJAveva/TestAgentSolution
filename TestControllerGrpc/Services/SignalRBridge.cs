@@ -27,6 +27,8 @@ public sealed class SignalRBridge : IDisposable
     private IDisposable? _subRegistered;
     private IDisposable? _subUnregistered;
     private IDisposable? _subHeartbeat;
+    private IDisposable? _subExecutionStarted;
+    private IDisposable? _subExecutionCompleted;
 
     // Heartbeat throttling: coalesce rapid heartbeats into a single push per second
     private readonly object _heartbeatLock = new();
@@ -60,6 +62,8 @@ public sealed class SignalRBridge : IDisposable
         _subRegistered = _events.Subscribe<AgentRegisteredEvent>(OnAgentRegistered);
         _subUnregistered = _events.Subscribe<AgentUnregisteredEvent>(OnAgentUnregistered);
         _subHeartbeat = _events.Subscribe<AgentHeartbeatEvent>(OnHeartbeat);
+        _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
+        _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
 
         _vocabMonitor.ConfigReloaded += OnWatchListReloaded;
 
@@ -229,6 +233,32 @@ public sealed class SignalRBridge : IDisposable
         SendSafe("WatchListReloaded", null);
     }
 
+    private void OnExecutionStarted(ExecutionStartedEvent e)
+    {
+        SendSafe("ExecutionStarted", new
+        {
+            sessionId = e.SessionId,
+            watchItemTag = e.WatchItemTag,
+            eventType = e.EventType,
+            startTime = DateTime.UtcNow.ToString("o"),
+            source = e.Source,
+        });
+    }
+
+    private void OnExecutionCompleted(ExecutionCompletedEvent e)
+    {
+        SendSafe("ExecutionCompleted", new
+        {
+            sessionId = e.SessionId,
+            watchItemTag = e.WatchItemTag,
+            state = e.State,
+            passed = e.Passed,
+            failed = e.Failed,
+            total = e.Total,
+            timestamp = DateTime.UtcNow.ToString("o"),
+        });
+    }
+
     /// <summary>
     /// Sends a SignalR message to the "global" group with error logging.
     /// Prevents unobserved task exceptions from fire-and-forget calls.
@@ -264,5 +294,7 @@ public sealed class SignalRBridge : IDisposable
         _subRegistered?.Dispose();
         _subUnregistered?.Dispose();
         _subHeartbeat?.Dispose();
+        _subExecutionStarted?.Dispose();
+        _subExecutionCompleted?.Dispose();
     }
 }
