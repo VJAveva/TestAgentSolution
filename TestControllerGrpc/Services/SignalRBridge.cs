@@ -65,6 +65,11 @@ public sealed class SignalRBridge : IDisposable
 
         // Flush pending heartbeats every 1 second
         _heartbeatTimer = new Timer(FlushHeartbeats, null, 1000, 1000);
+
+        _logger.LogInformation(
+            "SignalR bridge started. Subscribed to: LogEntry, NodeProgress, " +
+            "OutputReceived, StatusChanged, AgentRegistered, AgentUnregistered, " +
+            "Heartbeat, ConfigReloaded");
     }
 
     private void OnLogEntry(PipelineLogEntry entry)

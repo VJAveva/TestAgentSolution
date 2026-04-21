@@ -24,34 +24,55 @@ public class WatchListController : ControllerBase
     [HttpGet]
     public IActionResult GetWatchList()
     {
-        var config = _vocabMonitor.CurrentConfig;
-        if (config == null)
-            return Ok(new { watchItems = Array.Empty<object>() });
-
-        return Ok(new
+        try
         {
-            watchItems = config.WatchItems.Select(wi =>
+            var config = _vocabMonitor.CurrentConfig;
+            if (config == null || config.WatchItems.Count == 0)
             {
-                var isRunning = _sessionManager.HasActiveExecution(wi.Tag);
-                var lastSession = _sessionManager.GetLastSession(wi.Tag);
-                var executionStatus = isRunning ? "Running"
-                    : lastSession?.State == SessionState.Completed ? "Success"
-                    : lastSession?.State == SessionState.Failed ? "Failed"
-                    : lastSession?.State == SessionState.PartialFailure ? "Failed"
-                    : "Idle";
-
-                return new
+                return Ok(new
                 {
-                    tag = wi.Tag,
-                    nodeKind = "WatchItem",
-                    filter = wi.Filter,
-                    isEnabled = wi.IsEnabled,
-                    buildBasePath = wi.BuildBasePath,
-                    executionStatus,
-                    children = wi.Events.Select(e => SerializeEvent(e)).ToList(),
-                };
-            }),
-        });
+                    watchItems = Array.Empty<object>(),
+                    warning = config == null
+                        ? "WatchList is not loaded. Check if WatchList.xml path is configured."
+                        : "WatchList is empty — no WatchItems defined.",
+                    configPath = config?.FilePath ?? "(not set)",
+                });
+            }
+
+            return Ok(new
+            {
+                watchItems = config.WatchItems.Select(wi =>
+                {
+                    var isRunning = _sessionManager.HasActiveExecution(wi.Tag);
+                    var lastSession = _sessionManager.GetLastSession(wi.Tag);
+                    var executionStatus = isRunning ? "Running"
+                        : lastSession?.State == SessionState.Completed ? "Success"
+                        : lastSession?.State == SessionState.Failed ? "Failed"
+                        : lastSession?.State == SessionState.PartialFailure ? "Failed"
+                        : "Idle";
+
+                    return new
+                    {
+                        tag = wi.Tag,
+                        nodeKind = "WatchItem",
+                        filter = wi.Filter,
+                        isEnabled = wi.IsEnabled,
+                        buildBasePath = wi.BuildBasePath,
+                        executionStatus,
+                        children = wi.Events.Select(e => SerializeEvent(e)).ToList(),
+                    };
+                }),
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                error = "Failed to load WatchList",
+                detail = ex.Message,
+                configPath = _vocabMonitor.CurrentConfig?.FilePath ?? "(not set)",
+            });
+        }
     }
 
     /// <summary>GET /api/watchlist/{tag}/status — execution status of a WatchItem.</summary>
@@ -81,27 +102,38 @@ public class WatchListController : ControllerBase
     [HttpGet("{tag}/parameters")]
     public IActionResult GetParameters(string tag)
     {
-        var config = _vocabMonitor.CurrentConfig;
-        var watchItem = config?.WatchItems
-            .FirstOrDefault(w => string.Equals(w.Tag, tag, StringComparison.OrdinalIgnoreCase));
-
-        if (watchItem == null)
-            return NotFound(new { error = $"WatchItem '{tag}' not found" });
-
-        var paramFile = FindInitializeFile(watchItem);
-        if (paramFile == null || !System.IO.File.Exists(paramFile))
-            return Ok(new { parameters = new Dictionary<string, string>(), file = "" });
-
-        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var entries = ParameterResolver.ParseParameterFile(paramFile);
-        foreach (var (key, value) in entries)
+        try
         {
-            parameters[key] = value;
-            if (key.StartsWith('_'))
-                parameters[key[1..]] = value;
-        }
+            var config = _vocabMonitor.CurrentConfig;
+            var watchItem = config?.WatchItems
+                .FirstOrDefault(w => string.Equals(w.Tag, tag, StringComparison.OrdinalIgnoreCase));
 
-        return Ok(new { parameters, file = Path.GetFileName(paramFile) });
+            if (watchItem == null)
+                return NotFound(new { error = $"WatchItem '{tag}' not found" });
+
+            var paramFile = FindInitializeFile(watchItem);
+            if (paramFile == null || !System.IO.File.Exists(paramFile))
+                return Ok(new { parameters = new Dictionary<string, string>(), file = "", warning = paramFile == null ? "No Initialize node found" : $"Parameter file not found: {Path.GetFileName(paramFile)}" });
+
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var entries = ParameterResolver.ParseParameterFile(paramFile);
+            foreach (var (key, value) in entries)
+            {
+                parameters[key] = value;
+                if (key.StartsWith('_'))
+                    parameters[key[1..]] = value;
+            }
+
+            return Ok(new { parameters, file = Path.GetFileName(paramFile) });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                error = $"Failed to load parameters for '{tag}'",
+                detail = ex.Message,
+            });
+        }
     }
 
     // ?? Tree serialization helpers ???????????????????????????????????????

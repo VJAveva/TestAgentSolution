@@ -122,9 +122,35 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
 
             builder.Services.AddSingleton<SignalRBridge>();
 
-            builder.Logging.SetMinimumLevel(LogLevel.Warning);
+            builder.Logging.SetMinimumLevel(LogLevel.Information);
+            builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
             _app = builder.Build();
+
+            // Request logging middleware — logs every API call with timing
+            _app.Use(async (context, next) =>
+            {
+                var path = context.Request.Path;
+                var method = context.Request.Method;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                try
+                {
+                    await next();
+                    sw.Stop();
+                    _logger.LogInformation(
+                        "API {Method} {Path} -> {Status} ({Elapsed}ms)",
+                        method, path, context.Response.StatusCode, sw.ElapsedMilliseconds);
+                }
+                catch (Exception ex)
+                {
+                    sw.Stop();
+                    _logger.LogError(ex,
+                        "API {Method} {Path} -> EXCEPTION ({Elapsed}ms): {Error}",
+                        method, path, sw.ElapsedMilliseconds, ex.Message);
+                    throw;
+                }
+            });
 
             _app.UseCors("WebClient");
             _app.MapControllers();
