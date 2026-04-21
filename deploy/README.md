@@ -14,7 +14,8 @@ Batch files for deploying the **TestControllerGrpc** (Controller) and **TestAgen
 |:------------------------|:---------------------------------------------------------|
 | `deploy-controller.bat` | Build and deploy the Controller to a single node         |
 | `deploy-agent.bat`      | Build and deploy an Agent to a single node               |
-| `deploy-all.bat`        | Orchestrate full deployment (1 Controller + N Agents)    |
+| `deploy-webapi.bat`     | Build React frontend + WebApi and deploy to IIS          |
+| `deploy-all.bat`        | Orchestrate full deployment (1 Controller + N Agents + WebApi) |
 
 ---
 
@@ -27,9 +28,9 @@ deploy\deploy-controller.bat <ControllerNode> [GrpcPort] [PublishDir]
 ```
 
 **Parameters:**
-- `ControllerNode` — Machine name or IP *(required)*
-- `GrpcPort` — Controller gRPC port *(default: 5100)*
-- `PublishDir` — Local publish output folder *(default: publish\controller)*
+- `ControllerNode` ï¿½ Machine name or IP *(required)*
+- `GrpcPort` ï¿½ Controller gRPC port *(default: 5100)*
+- `PublishDir` ï¿½ Local publish output folder *(default: publish\controller)*
 
 **Example:**
 ```bat
@@ -47,11 +48,11 @@ deploy\deploy-agent.bat <AgentNode> <ControllerNode> [AgentPort] [ControllerPort
 ```
 
 **Parameters:**
-- `AgentNode` — Agent machine name or IP *(required)*
-- `ControllerNode` — Controller machine name or IP *(required)*
-- `AgentPort` — Agent gRPC port *(default: 5200)*
-- `ControllerPort` — Controller gRPC port *(default: 5100)*
-- `PublishDir` — Local publish output folder *(default: publish\agent)*
+- `AgentNode` ï¿½ Agent machine name or IP *(required)*
+- `ControllerNode` ï¿½ Controller machine name or IP *(required)*
+- `AgentPort` ï¿½ Agent gRPC port *(default: 5200)*
+- `ControllerPort` ï¿½ Controller gRPC port *(default: 5100)*
+- `PublishDir` ï¿½ Local publish output folder *(default: publish\agent)*
 
 **Example:**
 ```bat
@@ -59,6 +60,33 @@ deploy\deploy-agent.bat AGENT01 CONTROLLER01 5200 5100
 ```
 
 Deploys to `\\AGENT01\C$\TestAgentService\` and patches `appsettings.json` so the agent connects to `http://CONTROLLER01:5100`.
+
+---
+
+### Deploy WebApi (IIS)
+
+```bat
+deploy\deploy-webapi.bat <TargetNode> [IISSiteName] [PublishDir]
+```
+
+**Parameters:**
+- `TargetNode` â€” Machine name or IP where IIS is running *(required)*
+- `IISSiteName` â€” IIS site name *(default: TestControllerWeb)*
+- `PublishDir` â€” Local publish output folder *(default: publish\webapi)*
+
+**Example:**
+```bat
+deploy\deploy-webapi.bat WEBSERVER01 TestControllerWeb
+```
+
+Builds the React frontend, publishes the .NET WebApi, and deploys to `\\WEBSERVER01\C$\inetpub\TestControllerWeb\`.
+
+**IIS Prerequisites:**
+1. Install the [ASP.NET Core Hosting Bundle](https://dotnet.microsoft.com/download/dotnet) on the target server
+2. Create an IIS site pointing to `C:\inetpub\TestControllerWeb`
+3. Set the Application Pool to **No Managed Code**
+4. Enable **WebSockets** in IIS (required for SignalR)
+5. Edit `appsettings.Production.json` on the server for environment-specific config
 
 ---
 
@@ -84,7 +112,8 @@ This will:
 1. Publish and deploy the Controller to `CONTROLLER01`
 2. Publish and deploy the Agent to each node in `AGENT_NODES`
 3. Patch each agent's `appsettings.json` to point at the Controller
-4. Print a summary with the full topology
+4. Build and deploy the WebApi + React frontend to IIS on `WEBSERVER01`
+5. Print a summary with the full topology
 
 ---
 
@@ -94,6 +123,7 @@ This will:
 |:-----------|:------------------------------------------|
 | Controller | `\\<node>\C$\TestControllerService\`      |
 | Agent      | `\\<node>\C$\TestAgentService\`           |
+| WebApi     | `\\<node>\C$\inetpub\TestControllerWeb\`  |
 
 ## Notes
 
