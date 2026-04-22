@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -25,8 +26,8 @@ public class ExecutionController : ControllerBase
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IHubContext<ControllerHub> _hub;
 
-    /// <summary>Lock to prevent TOCTOU race between HasActiveExecution check and trigger.</summary>
-    private static readonly object _triggerLock = new();
+    /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
+    private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
 
     public ExecutionController(
         ExecutionSessionManager sessionManager,
@@ -117,8 +118,9 @@ public class ExecutionController : ControllerBase
         if (evt == null)
             return BadRequest(new { error = $"Event type '{eventType}' not found on WatchItem '{watchItemTag}'" });
 
-        // Atomic check-and-mark inside a lock to prevent TOCTOU race
-        lock (_triggerLock)
+        // Atomic check-and-mark inside a per-tag lock to prevent TOCTOU race
+        var tagLock = _triggerLocks.GetOrAdd(watchItemTag, _ => new object());
+        lock (tagLock)
         {
             if (_sessionManager.HasActiveExecution(watchItemTag))
                 return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });

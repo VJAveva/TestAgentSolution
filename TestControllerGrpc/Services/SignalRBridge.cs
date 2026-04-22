@@ -142,23 +142,19 @@ public sealed class SignalRBridge : IDisposable
 
     private void OnOutputReceived(string agentName, string line, string kind)
     {
-        // Broadcast as AgentOutput for execution monitor
+        // Single broadcast with all fields — avoids doubling WebSocket traffic.
+        // Clients use the "category" field to distinguish AgentOutput from other log entries.
+        var ts = DateTime.Now.ToString("HH:mm:ss.fff");
         SendSafe("AgentOutput", new
         {
             agentName,
             line,
             kind,
-            timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
-        });
-
-        // Also broadcast as LogEntry for the unified log viewer
-        SendSafe("LogEntry", new
-        {
-            timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+            timestamp = ts,
+            // Extra fields so the unified log viewer can consume this as a LogEntry too
             sessionId = "",
             severity = kind == "stderr" ? "Error" : "Info",
             category = "Output",
-            agentName,
             message = $"[{agentName}:{kind}] {line}",
         });
     }

@@ -679,6 +679,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     }
 
     public IEnumerable<string> RegisteredAgents => _agents.Keys;
+    public int RegisteredAgentCount => _agents.Count;
 
     /// <inheritdoc/>
     public AgentHealthState? GetAgentHealth(string agentName)

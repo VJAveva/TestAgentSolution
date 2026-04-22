@@ -36,7 +36,7 @@ public class HealthController : ControllerBase
             components = new
             {
                 watchList = new { loaded = config != null, watchItems = config?.WatchItems.Count ?? 0 },
-                agents = new { registered = _dispatcher.RegisteredAgents.Count() },
+                agents = new { registered = _dispatcher.RegisteredAgentCount },
                 execution = new { activeSessions = _sessionManager.ActiveExecutionCount },
                 signalR = new { status = "available" },
             },

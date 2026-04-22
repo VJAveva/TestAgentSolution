@@ -44,6 +44,9 @@ public interface IAgentGrpcDispatcher : IDisposable
     /// <summary>Gets the names of all registered agents.</summary>
     IEnumerable<string> RegisteredAgents { get; }
 
+    /// <summary>Gets the count of registered agents without enumerating.</summary>
+    int RegisteredAgentCount { get; }
+
     /// <summary>Gets the address of a registered agent.</summary>
     string? GetAgentAddress(string agentName);
 
