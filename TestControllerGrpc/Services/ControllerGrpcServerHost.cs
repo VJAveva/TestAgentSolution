@@ -56,6 +56,12 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable
             builder.WebHost.ConfigureKestrel(kestrel =>
             {
                 kestrel.ListenAnyIP(_port, o => o.Protocols = HttpProtocols.Http2);
+                // Allow long-running gRPC streams (test executions can take hours).
+                // Default MinDataRate kills connections with minutes of silence
+                // between stdout lines (e.g., during installs).
+                kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
+                kestrel.Limits.MinRequestBodyDataRate = null;
+                kestrel.Limits.MinResponseDataRate = null;
             });
 
             builder.Services.AddGrpc();

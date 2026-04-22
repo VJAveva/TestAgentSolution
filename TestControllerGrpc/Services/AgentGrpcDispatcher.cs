@@ -296,6 +296,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         }
 
         StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
+        var startTimestamp = Stopwatch.GetTimestamp();
 
         try
         {
@@ -441,17 +442,39 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         catch (TimeoutRejectedException)
         {
             RecordFailure(agentName);
+            _logger.LogError(
+                "Agent {Agent} hit Polly outer timeout for: {Command}",
+                agentName, resolved.Command);
             return new ActionResult(false, -1,
-                $"Agent {agentName} hard timeout exceeded (60 min resilience limit)");
+                $"Agent {agentName} hard timeout exceeded (24-hour resilience safety net)");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return new ActionResult(false, -1, "Cancelled by user");
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
+            _logger.LogWarning(
+                "Action cancelled by user on {Agent} after {Elapsed}: {Command}",
+                agentName, elapsed.ToString(@"hh\:mm\:ss"), resolved.Command);
+            return new ActionResult(false, -1,
+                $"Cancelled by user after {elapsed:hh\\:mm\\:ss}");
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
             RecordFailure(agentName);
-            return new ActionResult(false, -1, $"Timed out ({resolved.Timeout}s)");
+            _logger.LogError(
+                "Action TIMED OUT on {Agent} after {Elapsed}: {Command}. " +
+                "Configured timeout: {Timeout}s. Exception: {Error}",
+                agentName, elapsed.ToString(@"hh\:mm\:ss"),
+                resolved.Command, resolved.Timeout, ex.Message);
+
+            var detail = resolved.Timeout > 0
+                ? $"Timed out after {elapsed:hh\\:mm\\:ss} (limit: {resolved.Timeout}s). "
+                : $"Timed out after {elapsed:hh\\:mm\\:ss} (no explicit timeout - check Kestrel/IIS limits). ";
+
+            if (elapsed.TotalSeconds >= 3590 && elapsed.TotalSeconds <= 3610)
+                detail += "HINT: Exactly 1 hour suggests IIS requestTimeout or Action Timeout=3600.";
+
+            return new ActionResult(false, -1, detail);
         }
         catch (Exception ex)
         {
@@ -720,12 +743,16 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 HttpHandler = new SocketsHttpHandler
                 {
                     EnableMultipleHttp2Connections = true,
-                    ConnectTimeout               = TimeSpan.FromSeconds(5),
-                    KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
-                    KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
+                    ConnectTimeout               = TimeSpan.FromSeconds(30),
+                    // Keep gRPC streams alive during long test runs (2-4+ hours).
+                    // Pings every 60s prevent proxies/firewalls from killing
+                    // idle-looking HTTP/2 streams when no stdout is flowing.
+                    KeepAlivePingDelay            = TimeSpan.FromSeconds(60),
+                    KeepAlivePingTimeout          = TimeSpan.FromSeconds(30),
                     KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
-                    PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
-                    PooledConnectionLifetime      = TimeSpan.FromMinutes(5),
+                    PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
+                    // Do NOT recycle connections with a short lifetime.
+                    PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
                 },
                 DisposeHttpClient = true,
             });
@@ -746,7 +773,10 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     MinimumThroughput = 5,
                     BreakDuration = TimeSpan.FromSeconds(15),
                 })
-                .AddTimeout(TimeSpan.FromMinutes(60))
+                // Outer safety net: 24 hours. Individual action Timeout (in seconds)
+                // is enforced separately via CancellationTokenSource in ExecuteRemoteCommandAsync.
+                // The previous 60-minute limit killed long installs (e.g., SP upgrades that take 2–3 hours).
+                .AddTimeout(TimeSpan.FromHours(24))
                 .Build();
         }
 

@@ -77,6 +77,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                 {
                     o.Protocols = HttpProtocols.Http1AndHttp2;
                 });
+                // Allow long-running executions triggered via WebClient.
+                kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
+                kestrel.Limits.MinRequestBodyDataRate = null;
+                kestrel.Limits.MinResponseDataRate = null;
             });
 
             // Share singletons from WPF DI into the WebApi server's DI container
