@@ -17,6 +17,7 @@
   <ItemGroup>
     <!-- Required for hosting gRPC server (Kestrel) alongside WPF -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
 
   <ItemGroup>

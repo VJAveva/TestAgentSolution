@@ -384,6 +384,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // ── Dispose ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Cancels all running pipelines. Called during app shutdown.
+    /// </summary>
+    public void CancelAllPipelines()
+    {
+        _executionCts?.Cancel();
+
+        foreach (var session in ActiveSessions.ToList())
+            session.Cts.Cancel();
+
+        AddLog("All pipelines cancelled (app shutting down)", LogSeverity.Warning);
+    }
+
     public void Dispose()
     {
         _vocabMonitor.ConfigReloaded -= OnConfigReloaded;

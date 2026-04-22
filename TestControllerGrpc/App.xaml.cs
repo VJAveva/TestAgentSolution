@@ -13,9 +13,47 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
     private IHost? _host;
+    private static Mutex? _singleInstanceMutex;
+    private readonly CancellationTokenSource _appShutdownCts = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Single instance enforcement
+        const string mutexName = "Global\\TestControllerGrpc_SingleInstance";
+        _singleInstanceMutex = new Mutex(true, mutexName, out bool isNew);
+
+        if (!isNew)
+        {
+            var answer = MessageBox.Show(
+                "TestController is already running.\n\n" +
+                "YES = Kill old instance and start fresh\n" +
+                "NO = Cancel (switch to existing window manually)",
+                "Already Running",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (answer == MessageBoxResult.Yes)
+            {
+                KillOtherInstances();
+                _singleInstanceMutex.Dispose();
+                Thread.Sleep(3000);
+                _singleInstanceMutex = new Mutex(true, mutexName, out isNew);
+                if (!isNew)
+                {
+                    MessageBox.Show(
+                        "Old process still running. Wait a moment and retry.",
+                        "Startup Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Shutdown(1);
+                    return;
+                }
+            }
+            else
+            {
+                Shutdown(0);
+                return;
+            }
+        }
+
         base.OnStartup(e);
 
         _host = Host.CreateDefaultBuilder()
@@ -68,8 +106,36 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _host?.StopAsync().GetAwaiter().GetResult();
-        _host?.Dispose();
+        try
+        {
+            _appShutdownCts.Cancel();
+
+            var vm = Services?.GetService<MainViewModel>();
+            vm?.CancelAllPipelines();
+
+            _host?.StopAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+        }
+        catch { }
+        finally
+        {
+            _host?.Dispose();
+            _singleInstanceMutex?.ReleaseMutex();
+            _singleInstanceMutex?.Dispose();
+        }
         base.OnExit(e);
+    }
+
+    private static void KillOtherInstances()
+    {
+        var myPid = Environment.ProcessId;
+        var myName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+        foreach (var p in System.Diagnostics.Process.GetProcessesByName(myName))
+        {
+            if (p.Id != myPid)
+            {
+                try { p.Kill(entireProcessTree: true); p.WaitForExit(5000); }
+                catch { }
+            }
+        }
     }
 }
