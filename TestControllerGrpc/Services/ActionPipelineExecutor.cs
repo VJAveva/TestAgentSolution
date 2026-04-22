@@ -557,17 +557,28 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         // Snapshot isolation: clone the action tree so hot-reloads don't mutate in-flight nodes
         var snapshotChildren = evt.Children.Select(DeepCloneNode).ToList();
 
+        // Use the caller's sessionId if provided (e.g. from WebApi controller)
+        var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
+
         var session = _sessionManager.BeginSession(
             watchItemTag, evt.Type,
             new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
-            snapshotChildren);
+            snapshotChildren,
+            callerSessionId);
+
+        // Sync the context's SessionId with the actual session
+        ctx.SessionId = session.SessionId;
 
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:{evt.Type}");
+
+        // Link the external cancellation token with the session's own CTS
+        // so that both _sessionManager.CancelSession() and external cancellation work.
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
 
         try
         {
             await ExecuteChildrenTrackedAsync(
-                snapshotChildren, evt.ExecutionType, true, ctx, session, ct);
+                snapshotChildren, evt.ExecutionType, true, ctx, session, linkedCts.Token);
         }
         finally
         {

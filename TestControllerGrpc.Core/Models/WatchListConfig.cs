@@ -214,7 +214,7 @@ public sealed class PipelineExecutionContext
 // =============================================================================
 public sealed class ExecutionSession
 {
-    public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
+    public string SessionId { get; init; } = Guid.NewGuid().ToString("N")[..12];
     public string WatchItemTag { get; init; } = "";
     public string EventType { get; init; } = "";
     public DateTime StartedUtc { get; init; } = DateTime.UtcNow;

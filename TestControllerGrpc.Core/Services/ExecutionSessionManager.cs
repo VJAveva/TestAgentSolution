@@ -18,10 +18,12 @@ public sealed class ExecutionSessionManager
     public ExecutionSession BeginSession(
         string watchItemTag, string eventType,
         Dictionary<string, string> resolvedParameters,
-        List<IActionNode> snapshotNodes)
+        List<IActionNode> snapshotNodes,
+        string? sessionId = null)
     {
         var session = new ExecutionSession
         {
+            SessionId = sessionId ?? Guid.NewGuid().ToString("N")[..12],
             WatchItemTag = watchItemTag,
             EventType = eventType,
             ResolvedParameters = new Dictionary<string, string>(resolvedParameters, StringComparer.OrdinalIgnoreCase),
