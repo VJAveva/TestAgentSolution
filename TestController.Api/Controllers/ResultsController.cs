@@ -28,15 +28,43 @@ public class ResultsController : ControllerBase
     public IActionResult GetBuilds()
     {
         var builds = _parser.DiscoverBuilds(_config.ResultsRootPath);
-        return Ok(builds.Select(b => new
+        return Ok(builds.Select(b =>
         {
-            buildNumber = b.BuildNumber,
-            modified = b.Modified,
+            try
+            {
+                var node = _parser.ParseBuildFolder(b.Path);
+                node = _aggregator.EvaluateBuildHealth(node);
+                return new
+                {
+                    buildNumber = b.BuildNumber,
+                    modified = b.Modified,
+                    totalTests = node.TotalTests,
+                    passedTests = node.PassedTests,
+                    failedTests = node.FailedTests,
+                    timeoutTests = node.TimeoutTests,
+                    passRate = node.PassRate,
+                    health = node.Health.ToString(),
+                };
+            }
+            catch
+            {
+                return new
+                {
+                    buildNumber = b.BuildNumber,
+                    modified = b.Modified,
+                    totalTests = 0,
+                    passedTests = 0,
+                    failedTests = 0,
+                    timeoutTests = 0,
+                    passRate = 0.0,
+                    health = "Unknown",
+                };
+            }
         }));
     }
 
-    /// <summary>GET /api/results/{buildNumber} — parsed build results.</summary>
-    [HttpGet("{buildNumber}")]
+    /// <summary>GET /api/results/builds/{buildNumber} — parsed build results.</summary>
+    [HttpGet("builds/{buildNumber}")]
     public IActionResult GetBuild(string buildNumber)
     {
         var buildPath = Path.Combine(_config.ResultsRootPath, buildNumber);
