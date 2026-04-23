@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -17,6 +17,10 @@
     <PackageReference Include="Grpc.Net.Client" Version="2.62.0" />
     <PackageReference Include="Google.Protobuf" Version="3.26.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Hubs\" />
+  </ItemGroup>
   
    <!-- Auto-build React on publish -->
   <Target Name="BuildReactApp" BeforeTargets="Build" Condition="!Exists('wwwroot\index.html')">
@@ -26,8 +30,7 @@
     <ItemGroup>
       <ReactBuildFiles Include="$(SpaRoot)dist\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(ReactBuildFiles)" 
-          DestinationFolder="wwwroot\%(RecursiveDir)" />
+    <Copy SourceFiles="@(ReactBuildFiles)" DestinationFolder="wwwroot\%(RecursiveDir)" />
   </Target>
 
   <!-- Always rebuild React on publish -->

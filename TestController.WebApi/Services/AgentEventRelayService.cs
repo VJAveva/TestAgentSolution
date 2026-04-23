@@ -1,29 +1,32 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Microsoft.AspNetCore.SignalR;
 using TestAgentGrpc;
-using TestController.WebApi.Hubs;
+using TestControllerGrpc.Services;
 
 namespace TestController.WebApi.Services;
 
 /// <summary>
 /// Background service that subscribes to gRPC agent event streams
-/// and broadcasts them to all connected SignalR clients.
+/// and publishes events through <see cref="IRealtimeNotifier"/>.
+///
+/// Replaces the former <c>SignalRBroadcastService</c> which broadcast
+/// directly to a separate <c>LiveHub</c>. Events now flow through the
+/// single <c>ControllerHub</c> via <c>SignalRNotifier</c>.
 /// </summary>
-public sealed class SignalRBroadcastService : BackgroundService
+public sealed class AgentEventRelayService : BackgroundService
 {
-    private readonly IHubContext<LiveHub> _hub;
+    private readonly IRealtimeNotifier _notifier;
     private readonly AgentGrpcClientManager _grpcManager;
     private readonly AgentRegistry _registry;
-    private readonly ILogger<SignalRBroadcastService> _logger;
+    private readonly ILogger<AgentEventRelayService> _logger;
 
-    public SignalRBroadcastService(
-        IHubContext<LiveHub> hub,
+    public AgentEventRelayService(
+        IRealtimeNotifier notifier,
         AgentGrpcClientManager grpcManager,
         AgentRegistry registry,
-        ILogger<SignalRBroadcastService> logger)
+        ILogger<AgentEventRelayService> logger)
     {
-        _hub = hub;
+        _notifier = notifier;
         _grpcManager = grpcManager;
         _registry = registry;
         _logger = logger;
@@ -53,7 +56,12 @@ public sealed class SignalRBroadcastService : BackgroundService
             using var stream = client.SubscribeAgentEvents(new Empty(), cancellationToken: ct);
 
             _registry.UpdateStatus(agent.Name, "Connected");
-            await _hub.Clients.All.SendAsync("AgentStatus", agent.Name, "Connected", ct);
+            await _notifier.NotifyAgentStatusChanged(new
+            {
+                agentName = agent.Name,
+                status = "Connected",
+                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+            });
 
             await foreach (var evt in stream.ResponseStream.ReadAllAsync(ct))
             {
@@ -63,7 +71,12 @@ public sealed class SignalRBroadcastService : BackgroundService
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
         {
             _registry.UpdateStatus(agent.Name, "Unreachable", ex.Message);
-            await _hub.Clients.All.SendAsync("AgentStatus", agent.Name, "Unreachable", ct);
+            await _notifier.NotifyAgentStatusChanged(new
+            {
+                agentName = agent.Name,
+                status = "Unreachable",
+                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+            });
             _logger.LogWarning("Agent {Name} unreachable: {Message}", agent.Name, ex.Status.Detail);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -84,42 +97,44 @@ public sealed class SignalRBroadcastService : BackgroundService
             case ExecutionEventType.EventStdoutLine:
             case ExecutionEventType.EventStderrLine:
                 var kind = evt.EventType == ExecutionEventType.EventStdoutLine ? "stdout" : "stderr";
-                await _hub.Clients.All.SendAsync("ExecutionEvent", agentName, evt.OutputLine, kind, ct);
+                await _notifier.NotifyAgentOutput(new
+                {
+                    agentName,
+                    line = evt.OutputLine,
+                    kind,
+                    timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+                    severity = kind == "stderr" ? "Error" : "Info",
+                    category = "Output",
+                    message = $"[{agentName}:{kind}] {evt.OutputLine}",
+                });
                 break;
 
             case ExecutionEventType.EventStarted:
-                await _hub.Clients.All.SendAsync("ExecutionLog", new
-                {
-                    Agent = agentName,
-                    Message = $"Started: {evt.Command} {evt.Arguments}",
-                    evt.ExecutionId,
-                    Timestamp = DateTime.UtcNow
-                }, ct);
+                await _notifier.NotifyLogEntry(new PipelineLogEntry(
+                    DateTime.Now, "AgentStream",
+                    $"[{agentName}] Started: {evt.Command} {evt.Arguments}"));
                 break;
 
             case ExecutionEventType.EventCompleted:
-                await _hub.Clients.All.SendAsync("ExecutionLog", new
-                {
-                    Agent = agentName,
-                    Message = $"Completed (exit code {evt.ExitCode})",
-                    evt.ExecutionId,
-                    Timestamp = DateTime.UtcNow
-                }, ct);
+                await _notifier.NotifyLogEntry(new PipelineLogEntry(
+                    DateTime.Now, "AgentStream",
+                    $"[{agentName}] Completed (exit code {evt.ExitCode})"));
                 break;
 
             case ExecutionEventType.EventFailed:
-                await _hub.Clients.All.SendAsync("ExecutionLog", new
-                {
-                    Agent = agentName,
-                    Message = $"Failed: {evt.ErrorMessage}",
-                    evt.ExecutionId,
-                    Timestamp = DateTime.UtcNow
-                }, ct);
+                await _notifier.NotifyLogEntry(new PipelineLogEntry(
+                    DateTime.Now, "AgentStream",
+                    $"[{agentName}] Failed: {evt.ErrorMessage}"));
                 break;
 
             case ExecutionEventType.EventStateChanged:
                 _registry.UpdateStatus(agentName, evt.AgentState.ToString());
-                await _hub.Clients.All.SendAsync("AgentStatus", agentName, evt.AgentState.ToString(), ct);
+                await _notifier.NotifyAgentStatusChanged(new
+                {
+                    agentName,
+                    status = evt.AgentState.ToString(),
+                    timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+                });
                 break;
 
             case ExecutionEventType.EventHeartbeat:

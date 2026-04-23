@@ -1,8 +1,6 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Microsoft.AspNetCore.SignalR;
 using TestAgentGrpc;
-using TestController.WebApi.Hubs;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Services;
 
@@ -65,7 +63,7 @@ public static class AgentEndpoints
         string name,
         AgentRegistry registry,
         AgentGrpcClientManager grpcManager,
-        IHubContext<LiveHub> hub,
+        IRealtimeNotifier notifier,
         IAppLogger logger)
     {
         if (!registry.TryGet(name, out var entry))
@@ -78,14 +76,24 @@ public static class AgentEndpoints
             var status = state.State.ToString();
 
             registry.UpdateStatus(name, status);
-            await hub.Clients.All.SendAsync("AgentStatus", name, status);
+            await notifier.NotifyAgentStatusChanged(new
+            {
+                agentName = name,
+                status,
+                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+            });
 
             return Results.Ok(new { name, status, message = "Connection successful." });
         }
         catch (RpcException ex)
         {
             registry.UpdateStatus(name, "Unreachable", ex.Status.Detail);
-            await hub.Clients.All.SendAsync("AgentStatus", name, "Unreachable");
+            await notifier.NotifyAgentStatusChanged(new
+            {
+                agentName = name,
+                status = "Unreachable",
+                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+            });
             logger.Warn("Agent", $"Agent '{name}' unreachable: {ex.Status.Detail}");
             return Results.Ok(new { name, status = "Unreachable", message = ex.Status.Detail });
         }

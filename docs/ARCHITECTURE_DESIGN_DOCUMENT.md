@@ -1,6 +1,6 @@
 # TestAgentSolution — Architecture Design Document
 
-**Version:** 2.0 — Post-.NET 10 Upgrade  
+**Version:** 2.1 — Post-Single-Hub Unification  
 **Branch:** `upgrade-to-NET10`  
 **Date:** June 2025  
 **Scope:** All recent architectural changes, recommendations, performance analysis, and E2E blocking points

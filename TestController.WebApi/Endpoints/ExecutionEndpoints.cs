@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.SignalR;
-using TestController.WebApi.Hubs;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -22,7 +20,7 @@ public static class ExecutionEndpoints
     private static IResult TriggerAll(
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub,
+        IRealtimeNotifier notifier,
         IAppLogger logger)
     {
         WatchListConfig config;
@@ -52,13 +50,9 @@ public static class ExecutionEndpoints
             triggered.Add(wi.Tag);
 
             // Notify SignalR clients
-            hub.Clients.All.SendAsync("NodeProgress", wi.Tag, "Running");
-            hub.Clients.All.SendAsync("ExecutionLog", new
-            {
-                Message = $"Triggered WatchItem '{wi.Tag}'",
-                SessionId = session.SessionId,
-                Timestamp = DateTime.UtcNow
-            });
+            notifier.NotifyActionProgress(new { nodeTag = wi.Tag, status = "Running", timestamp = DateTime.UtcNow.ToString("o") });
+            notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+                $"Triggered WatchItem '{wi.Tag}' (session {session.SessionId})"));
         }
 
         logger.Info("Execution", $"Trigger-all: triggered {triggered.Count} WatchItem(s)");
@@ -75,7 +69,7 @@ public static class ExecutionEndpoints
         string tag,
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub,
+        IRealtimeNotifier notifier,
         IAppLogger logger)
     {
         WatchListConfig config;
@@ -104,13 +98,9 @@ public static class ExecutionEndpoints
             new Dictionary<string, string>(),
             wi.Events.SelectMany(e => e.Children).ToList());
 
-        hub.Clients.All.SendAsync("NodeProgress", wi.Tag, "Running");
-        hub.Clients.All.SendAsync("ExecutionLog", new
-        {
-            Message = $"Triggered WatchItem '{wi.Tag}'",
-            SessionId = session.SessionId,
-            Timestamp = DateTime.UtcNow
-        });
+        notifier.NotifyActionProgress(new { nodeTag = wi.Tag, status = "Running", timestamp = DateTime.UtcNow.ToString("o") });
+        notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+            $"Triggered WatchItem '{wi.Tag}' (session {session.SessionId})"));
 
         logger.Info("Execution", $"Triggered WatchItem '{wi.Tag}' (session {session.SessionId})");
         return Results.Ok(new
@@ -126,7 +116,7 @@ public static class ExecutionEndpoints
         int eventIndex,
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub,
+        IRealtimeNotifier notifier,
         IAppLogger logger)
     {
         WatchListConfig config;
@@ -156,13 +146,9 @@ public static class ExecutionEndpoints
             new Dictionary<string, string>(),
             ev.Children);
 
-        hub.Clients.All.SendAsync("NodeProgress", wi.Tag, "Running");
-        hub.Clients.All.SendAsync("ExecutionLog", new
-        {
-            Message = $"Triggered '{wi.Tag}' event [{eventIndex}] ({ev.Type})",
-            SessionId = session.SessionId,
-            Timestamp = DateTime.UtcNow
-        });
+        notifier.NotifyActionProgress(new { nodeTag = wi.Tag, status = "Running", timestamp = DateTime.UtcNow.ToString("o") });
+        notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+            $"Triggered '{wi.Tag}' event [{eventIndex}] ({ev.Type}) (session {session.SessionId})"));
 
         logger.Info("Execution", $"Triggered '{wi.Tag}' event [{eventIndex}] ({ev.Type})");
         return Results.Ok(new
@@ -175,18 +161,15 @@ public static class ExecutionEndpoints
     /// <summary>POST /api/execution/cancel — cancel all running executions.</summary>
     private static IResult CancelAll(
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub)
+        IRealtimeNotifier notifier)
     {
         var cancelledTags = sessionManager.CancelAll();
 
         foreach (var tag in cancelledTags)
-            hub.Clients.All.SendAsync("NodeProgress", tag, "Idle");
+            notifier.NotifyActionProgress(new { nodeTag = tag, status = "Idle", timestamp = DateTime.UtcNow.ToString("o") });
 
-        hub.Clients.All.SendAsync("ExecutionLog", new
-        {
-            Message = $"Cancelled {cancelledTags.Count} active execution(s).",
-            Timestamp = DateTime.UtcNow
-        });
+        notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+            $"Cancelled {cancelledTags.Count} active execution(s)."));
 
         return Results.Ok(new
         {
@@ -199,18 +182,14 @@ public static class ExecutionEndpoints
     private static IResult CancelBySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub)
+        IRealtimeNotifier notifier)
     {
         var cancelled = sessionManager.CancelSession(sessionId);
         if (!cancelled)
             return Results.NotFound($"Session '{sessionId}' not found or already completed.");
 
-        hub.Clients.All.SendAsync("ExecutionLog", new
-        {
-            Message = $"Session '{sessionId}' cancelled.",
-            SessionId = sessionId,
-            Timestamp = DateTime.UtcNow
-        });
+        notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+            $"Session '{sessionId}' cancelled."));
 
         return Results.Ok(new
         {
@@ -224,17 +203,14 @@ public static class ExecutionEndpoints
     private static IResult RetrySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
-        IHubContext<LiveHub> hub)
+        IRealtimeNotifier notifier)
     {
         var retryable = sessionManager.GetRetryableNodes(sessionId);
         if (retryable.Count == 0)
             return Results.NotFound($"No retryable actions found for session '{sessionId}'.");
 
-        hub.Clients.All.SendAsync("ExecutionLog", new
-        {
-            Message = $"Retry requested for session '{sessionId}' — {retryable.Count} action(s)",
-            Timestamp = DateTime.UtcNow
-        });
+        notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+            $"Retry requested for session '{sessionId}' — {retryable.Count} action(s)"));
 
         return Results.Ok(new
         {

@@ -7,23 +7,30 @@ using TestControllerGrpc.Services;
 namespace TestController.Api.Services;
 
 /// <summary>
-/// Bridges existing service events to SignalR broadcasts.
-/// Subscribes to ActionPipelineExecutor.NodeProgress, LogEntry,
-/// AgentGrpcDispatcher.OutputReceived, StatusChanged, and
-/// EventAggregator events (agent registration, heartbeat),
-/// then pushes them to all connected WebSocket clients.
+/// Unified IRealtimeNotifier implementation that broadcasts all events
+/// to a single <see cref="ControllerHub"/> via <see cref="IHubContext{THub}"/>.
 ///
-/// Heartbeats are throttled to 1 broadcast per second to prevent
-/// flooding when many agents are connected.
+/// Subscribes to:
+///   • C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
+///   • C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
+///   • C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
+///   • <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
+///     AgentHeartbeat, ExecutionStarted, ExecutionCompleted)
+///
+/// Includes heartbeat throttling: coalesces rapid heartbeats into a single
+/// batch push per second to prevent flooding when many agents are connected.
+///
+/// Replaces the former dual-hub design (SignalRBridge + LiveHub) with a
+/// single hub at <c>/hubs/controller</c>.
 /// </summary>
-public sealed class SignalRBridge : IDisposable
+public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
 {
     private readonly IHubContext<ControllerHub> _hub;
     private readonly IActionPipelineExecutor _executor;
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IEventAggregator _events;
-    private readonly ILogger<SignalRBridge> _logger;
+    private readonly ILogger<SignalRNotifier> _logger;
 
     private IDisposable? _subRegistered;
     private IDisposable? _subUnregistered;
@@ -31,18 +38,18 @@ public sealed class SignalRBridge : IDisposable
     private IDisposable? _subExecutionStarted;
     private IDisposable? _subExecutionCompleted;
 
-    // Heartbeat throttling: coalesce rapid heartbeats into a single push per second
+    // Heartbeat throttling
     private readonly object _heartbeatLock = new();
     private readonly Dictionary<string, object> _pendingHeartbeats = new();
     private Timer? _heartbeatTimer;
 
-    public SignalRBridge(
+    public SignalRNotifier(
         IHubContext<ControllerHub> hub,
         IActionPipelineExecutor executor,
         IAgentGrpcDispatcher dispatcher,
         IVocabularyMonitor vocabMonitor,
         IEventAggregator events,
-        ILogger<SignalRBridge> logger)
+        ILogger<SignalRNotifier> logger)
     {
         _hub = hub;
         _executor = executor;
@@ -52,29 +59,40 @@ public sealed class SignalRBridge : IDisposable
         _logger = logger;
     }
 
+    /// <summary>
+    /// Subscribes to all event sources and starts the heartbeat timer.
+    /// Call after the SignalR hub is mapped.
+    /// </summary>
     public void Start()
     {
+        // C# events from pipeline executor
         _executor.LogEntry += OnLogEntry;
         _executor.NodeProgress += OnNodeProgress;
 
+        // C# events from agent dispatcher
         _dispatcher.OutputReceived += OnOutputReceived;
         _dispatcher.StatusChanged += OnStatusChanged;
 
+        // IEventAggregator events
         _subRegistered = _events.Subscribe<AgentRegisteredEvent>(OnAgentRegistered);
         _subUnregistered = _events.Subscribe<AgentUnregisteredEvent>(OnAgentUnregistered);
         _subHeartbeat = _events.Subscribe<AgentHeartbeatEvent>(OnHeartbeat);
         _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
         _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
 
+        // Config reload
         _vocabMonitor.ConfigReloaded += OnWatchListReloaded;
 
+        // Heartbeat flush timer (1 batch/second)
         _heartbeatTimer = new Timer(FlushHeartbeats, null, 1000, 1000);
 
         _logger.LogInformation(
-            "SignalR bridge started. Subscribed to: LogEntry, NodeProgress, " +
+            "SignalRNotifier started — subscribed to: LogEntry, NodeProgress, " +
             "OutputReceived, StatusChanged, AgentRegistered, AgentUnregistered, " +
-            "Heartbeat, ConfigReloaded");
+            "Heartbeat, ExecutionStarted, ExecutionCompleted, ConfigReloaded");
     }
+
+    // ?? C# event handlers ? IRealtimeNotifier calls ????????????????????
 
     private void OnLogEntry(PipelineLogEntry entry)
     {
@@ -127,7 +145,7 @@ public sealed class SignalRBridge : IDisposable
         }
         else if (node is ActionGroupConfig group)
         {
-            SendSafe("GroupProgress", new
+            SendSafe("ActionProgress", new
             {
                 groupTag = group.Tag,
                 executionType = group.ExecutionType.ToString(),
@@ -244,6 +262,21 @@ public sealed class SignalRBridge : IDisposable
             timestamp = DateTime.UtcNow.ToString("o"),
         });
     }
+
+    // ?? IRealtimeNotifier (for direct calls from services) ?????????????
+
+    public Task NotifyLogEntry(PipelineLogEntry entry) { OnLogEntry(entry); return Task.CompletedTask; }
+    public Task NotifyActionProgress(object payload) => SendSafeAsync("ActionProgress", payload);
+    public Task NotifyAgentOutput(object payload) => SendSafeAsync("AgentOutput", payload);
+    public Task NotifyAgentStatusChanged(object payload) => SendSafeAsync("AgentStatusChanged", payload);
+    public Task NotifyAgentHeartbeats(IReadOnlyList<object> batch) => SendSafeAsync("AgentHeartbeats", batch);
+    public Task NotifyExecutionStarted(ExecutionStartedEvent e) { OnExecutionStarted(e); return Task.CompletedTask; }
+    public Task NotifyExecutionCompleted(ExecutionCompletedEvent e) { OnExecutionCompleted(e); return Task.CompletedTask; }
+    public Task NotifyAgentRegistered(AgentRegisteredEvent e) { OnAgentRegistered(e); return Task.CompletedTask; }
+    public Task NotifyAgentUnregistered(AgentUnregisteredEvent e) { OnAgentUnregistered(e); return Task.CompletedTask; }
+    public Task NotifyWatchListReloaded() { SendSafe("WatchListReloaded", null); return Task.CompletedTask; }
+
+    // ?? Transport ??????????????????????????????????????????????????????
 
     private void SendSafe(string method, object? arg)
     {

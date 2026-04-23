@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using TestController.Api.Hubs;
 using TestController.Api.Services;
+using TestControllerGrpc.Services;
 
 namespace TestController.Api;
 
@@ -13,13 +14,15 @@ namespace TestController.Api;
 public static class ControllerApiExtensions
 {
     /// <summary>
-    /// Registers the shared API controllers, SignalR hub services, and bridge
-    /// into the DI container. Call this from both the WPF host and the standalone WebApi.
+    /// Registers the shared API controllers, SignalR hub services, and unified
+    /// real-time notifier into the DI container. Call this from both the WPF host
+    /// and the standalone WebApi.
     /// Returns the IMvcBuilder so callers can chain .AddJsonOptions() etc.
     /// </summary>
     public static IMvcBuilder AddControllerApi(this IServiceCollection services)
     {
-        services.AddSingleton<SignalRBridge>();
+        services.AddSingleton<SignalRNotifier>();
+        services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
 
         // Add controllers from the shared assembly
         return services.AddControllers()
@@ -27,7 +30,7 @@ public static class ControllerApiExtensions
     }
 
     /// <summary>
-    /// Maps shared API controllers and the SignalR hub, then starts the bridge.
+    /// Maps shared API controllers and the single SignalR hub, then starts the notifier.
     /// Call this after building the WebApplication.
     /// </summary>
     public static WebApplication UseControllerApi(this WebApplication app, string hubPath = "/hubs/controller")
@@ -35,9 +38,9 @@ public static class ControllerApiExtensions
         app.MapControllers();
         app.MapHub<ControllerHub>(hubPath);
 
-        // Start the bridge to wire up service events ? SignalR broadcasts
-        var bridge = app.Services.GetRequiredService<SignalRBridge>();
-        bridge.Start();
+        // Start the unified notifier to wire up service events ? SignalR broadcasts
+        var notifier = app.Services.GetRequiredService<SignalRNotifier>();
+        notifier.Start();
 
         return app;
     }

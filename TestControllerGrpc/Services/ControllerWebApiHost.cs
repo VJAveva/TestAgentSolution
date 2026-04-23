@@ -176,11 +176,11 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     {
         _logger.LogInformation("WebApi + SignalR server stopping…");
 
-        // Dispose the bridge first to unsubscribe from all events
+        // Dispose the notifier first to unsubscribe from all events
         if (_app is not null)
         {
-            var bridge = _app.Services.GetService<SignalRBridge>();
-            bridge?.Dispose();
+            var notifier = _app.Services.GetService<SignalRNotifier>();
+            notifier?.Dispose();
         }
 
         if (_app is not null)

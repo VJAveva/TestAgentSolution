@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using TestController.Api;
 using TestController.WebApi.Endpoints;
-using TestController.WebApi.Hubs;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -38,7 +37,7 @@ builder.Services.AddSingleton<IAppLogger>(sp =>
 builder.Services.AddSingleton<AgentGrpcClientManager>();
 builder.Services.AddSingleton<AgentRegistry>();
 builder.Services.AddSingleton<WatchListFileService>();
-builder.Services.AddHostedService<SignalRBroadcastService>();
+builder.Services.AddHostedService<AgentEventRelayService>();
 
 // Adapters: expose standalone services as the interfaces the shared API controllers expect
 builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabularyMonitor(sp.GetRequiredService<WatchListFileService>()));
@@ -84,11 +83,8 @@ app.UseCors();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Shared API: controllers (execution, watchlist, agents, health, results) + SignalR hub + bridge
+// Shared API: controllers (execution, watchlist, agents, health, results) + single SignalR hub
 app.UseControllerApi("/hubs/controller");
-
-// Standalone-only LiveHub for gRPC-streamed agent events (used by SignalRBroadcastService)
-app.MapHub<LiveHub>("/hub/live");
 
 // Standalone-only minimal API endpoints (features not in the shared library):
 // - WatchList file I/O (import/export/xml/refresh/save)
