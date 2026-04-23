@@ -30,6 +30,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IEventAggregator _events;
+    private readonly CachedBuildResultsProvider _buildResults;
     private readonly ILogger<SignalRNotifier> _logger;
 
     private IDisposable? _subRegistered;
@@ -49,6 +50,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         IAgentGrpcDispatcher dispatcher,
         IVocabularyMonitor vocabMonitor,
         IEventAggregator events,
+        CachedBuildResultsProvider buildResults,
         ILogger<SignalRNotifier> logger)
     {
         _hub = hub;
@@ -56,6 +58,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _dispatcher = dispatcher;
         _vocabMonitor = vocabMonitor;
         _events = events;
+        _buildResults = buildResults;
         _logger = logger;
     }
 
@@ -251,6 +254,9 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
 
     private void OnExecutionCompleted(ExecutionCompletedEvent e)
     {
+        // Invalidate build results cache so the next dashboard load picks up new TRX files
+        _buildResults.InvalidateAll();
+
         SendSafe("ExecutionCompleted", new
         {
             sessionId = e.SessionId,

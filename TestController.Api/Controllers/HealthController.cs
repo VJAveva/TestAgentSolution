@@ -12,15 +12,18 @@ public class HealthController : ControllerBase
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly IAgentGrpcDispatcher _dispatcher;
+    private readonly CachedBuildResultsProvider _buildResults;
 
     public HealthController(
         IVocabularyMonitor vocabMonitor,
         ExecutionSessionManager sessionManager,
-        IAgentGrpcDispatcher dispatcher)
+        IAgentGrpcDispatcher dispatcher,
+        CachedBuildResultsProvider buildResults)
     {
         _vocabMonitor = vocabMonitor;
         _sessionManager = sessionManager;
         _dispatcher = dispatcher;
+        _buildResults = buildResults;
     }
 
     /// <summary>GET /api/health — lightweight liveness check.</summary>
@@ -105,6 +108,7 @@ public class HealthController : ControllerBase
                 workingDirectory = Environment.CurrentDirectory,
                 uptime = (DateTime.UtcNow - process.StartTime.ToUniversalTime()).ToString(@"dd\.hh\:mm\:ss"),
             },
+            resultsCache = _buildResults.GetStats(),
         });
     }
 }

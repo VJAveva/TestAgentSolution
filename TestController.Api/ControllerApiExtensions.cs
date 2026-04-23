@@ -21,6 +21,7 @@ public static class ControllerApiExtensions
     /// </summary>
     public static IMvcBuilder AddControllerApi(this IServiceCollection services)
     {
+        services.AddSingleton<CachedBuildResultsProvider>();
         services.AddSingleton<SignalRNotifier>();
         services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
 

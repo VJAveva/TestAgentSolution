@@ -9,70 +9,69 @@ namespace TestController.Api.Controllers;
 [Route("api/results")]
 public class ResultsController : ControllerBase
 {
+    private readonly CachedBuildResultsProvider _buildResults;
     private readonly TrxResultsParser _parser;
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
 
     public ResultsController(
+        CachedBuildResultsProvider buildResults,
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildResultsConfig config)
     {
+        _buildResults = buildResults;
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
     }
 
-    /// <summary>GET /api/results/builds — list available builds.</summary>
+    /// <summary>
+    /// GET /api/results/builds — list available builds.
+    /// Cached: first call parses TRX files, subsequent calls return from cache
+    /// until the build folder's modification time changes.
+    /// </summary>
     [HttpGet("builds")]
-    public IActionResult GetBuilds()
+    public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health)
     {
-        var builds = _parser.DiscoverBuilds(_config.ResultsRootPath);
-        return Ok(builds.Select(b =>
+        var builds = _buildResults.GetAllBuilds();
+
+        IEnumerable<BuildNode> filtered = builds;
+
+        if (!string.IsNullOrEmpty(health))
         {
-            try
-            {
-                var node = _parser.ParseBuildFolder(b.Path);
-                node = _aggregator.EvaluateBuildHealth(node);
-                return new
-                {
-                    buildNumber = b.BuildNumber,
-                    modified = b.Modified,
-                    totalTests = node.TotalTests,
-                    passedTests = node.PassedTests,
-                    failedTests = node.FailedTests,
-                    timeoutTests = node.TimeoutTests,
-                    passRate = node.PassRate,
-                    health = node.Health.ToString(),
-                };
-            }
-            catch
-            {
-                return new
-                {
-                    buildNumber = b.BuildNumber,
-                    modified = b.Modified,
-                    totalTests = 0,
-                    passedTests = 0,
-                    failedTests = 0,
-                    timeoutTests = 0,
-                    passRate = 0.0,
-                    health = "Unknown",
-                };
-            }
+            filtered = filtered.Where(b =>
+                string.Equals(b.Health.ToString(), health, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (limit is > 0)
+        {
+            filtered = filtered.Take(limit.Value);
+        }
+
+        return Ok(filtered.Select(node => new
+        {
+            buildNumber = node.BuildNumber,
+            modified = node.LatestRun ?? node.EarliestRun,
+            totalTests = node.TotalTests,
+            passedTests = node.PassedTests,
+            failedTests = node.FailedTests,
+            timeoutTests = node.TimeoutTests,
+            passRate = node.PassRate,
+            health = node.Health.ToString(),
         }));
     }
 
-    /// <summary>GET /api/results/builds/{buildNumber} — parsed build results.</summary>
+    /// <summary>
+    /// GET /api/results/builds/{buildNumber} — parsed build results.
+    /// Returns from cache if available.
+    /// </summary>
     [HttpGet("builds/{buildNumber}")]
     public IActionResult GetBuild(string buildNumber)
     {
-        var buildPath = Path.Combine(_config.ResultsRootPath, buildNumber);
-        if (!Directory.Exists(buildPath))
+        var node = _buildResults.GetBuild(buildNumber);
+        if (node == null)
             return NotFound(new { error = $"Build '{buildNumber}' not found" });
-
-        var node = _parser.ParseBuildFolder(buildPath);
-        node = _aggregator.EvaluateBuildHealth(node);
 
         return Ok(ToBuildDto(node));
     }
@@ -102,6 +101,45 @@ public class ResultsController : ControllerBase
         var detector = new ConsecutiveFailureDetector();
         var alerts = detector.Detect(_config.ResultsRootPath, _parser);
         return Ok(alerts);
+    }
+
+    /// <summary>
+    /// POST /api/results/invalidate/{buildNumber} — force re-parse of a specific build.
+    /// </summary>
+    [HttpPost("invalidate/{buildNumber}")]
+    public IActionResult InvalidateBuild(string buildNumber)
+    {
+        _buildResults.Invalidate(buildNumber);
+        return Ok(new
+        {
+            message = $"Cache invalidated for '{buildNumber}'",
+            build = _buildResults.GetBuild(buildNumber) is { } node ? new
+            {
+                buildNumber = node.BuildNumber,
+                totalTests = node.TotalTests,
+                passRate = node.PassRate,
+                health = node.Health.ToString(),
+            } : null,
+        });
+    }
+
+    /// <summary>
+    /// POST /api/results/invalidate — clear the entire results cache.
+    /// </summary>
+    [HttpPost("invalidate")]
+    public IActionResult InvalidateAll()
+    {
+        _buildResults.InvalidateAll();
+        return Ok(new { message = "All results cache cleared" });
+    }
+
+    /// <summary>
+    /// GET /api/results/cache-stats — cache diagnostics.
+    /// </summary>
+    [HttpGet("cache-stats")]
+    public IActionResult GetCacheStats()
+    {
+        return Ok(_buildResults.GetStats());
     }
 
     private static object ToBuildDto(BuildNode node) => new
