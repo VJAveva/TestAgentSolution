@@ -96,7 +96,7 @@ public sealed class ExecutionMonitorForm : Form
             ReadOnly = true,
             BackColor = Color.FromArgb(20, 20, 20),
             ForeColor = Color.FromArgb(204, 204, 204),
-            Font = new Font("Cascadia Mono", 9.5f, FontStyle.Regular, GraphicsUnit.Point),
+            Font = CreateMonoFont(9.5f),
             WordWrap = false,
             ScrollBars = RichTextBoxScrollBars.Both,
         };
@@ -195,6 +195,23 @@ public sealed class ExecutionMonitorForm : Form
         // ── Start event consumption ────────────────────────────────
         Load += OnLoad;
         FormClosed += OnFormClosed;
+    }
+
+    private static Font CreateMonoFont(float size)
+    {
+        string[] candidates = ["Cascadia Mono", "Consolas", "Courier New"];
+        foreach (var name in candidates)
+        {
+            try
+            {
+                var font = new Font(name, size, FontStyle.Regular, GraphicsUnit.Point);
+                if (font.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return font;
+                font.Dispose();
+            }
+            catch { }
+        }
+        return new Font(FontFamily.GenericMonospace, size, FontStyle.Regular, GraphicsUnit.Point);
     }
 
     private void OnLoad(object? s, EventArgs e)
