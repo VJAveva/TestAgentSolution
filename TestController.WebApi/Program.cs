@@ -42,8 +42,14 @@ builder.Services.AddHostedService<SignalRBroadcastService>();
 
 // Adapters: expose standalone services as the interfaces the shared API controllers expect
 builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabularyMonitor(sp.GetRequiredService<WatchListFileService>()));
-builder.Services.AddSingleton<IAgentGrpcDispatcher>(sp => new StandaloneAgentDispatcher(sp.GetRequiredService<AgentRegistry>()));
-builder.Services.AddSingleton<IActionPipelineExecutor, StandalonePipelineExecutor>();
+builder.Services.AddSingleton<IAgentGrpcDispatcher>(sp => new StandaloneAgentDispatcher(
+    sp.GetRequiredService<AgentGrpcClientManager>(),
+    sp.GetRequiredService<AgentRegistry>(),
+    sp.GetRequiredService<ILogger<StandaloneAgentDispatcher>>()));
+builder.Services.AddSingleton<IActionPipelineExecutor>(sp => new StandalonePipelineExecutor(
+    sp.GetRequiredService<IAgentGrpcDispatcher>(),
+    sp.GetRequiredService<ExecutionSessionManager>(),
+    sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>()));
 builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
 // Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
