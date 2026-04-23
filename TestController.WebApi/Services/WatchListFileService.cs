@@ -5,17 +5,19 @@ namespace TestController.WebApi.Services;
 
 /// <summary>
 /// Thread-safe wrapper around WatchList XML file I/O.
-/// Reads/writes via <see cref="WatchListXmlParser"/> (from Core).
+/// Reads/writes via <see cref="IWatchListXmlParser"/> (from Core).
 /// </summary>
 public sealed class WatchListFileService
 {
     private readonly string _filePath;
     private readonly object _lock = new();
+    private readonly IWatchListXmlParser _parser;
     private readonly IAppLogger _logger;
 
-    public WatchListFileService(IConfiguration config, IAppLogger logger)
+    public WatchListFileService(IConfiguration config, IWatchListXmlParser parser, IAppLogger logger)
     {
         _filePath = config["VocabularyFile"] ?? @"C:\TestControllerService\WatchList.xml";
+        _parser = parser;
         _logger = logger;
     }
 
@@ -27,7 +29,7 @@ public sealed class WatchListFileService
         {
             try
             {
-                var config = WatchListXmlParser.Load(_filePath);
+                var config = _parser.Load(_filePath);
                 config.FilePath = _filePath;
                 return config;
             }
@@ -45,7 +47,7 @@ public sealed class WatchListFileService
         {
             try
             {
-                WatchListXmlParser.Save(config, _filePath);
+                _parser.Save(config, _filePath);
             }
             catch (Exception ex)
             {

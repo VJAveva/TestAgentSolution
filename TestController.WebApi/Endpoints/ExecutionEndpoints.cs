@@ -10,14 +10,11 @@ public static class ExecutionEndpoints
 {
     public static RouteGroupBuilder MapExecutionEndpoints(this RouteGroupBuilder group)
     {
+        // These endpoints extend the shared ExecutionController with standalone-specific features.
+        // Common endpoints (sessions, status, trigger/{tag}, cancel) are provided by the shared library.
         group.MapPost("/trigger-all", TriggerAll);
-        group.MapPost("/trigger/{tag}", TriggerByTag);
         group.MapPost("/trigger-event/{tag}/{eventIndex:int}", TriggerEvent);
-        group.MapPost("/cancel", CancelAll);
-        group.MapPost("/cancel/{sessionId}", CancelBySession);
         group.MapPost("/retry/{sessionId}", RetrySession);
-        group.MapGet("/status", GetStatus);
-        group.MapGet("/sessions", GetSessions);
         return group;
     }
 

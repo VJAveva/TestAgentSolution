@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
-namespace TestControllerGrpc.Controllers;
+namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api/watchlist")]
@@ -40,9 +40,6 @@ public class WatchListController : ControllerBase
                 });
             }
 
-            // Return the raw WatchListConfig model — the React WebClient's
-            // watchlistStore.buildTree() expects the full model shape with
-            // watchItems[].events[].children[] using the polymorphic nodeType discriminator.
             return Ok(config);
         }
         catch (Exception ex)
@@ -92,7 +89,7 @@ public class WatchListController : ControllerBase
             if (watchItem == null)
                 return NotFound(new { error = $"WatchItem '{tag}' not found" });
 
-            var paramFile = FindInitializeFile(watchItem);
+            var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
             if (paramFile == null || !System.IO.File.Exists(paramFile))
                 return Ok(new { parameters = new Dictionary<string, string>(), file = "", warning = paramFile == null ? "No Initialize node found" : $"Parameter file not found: {Path.GetFileName(paramFile)}" });
 
@@ -115,91 +112,5 @@ public class WatchListController : ControllerBase
                 detail = ex.Message,
             });
         }
-    }
-
-    // ?? Tree serialization helpers ???????????????????????????????????????
-
-    private static object SerializeEvent(EventConfig e) => new
-    {
-        tag = e.Type,
-        nodeKind = "Event",
-        executionType = e.ExecutionType.ToString(),
-        executionStatus = "Idle",
-        children = e.Children.Select(SerializeNode).ToList(),
-    };
-
-    private static object SerializeNode(IActionNode node) => node switch
-    {
-        ActionGroupConfig g => new
-        {
-            tag = g.Tag,
-            nodeKind = "ActionGroup",
-            executionType = g.ExecutionType.ToString(),
-            executionStatus = "Idle",
-            agentName = (string?)null,
-            command = (string?)null,
-            children = g.Children.Select(SerializeNode).ToList(),
-        },
-        ActionConfig a => (object)new
-        {
-            tag = !string.IsNullOrEmpty(a.Order) ? a.Order : a.Command,
-            nodeKind = "Action",
-            executionStatus = "Idle",
-            agentName = string.IsNullOrEmpty(a.AgentName) ? "Controller" : a.AgentName,
-            command = a.Command,
-            children = Array.Empty<object>(),
-        },
-        InitializeConfig i => (object)new
-        {
-            tag = i.Tag,
-            nodeKind = "Initialize",
-            executionStatus = "Idle",
-            agentName = (string?)null,
-            command = (string?)null,
-            children = Array.Empty<object>(),
-        },
-        RefConfig r => (object)new
-        {
-            tag = r.TemplateID,
-            nodeKind = "Ref",
-            executionStatus = "Idle",
-            agentName = (string?)null,
-            command = (string?)null,
-            children = Array.Empty<object>(),
-        },
-        _ => new
-        {
-            tag = "Unknown",
-            nodeKind = "Unknown",
-            executionStatus = "Idle",
-            agentName = (string?)null,
-            command = (string?)null,
-            children = Array.Empty<object>(),
-        },
-    };
-
-    private static string? FindInitializeFile(WatchItemConfig watchItem)
-    {
-        foreach (var ev in watchItem.Events)
-        {
-            var file = FindInitializeFileInChildren(ev.Children);
-            if (file != null) return file;
-        }
-        return null;
-    }
-
-    private static string? FindInitializeFileInChildren(List<IActionNode> children)
-    {
-        foreach (var child in children)
-        {
-            if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
-                return init.ParameterFile;
-            if (child is ActionGroupConfig group)
-            {
-                var file = FindInitializeFileInChildren(group.Children);
-                if (file != null) return file;
-            }
-        }
-        return null;
     }
 }

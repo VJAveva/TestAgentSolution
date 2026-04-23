@@ -1,13 +1,12 @@
 using System.Collections.Concurrent;
-using System.IO;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
-using TestControllerGrpc.Hubs;
+using TestController.Api.Hubs;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
-namespace TestControllerGrpc.Controllers;
+namespace TestController.Api.Controllers;
 
 /// <summary>Request body for triggering with parameters.</summary>
 public record TriggerRequest
@@ -41,7 +40,7 @@ public class ExecutionController : ControllerBase
         _hub = hub;
     }
 
-    /// <summary>GET /api/execution/sessions — list active sessions (matches WebClient SessionsResponse).</summary>
+    /// <summary>GET /api/execution/sessions — list active sessions.</summary>
     [HttpGet("sessions")]
     public IActionResult GetSessions()
     {
@@ -109,7 +108,6 @@ public class ExecutionController : ControllerBase
         if (watchItem.Events.Count == 0)
             return BadRequest(new { error = $"WatchItem '{watchItemTag}' has no events" });
 
-        // Select the requested event type, or default to the first event
         var evt = eventType is not null
             ? watchItem.Events.FirstOrDefault(e =>
                 string.Equals(e.Type, eventType, StringComparison.OrdinalIgnoreCase))
@@ -118,17 +116,25 @@ public class ExecutionController : ControllerBase
         if (evt == null)
             return BadRequest(new { error = $"Event type '{eventType}' not found on WatchItem '{watchItemTag}'" });
 
-        // Atomic check-and-mark inside a per-tag lock to prevent TOCTOU race
+        // Atomic check-and-mark inside a per-tag lock to prevent TOCTOU race.
         var tagLock = _triggerLocks.GetOrAdd(watchItemTag, _ => new object());
+        string sessionId;
         lock (tagLock)
         {
             if (_sessionManager.HasActiveExecution(watchItemTag))
                 return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });
+
+            sessionId = Guid.NewGuid().ToString("N")[..12];
+            _sessionManager.BeginSession(
+                watchItemTag, evt.Type,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                evt.Children.ToList(),
+                sessionId);
         }
 
-        // Build parameters: load from Initialize node's file, then merge request overrides
+        // Build parameters
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var paramFile = FindInitializeFile(watchItem);
+        var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
         if (paramFile != null && System.IO.File.Exists(paramFile))
         {
             var entries = ParameterResolver.ParseParameterFile(paramFile);
@@ -140,7 +146,6 @@ public class ExecutionController : ControllerBase
             }
         }
 
-        // Override with request parameters
         if (!string.IsNullOrEmpty(request?.BuildNumber))
         {
             parameters["_BuildNumber"] = request.BuildNumber;
@@ -161,7 +166,6 @@ public class ExecutionController : ControllerBase
             }
         }
 
-        // Write updated parameters back to Variables.txt so WPF also sees them
         if (paramFile != null && parameters.Count > 0)
         {
             try
@@ -171,10 +175,9 @@ public class ExecutionController : ControllerBase
                     .Select(kvp => $"{kvp.Key},{kvp.Value}");
                 await System.IO.File.WriteAllLinesAsync(paramFile, lines);
             }
-            catch { /* best effort — file may be locked */ }
+            catch { /* best effort */ }
         }
 
-        var sessionId = Guid.NewGuid().ToString("N")[..12];
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = watchItem.Path,
@@ -190,9 +193,6 @@ public class ExecutionController : ControllerBase
             {
                 await _executor.ExecuteEventTrackedAsync(watchItemTag, evt, ctx, CancellationToken.None);
 
-                // Read the actual session state set by CompleteSession —
-                // the executor doesn't throw on partial failure (FailAndContinue),
-                // so we must read the session's final state rather than assuming success.
                 var completedSession = _sessionManager.GetSession(sessionId)
                     ?? _sessionManager.GetLastSession(watchItemTag);
                 var finalState = completedSession?.State switch
@@ -221,9 +221,7 @@ public class ExecutionController : ControllerBase
                     sessionId,
                     watchItemTag,
                     state = "Cancelled",
-                    passed = 0,
-                    failed = 0,
-                    total = 0,
+                    passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
                 });
             }
@@ -235,9 +233,7 @@ public class ExecutionController : ControllerBase
                     watchItemTag,
                     state = "Failed",
                     error = ex.Message,
-                    passed = 0,
-                    failed = 0,
-                    total = 0,
+                    passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
                 });
             }
@@ -259,22 +255,22 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/execution/available-builds?basePath=... — list builds from a network path.</summary>
+    /// <summary>GET /api/execution/available-builds?basePath=...</summary>
     [HttpGet("available-builds")]
     public IActionResult GetAvailableBuilds([FromQuery] string? basePath)
     {
         if (string.IsNullOrEmpty(basePath))
             return Ok(new { builds = Array.Empty<object>() });
 
-        if (!Directory.Exists(basePath))
+        if (!System.IO.Directory.Exists(basePath))
             return NotFound(new { error = $"Path not found: {basePath}" });
 
-        var builds = Directory.GetDirectories(basePath)
+        var builds = System.IO.Directory.GetDirectories(basePath)
             .Select(d => new
             {
-                name = Path.GetFileName(d),
+                name = System.IO.Path.GetFileName(d),
                 path = d,
-                modified = Directory.GetLastWriteTime(d),
+                modified = System.IO.Directory.GetLastWriteTime(d),
             })
             .OrderByDescending(b => b.modified)
             .Take(50)
@@ -304,7 +300,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a running session.</summary>
+    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a specific session.</summary>
     [HttpPost("{sessionId}/cancel")]
     public async Task<IActionResult> CancelSession(string sessionId)
     {
@@ -320,7 +316,6 @@ public class ExecutionController : ControllerBase
         return Ok(new { message = "Cancellation requested" });
     }
 
-    /// <summary>Safe DTO projection — strips internal state, paths, and sensitive fields.</summary>
     private static object ToSessionDto(ExecutionSession s) => new
     {
         sessionId = s.SessionId,
@@ -334,33 +329,4 @@ public class ExecutionController : ControllerBase
         failedCount = s.FailedCount,
         summary = s.SummaryText,
     };
-
-    /// <summary>
-    /// Finds the first Initialize node's ParameterFile in a WatchItem's event tree.
-    /// Returns the resolved file path, or null if none found.
-    /// </summary>
-    private static string? FindInitializeFile(WatchItemConfig watchItem)
-    {
-        foreach (var ev in watchItem.Events)
-        {
-            var file = FindInitializeFileInChildren(ev.Children);
-            if (file != null) return file;
-        }
-        return null;
-    }
-
-    private static string? FindInitializeFileInChildren(List<IActionNode> children)
-    {
-        foreach (var child in children)
-        {
-            if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
-                return init.ParameterFile;
-            if (child is ActionGroupConfig group)
-            {
-                var file = FindInitializeFileInChildren(group.Children);
-                if (file != null) return file;
-            }
-        }
-        return null;
-    }
 }

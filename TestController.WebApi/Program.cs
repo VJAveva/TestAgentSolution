@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TestController.Api;
 using TestController.WebApi.Endpoints;
 using TestController.WebApi.Hubs;
 using TestController.WebApi.Services;
@@ -17,6 +18,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 // Shared services from Core
+builder.Services.AddSingleton<IWatchListXmlParser, WatchListXmlParserService>();
 builder.Services.AddSingleton<TrxResultsParser>();
 builder.Services.AddSingleton(sp =>
 {
@@ -37,6 +39,21 @@ builder.Services.AddSingleton<AgentGrpcClientManager>();
 builder.Services.AddSingleton<AgentRegistry>();
 builder.Services.AddSingleton<WatchListFileService>();
 builder.Services.AddHostedService<SignalRBroadcastService>();
+
+// Adapters: expose standalone services as the interfaces the shared API controllers expect
+builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabularyMonitor(sp.GetRequiredService<WatchListFileService>()));
+builder.Services.AddSingleton<IAgentGrpcDispatcher>(sp => new StandaloneAgentDispatcher(sp.GetRequiredService<AgentRegistry>()));
+builder.Services.AddSingleton<IActionPipelineExecutor, StandalonePipelineExecutor>();
+builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
+
+// Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
+builder.Services.AddControllerApi()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        o.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 
 var signalRSection = builder.Configuration.GetSection("SignalR");
 builder.Services.AddSignalR(options =>
@@ -61,12 +78,21 @@ app.UseCors();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// API routes
+// Shared API: controllers (execution, watchlist, agents, health, results) + SignalR hub + bridge
+app.UseControllerApi("/hubs/controller");
+
+// Standalone-only LiveHub for gRPC-streamed agent events (used by SignalRBroadcastService)
+app.MapHub<LiveHub>("/hub/live");
+
+// Standalone-only minimal API endpoints (features not in the shared library):
+// - WatchList file I/O (import/export/xml/refresh/save)
+// - Direct agent gRPC queries (snapshot, health, history, audit, diagnose, register/unregister)
+// - Extended execution (trigger-all, trigger-event, retry)
+// - Build results export and email reports
 app.MapGroup("/api/watchlist").MapWatchListEndpoints();
 app.MapGroup("/api/agents").MapAgentEndpoints();
 app.MapGroup("/api/execution").MapExecutionEndpoints();
 app.MapGroup("/api/results").MapResultsEndpoints();
-app.MapHub<LiveHub>("/hub/live");
 
 // SPA fallback
 app.MapFallbackToFile("index.html");

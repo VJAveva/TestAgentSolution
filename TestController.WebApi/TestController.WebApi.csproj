@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
+    <ProjectReference Include="..\TestController.Api\TestController.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

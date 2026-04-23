@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
-namespace TestControllerGrpc.Controllers;
+namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api")]

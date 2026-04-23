@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
+    <ProjectReference Include="..\TestController.Api\TestController.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -60,6 +61,11 @@
     <Content Include="Help\TestController_Help.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+    <Folder Include="Hubs\" />
   </ItemGroup>
 
 </Project>

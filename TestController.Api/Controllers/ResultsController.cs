@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
-namespace TestControllerGrpc.Controllers;
+namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api/results")]
@@ -23,7 +23,7 @@ public class ResultsController : ControllerBase
         _config = config;
     }
 
-    /// <summary>GET /api/results/builds — list available builds (paths stripped).</summary>
+    /// <summary>GET /api/results/builds — list available builds.</summary>
     [HttpGet("builds")]
     public IActionResult GetBuilds()
     {
@@ -39,7 +39,6 @@ public class ResultsController : ControllerBase
     [HttpGet("{buildNumber}")]
     public IActionResult GetBuild(string buildNumber)
     {
-        // Construct path directly instead of scanning all directories
         var buildPath = Path.Combine(_config.ResultsRootPath, buildNumber);
         if (!Directory.Exists(buildPath))
             return NotFound(new { error = $"Build '{buildNumber}' not found" });
@@ -77,7 +76,6 @@ public class ResultsController : ControllerBase
         return Ok(alerts);
     }
 
-    /// <summary>DTO projection — strips internal file system paths from BuildNode.</summary>
     private static object ToBuildDto(BuildNode node) => new
     {
         buildNumber = node.BuildNumber,

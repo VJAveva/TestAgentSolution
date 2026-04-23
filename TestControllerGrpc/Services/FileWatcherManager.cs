@@ -15,6 +15,7 @@ namespace TestControllerGrpc.Services;
 public sealed class FileWatcherManager : IFileWatcherManager
 {
     private readonly IActionPipelineExecutor _executor;
+    private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<FileWatcherManager> _logger;
     private readonly List<ActiveWatcher> _watchers = new();
     private readonly object _lock = new();
@@ -31,9 +32,11 @@ public sealed class FileWatcherManager : IFileWatcherManager
 
     public FileWatcherManager(
         IActionPipelineExecutor executor,
+        ExecutionSessionManager sessionManager,
         ILogger<FileWatcherManager> logger)
     {
         _executor = executor;
+        _sessionManager = sessionManager;
         _logger = logger;
     }
 
@@ -208,6 +211,16 @@ public sealed class FileWatcherManager : IFileWatcherManager
     private void OnTriggered(WatchItemConfig wi, EventConfig evt, string fullPath, string fileName)
     {
         _logger.LogInformation("Trigger: {Path} → {File} ({Type})", wi.Path, fileName, evt.Type);
+
+        // ARCH-2 fix: Prevent duplicate concurrent executions for the same WatchItem
+        if (_sessionManager.HasActiveExecution(wi.Tag))
+        {
+            _logger.LogWarning(
+                "Ignoring trigger for '{Tag}' — already executing. File: {File}",
+                wi.Tag, fileName);
+            return;
+        }
+
         TriggerFired?.Invoke(wi.Path, fileName);
 
         // Build execution context
@@ -229,12 +242,17 @@ public sealed class FileWatcherManager : IFileWatcherManager
         // Notify UI of all parameters for token resolution
         TriggerParametersLoaded?.Invoke(wi.Tag, ctx.Parameters.ToDictionary(p => p.Key, p => p.Value));
 
-        // Execute pipeline on background thread
+        // ARCH-9 fix: Use session-tracked execution so SessionManager.CancelSession()
+        // propagates cancellation through the linked CTS in ExecuteEventTrackedAsync.
         _ = Task.Run(async () =>
         {
             try
             {
-                await _executor.ExecuteEventAsync(evt, ctx, CancellationToken.None);
+                await _executor.ExecuteEventTrackedAsync(wi.Tag, evt, ctx, CancellationToken.None);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Pipeline cancelled for {Tag}/{File}", wi.Tag, fileName);
             }
             catch (Exception ex)
             {

@@ -56,7 +56,8 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
                     })
                     .Build();
                 var logger = sp.GetRequiredService<TestControllerGrpc.Services.IAppLogger>();
-                return new WatchListFileService(config, logger);
+                var parser = sp.GetRequiredService<TestControllerGrpc.Services.IWatchListXmlParser>();
+                return new WatchListFileService(config, parser, logger);
             });
 
             ReplaceService<AgentRegistry>(services, sp =>

@@ -9,7 +9,8 @@ public static class WatchListEndpoints
 {
     public static RouteGroupBuilder MapWatchListEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", GetWatchList);
+        // These endpoints extend the shared WatchListController with standalone-specific features.
+        // Common endpoints (GET /, GET {tag}/status, GET {tag}/parameters) are provided by the shared library.
         group.MapGet("/xml", GetWatchListXml);
         group.MapPut("/", SaveWatchList);
         group.MapPost("/import", ImportWatchItems);

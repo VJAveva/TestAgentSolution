@@ -12,7 +12,8 @@ public static class AgentEndpoints
 {
     public static RouteGroupBuilder MapAgentEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", ListAgents);
+        // These endpoints extend the shared AgentsController with standalone-specific features.
+        // Common endpoint (GET /) is provided by the shared library.
         group.MapPost("/register", RegisterAgent);
         group.MapDelete("/{name}", UnregisterAgent);
         group.MapPost("/{name}/test", TestAgent);

@@ -250,10 +250,18 @@ public class TrxResultsParser
             TestCases = testCases,
         };
 
+        // Evict stale entries for the same file path (old timestamps) to prevent
+        // unbounded key growth when .trx files are rewritten.
+        var pathPrefix = trxFilePath + "|";
+        foreach (var existingKey in _fileCache.Keys)
+        {
+            if (existingKey.StartsWith(pathPrefix, StringComparison.Ordinal) && existingKey != cacheKey)
+                _fileCache.TryRemove(existingKey, out _);
+        }
+
         _fileCache[cacheKey] = result;
 
-        // Evict oldest entries when cache exceeds max size to prevent unbounded memory growth.
-        // Simple eviction: clear half the cache when limit is reached.
+        // Size cap: if still over limit, clear the oldest half
         if (_fileCache.Count > MaxFileCacheSize)
         {
             var keysToRemove = _fileCache.Keys.Take(_fileCache.Count / 2).ToList();

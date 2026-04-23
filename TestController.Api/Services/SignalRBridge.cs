@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
-using TestControllerGrpc.Hubs;
+using TestController.Api.Hubs;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
-namespace TestControllerGrpc.Services;
+namespace TestController.Api.Services;
 
 /// <summary>
 /// Bridges existing service events to SignalR broadcasts.
@@ -67,7 +68,6 @@ public sealed class SignalRBridge : IDisposable
 
         _vocabMonitor.ConfigReloaded += OnWatchListReloaded;
 
-        // Flush pending heartbeats every 1 second
         _heartbeatTimer = new Timer(FlushHeartbeats, null, 1000, 1000);
 
         _logger.LogInformation(
@@ -78,7 +78,6 @@ public sealed class SignalRBridge : IDisposable
 
     private void OnLogEntry(PipelineLogEntry entry)
     {
-        // Extract sessionId from message prefix pattern: [sessionId] ...
         var sessionId = "";
         var message = entry.Message;
         if (message.StartsWith('[') && message.IndexOf(']') is > 0 and var endBracket)
@@ -86,7 +85,6 @@ public sealed class SignalRBridge : IDisposable
             sessionId = message[1..endBracket];
         }
 
-        // Infer severity from message content
         var severity = message.Contains("Failed", StringComparison.OrdinalIgnoreCase)
                     || message.Contains("?", StringComparison.Ordinal)
             ? "Error"
@@ -98,7 +96,6 @@ public sealed class SignalRBridge : IDisposable
                 ? "Warning"
                 : "Info";
 
-        // Infer agent name from category when available
         var agentName = entry.Category == "Action" || entry.Category == "Retry"
             ? "Controller" : "";
 
@@ -142,8 +139,6 @@ public sealed class SignalRBridge : IDisposable
 
     private void OnOutputReceived(string agentName, string line, string kind)
     {
-        // Single broadcast with all fields — avoids doubling WebSocket traffic.
-        // Clients use the "category" field to distinguish AgentOutput from other log entries.
         var ts = DateTime.Now.ToString("HH:mm:ss.fff");
         SendSafe("AgentOutput", new
         {
@@ -151,7 +146,6 @@ public sealed class SignalRBridge : IDisposable
             line,
             kind,
             timestamp = ts,
-            // Extra fields so the unified log viewer can consume this as a LogEntry too
             sessionId = "",
             severity = kind == "stderr" ? "Error" : "Info",
             category = "Output",
@@ -188,10 +182,6 @@ public sealed class SignalRBridge : IDisposable
         });
     }
 
-    /// <summary>
-    /// Heartbeats are coalesced per-agent and flushed once per second
-    /// to avoid flooding WebSocket connections when many agents are connected.
-    /// </summary>
     private void OnHeartbeat(AgentHeartbeatEvent e)
     {
         var payload = new
@@ -255,10 +245,6 @@ public sealed class SignalRBridge : IDisposable
         });
     }
 
-    /// <summary>
-    /// Sends a SignalR message to the "global" group with error logging.
-    /// Prevents unobserved task exceptions from fire-and-forget calls.
-    /// </summary>
     private void SendSafe(string method, object? arg)
     {
         _ = SendSafeAsync(method, arg);

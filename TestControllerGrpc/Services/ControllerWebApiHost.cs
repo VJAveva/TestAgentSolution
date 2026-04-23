@@ -5,7 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TestControllerGrpc.Hubs;
+using TestController.Api;
+using TestController.Api.Services;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
@@ -94,7 +95,8 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_aggregator);
             builder.Services.AddSingleton(_resultsConfig);
 
-            builder.Services.AddControllers()
+            // Use the shared API library for controllers, hub, and bridge
+            builder.Services.AddControllerApi()
                 .AddJsonOptions(o =>
                 {
                     o.JsonSerializerOptions.PropertyNamingPolicy =
@@ -124,8 +126,6 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                         .AllowCredentials();
                 });
             });
-
-            builder.Services.AddSingleton<SignalRBridge>();
 
             builder.Logging.SetMinimumLevel(LogLevel.Information);
             builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
@@ -158,12 +158,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             });
 
             _app.UseCors("WebClient");
-            _app.MapControllers();
-            _app.MapHub<ControllerHub>("/hubs/controller");
 
-            // Start the bridge after the hub is mapped
-            var bridge = _app.Services.GetRequiredService<SignalRBridge>();
-            bridge.Start();
+            // Map shared controllers, hub, and start the SignalR bridge
+            _app.UseControllerApi();
 
             _logger.LogInformation("WebApi + SignalR server listening on port {Port}", _port);
             await _app.RunAsync(ct);

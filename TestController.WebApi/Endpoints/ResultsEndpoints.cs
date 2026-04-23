@@ -10,10 +10,8 @@ public static class ResultsEndpoints
 {
     public static RouteGroupBuilder MapResultsEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/builds", ListBuilds);
-        group.MapGet("/builds/{buildNumber}", GetBuildResults);
-        group.MapGet("/trends", GetTrends);
-        group.MapGet("/alerts", GetAlerts);
+        // These endpoints extend the shared ResultsController with standalone-specific features.
+        // Common endpoints (builds, builds/{buildNumber}, trends, flaky, alerts) are provided by the shared library.
         group.MapGet("/export/{buildNumber}", ExportBuildReport);
         group.MapPost("/send-report", SendReport);
         return group;

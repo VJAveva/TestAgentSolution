@@ -1,4 +1,5 @@
 using System.Windows;
+using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -81,7 +82,12 @@ public partial class App : Application
 
                 // Application logger (file + in-memory ring buffer)
                 services.AddSingleton<IAppLogger>(sp =>
-                    new AppLogger("controller", @"C:\TestAgentSolution\Logs"));
+                {
+                    var cfg = sp.GetRequiredService<IConfiguration>();
+                    var logDir = cfg.GetValue<string>("LogDirectory")
+                        ?? Path.Combine(AppContext.BaseDirectory, "Logs");
+                    return new AppLogger("controller", logDir);
+                });
 
                 services.AddSingleton<MainViewModel>();
 

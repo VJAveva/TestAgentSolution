@@ -16,6 +16,7 @@ public class FileWatcherManagerTests : IDisposable
         _executor = new Mock<IActionPipelineExecutor>();
         _manager = new FileWatcherManager(
             _executor.Object,
+            new ExecutionSessionManager(),
             NullLogger<FileWatcherManager>.Instance);
         _tempDir = Path.Combine(Path.GetTempPath(), $"FWMTests_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);

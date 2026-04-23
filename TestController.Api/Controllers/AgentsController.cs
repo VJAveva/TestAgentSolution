@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TestControllerGrpc.Services;
 
-namespace TestControllerGrpc.Controllers;
+namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api/agents")]

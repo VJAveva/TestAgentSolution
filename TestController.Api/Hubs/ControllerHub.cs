@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 
-namespace TestControllerGrpc.Hubs;
+namespace TestController.Api.Hubs;
 
 /// <summary>
-/// SignalR hub for real-time communication with the React WebClient.
+/// Shared SignalR hub for real-time communication with browser clients.
+/// Used by both the WPF-hosted Kestrel server and the standalone WebApi.
 /// Server pushes events; clients can join/leave session groups.
 /// </summary>
 public sealed class ControllerHub : Hub
