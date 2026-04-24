@@ -76,6 +76,92 @@ public class ResultsController : ControllerBase
         return Ok(ToBuildDto(node));
     }
 
+    /// <summary>
+    /// GET /api/results/builds/{buildNumber}/detail — full build detail with all test results.
+    /// Includes individual test cases with error messages, stack traces, and debug output.
+    /// Supports optional filtering by outcome, use case, and text search.
+    /// </summary>
+    [HttpGet("builds/{buildNumber}/detail")]
+    public IActionResult GetBuildDetail(
+        string buildNumber,
+        [FromQuery] string? outcome,
+        [FromQuery] string? useCase,
+        [FromQuery] string? search)
+    {
+        var node = _buildResults.GetBuild(buildNumber);
+        if (node == null)
+            return NotFound(new { error = $"Build '{buildNumber}' not found" });
+
+        // Flatten all test results across use cases
+        var allTests = node.UseCases
+            .SelectMany(uc => uc.TestResults)
+            .ToList();
+
+        // Apply optional filters
+        IEnumerable<TestResult> filtered = allTests;
+        if (!string.IsNullOrEmpty(outcome))
+            filtered = filtered.Where(t => string.Equals(t.Outcome, outcome, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(useCase))
+            filtered = filtered.Where(t => string.Equals(t.UseCaseName, useCase, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(search))
+            filtered = filtered.Where(t =>
+                t.TestName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                t.ClassName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (t.ErrorMessage?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+        var filteredList = filtered.ToList();
+
+        return Ok(new
+        {
+            buildNumber = node.BuildNumber,
+            earliestRun = node.EarliestRun,
+            latestRun = node.LatestRun,
+            totalDuration = node.TotalDuration,
+            totalTests = node.TotalTests,
+            passedTests = node.PassedTests,
+            failedTests = node.FailedTests,
+            timeoutTests = node.TimeoutTests,
+            notExecutedTests = node.NotExecutedTests,
+            passRate = node.PassRate,
+            health = node.Health.ToString(),
+            useCases = node.UseCases.Select(uc => new
+            {
+                useCaseName = uc.UseCaseName,
+                total = uc.Total,
+                passed = uc.Passed,
+                failed = uc.Failed,
+                timeout = uc.Timeout,
+                notExecuted = uc.NotExecuted,
+                passRate = uc.PassRate,
+                duration = uc.Duration,
+            }),
+            filteredCount = filteredList.Count,
+            tests = filteredList.Select(t => new
+            {
+                testName = t.TestName,
+                className = t.ClassName,
+                useCase = t.UseCaseName,
+                outcome = t.Outcome,
+                duration = t.Duration,
+                durationText = FormatDuration(t.Duration),
+                errorMessage = t.ErrorMessage,
+                stackTrace = t.StackTrace,
+                debugTrace = t.DebugTrace,
+                stdOut = t.StdOut,
+                trxFile = t.TrxFileName,
+                steps = t.ExecutionSteps.Select(s => new
+                {
+                    stepName = s.StepName,
+                    outcome = s.Outcome,
+                    duration = s.Duration,
+                    stdOut = s.StdOut,
+                    errorMessage = s.ErrorMessage,
+                }),
+            }),
+            filters = new { outcome, useCase, search },
+        });
+    }
+
     /// <summary>GET /api/results/trends — pass rate trends.</summary>
     [HttpGet("trends")]
     public IActionResult GetTrends()
@@ -173,5 +259,23 @@ public class ResultsController : ControllerBase
                 errorMessage = t.ErrorMessage,
             }),
         }),
+        allFailedTests = node.AllFailedTests.Select(t => new
+        {
+            testName = t.TestName,
+            className = t.ClassName,
+            outcome = t.Outcome,
+            duration = t.Duration,
+            errorMessage = t.ErrorMessage,
+            stackTrace = t.StackTrace,
+            useCaseName = t.UseCaseName,
+            trxFileName = t.TrxFileName,
+        }),
     };
+
+    private static string FormatDuration(TimeSpan d)
+    {
+        if (d.TotalMinutes >= 1) return $"{d.Minutes}m {d.Seconds}s";
+        if (d.TotalSeconds >= 1) return $"{d.TotalSeconds:F1}s";
+        return $"{d.TotalMilliseconds:F0}ms";
+    }
 }

@@ -1,11 +1,12 @@
 import { useCallback } from 'react';
 import axios from 'axios';
 import { useResultsStore } from '../stores/resultsStore';
-import type { BuildSummary, BuildNode, TrendReport, ConsecutiveFailureAlert } from '../types/api';
+import type { BuildSummary, BuildNode, BuildDetailResponse, TrendReport, ConsecutiveFailureAlert } from '../types/api';
 
 export function useResults() {
   const setBuilds = useResultsStore(s => s.setBuilds);
   const setSelectedBuild = useResultsStore(s => s.setSelectedBuild);
+  const setBuildDetail = useResultsStore(s => s.setBuildDetail);
   const setTrends = useResultsStore(s => s.setTrends);
   const setAlerts = useResultsStore(s => s.setAlerts);
 
@@ -20,6 +21,12 @@ export function useResults() {
     setSelectedBuild(data);
     return data;
   }, [setSelectedBuild]);
+
+  const fetchBuildDetail = useCallback(async (buildNumber: string, params?: { outcome?: string; useCase?: string; search?: string }) => {
+    const { data } = await axios.get<BuildDetailResponse>(`/api/results/builds/${encodeURIComponent(buildNumber)}/detail`, { params });
+    setBuildDetail(data);
+    return data;
+  }, [setBuildDetail]);
 
   const fetchTrends = useCallback(async () => {
     const { data } = await axios.get<TrendReport>('/api/results/trends');
@@ -51,5 +58,5 @@ export function useResults() {
     return data;
   }, []);
 
-  return { fetchBuilds, fetchBuild, fetchTrends, fetchAlerts, exportReport, sendReport };
+  return { fetchBuilds, fetchBuild, fetchBuildDetail, fetchTrends, fetchAlerts, exportReport, sendReport };
 }

@@ -135,6 +135,60 @@ export interface TestResult {
   useCaseName: string;
 }
 
+// ?? Build detail types (from /api/results/builds/{id}/detail) ????????
+
+export interface BuildDetailTest {
+  testName: string;
+  className: string;
+  useCase: string;
+  outcome: string;
+  duration: string;
+  durationText: string;
+  errorMessage?: string;
+  stackTrace?: string;
+  debugTrace?: string;
+  stdOut?: string;
+  trxFile: string;
+  steps?: TestStepDto[];
+}
+
+export interface TestStepDto {
+  stepName: string;
+  outcome: string;
+  duration: string;
+  stdOut?: string;
+  errorMessage?: string;
+}
+
+export interface BuildDetailUseCaseSummary {
+  useCaseName: string;
+  total: number;
+  passed: number;
+  failed: number;
+  timeout: number;
+  notExecuted: number;
+  passRate: number;
+  duration: string;
+}
+
+export interface BuildDetailResponse {
+  buildNumber: string;
+  earliestRun?: string;
+  latestRun?: string;
+  totalDuration: string;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  timeoutTests: number;
+  notExecutedTests: number;
+  passRate: number;
+  health: string;
+  useCases: BuildDetailUseCaseSummary[];
+  filteredCount: number;
+  tests: BuildDetailTest[];
+  filters: { outcome?: string; useCase?: string; search?: string };
+}
+
 export interface TrendReport {
   builds: BuildTrendEntry[];
   weeklySummaries: PeriodSummary[];
