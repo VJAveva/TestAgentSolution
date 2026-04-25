@@ -20,8 +20,16 @@ public sealed class AgentGrpcClientManager : IDisposable
                 HttpHandler = new SocketsHttpHandler
                 {
                     EnableMultipleHttp2Connections = true,
-                    KeepAlivePingDelay = TimeSpan.FromSeconds(30),
-                    KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+                    ConnectTimeout               = TimeSpan.FromSeconds(30),
+                    // Keep gRPC streams alive during long test runs (2-4+ hours).
+                    // Pings every 60s prevent proxies/firewalls from killing
+                    // idle-looking HTTP/2 streams when no stdout is flowing.
+                    KeepAlivePingDelay            = TimeSpan.FromSeconds(60),
+                    KeepAlivePingTimeout          = TimeSpan.FromSeconds(30),
+                    KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
+                    PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
+                    // Do NOT recycle connections with a short lifetime.
+                    PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
                 }
             }));
         return new TestAgentService.TestAgentServiceClient(channel);

@@ -281,11 +281,23 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
             return new ActionResult(false, -1, $"Cancelled by user after {elapsed:hh\\:mm\\:ss}");
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
-            return new ActionResult(false, -1,
-                $"Timed out after {elapsed:hh\\:mm\\:ss} (limit: {resolved.Timeout}s)");
+            _logger.LogError(
+                "Action TIMED OUT on {Agent} after {Elapsed}: {Command}. " +
+                "Configured timeout: {Timeout}s. Exception: {Error}",
+                agentName, elapsed.ToString(@"hh\:mm\:ss"),
+                resolved.Command, resolved.Timeout, ex.Message);
+
+            var detail = resolved.Timeout > 0
+                ? $"Timed out after {elapsed:hh\\:mm\\:ss} (limit: {resolved.Timeout}s). "
+                : $"Timed out after {elapsed:hh\\:mm\\:ss} (no explicit timeout - check Kestrel/IIS limits). ";
+
+            if (elapsed.TotalSeconds >= 3590 && elapsed.TotalSeconds <= 3610)
+                detail += "HINT: Exactly 1 hour suggests IIS requestTimeout or Action Timeout=3600.";
+
+            return new ActionResult(false, -1, detail);
         }
         catch (Exception ex)
         {

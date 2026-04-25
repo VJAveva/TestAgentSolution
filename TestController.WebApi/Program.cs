@@ -8,6 +8,16 @@ using TestControllerGrpc.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Allow long-running executions triggered via WebClient.
+// Without these, Kestrel defaults (130s keepalive, minimum data rates)
+// kill connections during long test runs that produce no output for minutes.
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
+    kestrel.Limits.MinRequestBodyDataRate = null;
+    kestrel.Limits.MinResponseDataRate = null;
+});
+
 // ?? JSON serializer: camelCase + string enums for React client ??????
 builder.Services.ConfigureHttpJsonOptions(options =>
 {

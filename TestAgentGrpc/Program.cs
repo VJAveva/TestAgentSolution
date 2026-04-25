@@ -27,6 +27,14 @@ builder.WebHost.ConfigureKestrel(options =>
 {
     var port = builder.Configuration.GetValue("AgentSettings:GrpcPort", 5200);
     options.ListenAnyIP(port, o => o.Protocols = HttpProtocols.Http2);
+    // Allow long-running gRPC streams (test executions can take 2-4+ hours).
+    // Default KeepAliveTimeout (130s) and MinDataRate (240 bytes/sec with 5s grace)
+    // kill connections during long installs/compiles that produce no stdout for
+    // extended periods. The amount of initial output determines how long the
+    // connection survives — typically ~1 hour, which matches the reported failures.
+    options.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
+    options.Limits.MinRequestBodyDataRate = null;
+    options.Limits.MinResponseDataRate = null;
 });
 
 // ── Core services ──────────────────────────────────────────────────────
