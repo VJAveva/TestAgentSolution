@@ -35,7 +35,7 @@
 
   <!-- Always rebuild React on publish -->
   <Target Name="PublishReactApp" AfterTargets="ComputeFilesToPublish">
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
     <ItemGroup>
       <ReactPublishFiles Include="$(SpaRoot)dist\**\*" />
