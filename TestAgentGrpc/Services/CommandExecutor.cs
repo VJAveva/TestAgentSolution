@@ -381,8 +381,13 @@ public sealed class CommandExecutor : IDisposable
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Cancellation from timeout or controller disconnect — kill the process
+            // Cancellation from timeout or controller disconnect — kill the process tree
+            // and wait briefly for it to actually die before releasing the execution lock.
+            // Without this wait, the controller may immediately dispatch the next command
+            // and get "Agent is busy" because the lock hasn't been released yet.
             KillCurrentProcess();
+            try { _currentProcess?.WaitForExit(5000); }
+            catch { /* process already disposed or exited */ }
 
             _lastExitCode = -1;
             _lastError = "Execution cancelled (timeout or client disconnect)";

@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.IO;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -13,73 +15,99 @@ public class ResultsController : ControllerBase
     private readonly TrxResultsParser _parser;
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
+    private readonly IAppLogger _appLogger;
 
     public ResultsController(
         CachedBuildResultsProvider buildResults,
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
-        BuildResultsConfig config)
+        BuildResultsConfig config,
+        IAppLogger appLogger)
     {
         _buildResults = buildResults;
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
+        _appLogger = appLogger;
     }
+
+    private string Corr => HttpContext.Items["CorrelationId"] as string ?? "";
 
     /// <summary>
     /// GET /api/results/builds — list available builds.
-    /// Cached: first call parses TRX files, subsequent calls return from cache
-    /// until the build folder's modification time changes.
     /// </summary>
     [HttpGet("builds")]
     public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health)
     {
-        var builds = _buildResults.GetAllBuilds();
-
-        IEnumerable<BuildNode> filtered = builds;
-
-        if (!string.IsNullOrEmpty(health))
+        var corr = Corr;
+        try
         {
-            filtered = filtered.Where(b =>
-                string.Equals(b.Health.ToString(), health, StringComparison.OrdinalIgnoreCase));
+            var builds = _buildResults.GetAllBuilds();
+            IEnumerable<BuildNode> filtered = builds;
+
+            if (!string.IsNullOrEmpty(health))
+                filtered = filtered.Where(b =>
+                    string.Equals(b.Health.ToString(), health, StringComparison.OrdinalIgnoreCase));
+            if (limit is > 0)
+                filtered = filtered.Take(limit.Value);
+
+            var result = filtered.Select(node => new
+            {
+                buildNumber = node.BuildNumber,
+                modified = node.LatestRun ?? node.EarliestRun,
+                totalTests = node.TotalTests,
+                passedTests = node.PassedTests,
+                failedTests = node.FailedTests,
+                timeoutTests = node.TimeoutTests,
+                passRate = node.PassRate,
+                health = node.Health.ToString(),
+            }).ToList();
+
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"GetBuilds returned {result.Count} builds", corr);
+            return Ok(result);
         }
-
-        if (limit is > 0)
+        catch (Exception ex)
         {
-            filtered = filtered.Take(limit.Value);
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"GetBuilds FAILED: {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = "Failed to load builds", detail = ex.Message, correlationId = corr });
         }
-
-        return Ok(filtered.Select(node => new
-        {
-            buildNumber = node.BuildNumber,
-            modified = node.LatestRun ?? node.EarliestRun,
-            totalTests = node.TotalTests,
-            passedTests = node.PassedTests,
-            failedTests = node.FailedTests,
-            timeoutTests = node.TimeoutTests,
-            passRate = node.PassRate,
-            health = node.Health.ToString(),
-        }));
     }
 
     /// <summary>
     /// GET /api/results/builds/{buildNumber} — parsed build results.
-    /// Returns from cache if available.
     /// </summary>
     [HttpGet("builds/{buildNumber}")]
     public IActionResult GetBuild(string buildNumber)
     {
-        var node = _buildResults.GetBuild(buildNumber);
-        if (node == null)
-            return NotFound(new { error = $"Build '{buildNumber}' not found" });
+        var corr = Corr;
+        _appLogger.Log(LogLevel.Information, "ResultsController",
+            $"GetBuild requested: {buildNumber}", corr);
+        try
+        {
+            var node = _buildResults.GetBuild(buildNumber);
+            if (node == null)
+            {
+                _appLogger.Log(LogLevel.Warning, "ResultsController",
+                    $"Build not found: {buildNumber}", corr);
+                return NotFound(new { error = $"Build '{buildNumber}' not found", correlationId = corr });
+            }
 
-        return Ok(ToBuildDto(node));
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"GetBuild returned: {node.TotalTests} tests, {node.PassRate:F1}% pass", corr);
+            return Ok(ToBuildDto(node));
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"GetBuild FAILED for '{buildNumber}': {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = $"Failed to load build '{buildNumber}'", detail = ex.Message, correlationId = corr });
+        }
     }
 
     /// <summary>
     /// GET /api/results/builds/{buildNumber}/detail — full build detail with all test results.
-    /// Includes individual test cases with error messages, stack traces, and debug output.
-    /// Supports optional filtering by outcome, use case, and text search.
     /// </summary>
     [HttpGet("builds/{buildNumber}/detail")]
     public IActionResult GetBuildDetail(
@@ -88,78 +116,114 @@ public class ResultsController : ControllerBase
         [FromQuery] string? useCase,
         [FromQuery] string? search)
     {
-        var node = _buildResults.GetBuild(buildNumber);
-        if (node == null)
-            return NotFound(new { error = $"Build '{buildNumber}' not found" });
+        var corr = Corr;
+        var sw = Stopwatch.StartNew();
+        _appLogger.Log(LogLevel.Information, "ResultsController",
+            $"GetBuildDetail requested: {buildNumber} (outcome={outcome}, useCase={useCase}, search={search})", corr);
 
-        // Flatten all test results across use cases
-        var allTests = node.UseCases
-            .SelectMany(uc => uc.TestResults)
-            .ToList();
-
-        // Apply optional filters
-        IEnumerable<TestResult> filtered = allTests;
-        if (!string.IsNullOrEmpty(outcome))
-            filtered = filtered.Where(t => string.Equals(t.Outcome, outcome, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrEmpty(useCase))
-            filtered = filtered.Where(t => string.Equals(t.UseCaseName, useCase, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrEmpty(search))
-            filtered = filtered.Where(t =>
-                t.TestName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                t.ClassName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                (t.ErrorMessage?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
-
-        var filteredList = filtered.ToList();
-
-        return Ok(new
+        try
         {
-            buildNumber = node.BuildNumber,
-            earliestRun = node.EarliestRun,
-            latestRun = node.LatestRun,
-            totalDuration = node.TotalDuration,
-            totalTests = node.TotalTests,
-            passedTests = node.PassedTests,
-            failedTests = node.FailedTests,
-            timeoutTests = node.TimeoutTests,
-            notExecutedTests = node.NotExecutedTests,
-            passRate = node.PassRate,
-            health = node.Health.ToString(),
-            useCases = node.UseCases.Select(uc => new
+            var node = _buildResults.GetBuild(buildNumber);
+            if (node == null)
             {
-                useCaseName = uc.UseCaseName,
-                total = uc.Total,
-                passed = uc.Passed,
-                failed = uc.Failed,
-                timeout = uc.Timeout,
-                notExecuted = uc.NotExecuted,
-                passRate = uc.PassRate,
-                duration = uc.Duration,
-            }),
-            filteredCount = filteredList.Count,
-            tests = filteredList.Select(t => new
+                _appLogger.Log(LogLevel.Warning, "ResultsController",
+                    $"Build not found for detail: {buildNumber} (root={_config.ResultsRootPath})", corr);
+                return NotFound(new { error = $"Build '{buildNumber}' not found", correlationId = corr });
+            }
+
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"Build loaded: {node.TotalTests} tests across {node.UseCases.Count} use cases", corr);
+
+            // Flatten all test results across use cases
+            var allTests = node.UseCases
+                .SelectMany(uc => uc.TestResults)
+                .ToList();
+
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"Flattened {allTests.Count} test results", corr);
+
+            // Apply optional filters
+            IEnumerable<TestResult> filtered = allTests;
+            if (!string.IsNullOrEmpty(outcome))
+                filtered = filtered.Where(t => string.Equals(t.Outcome, outcome, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(useCase))
+                filtered = filtered.Where(t => string.Equals(t.UseCaseName, useCase, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(search))
+                filtered = filtered.Where(t =>
+                    t.TestName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    t.ClassName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    (t.ErrorMessage?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+            var filteredList = filtered.ToList();
+
+            sw.Stop();
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"GetBuildDetail completed: {filteredList.Count}/{allTests.Count} tests returned", corr, sw.ElapsedMilliseconds);
+
+            return Ok(new
             {
-                testName = t.TestName,
-                className = t.ClassName,
-                useCase = t.UseCaseName,
-                outcome = t.Outcome,
-                duration = t.Duration,
-                durationText = FormatDuration(t.Duration),
-                errorMessage = t.ErrorMessage,
-                stackTrace = t.StackTrace,
-                debugTrace = t.DebugTrace,
-                stdOut = t.StdOut,
-                trxFile = t.TrxFileName,
-                steps = t.ExecutionSteps.Select(s => new
+                buildNumber = node.BuildNumber,
+                earliestRun = node.EarliestRun,
+                latestRun = node.LatestRun,
+                totalDuration = node.TotalDuration,
+                totalTests = node.TotalTests,
+                passedTests = node.PassedTests,
+                failedTests = node.FailedTests,
+                timeoutTests = node.TimeoutTests,
+                notExecutedTests = node.NotExecutedTests,
+                passRate = node.PassRate,
+                health = node.Health.ToString(),
+                useCases = node.UseCases.Select(uc => new
                 {
-                    stepName = s.StepName,
-                    outcome = s.Outcome,
-                    duration = s.Duration,
-                    stdOut = s.StdOut,
-                    errorMessage = s.ErrorMessage,
+                    useCaseName = uc.UseCaseName,
+                    total = uc.Total,
+                    passed = uc.Passed,
+                    failed = uc.Failed,
+                    timeout = uc.Timeout,
+                    notExecuted = uc.NotExecuted,
+                    passRate = uc.PassRate,
+                    duration = uc.Duration,
                 }),
-            }),
-            filters = new { outcome, useCase, search },
-        });
+                filteredCount = filteredList.Count,
+                tests = filteredList.Select(t => new
+                {
+                    testName = t.TestName,
+                    className = t.ClassName,
+                    useCase = t.UseCaseName,
+                    outcome = t.Outcome,
+                    duration = t.Duration,
+                    durationText = FormatDuration(t.Duration),
+                    errorMessage = t.ErrorMessage,
+                    stackTrace = t.StackTrace,
+                    debugTrace = t.DebugTrace,
+                    stdOut = t.StdOut,
+                    trxFile = t.TrxFileName,
+                    steps = t.ExecutionSteps.Select(s => new
+                    {
+                        stepName = s.StepName,
+                        outcome = s.Outcome,
+                        duration = s.Duration,
+                        stdOut = s.StdOut,
+                        errorMessage = s.ErrorMessage,
+                    }),
+                }),
+                filters = new { outcome, useCase, search },
+                correlationId = corr,
+            });
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"GetBuildDetail FAILED for '{buildNumber}': {ex.Message}", corr, sw.ElapsedMilliseconds, ex);
+            return StatusCode(500, new
+            {
+                error = "Failed to parse build detail",
+                detail = ex.Message,
+                correlationId = corr,
+                build = buildNumber,
+            });
+        }
     }
 
     /// <summary>GET /api/results/trends — pass rate trends.</summary>

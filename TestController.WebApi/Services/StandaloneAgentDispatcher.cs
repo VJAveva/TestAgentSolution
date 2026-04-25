@@ -177,6 +177,9 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
         var startTimestamp = Stopwatch.GetTimestamp();
 
+        // Wait for agent to become free if it's still cleaning up from a previous command.
+        await WaitForAgentFree(_clientManager.GetClient(entry.Address), agentName, ct);
+
         try
         {
             var client = _clientManager.GetClient(entry.Address);
@@ -417,6 +420,39 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             ".ps1" => ("powershell.exe", $"-ExecutionPolicy Bypass -NoProfile -File \"{cmd}\" {arguments}".TrimEnd()),
             _ => (command, arguments),
         };
+    }
+
+    /// <summary>
+    /// Waits up to 30 seconds for an agent to become free (not Running).
+    /// Prevents "Agent is busy" errors when sequential commands are dispatched
+    /// immediately after a timeout/cancellation killed the previous command.
+    /// </summary>
+    private async Task WaitForAgentFree(
+        TestAgentService.TestAgentServiceClient client,
+        string agentName, CancellationToken ct)
+    {
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            try
+            {
+                var reply = await client.GetStateAsync(new Empty(),
+                    deadline: DateTime.UtcNow.AddSeconds(5),
+                    cancellationToken: ct);
+
+                if (reply.State != AgentState.Running)
+                    return;
+
+                _logger.LogWarning(
+                    "Agent {Agent} still busy (attempt {N}/6). Waiting 5s for previous command to finish...",
+                    agentName, attempt + 1);
+                StatusChanged?.Invoke(agentName, $"Waiting for previous command to finish ({attempt + 1}/6)");
+                await Task.Delay(5000, ct);
+            }
+            catch (RpcException) { return; }
+            catch (OperationCanceledException) { throw; }
+        }
+
+        _logger.LogWarning("Agent {Agent} still busy after 30s — proceeding anyway", agentName);
     }
 
     private async Task WaitForAgentReady(

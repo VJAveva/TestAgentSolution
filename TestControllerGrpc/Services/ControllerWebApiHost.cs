@@ -29,6 +29,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly TrxResultsParser _parser;
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _resultsConfig;
+    private readonly IAppLogger _appLogger;
     private readonly ILogger<ControllerWebApiHost> _logger;
     private readonly int _port;
     private WebApplication? _app;
@@ -44,6 +45,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildResultsConfig resultsConfig,
+        IAppLogger appLogger,
         IConfiguration config,
         ILogger<ControllerWebApiHost> logger)
     {
@@ -56,6 +58,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _parser = parser;
         _aggregator = aggregator;
         _resultsConfig = resultsConfig;
+        _appLogger = appLogger;
         _logger = logger;
         _port = config.GetValue<int>("WebApiPort", 5200);
     }
@@ -94,6 +97,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_parser);
             builder.Services.AddSingleton(_aggregator);
             builder.Services.AddSingleton(_resultsConfig);
+            builder.Services.AddSingleton(_appLogger);
 
             // Use the shared API library for controllers, hub, and bridge
             builder.Services.AddControllerApi()
@@ -132,34 +136,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
 
             _app = builder.Build();
 
-            // Request logging middleware — logs every API call with timing
-            _app.Use(async (context, next) =>
-            {
-                var path = context.Request.Path;
-                var method = context.Request.Method;
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-
-                try
-                {
-                    await next();
-                    sw.Stop();
-                    _logger.LogInformation(
-                        "API {Method} {Path} -> {Status} ({Elapsed}ms)",
-                        method, path, context.Response.StatusCode, sw.ElapsedMilliseconds);
-                }
-                catch (Exception ex)
-                {
-                    sw.Stop();
-                    _logger.LogError(ex,
-                        "API {Method} {Path} -> EXCEPTION ({Elapsed}ms): {Error}",
-                        method, path, sw.ElapsedMilliseconds, ex.Message);
-                    throw;
-                }
-            });
-
             _app.UseCors("WebClient");
 
             // Map shared controllers, hub, and start the SignalR bridge
+            // (UseControllerApi registers RequestLoggingMiddleware)
             _app.UseControllerApi();
 
             _logger.LogInformation("WebApi + SignalR server listening on port {Port}", _port);

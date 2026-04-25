@@ -84,8 +84,9 @@ public partial class App : Application
                 services.AddSingleton<IAppLogger>(sp =>
                 {
                     var cfg = sp.GetRequiredService<IConfiguration>();
-                    var logDir = cfg.GetValue<string>("LogDirectory")
-                        ?? Path.Combine(AppContext.BaseDirectory, "Logs");
+                    var logDir = cfg.GetValue<string>("Logging:LogDirectory")
+                        ?? cfg.GetValue<string>("LogDirectory")
+                        ?? AppLogger.DefaultLogDirectory;
                     return new AppLogger("controller", logDir);
                 });
 

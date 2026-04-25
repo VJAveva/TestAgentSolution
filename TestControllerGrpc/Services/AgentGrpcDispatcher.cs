@@ -298,6 +298,11 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
         var startTimestamp = Stopwatch.GetTimestamp();
 
+        // Wait for agent to become free if it's still cleaning up from a previous command.
+        // This prevents "Agent is busy" errors when the pipeline sends commands in sequence
+        // and the previous command's process tree hasn't fully exited yet.
+        await WaitForAgentFree(endpoint.GetClient(), agentName, ct);
+
         try
         {
             return await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
@@ -654,6 +659,39 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
     private static string Truncate(string s, int max)
         => s.Length <= max ? s : s[..max] + "…";
+
+    /// <summary>
+    /// Waits up to 30 seconds for an agent to become free (not Running).
+    /// This handles the race where a previous command's process tree is still being
+    /// killed when the pipeline dispatches the next sequential command.
+    /// </summary>
+    private async Task WaitForAgentFree(
+        TestAgentService.TestAgentServiceClient client,
+        string agentName, CancellationToken ct)
+    {
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            try
+            {
+                var reply = await client.GetStateAsync(new Empty(),
+                    deadline: DateTime.UtcNow.AddSeconds(5),
+                    cancellationToken: ct);
+
+                if (reply.State != AgentState.Running)
+                    return;
+
+                _logger.LogWarning(
+                    "Agent {Agent} still busy (attempt {N}/6). Waiting 5s for previous command to finish...",
+                    agentName, attempt + 1);
+                StatusChanged?.Invoke(agentName, $"Waiting for previous command to finish ({attempt + 1}/6)");
+                await Task.Delay(5000, ct);
+            }
+            catch (RpcException) { return; } // agent unreachable — proceed, will fail on the actual call
+            catch (OperationCanceledException) { throw; }
+        }
+
+        _logger.LogWarning("Agent {Agent} still busy after 30s — proceeding anyway", agentName);
+    }
 
     private async Task WaitForAgentReady(
         TestAgentService.TestAgentServiceClient client,

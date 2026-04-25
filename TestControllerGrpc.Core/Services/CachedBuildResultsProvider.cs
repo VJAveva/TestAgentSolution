@@ -22,6 +22,7 @@ public sealed class CachedBuildResultsProvider
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
     private readonly ILogger<CachedBuildResultsProvider> _logger;
+    private readonly IAppLogger _appLogger;
 
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
 
@@ -34,11 +35,13 @@ public sealed class CachedBuildResultsProvider
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildResultsConfig config,
+        IAppLogger appLogger,
         ILogger<CachedBuildResultsProvider> logger)
     {
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
+        _appLogger = appLogger;
         _logger = logger;
     }
 
@@ -122,6 +125,7 @@ public sealed class CachedBuildResultsProvider
 
     private (BuildNode? Node, bool WasCached) GetOrParse(string folderPath)
     {
+        var folderName = Path.GetFileName(folderPath);
         var folderModified = Directory.GetLastWriteTimeUtc(folderPath);
 
         // Cache hit: folder hasn't changed since last parse
@@ -132,17 +136,22 @@ public sealed class CachedBuildResultsProvider
         }
 
         // Cache miss: parse TRX files
+        _appLogger.Info("BuildResultsCache", $"Cache MISS for {folderName} — parsing TRX files");
         try
         {
             var node = _parser.ParseBuildFolder(folderPath);
             node = _aggregator.EvaluateBuildHealth(node);
+
+            _appLogger.Info("BuildResultsCache",
+                $"Parsed {folderName}: {node.TotalTests} tests, {node.PassRate:F1}% pass, health={node.Health}");
 
             _cache[folderPath] = new CacheEntry(folderModified, node, DateTime.UtcNow);
             return (node, false);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse build folder: {Folder}", Path.GetFileName(folderPath));
+            _appLogger.Error("BuildResultsCache", $"FAILED to parse {folderName}: {ex.Message}", ex);
+            _logger.LogWarning(ex, "Failed to parse build folder: {Folder}", folderName);
             return (null, false);
         }
     }

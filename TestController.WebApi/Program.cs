@@ -41,7 +41,12 @@ builder.Services.AddSingleton<ConsecutiveFailureDetector>();
 builder.Services.AddSingleton<BuildReportHtmlGenerator>();
 builder.Services.AddSingleton<ExecutionSessionManager>();
 builder.Services.AddSingleton<IAppLogger>(sp =>
-    new AppLogger("webapi", builder.Configuration["LogDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "Logs")));
+{
+    var logDir = builder.Configuration["Logging:LogDirectory"]
+        ?? builder.Configuration["LogDirectory"]
+        ?? AppLogger.DefaultLogDirectory;
+    return new AppLogger("webapi", logDir);
+});
 
 // Web API specific services
 builder.Services.AddSingleton<AgentGrpcClientManager>();

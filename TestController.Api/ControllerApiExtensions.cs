@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using TestController.Api.Hubs;
+using TestController.Api.Middleware;
 using TestController.Api.Services;
 using TestControllerGrpc.Services;
 
@@ -36,6 +37,9 @@ public static class ControllerApiExtensions
     /// </summary>
     public static WebApplication UseControllerApi(this WebApplication app, string hubPath = "/hubs/controller")
     {
+        // Request correlation + logging middleware — must be before controllers
+        app.UseMiddleware<RequestLoggingMiddleware>();
+
         app.MapControllers();
         app.MapHub<ControllerHub>(hubPath);
 
