@@ -36,6 +36,7 @@ builder.Services.AddSingleton(sp =>
     return rc;
 });
 builder.Services.AddSingleton<BuildResultsAggregator>();
+builder.Services.AddSingleton<CachedBuildResultsProvider>();
 builder.Services.AddSingleton<BuildTrendAnalyzer>();
 builder.Services.AddSingleton<ConsecutiveFailureDetector>();
 builder.Services.AddSingleton<BuildReportHtmlGenerator>();

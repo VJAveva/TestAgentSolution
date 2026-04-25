@@ -1174,6 +1174,9 @@ public partial class BuildResultsViewModel : ObservableObject
         var total = buildList.Count;
         var done = 0;
 
+        // Collect results in a thread-safe bag, then update UI in one batch
+        var parsedNodes = new ConcurrentBag<(BuildListItem Build, BuildNode Node)>();
+
         var semaphore = new SemaphoreSlim(4);
         var tasks = buildList.Select(async build =>
         {
@@ -1182,9 +1185,9 @@ public partial class BuildResultsViewModel : ObservableObject
             {
                 if (!Directory.Exists(build.Path))
                 {
-                    Interlocked.Increment(ref done);
+                    var current = Interlocked.Increment(ref done);
                     Application.Current?.Dispatcher.InvokeAsync(() =>
-                        StatusMessage = $"Skipped {build.BuildNumber} (folder no longer exists).");
+                        StatusMessage = $"Skipped {build.BuildNumber} (folder no longer exists) [{current}/{total}]");
                     return;
                 }
 
@@ -1200,13 +1203,11 @@ public partial class BuildResultsViewModel : ObservableObject
                     _buildCache[build.Path] = node;
                 }
 
-                var current = Interlocked.Increment(ref done);
+                parsedNodes.Add((build, node));
+
+                var current2 = Interlocked.Increment(ref done);
                 Application.Current?.Dispatcher.InvokeAsync(() =>
-                {
-                    LoadedBuildNodes.Add(node);
-                    build.HasBeenLoaded = true;
-                    StatusMessage = $"Parsing builds: {current}/{total} ({node.BuildNumber}: {node.TotalTests} tests)";
-                });
+                    StatusMessage = $"Parsing builds: {current2}/{total} ({node.BuildNumber}: {node.TotalTests} tests)");
             }
             catch (Exception ex)
             {
@@ -1222,11 +1223,26 @@ public partial class BuildResultsViewModel : ObservableObject
 
         await Task.WhenAll(tasks);
 
-        // Sort by date after all loaded
-        var sorted = LoadedBuildNodes.OrderByDescending(b => b.LatestRun).ToList();
+        // Prune cache entries for folders that no longer exist
+        var validPaths = new HashSet<string>(buildList.Select(b => b.Path), StringComparer.OrdinalIgnoreCase);
+        foreach (var key in _buildCache.Keys)
+        {
+            if (!validPaths.Contains(key))
+                _buildCache.TryRemove(key, out _);
+        }
+
+        // Sort and populate LoadedBuildNodes on the UI thread in one batch
+        var sorted = parsedNodes
+            .Select(p => p.Node)
+            .OrderByDescending(b => b.LatestRun)
+            .ToList();
+
         LoadedBuildNodes.Clear();
         foreach (var n in sorted)
             LoadedBuildNodes.Add(n);
+
+        foreach (var (build, _) in parsedNodes)
+            build.HasBeenLoaded = true;
     }
 
     [RelayCommand]
