@@ -707,6 +707,7 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         }
 
         _sessionManager.RecordResult(session.SessionId, result);
+        session.TrackAgentAction(result);
         return !result.IsRetryable || action.FailAndContinue;
     }
 

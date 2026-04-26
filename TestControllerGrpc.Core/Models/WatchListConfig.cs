@@ -276,6 +276,32 @@ public sealed class ExecutionSession
         _ => ""
     };
 
+    // ── Per-agent tracking for dashboard ────────────────────────────
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, AgentSessionSummary>
+        _agentSummaries = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Track a per-agent action result for dashboard rendering.</summary>
+    public void TrackAgentAction(ActionExecutionResult result)
+    {
+        var agentName = result.AgentName ?? "Controller";
+        _agentSummaries.AddOrUpdate(
+            agentName,
+            _ => new AgentSessionSummary
+            {
+                AgentName = agentName,
+                Actions = new System.Collections.Concurrent.ConcurrentBag<ActionExecutionResult> { result },
+            },
+            (_, existing) =>
+            {
+                existing.Actions.Add(result);
+                return existing;
+            });
+    }
+
+    /// <summary>Returns per-agent summaries for dashboard API.</summary>
+    public IReadOnlyList<AgentSessionSummary> GetAgentSummaries()
+        => _agentSummaries.Values.ToList();
+
     // ── Per-session log buffer for reconnection backfill ─────────────
     private readonly List<PipelineLogEntry> _logBuffer = new(500);
     private readonly object _logLock = new();
@@ -339,6 +365,18 @@ public sealed class ActionExecutionResult
 }
 
 public enum ActionOutcome { Unknown, Success, Failed, Terminated, TimedOut }
+
+/// <summary>Per-agent execution summary for dashboard rendering.</summary>
+public sealed class AgentSessionSummary
+{
+    public string AgentName { get; set; } = "";
+    public string Status => Actions.Any(a => a.Outcome == ActionOutcome.Failed) ? "Failed"
+        : Actions.All(a => a.Outcome == ActionOutcome.Success) && Actions.Count > 0 ? "Success"
+        : "Executing";
+    public System.Collections.Concurrent.ConcurrentBag<ActionExecutionResult> Actions { get; set; } = new();
+    public int CompletedCount => Actions.Count(a => a.Outcome != ActionOutcome.Unknown);
+    public int TotalCount => Actions.Count;
+}
 
 /// <summary>
 /// Documents common Windows/MSI/PowerShell exit codes

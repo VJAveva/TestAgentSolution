@@ -8,7 +8,7 @@ namespace TestController.WebApi.Services;
 /// <summary>
 /// Full pipeline executor for standalone WebApi deployment.
 /// Walks the action tree depth-first, executing ActionGroups, Actions,
-/// Initialize, and Ref nodes — mirroring the WPF ActionPipelineExecutor
+/// Initialize, and Ref nodes ï¿½ mirroring the WPF ActionPipelineExecutor
 /// without any WPF/UI dependencies.
 ///
 /// Delegates actual command execution to <see cref="IAgentGrpcDispatcher"/>
@@ -161,7 +161,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
             var success = await ExecuteNodeAsync(child, ctx, ct);
             if (!success && !parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping — FailAndContinue=false");
+                Log("Pipeline", "Stopping ï¿½ FailAndContinue=false");
                 return false;
             }
         }
@@ -220,7 +220,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
             var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct);
             if (!success && !parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping — FailAndContinue=false");
+                Log("Pipeline", "Stopping ï¿½ FailAndContinue=false");
                 return false;
             }
         }
@@ -270,7 +270,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found ï¿½ skipping");
             return false;
         }
         Log("Ref", $"Expanding template: {refNode.TemplateID}");
@@ -318,6 +318,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
         }
 
         _sessionManager.RecordResult(session.SessionId, result);
+        session.TrackAgentAction(result);
         return !result.IsRetryable || action.FailAndContinue;
     }
 
@@ -392,7 +393,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
             if (attempt < maxAttempts && ShouldRetry(result, retryExitCodes))
             {
                 var agentCtx = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
-                Log("Action", $"? Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} — will retry");
+                Log("Action", $"? Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} ï¿½ will retry");
                 continue;
             }
 
@@ -403,7 +404,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
         {
             var agentInfo = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
             var cmdInfo = $"{resolved.Command} {resolved.Parameters}".Trim();
-            if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "…";
+            if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "ï¿½";
 
             if (maxAttempts > 1)
                 Log("Action", $"? FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
@@ -435,7 +436,7 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found ï¿½ skipping");
             return false;
         }
         Log("Ref", $"Expanding template: {refNode.TemplateID}");

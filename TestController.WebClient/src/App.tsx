@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import AppShell from './components/layout/AppShell';
 import SessionReconnector from './components/execution/SessionReconnector';
+import { ExecutionDashboardProvider } from './hooks/useExecutionDashboard';
 import { useSignalR } from './hooks/useSignalR';
 
 export default function App() {
@@ -13,9 +14,9 @@ export default function App() {
   }, [connection]);
 
   return (
-    <>
+    <ExecutionDashboardProvider>
       <SessionReconnector />
       <AppShell />
-    </>
+    </ExecutionDashboardProvider>
   );
 }

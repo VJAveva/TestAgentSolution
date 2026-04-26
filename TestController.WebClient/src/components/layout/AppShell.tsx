@@ -7,7 +7,7 @@ import AgentList from '../agents/AgentList';
 import AgentDetail from '../agents/AgentDetail';
 import LiveLogger from '../execution/LiveLogger';
 import SessionList from '../execution/SessionList';
-import ExecutionMonitor from '../execution/ExecutionMonitor';
+import ExecutionDashboard from '../execution/ExecutionDashboard';
 import LogViewer from '../execution/LogViewer';
 import BuildList from '../results/BuildList';
 import BuildDetail from '../results/BuildDetail';
@@ -135,7 +135,7 @@ function ResultsPage() {
 function MonitorPage() {
   return (
     <main className="flex-1 overflow-hidden">
-      <ExecutionMonitor />
+      <ExecutionDashboard />
     </main>
   );
 }
