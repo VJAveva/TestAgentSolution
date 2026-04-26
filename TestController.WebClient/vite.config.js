@@ -5,9 +5,9 @@ export default defineConfig({
     server: {
         port: 3000,
         proxy: {
-            '/api': 'http://localhost:5050',
-            '/hub': {
-                target: 'http://localhost:5050',
+            '/api': 'http://127.0.0.1:5200',
+            '/hubs': {
+                target: 'http://127.0.0.1:5200',
                 ws: true,
             },
         },
