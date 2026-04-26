@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.ViewModels.Execution;
 
@@ -24,13 +26,22 @@ namespace TestControllerGrpc.ViewModels.Execution;
 /// per-action events are added later, swap the timer reconciliation
 /// for direct event handlers.
 /// </summary>
-public partial class ExecutionDashboardVM : ObservableObject
+public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 {
     private readonly ExecutionSessionManager _sessionManager;
     private readonly AgentLockManager _lockManager;
     private readonly IEventAggregator _eventAggregator;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _refreshTimer;
+    private readonly List<IDisposable> _subscriptions = new();
+    private bool _disposed;
+
+    /// <summary>Maximum number of session cards retained (running + completed).</summary>
+    private const int MaxSessionCards = 50;
+
+    /// <summary>Soft cap for log entries; <see cref="AddLogEntry"/> evicts in batches once exceeded.</summary>
+    private const int MaxLogEntries = 5000;
+    private const int LogEvictBatch = 500;
 
     /// <summary>Per-session count of log entries already mirrored into <see cref="LogEntries"/>.</summary>
     private readonly Dictionary<string, int> _logCursors = new(StringComparer.Ordinal);
@@ -46,8 +57,10 @@ public partial class ExecutionDashboardVM : ObservableObject
         _eventAggregator = eventAggregator;
         _dispatcher = dispatcher;
 
-        _eventAggregator.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
-        _eventAggregator.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
+        // Capture subscription tokens so Dispose() can release them and we
+        // don't leak event handlers (B1).
+        _subscriptions.Add(_eventAggregator.Subscribe<ExecutionStartedEvent>(OnExecutionStarted));
+        _subscriptions.Add(_eventAggregator.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted));
 
         _refreshTimer = new DispatcherTimer(
             TimeSpan.FromSeconds(1),
@@ -68,7 +81,7 @@ public partial class ExecutionDashboardVM : ObservableObject
     // ?? Collections ?????????????????????????????????????????????????
 
     public ObservableCollection<SessionCardVM> Sessions { get; } = new();
-    public ObservableCollection<LogEntryVM> LogEntries { get; } = new();
+    public RangeObservableCollection<LogEntryVM> LogEntries { get; } = new();
 
     // ?? Selection state (drives log filtering) ??????????????????????
 
@@ -103,7 +116,13 @@ public partial class ExecutionDashboardVM : ObservableObject
             entry.SessionId != SelectedSessionId)
             return false;
 
+        // P2-1: agent-attributed lines now carry entry.AgentName, so strict
+        // equality filters them correctly. Session-scoped lines (executor
+        // emissions, lifecycle messages) legitimately have no agent and must
+        // remain visible under any agent selection — keep the empty-matches-all
+        // rule.
         if (!string.IsNullOrEmpty(SelectedAgentName) &&
+            !string.IsNullOrEmpty(entry.AgentName) &&
             !string.Equals(entry.AgentName, SelectedAgentName,
                 StringComparison.OrdinalIgnoreCase))
             return false;
@@ -140,7 +159,7 @@ public partial class ExecutionDashboardVM : ObservableObject
                 Source = e.Source,
                 Status = "Running",
                 BuildNumber = session != null &&
-                    session.ResolvedParameters.TryGetValue("_BuildNumber", out var bn)
+                    session.ResolvedParameters.TryGetValue(WatchListConstants.BuildNumberKey, out var bn)
                         ? bn : "",
                 LockedAgentsList = session != null
                     ? string.Join(", ", session.LockedAgents)
@@ -158,7 +177,30 @@ public partial class ExecutionDashboardVM : ObservableObject
         _dispatcher.InvokeAsync(() =>
         {
             var card = Sessions.FirstOrDefault(s => s.SessionId == e.SessionId);
-            if (card == null) return;
+
+            // B6: Tolerate Completed-before-Started ordering. EventAggregator
+            // dispatches handlers via ThreadPool, so the Completed handler
+            // can hit the dispatcher before its matching Started. Materialize
+            // the card in completed state instead of dropping the event.
+            if (card == null)
+            {
+                var session = _sessionManager.GetSession(e.SessionId);
+                card = new SessionCardVM
+                {
+                    SessionId = e.SessionId,
+                    WatchItemTag = e.WatchItemTag,
+                    UserId = session?.UserId ?? "",
+                    Source = session?.Source ?? "",
+                    BuildNumber = session != null &&
+                        session.ResolvedParameters.TryGetValue(WatchListConstants.BuildNumberKey, out var bn)
+                            ? bn : "",
+                    LockedAgentsList = session != null
+                        ? string.Join(", ", session.LockedAgents)
+                        : "",
+                    IsExpanded = false,
+                };
+                Sessions.Insert(0, card);
+            }
 
             card.Status = e.State;
             card.PassedActions = e.Passed;
@@ -169,6 +211,7 @@ public partial class ExecutionDashboardVM : ObservableObject
             // Final reconcile so all pills show terminal state.
             ReconcileCard(card);
             card.RecalculateCounters();
+            EvictOldCompletedCards();
             RecalculateStats();
         });
     }
@@ -178,16 +221,17 @@ public partial class ExecutionDashboardVM : ObservableObject
         // UI thread (DispatcherTimer).
         foreach (var card in Sessions.ToList())
         {
+            // B3: completed cards never change — skip the per-tick reconcile
+            // and log harvest entirely. Only running cards need refreshing.
+            if (card.Status != "Running") continue;
+
             var session = _sessionManager.GetSession(card.SessionId);
             if (session == null) continue;
 
-            if (card.Status == "Running")
-            {
-                card.Elapsed = (DateTime.UtcNow - session.StartedUtc)
-                    .ToString(@"hh\:mm\:ss");
-            }
+            card.Elapsed = (DateTime.UtcNow - session.StartedUtc)
+                .ToString(@"hh\:mm\:ss");
 
-            ReconcileCard(card);
+            ReconcileCard(card, session);
             HarvestLogs(card, session);
         }
 
@@ -201,7 +245,9 @@ public partial class ExecutionDashboardVM : ObservableObject
         foreach (var summary in summaries)
         {
             var row = card.GetOrCreateAgent(summary.AgentName);
-            foreach (var action in summary.Actions)
+            // B4: ConcurrentBag has no defined enumeration order. Sort by
+            // Sequence so pills render in the order actions actually started.
+            foreach (var action in summary.Actions.OrderBy(a => a.Sequence))
             {
                 row.UpdateAction(
                     tag: action.ActionTag,
@@ -216,8 +262,8 @@ public partial class ExecutionDashboardVM : ObservableObject
         card.RecalculateCounters();
     }
 
-    // Wrapper: the real reconcile body needs the session — re-resolve here
-    // so the timer can use a single call site.
+    // Wrapper used by OnExecutionCompleted, which already has the card but
+    // not the session reference.
     private void ReconcileCard(SessionCardVM card)
     {
         var s = _sessionManager.GetSession(card.SessionId);
@@ -239,21 +285,31 @@ public partial class ExecutionDashboardVM : ObservableObject
         var seen = _logCursors.GetValueOrDefault(card.SessionId, 0);
         if (all.Count <= seen) return;
 
+        // B9: Batch the per-tick harvest. AddLogEntry would fire one
+        // CollectionChanged per item, which during a log burst defeats the
+        // batching that RangeObservableCollection was added for. Build the
+        // VMs locally, then publish + trim in a single Reset notification.
+        var batch = new List<LogEntryVM>(all.Count - seen);
         for (var i = seen; i < all.Count; i++)
         {
             var entry = all[i];
-            AddLogEntry(new LogEntryVM
+            batch.Add(new LogEntryVM
             {
                 Timestamp = entry.Timestamp.ToString("HH:mm:ss"),
                 SessionId = card.SessionId,
                 SessionName = card.WatchItemTag,
-                AgentName = "",
+                // P2-1: real agent attribution (empty = session-scope line).
+                AgentName = entry.AgentName ?? "",
                 Category = entry.Category,
                 Message = entry.Message,
                 Severity = InferSeverity(entry.Category, entry.Message),
             });
         }
         _logCursors[card.SessionId] = all.Count;
+
+        LogEntries.AddRange(batch);
+        if (LogEntries.Count > MaxLogEntries + LogEvictBatch)
+            LogEntries.TrimFromStart(LogEntries.Count - MaxLogEntries);
     }
 
     private static string InferSeverity(string category, string message)
@@ -272,22 +328,49 @@ public partial class ExecutionDashboardVM : ObservableObject
     private void AddLogEntry(LogEntryVM entry)
     {
         LogEntries.Add(entry);
-        while (LogEntries.Count > 5000)
-            LogEntries.RemoveAt(0);
+        // B7: Batch eviction. Removing one item at a time from an
+        // ObservableCollection at index 0 is O(N) per remove and fires
+        // a CollectionChanged event for every shift; doing it 5000 times
+        // during a burst dwarfs the actual append work.
+        if (LogEntries.Count > MaxLogEntries + LogEvictBatch)
+            LogEntries.TrimFromStart(LogEvictBatch);
+    }
+
+    /// <summary>
+    /// B2: cap the number of session cards. Keep all running sessions plus the
+    /// most recent completed cards up to <see cref="MaxSessionCards"/>; evict
+    /// the oldest completed cards and clean up their log cursors so the
+    /// dictionary doesn't accumulate dead entries.
+    /// </summary>
+    private void EvictOldCompletedCards()
+    {
+        if (Sessions.Count <= MaxSessionCards) return;
+
+        // Walk from the end of the list (oldest) and remove completed cards
+        // until we're under the cap. Running cards are never evicted.
+        for (var i = Sessions.Count - 1; i >= 0 && Sessions.Count > MaxSessionCards; i--)
+        {
+            var card = Sessions[i];
+            if (card.Status == "Running") continue;
+            _logCursors.Remove(card.SessionId);
+            Sessions.RemoveAt(i);
+        }
     }
 
     // ?? Helpers ?????????????????????????????????????????????????????
 
-    private void RecalculateStats()
+    internal void RecalculateStats()
     {
         ActiveSessionCount = Sessions.Count(s => s.Status == "Running");
         LockedAgentCount = _lockManager.GetAllLocks().Count;
-        TotalPassedActions = Sessions
-            .Where(s => s.Status == "Running")
-            .Sum(s => s.PassedActions);
-        TotalFailedActions = Sessions
-            .Where(s => s.Status == "Running")
-            .Sum(s => s.FailedActions);
+
+        // P2-2: Passed/Failed totals span all retained cards (Running +
+        // Completed within the MaxSessionCards window) so the KPI strip
+        // doesn't snap to zero the moment the last session finishes.
+        // OverallProgressPercent stays Running-only — averaging completed
+        // cards (always 100%) would mask in-flight progress.
+        TotalPassedActions = Sessions.Sum(s => s.PassedActions);
+        TotalFailedActions = Sessions.Sum(s => s.FailedActions);
 
         var running = Sessions.Where(s => s.Status == "Running").ToList();
         OverallProgressPercent = running.Count > 0
@@ -332,6 +415,18 @@ public partial class ExecutionDashboardVM : ObservableObject
         SelectedSessionId =
             SelectedSessionId == sessionId ? null : sessionId;
         SelectedAgentName = null;
+    }
+
+    /// <summary>Stops the refresh timer and releases all event subscriptions.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _refreshTimer.Stop();
+
+        foreach (var sub in _subscriptions) sub.Dispose();
+        _subscriptions.Clear();
     }
 }
 

@@ -44,6 +44,15 @@ public partial class AgentRowVM : ObservableObject
 
         if (existing != null)
         {
+            // B5: Never downgrade a terminal status. Once a pill reaches
+            // Success/Failed/Skipped, a stale "Running"/"Pending" record
+            // (e.g. an out-of-order reconcile from a ConcurrentBag) must
+            // not flip it back to in-progress.
+            var isTerminal = existing.Status is "Success" or "Failed" or "Skipped";
+            var demotion = status is "Running" or "Pending";
+            if (isTerminal && demotion)
+                return;
+
             existing.ActionType = actionType;
             existing.Command = command;
             existing.Status = status;

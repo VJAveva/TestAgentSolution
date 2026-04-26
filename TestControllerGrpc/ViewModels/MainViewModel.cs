@@ -459,6 +459,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _logBuffer?.Dispose();
         _executionCts?.Dispose();
 
+        // Stop the multi-session dashboard's refresh timer + event subscriptions.
+        ExecutionDashboard?.Dispose();
+
         // Cancel all active sessions
         foreach (var session in ActiveSessions.ToList())
             session.Cts.Dispose();

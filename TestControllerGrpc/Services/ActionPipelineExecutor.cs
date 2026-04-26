@@ -540,7 +540,12 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
             ? $"[{ctx.SessionId}] {message}"
             : message;
         _logger.LogInformation("[{Category}] {Message}", category, prefixed);
-        LogEntry?.Invoke(new PipelineLogEntry(DateTime.Now, category, prefixed));
+        // P2-1: carry SessionId so subscribers can route into the per-session
+        // log buffer used by the multi-session dashboard.
+        LogEntry?.Invoke(new PipelineLogEntry(
+            DateTime.Now, category, prefixed,
+            AgentName: null,
+            SessionId: string.IsNullOrEmpty(ctx.SessionId) ? null : ctx.SessionId));
     }
 
     // ═══════════════════════════════════════════════════════════════════

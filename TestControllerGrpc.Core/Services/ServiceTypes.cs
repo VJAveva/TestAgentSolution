@@ -4,7 +4,18 @@ namespace TestControllerGrpc.Services;
 public sealed record ActionResult(bool Success, int ExitCode, string ErrorMessage);
 
 /// <summary>Log entry emitted by the action pipeline executor.</summary>
-public sealed record PipelineLogEntry(DateTime Timestamp, string Category, string Message);
+/// <remarks>
+/// <see cref="AgentName"/> and <see cref="SessionId"/> are optional attribution
+/// added in P2-1 so the multi-session dashboard can filter logs per agent and
+/// per session. Existing callers that pass only the first three arguments
+/// remain source-compatible.
+/// </remarks>
+public sealed record PipelineLogEntry(
+    DateTime Timestamp,
+    string Category,
+    string Message,
+    string? AgentName = null,
+    string? SessionId = null);
 
 /// <summary>A single step in agent diagnostic results.</summary>
 public sealed record DiagnosticStep(string Name, bool Passed, string Detail, bool IsFatal = true);

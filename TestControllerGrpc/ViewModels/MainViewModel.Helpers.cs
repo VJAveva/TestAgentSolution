@@ -375,6 +375,13 @@ public sealed partial class MainViewModel
               ? LogSeverity.Success
               : LogSeverity.Info;
         AddLog($"[{e.Category}] {e.Message}", severity);
+
+        // P2-1: feed the multi-session dashboard's per-session log buffer.
+        // The executor stamps SessionId on tracked emissions; un-tagged
+        // entries (e.g. legacy untracked Log()) are still surfaced via the
+        // global UI log above.
+        if (!string.IsNullOrEmpty(e.SessionId))
+            _sessionManager.GetSession(e.SessionId)?.AddLogEntry(e);
     }
 
     private void OnOutputReceived(string agent, string line, string kind)
@@ -387,6 +394,22 @@ public sealed partial class MainViewModel
             string.Equals(a.AgentName, agent, StringComparison.OrdinalIgnoreCase));
         if (agentProgress is not null && !string.IsNullOrWhiteSpace(line))
             agentProgress.CurrentAction = line.Length > 80 ? line[..80] + "…" : line;
+
+        // P2-1: per-agent stdout/stderr is the canonical source of agent-
+        // attributed log lines. Resolve agent -> owning session via the lock
+        // manager and append to that session's buffer so the dashboard's
+        // per-agent filter has something to filter on.
+        var sessionId = _lockManager.GetLock(agent)?.SessionId;
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            _sessionManager.GetSession(sessionId)?.AddLogEntry(
+                new PipelineLogEntry(
+                    DateTime.Now,
+                    Category: kind,
+                    Message: line,
+                    AgentName: agent,
+                    SessionId: sessionId));
+        }
     }
 
     private readonly Dictionary<string, string> _lastAgentStatus = new(StringComparer.OrdinalIgnoreCase);

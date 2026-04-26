@@ -275,7 +275,7 @@ public sealed class FileWatcherManager : IFileWatcherManager
             wi.LastBuildNumber = buildNum;
             // Ensure canonical key is also available for downstream resolution
             ctx.Parameters["BuildNumber"] = buildNum;
-            ctx.Parameters["_BuildNumber"] = buildNum;
+            ctx.Parameters[WatchListConstants.BuildNumberKey] = buildNum;
         }
 
         if (TryGetParam(ctx, wi.DropLocationField, out var dropLoc))

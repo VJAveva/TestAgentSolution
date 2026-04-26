@@ -322,6 +322,16 @@ public enum SessionState { Running, Completed, PartialFailure, Failed }
 
 public sealed class ActionExecutionResult
 {
+    private static long _sequenceCounter;
+
+    /// <summary>
+    /// Monotonically-increasing creation order. Used by the dashboard to render
+    /// pills in a stable, deterministic sequence even though they are stored
+    /// in a <see cref="System.Collections.Concurrent.ConcurrentBag{T}"/>
+    /// (which has no defined enumeration order).
+    /// </summary>
+    public long Sequence { get; init; } = System.Threading.Interlocked.Increment(ref _sequenceCounter);
+
     public string ActionTag { get; init; } = "";
     public string ActionType { get; init; } = "";
     public string? AgentName { get; init; }
@@ -355,6 +365,19 @@ public sealed class ActionExecutionResult
 }
 
 public enum ActionOutcome { Unknown, Success, Failed, Terminated, TimedOut }
+
+/// <summary>
+/// Well-known parameter keys used across the WatchList pipeline.
+/// Centralized so dashboards, log writers, and the file watcher can't
+/// silently disagree on the spelling.
+/// </summary>
+public static class WatchListConstants
+{
+    /// <summary>Underscore-prefixed key written by the file watcher so token
+    /// substitution works as <c>[BuildNumber]</c>. The dashboard reads from
+    /// this key when displaying the build number on a session card.</summary>
+    public const string BuildNumberKey = "_BuildNumber";
+}
 
 /// <summary>Per-agent execution summary for dashboard rendering.</summary>
 public sealed class AgentSessionSummary
