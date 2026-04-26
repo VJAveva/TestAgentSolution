@@ -66,9 +66,7 @@ message RunCommandRequest {
   string password                    = 7;
   string completion_check_command    = 8;
   int32  completion_poll_interval_seconds = 9;
-  bool   enable_install_log          = 10;
-  int32  install_log_poll_seconds    = 11;
-  string install_log_root            = 12;
+  reserved 10, 11, 12; // formerly enable_install_log / install_log_poll_seconds / install_log_root
 }
 
 message RunCommandReply {

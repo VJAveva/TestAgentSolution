@@ -92,9 +92,6 @@ public static class WatchListXmlParser
                         Order = Attr(el, "Order"),
                         CompletionCheckCommand = Attr(el, "CompletionCheckCommand"),
                         CompletionPollIntervalSeconds = AttrInt(el, "CompletionPollIntervalSeconds", 30),
-                        EnableInstallLog = AttrBool(el, "EnableInstallLog"),
-                        InstallLogPollSeconds = AttrInt(el, "InstallLogPollSeconds", 5),
-                        InstallLogRoot = Attr(el, "InstallLogRoot"),
                         UserName = Attr(el, "UserName"),
                         Password = Attr(el, "Password"),
                         From = Attr(el, "From"),
@@ -203,10 +200,6 @@ public static class WatchListXmlParser
                     AddIfNotEmpty(aEl, "CompletionCheckCommand", a.CompletionCheckCommand);
                     if (a.CompletionPollIntervalSeconds != 30 && !string.IsNullOrEmpty(a.CompletionCheckCommand))
                         aEl.Add(new XAttribute("CompletionPollIntervalSeconds", a.CompletionPollIntervalSeconds));
-                    if (a.EnableInstallLog) aEl.Add(new XAttribute("EnableInstallLog", "true"));
-                    if (a.InstallLogPollSeconds != 5 && a.EnableInstallLog)
-                        aEl.Add(new XAttribute("InstallLogPollSeconds", a.InstallLogPollSeconds));
-                    AddIfNotEmpty(aEl, "InstallLogRoot", a.InstallLogRoot);
                     AddIfNotEmpty(aEl, "UserName", a.UserName);
                     AddIfNotEmpty(aEl, "Password", a.Password);
                     AddIfNotEmpty(aEl, "From", a.From);

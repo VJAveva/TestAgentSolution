@@ -109,16 +109,6 @@ public sealed class ActionConfig : IActionNode
     /// </summary>
     public int CompletionPollIntervalSeconds { get; set; } = 30;
 
-    /// <summary>When true, monitors ILog + MSI log + EventViewer during execution
-    /// and streams per-component install status to the execution log.</summary>
-    public bool EnableInstallLog { get; set; }
-
-    /// <summary>How often (seconds) to poll install logs. Default 5.</summary>
-    public int InstallLogPollSeconds { get; set; } = 5;
-
-    /// <summary>Root path for {GUID} log folders. Empty = auto-detect default path.</summary>
-    public string InstallLogRoot { get; set; } = "";
-
     // Credentials (RunRemoteCommand)
     public string UserName { get; set; } = "";
     public string Password { get; set; } = "";

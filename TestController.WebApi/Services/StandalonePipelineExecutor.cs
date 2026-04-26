@@ -484,9 +484,6 @@ public sealed class StandalonePipelineExecutor : IActionPipelineExecutor
             RetryBackoff = a.RetryBackoff, RetryOnExitCodes = a.RetryOnExitCodes,
             CompletionCheckCommand = a.CompletionCheckCommand,
             CompletionPollIntervalSeconds = a.CompletionPollIntervalSeconds,
-            EnableInstallLog = a.EnableInstallLog,
-            InstallLogPollSeconds = a.InstallLogPollSeconds,
-            InstallLogRoot = a.InstallLogRoot,
         },
         ActionGroupConfig g => new ActionGroupConfig
         {

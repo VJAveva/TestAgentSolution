@@ -331,9 +331,6 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     TimeoutSeconds = timeoutSeconds,
                     CompletionCheckCommand = resolved.CompletionCheckCommand ?? "",
                     CompletionPollIntervalSeconds = resolved.CompletionPollIntervalSeconds,
-                    EnableInstallLog = resolved.EnableInstallLog,
-                    InstallLogPollSeconds = resolved.InstallLogPollSeconds > 0 ? resolved.InstallLogPollSeconds : 5,
-                    InstallLogRoot = resolved.InstallLogRoot ?? "",
                 }, cancellationToken: linked.Token);
 
                 int exitCode = 0;

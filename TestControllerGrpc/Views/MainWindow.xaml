@@ -1789,24 +1789,6 @@
                                         <CheckBox Content="FailAndContinue" IsChecked="{Binding FailAndContinue}" Foreground="{DynamicResource TextP}" Margin="0,0,16,0" />
                                         <CheckBox Content="IsReboot" IsChecked="{Binding IsReboot}" Foreground="{DynamicResource TextP}" />
                                     </StackPanel>
-                                    <!-- Install Log Monitoring -->
-                                    <DockPanel Margin="0,4,0,2">
-                                        <CheckBox DockPanel.Dock="Right" Content="Enable Install Log"
-                                                  IsChecked="{Binding EnableInstallLog}"
-                                                  Foreground="{DynamicResource TextP}" FontSize="11"
-                                                  VerticalAlignment="Center" Margin="8,0,0,0"
-                                                  ToolTip="Monitor ILog + MSI log + EventViewer during execution" />
-                                        <StackPanel Orientation="Horizontal">
-                                            <Label Content="LOG POLL (sec)" Style="{StaticResource Lbl}"
-                                                   Padding="0" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                            <TextBox Text="{Binding InstallLogPollSeconds, UpdateSourceTrigger=PropertyChanged}"
-                                                     Style="{StaticResource Fld}" Width="50" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </DockPanel>
-                                         <TextBlock Text="Polls ILog + MSI log + EventViewer and streams per-component PASS/FAIL status."
-                                                   FontSize="10" Foreground="{DynamicResource TextS}" FontStyle="Italic"
-                                                   TextWrapping="Wrap" Margin="0,0,0,6"
-                                                   Visibility="{Binding EnableInstallLog, Converter={StaticResource BoolVis}}" />
                                         <!-- Smart Retry -->
                                         <TextBlock Text="SMART RETRY" Style="{StaticResource Sec}" />
                                         <Grid Margin="0,2">
