@@ -58,14 +58,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Help\TestController_Help.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Compile Remove="Controllers\**" />
+    <Compile Remove="Hubs\**" />
+    <EmbeddedResource Remove="Controllers\**" />
+    <EmbeddedResource Remove="Hubs\**" />
+    <None Remove="Controllers\**" />
+    <None Remove="Hubs\**" />
+    <Page Remove="Controllers\**" />
+    <Page Remove="Hubs\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Controllers\" />
-    <Folder Include="Hubs\" />
+    <Content Include="Help\TestController_Help.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

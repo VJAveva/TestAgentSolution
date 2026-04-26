@@ -35,6 +35,9 @@
 
         <!-- Help -->
         <KeyBinding Key="F1" Command="{Binding OpenHelpCommand}" />
+
+        <!-- Multi-session Execution Dashboard overlay -->
+        <KeyBinding Key="F12" Command="{Binding ToggleMultiSessionDashboardCommand}" />
     </Window.InputBindings>
 
     <Window.Icon>
@@ -1329,6 +1332,26 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- CENTER PANEL (Col 2, Row 0): Node Properties          -->
             <!-- ═══════════════════════════════════════════════════════ -->
+
+            <!-- MULTI-SESSION EXECUTION DASHBOARD (toggle: F12) -->
+            <Border Grid.Column="2" Grid.Row="0" Margin="5" CornerRadius="6"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1" Panel.ZIndex="20"
+                    Visibility="{Binding ShowMultiSessionDashboard, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}"
+                            Padding="10,6" CornerRadius="6,6,0,0">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Close (F12)" Style="{StaticResource SmBtn}"
+                                    Command="{Binding ToggleMultiSessionDashboardCommand}"
+                                    Foreground="{DynamicResource TextS}" Padding="8,2" />
+                            <TextBlock Text="Multi-Session Execution Dashboard"
+                                       FontSize="14" FontWeight="Bold"
+                                       Foreground="{DynamicResource Accent}" />
+                        </DockPanel>
+                    </Border>
+                    <views:ExecutionDashboardView DataContext="{Binding ExecutionDashboard}" />
+                </DockPanel>
+            </Border>
 
             <!-- EXECUTION DASHBOARD (overlays Node Properties during execution) -->
             <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"

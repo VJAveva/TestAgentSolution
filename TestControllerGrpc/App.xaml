@@ -1,12 +1,20 @@
 <Application x:Class="TestControllerGrpc.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/DarkTheme.xaml" />
+                <ResourceDictionary Source="Views/Styles/ExecutionDashboardStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converters for the Execution Dashboard view -->
+            <vm:DashboardPercentToWidthConverter x:Key="PercentToWidth"/>
+            <vm:RunningToVisibleConverter x:Key="RunningToVisible"/>
+            <vm:NullToCollapsedConverter  x:Key="NullToCollapsed"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

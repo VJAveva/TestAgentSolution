@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.ViewModels.Execution;
 using System.Windows;
 
 namespace TestControllerGrpc.ViewModels;
@@ -86,6 +87,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>True when execution dashboard should be shown instead of normal properties.</summary>
     [ObservableProperty] private bool _showExecutionDashboard;
+
+    /// <summary>True when the multi-session execution dashboard overlay is visible.</summary>
+    [ObservableProperty] private bool _showMultiSessionDashboard;
+
+    /// <summary>Multi-session execution dashboard ViewModel.</summary>
+    public ExecutionDashboardVM ExecutionDashboard { get; private set; } = null!;
+
+    [RelayCommand]
+    private void ToggleMultiSessionDashboard()
+        => ShowMultiSessionDashboard = !ShowMultiSessionDashboard;
 
     /// <summary>Total actions across all agents in current execution.</summary>
     [ObservableProperty] private string _executionTotals = "";
@@ -348,6 +359,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ActiveSessionCount = ActiveSessions.Count;
             IsExecuting = ActiveSessions.Count > 0;
         };
+
+        // ── Multi-session execution dashboard ──────────────────────
+        ExecutionDashboard = new ExecutionDashboardVM(
+            sessionManager, lockManager, events,
+            Application.Current?.Dispatcher
+                ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
+
+        // Cancel requests raised from the dashboard cancel the matching
+        // PipelineSession's CTS via the existing ActiveSessions tracking.
+        _subscriptions.Add(events.Subscribe<CancelSessionRequestEvent>(req =>
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                var session = ActiveSessions.FirstOrDefault(s =>
+                    s.SessionId == req.SessionId);
+                session?.Cancel();
+                if (session is not null)
+                    AddLog($"[{session.SessionId}] Cancellation requested from dashboard for {session.WatchItemTag}");
+            })));
     }
 
     /// <summary>Creates the single WatchList + TemplateList root nodes on startup.</summary>
