@@ -1,0 +1,57 @@
+name: build
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - upgrade-to-NET10
+  pull_request:
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & Test
+    # WPF (TestControllerGrpc, TestAgentGrpc, TestAgentDisplay) requires Windows.
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          # Allow pre-release SDKs while .NET 10 is in preview/RC.
+          dotnet-quality: preview
+
+      - name: NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore TestAgentSolution.sln
+
+      - name: Build
+        run: dotnet build TestAgentSolution.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test TestAgentSolution.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory ${{ runner.temp }}/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ runner.temp }}/test-results/**/*.trx
+          retention-days: 14

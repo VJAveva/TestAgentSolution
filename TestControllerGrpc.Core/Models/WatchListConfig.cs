@@ -13,6 +13,13 @@ public sealed class WatchListConfig
 
     /// <summary>Path to the vocabulary XML file itself (for hot-reload).</summary>
     public string FilePath { get; set; } = "";
+
+    /// <summary>
+    /// Non-fatal diagnostic messages produced during <c>WatchListXmlParser.Load</c>
+    /// (e.g. deprecated attribute usage). UI hosts surface these via their
+    /// log panel after a successful load. Empty for files that parse cleanly.
+    /// </summary>
+    public List<string> LoadWarnings { get; } = new();
 }
 
 // =============================================================================
