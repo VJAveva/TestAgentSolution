@@ -15,7 +15,8 @@ public sealed record PipelineLogEntry(
     string Category,
     string Message,
     string? AgentName = null,
-    string? SessionId = null);
+    string? SessionId = null,
+    string? Severity = null);
 
 /// <summary>A single step in agent diagnostic results.</summary>
 public sealed record DiagnosticStep(string Name, bool Passed, string Detail, bool IsFatal = true);

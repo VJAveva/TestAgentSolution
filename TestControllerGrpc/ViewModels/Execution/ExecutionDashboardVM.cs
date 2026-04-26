@@ -61,6 +61,9 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // don't leak event handlers (B1).
         _subscriptions.Add(_eventAggregator.Subscribe<ExecutionStartedEvent>(OnExecutionStarted));
         _subscriptions.Add(_eventAggregator.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted));
+        // Phase 1.13: real-time push events from the executors.
+        _subscriptions.Add(_eventAggregator.Subscribe<NodeProgressEvent>(OnNodeProgress));
+        _subscriptions.Add(_eventAggregator.Subscribe<AgentOutputEvent>(OnAgentOutput));
 
         _refreshTimer = new DispatcherTimer(
             TimeSpan.FromSeconds(1),
@@ -216,13 +219,61 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         });
     }
 
+    private void OnNodeProgress(NodeProgressEvent e)
+    {
+        _dispatcher.InvokeAsync(() =>
+        {
+            var card = Sessions.FirstOrDefault(s => s.SessionId == e.SessionId);
+            if (card == null) return;
+
+            var agentName = string.IsNullOrEmpty(e.AgentName) ? "Controller" : e.AgentName;
+            var row = card.GetOrCreateAgent(agentName);
+            row.UpdateAction(
+                tag: e.NodeTag,
+                actionType: e.ActionType,
+                command: e.Command,
+                status: e.Status,
+                exitCode: e.ExitCode ?? 0,
+                errorMessage: e.ErrorMessage ?? "",
+                duration: e.Duration ?? "",
+                progressPercent: e.ProgressPercent ?? 0);
+            card.RecalculateCounters();
+        });
+    }
+
+    private void OnAgentOutput(AgentOutputEvent e)
+    {
+        _dispatcher.InvokeAsync(() =>
+        {
+            var sessionName = !string.IsNullOrEmpty(e.SessionId)
+                ? Sessions.FirstOrDefault(s => s.SessionId == e.SessionId)?.WatchItemTag ?? ""
+                : "";
+            AddLogEntry(new LogEntryVM
+            {
+                Timestamp = e.Timestamp.ToString("HH:mm:ss"),
+                SessionId = e.SessionId,
+                SessionName = sessionName,
+                AgentName = e.AgentName,
+                Category = e.Kind,
+                Message = e.Line,
+                Severity = e.Kind == "stderr" ? "Error" : "Info",
+            });
+        });
+    }
+
     private void OnRefreshTick(object? sender, EventArgs e)
     {
-        // UI thread (DispatcherTimer).
+        // UI thread (DispatcherTimer). After the move to push events
+        // (Phase 1.13) this loop only needs to refresh the elapsed-time
+        // string for running cards. The pill state arrives via
+        // OnNodeProgress and the log via OnAgentOutput.
+        //
+        // We still call ReconcileCard once per running session as a
+        // defensive backfill: if the dashboard is opened mid-flight
+        // (after some events have already been published) the in-memory
+        // ExecutionSession snapshot lets us catch up.
         foreach (var card in Sessions.ToList())
         {
-            // B3: completed cards never change — skip the per-tick reconcile
-            // and log harvest entirely. Only running cards need refreshing.
             if (card.Status != "Running") continue;
 
             var session = _sessionManager.GetSession(card.SessionId);
@@ -231,6 +282,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             card.Elapsed = (DateTime.UtcNow - session.StartedUtc)
                 .ToString(@"hh\:mm\:ss");
 
+            // Cheap when no agents/actions; runs at most once per second.
             ReconcileCard(card, session);
             HarvestLogs(card, session);
         }

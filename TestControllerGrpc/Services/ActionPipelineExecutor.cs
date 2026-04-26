@@ -687,6 +687,9 @@ public sealed class ActionPipelineExecutor : IActionPipelineExecutor
         };
 
         var sw = Stopwatch.StartNew();
+        // Publish 'Running' so the dashboard can flip the pill immediately
+        // instead of waiting for the action to finish.
+        _sessionManager.BeginAction(session.SessionId, result);
         try
         {
             var actionSuccess = await ExecuteActionAsync(action, ctx, ct);

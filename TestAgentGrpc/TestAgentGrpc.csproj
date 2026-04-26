@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="Protos\test_agent.proto" GrpcServices="Both" />
+    <Protobuf Include="..\TestControllerGrpc.Core\Protos\test_agent.proto" Link="Protos\test_agent.proto" GrpcServices="Both" />
   </ItemGroup>
 
 </Project>
