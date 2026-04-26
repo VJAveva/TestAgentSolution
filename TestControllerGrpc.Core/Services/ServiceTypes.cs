@@ -12,9 +12,18 @@ public sealed record DiagnosticStep(string Name, bool Passed, string Detail, boo
 /// <summary>Per-agent health state tracked by the resilience layer.</summary>
 public sealed record AgentHealthState
 {
+    /// <summary>Logical name of the agent this state applies to.</summary>
     public required string AgentName { get; init; }
+
+    /// <summary>Indicates whether the agent is currently considered healthy by the circuit breaker.</summary>
     public bool IsHealthy { get; set; } = true;
+
+    /// <summary>Number of consecutive failed operations since the last success.</summary>
     public int ConsecutiveFailures { get; set; }
+
+    /// <summary>UTC timestamp of the most recent successful interaction with the agent, if any.</summary>
     public DateTime? LastSuccessUtc { get; set; }
+
+    /// <summary>UTC timestamp at which the circuit breaker was last opened, if currently open.</summary>
     public DateTime? CircuitOpenedUtc { get; set; }
 }
