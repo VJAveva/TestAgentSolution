@@ -51,12 +51,13 @@ export default function WatchListToolbar() {
     return triggerAll();
   };
 
-  const handleTriggerWithParams = async (buildNumber: string, dropLocation: string) => {
+  const handleTriggerWithParams = async (buildNumber: string, dropLocation: string, lockVersion?: number) => {
     if (!selectedNode?.tag) return;
     try {
       await triggerByTag(selectedNode.tag, {
         buildNumber: buildNumber || undefined,
         dropLocation: dropLocation || undefined,
+        lockVersion,
       });
     } catch (e) {
       console.error('Trigger failed:', e);

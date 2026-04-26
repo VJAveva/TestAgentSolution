@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Models;
 
@@ -221,6 +222,15 @@ public sealed class ExecutionSession
     public DateTime? CompletedUtc { get; set; }
     public SessionState State { get; set; } = SessionState.Running;
 
+    /// <summary>Who triggered this session.</summary>
+    public string UserId { get; set; } = "";
+
+    /// <summary>"WebClient" or "WPF".</summary>
+    public string Source { get; set; } = "";
+
+    /// <summary>Agents locked by this session (resolved names).</summary>
+    public string[] LockedAgents { get; set; } = Array.Empty<string>();
+
     /// <summary>
     /// Cancellation token source for this session. Call <see cref="RequestCancellation"/>
     /// to signal the running pipeline to stop. The token is passed through to the executor.
@@ -265,6 +275,31 @@ public sealed class ExecutionSession
         SessionState.Failed => $"All {TotalActions} actions failed",
         _ => ""
     };
+
+    // ── Per-session log buffer for reconnection backfill ─────────────
+    private readonly List<PipelineLogEntry> _logBuffer = new(500);
+    private readonly object _logLock = new();
+
+    /// <summary>Buffer a log entry for this session (used for reconnection backfill).</summary>
+    public void AddLogEntry(PipelineLogEntry entry)
+    {
+        lock (_logLock)
+        {
+            _logBuffer.Add(entry);
+            if (_logBuffer.Count > 500)
+                _logBuffer.RemoveRange(0, 100);
+        }
+    }
+
+    /// <summary>Returns recent buffered log entries for backfill.</summary>
+    public IReadOnlyList<PipelineLogEntry> GetRecentLogs(int count)
+    {
+        lock (_logLock)
+        {
+            if (count <= 0) return _logBuffer.ToList();
+            return _logBuffer.TakeLast(count).ToList();
+        }
+    }
 }
 
 public enum SessionState { Running, Completed, PartialFailure, Failed }

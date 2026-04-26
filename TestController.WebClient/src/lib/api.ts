@@ -1,3 +1,5 @@
+import { getUserId } from './userIdentity';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 /**
@@ -5,6 +7,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
  *
  * Features:
  *   - Assigns X-Request-Id to every request (logged server-side)
+ *   - Sends X-User-Id for session ownership and lock tracking
  *   - Detects HTML responses on /api/ routes (SPA rewrite misconfiguration)
  *   - Logs request/response timing to browser console
  *   - Returns structured error objects with correlationId for debugging
@@ -27,6 +30,8 @@ export async function apiFetch<T>(
       headers: {
         'Content-Type': 'application/json',
         'X-Request-Id': correlationId,
+        'X-User-Id': getUserId(),
+        'X-Source': 'WebClient',
         ...options?.headers,
       },
     });

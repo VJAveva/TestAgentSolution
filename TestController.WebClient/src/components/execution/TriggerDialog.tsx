@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import axios from 'axios';
+import { apiFetch } from '../../lib/api';
+import { getUserId } from '../../lib/userIdentity';
 
 interface TriggerDialogProps {
   watchItemTag: string;
   isOpen: boolean;
   onClose: () => void;
-  onTrigger: (buildNumber: string, dropLocation: string) => void;
+  onTrigger: (buildNumber: string, dropLocation: string, lockVersion?: number) => void;
 }
 
 interface AvailableBuild {
@@ -15,15 +17,63 @@ interface AvailableBuild {
   modified: string;
 }
 
+interface CanTriggerResult {
+  canTrigger: boolean;
+  lockVersion: number;
+  watchItemTag: string;
+  requiredAgents: string[];
+  conflicts: {
+    agentName: string;
+    lockedBy: string;
+    pipeline: string;
+    duration: string;
+    source: string;
+  }[];
+}
+
 export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger }: TriggerDialogProps) {
   const [buildNumber, setBuildNumber] = useState('');
   const [dropLocation, setDropLocation] = useState('');
   const [availableBuilds, setAvailableBuilds] = useState<AvailableBuild[]>([]);
   const [currentParams, setCurrentParams] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [canTrigger, setCanTrigger] = useState<CanTriggerResult | null>(null);
+  const [checkingAgents, setCheckingAgents] = useState(false);
+  const [error, setError] = useState('');
+  const [lockVersion, setLockVersion] = useState(0);
+
+  const refreshCanTrigger = () => {
+    apiFetch<CanTriggerResult>(`/api/execution/can-trigger/${encodeURIComponent(watchItemTag)}`)
+      .then(data => {
+        setCanTrigger(data);
+        setLockVersion(data.lockVersion);
+      })
+      .catch(() => {});
+  };
+
+  // Subscribe to real-time lock changes while dialog is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = () => refreshCanTrigger();
+    window.addEventListener('agent-locks-changed', handler);
+    return () => window.removeEventListener('agent-locks-changed', handler);
+  }, [isOpen, watchItemTag]);
 
   useEffect(() => {
     if (!isOpen) return;
+    setError('');
+    setCanTrigger(null);
+
+    // Pre-flight: check agent availability
+    setCheckingAgents(true);
+    apiFetch<CanTriggerResult>(`/api/execution/can-trigger/${encodeURIComponent(watchItemTag)}`)
+      .then(data => {
+        setCanTrigger(data);
+        setLockVersion(data.lockVersion);
+      })
+      .catch(() => {})
+      .finally(() => setCheckingAgents(false));
+
     // Load current parameters for this WatchItem
     axios.get(`/api/watchlist/${encodeURIComponent(watchItemTag)}/parameters`)
       .then(({ data }) => {
@@ -43,7 +93,8 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
 
   const handleTrigger = () => {
     setLoading(true);
-    onTrigger(buildNumber, dropLocation);
+    setError('');
+    onTrigger(buildNumber, dropLocation, lockVersion);
   };
 
   const selectBuild = (build: AvailableBuild) => {
@@ -52,6 +103,8 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
   };
 
   if (!isOpen) return null;
+
+  const hasConflicts = canTrigger != null && !canTrigger.canTrigger;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -71,6 +124,43 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
 
         {/* Body */}
         <div className="px-5 py-4 space-y-4">
+          {/* Agent availability check */}
+          {checkingAgents && (
+            <div className="text-text-muted text-xs animate-pulse">Checking agent availability…</div>
+          )}
+          {canTrigger && (
+            <div className={`rounded-lg p-3 border ${
+              hasConflicts
+                ? 'bg-red-900/15 border-red-800/40'
+                : 'bg-green-900/15 border-green-800/40'
+            }`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`w-2 h-2 rounded-full ${hasConflicts ? 'bg-acc-red' : 'bg-acc-green'}`} />
+                <span className={`text-xs font-semibold ${hasConflicts ? 'text-acc-red' : 'text-acc-green'}`}>
+                  {hasConflicts ? 'Agents Not Available' : 'All Agents Free — Ready'}
+                </span>
+              </div>
+              {canTrigger.requiredAgents.length > 0 && (
+                <div className="text-[11px] text-text-muted mt-1">
+                  Required: {canTrigger.requiredAgents.map((a, i) => (
+                    <span key={a}>
+                      {i > 0 && ', '}
+                      <span className={`font-mono ${
+                        canTrigger.conflicts.some(c => c.agentName === a) ? 'text-acc-red font-bold' : 'text-acc-green'
+                      }`}>{a}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {hasConflicts && canTrigger.conflicts.map(c => (
+                <div key={c.agentName} className="flex items-center justify-between py-1 border-t border-red-800/20 text-[11px] mt-1">
+                  <span><span className="font-mono text-acc-red font-bold">{c.agentName}</span> <span className="text-text-muted">locked by</span> <span className="text-amber-300">{c.lockedBy}</span></span>
+                  <span className="text-text-muted">{c.pipeline} • <span className="font-mono">{c.duration}</span></span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Build Number */}
           <div>
             <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
@@ -139,6 +229,11 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
               </div>
             </details>
           )}
+
+          {/* Error */}
+          {error && (
+            <div className="text-acc-red text-xs bg-red-900/20 rounded p-3">{error}</div>
+          )}
         </div>
 
         {/* Footer */}
@@ -147,10 +242,13 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
             className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary">
             Cancel
           </button>
-          <button onClick={handleTrigger} disabled={loading}
+          <button
+            onClick={handleTrigger}
+            disabled={loading || hasConflicts}
             className="px-4 py-1.5 bg-acc-green/20 text-acc-green hover:bg-acc-green/30
-                       text-xs font-semibold rounded disabled:opacity-50 transition-colors">
-            {loading ? 'Triggering...' : 'Trigger Execution'}
+                       text-xs font-semibold rounded disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Triggering...' : hasConflicts ? 'Agents Busy' : 'Trigger Execution'}
           </button>
         </div>
       </div>

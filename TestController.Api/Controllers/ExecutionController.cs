@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
@@ -14,6 +15,8 @@ public record TriggerRequest
     public string? BuildNumber { get; init; }
     public string? DropLocation { get; init; }
     public Dictionary<string, string>? Parameters { get; init; }
+    public string? UserId { get; init; }
+    public long? LockVersion { get; init; }
 }
 
 [ApiController]
@@ -24,6 +27,8 @@ public class ExecutionController : ControllerBase
     private readonly IActionPipelineExecutor _executor;
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IHubContext<ControllerHub> _hub;
+    private readonly AgentLockManager _lockManager;
+    private readonly IRealtimeNotifier _notifier;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
@@ -32,12 +37,16 @@ public class ExecutionController : ControllerBase
         ExecutionSessionManager sessionManager,
         IActionPipelineExecutor executor,
         IVocabularyMonitor vocabMonitor,
-        IHubContext<ControllerHub> hub)
+        IHubContext<ControllerHub> hub,
+        AgentLockManager lockManager,
+        IRealtimeNotifier notifier)
     {
         _sessionManager = sessionManager;
         _executor = executor;
         _vocabMonitor = vocabMonitor;
         _hub = hub;
+        _lockManager = lockManager;
+        _notifier = notifier;
     }
 
     /// <summary>GET /api/execution/sessions — list active sessions.</summary>
@@ -90,7 +99,7 @@ public class ExecutionController : ControllerBase
     /// <summary>
     /// POST /api/execution/trigger/{watchItemTag}?eventType=Renamed — trigger a WatchItem.
     /// Accepts an optional JSON body with build number, drop location, and custom parameters.
-    /// Uses a lock to prevent TOCTOU race between concurrent trigger requests.
+    /// Uses agent-level locking to prevent concurrent pipelines from sharing agents.
     /// </summary>
     [HttpPost("trigger/{watchItemTag}")]
     public async Task<IActionResult> TriggerWatchItem(
@@ -98,6 +107,11 @@ public class ExecutionController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TriggerRequest? request = null,
         [FromQuery] string? eventType = null)
     {
+        var userId = request?.UserId
+            ?? HttpContext.Request.Headers["X-User-Id"].FirstOrDefault()
+            ?? "anonymous";
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
+
         var config = _vocabMonitor.CurrentConfig;
         var watchItem = config?.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
@@ -116,23 +130,7 @@ public class ExecutionController : ControllerBase
         if (evt == null)
             return BadRequest(new { error = $"Event type '{eventType}' not found on WatchItem '{watchItemTag}'" });
 
-        // Atomic check-and-mark inside a per-tag lock to prevent TOCTOU race.
-        var tagLock = _triggerLocks.GetOrAdd(watchItemTag, _ => new object());
-        string sessionId;
-        lock (tagLock)
-        {
-            if (_sessionManager.HasActiveExecution(watchItemTag))
-                return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });
-
-            sessionId = Guid.NewGuid().ToString("N")[..12];
-            _sessionManager.BeginSession(
-                watchItemTag, evt.Type,
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                evt.Children.ToList(),
-                sessionId);
-        }
-
-        // Build parameters
+        // Build parameters (needed for agent variable resolution)
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
         if (paramFile != null && System.IO.File.Exists(paramFile))
@@ -166,6 +164,82 @@ public class ExecutionController : ControllerBase
             }
         }
 
+        // Extract required agents (resolved from variables)
+        var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
+
+        // Optimistic locking: reject if lock state changed since pre-flight check
+        if (request?.LockVersion.HasValue == true &&
+            request.LockVersion.Value != _lockManager.Version)
+        {
+            return Conflict(new
+            {
+                error = "Lock state changed",
+                message = "The agent availability changed since you last checked. Please refresh and try again.",
+                isStaleState = true,
+                yourVersion = request.LockVersion.Value,
+                currentVersion = _lockManager.Version,
+            });
+        }
+
+        // Atomic check-and-lock inside a per-tag lock to prevent TOCTOU race.
+        var tagLock = _triggerLocks.GetOrAdd(watchItemTag, _ => new object());
+        string sessionId;
+        lock (tagLock)
+        {
+            if (_sessionManager.HasActiveExecution(watchItemTag))
+                return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });
+
+            // Try to lock all agents atomically
+            sessionId = Guid.NewGuid().ToString("N")[..12];
+            if (requiredAgents.Count > 0)
+            {
+                var (locked, conflicts) = _lockManager.TryLockAgents(
+                    requiredAgents, sessionId, watchItemTag, userId, source);
+
+                if (!locked)
+                {
+                    // Detect "just missed it" race: conflict lock was acquired < 5s ago
+                    var newestConflict = conflicts.OrderByDescending(c => c.LockedAtUtc).First();
+                    var lockAge = DateTime.UtcNow - newestConflict.LockedAtUtc;
+                    var isRace = lockAge.TotalSeconds < 5;
+
+                    return Conflict(new
+                    {
+                        error = "Agents are busy",
+                        isRaceCondition = isRace,
+                        message = isRace
+                            ? $"Another user just triggered '{newestConflict.WatchItemTag}' moments ago. " +
+                              $"The agent was free when you opened the dialog but was claimed by {newestConflict.UserId} first."
+                            : $"Cannot start '{watchItemTag}' — {conflicts.Count} required agent(s) are locked by other sessions",
+                        conflicts = conflicts.Select(c => new
+                        {
+                            c.AgentName,
+                            lockedBy = c.UserId,
+                            pipeline = c.WatchItemTag,
+                            sessionId = c.SessionId,
+                            source = c.Source,
+                            lockedSince = c.LockedAtUtc,
+                            duration = FormatDuration(DateTime.UtcNow - c.LockedAtUtc),
+                        }),
+                        requiredAgents,
+                        yourUserId = userId,
+                        retryAdvice = isRace
+                            ? "Try again in a few seconds — or wait for the other pipeline to finish."
+                            : "Wait for the blocking pipeline to complete.",
+                    });
+                }
+            }
+
+            var session = _sessionManager.BeginSession(
+                watchItemTag, evt.Type,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                evt.Children.ToList(),
+                sessionId);
+            session.UserId = userId;
+            session.Source = source;
+            session.LockedAgents = requiredAgents.ToArray();
+        }
+
         if (paramFile != null && parameters.Count > 0)
         {
             try
@@ -185,6 +259,9 @@ public class ExecutionController : ControllerBase
             StartedUtc = DateTime.UtcNow,
             Parameters = parameters,
         };
+
+        // Broadcast lock state to all clients
+        BroadcastLockChange("Pipeline started");
 
         // Fire and forget — ExecuteEventTrackedAsync handles session lifecycle
         _ = Task.Run(async () =>
@@ -237,6 +314,12 @@ public class ExecutionController : ControllerBase
                     timestamp = DateTime.UtcNow.ToString("o"),
                 });
             }
+            finally
+            {
+                // CRITICAL: Always release locks
+                _lockManager.ReleaseSession(sessionId);
+                BroadcastLockChange("Pipeline completed");
+            }
         });
 
         await _hub.Clients.Group("global").SendAsync("ExecutionStarted", new
@@ -245,7 +328,9 @@ public class ExecutionController : ControllerBase
             watchItemTag,
             eventType = evt.Type,
             startTime = DateTime.UtcNow.ToString("o"),
-            source = "WebClient",
+            source,
+            userId,
+            lockedAgents = requiredAgents,
         });
 
         return Accepted(new
@@ -279,11 +364,158 @@ public class ExecutionController : ControllerBase
         return Ok(new { builds });
     }
 
+    // ?? Lock & availability endpoints ????????????????????????????????
+
+    /// <summary>GET /api/execution/locks — all current agent locks.</summary>
+    [HttpGet("locks")]
+    public IActionResult GetLocks()
+    {
+        var locks = _lockManager.GetAllLocks()
+            .Select(l => new
+            {
+                l.AgentName,
+                l.SessionId,
+                l.WatchItemTag,
+                l.UserId,
+                l.Source,
+                l.LockedAtUtc,
+                duration = FormatDuration(DateTime.UtcNow - l.LockedAtUtc),
+            });
+
+        return Ok(new { locks, lockVersion = _lockManager.Version, timestamp = DateTime.UtcNow });
+    }
+
+    /// <summary>GET /api/execution/can-trigger/{watchItemTag} — pre-flight availability check.</summary>
+    [HttpGet("can-trigger/{watchItemTag}")]
+    public IActionResult CanTrigger(string watchItemTag)
+    {
+        var config = _vocabMonitor.CurrentConfig;
+        var watchItem = config?.WatchItems
+            .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
+        if (watchItem == null)
+            return NotFound(new { error = "WatchItem not found" });
+
+        var parameters = LoadParametersForWatchItem(watchItem);
+        var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
+        var conflicts = _lockManager.CheckAvailability(requiredAgents);
+
+        return Ok(new
+        {
+            canTrigger = conflicts.Count == 0,
+            lockVersion = _lockManager.Version,
+            watchItemTag,
+            requiredAgents,
+            conflicts = conflicts.Select(c => new
+            {
+                c.AgentName,
+                lockedBy = c.UserId,
+                pipeline = c.WatchItemTag,
+                sessionId = c.SessionId,
+                source = c.Source,
+                since = c.LockedAtUtc,
+                duration = FormatDuration(DateTime.UtcNow - c.LockedAtUtc),
+            }),
+        });
+    }
+
+    // ?? Reconnection & session endpoints ?????????????????????????????
+
+    /// <summary>GET /api/execution/reconnect — returns user's active sessions for reconnection.</summary>
+    [HttpGet("reconnect")]
+    public IActionResult Reconnect()
+    {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
+        if (string.IsNullOrEmpty(userId))
+            return Ok(new { activeSessions = Array.Empty<object>() });
+
+        var active = _sessionManager.GetActiveSessions()
+            .Where(s => string.Equals(s.UserId, userId, StringComparison.OrdinalIgnoreCase))
+            .Select(s => new
+            {
+                s.SessionId,
+                s.WatchItemTag,
+                s.Source,
+                status = s.State.ToString(),
+                elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
+                s.LockedAgents,
+                logCount = s.GetRecentLogs(0).Count,
+            })
+            .ToList();
+
+        return Ok(new { userId, activeSessions = active });
+    }
+
+    /// <summary>GET /api/execution/{sessionId}/recent-logs — backfill logs after reconnect.</summary>
+    [HttpGet("{sessionId}/recent-logs")]
+    public IActionResult GetRecentLogs(string sessionId, [FromQuery] int count = 200)
+    {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
+
+        var session = _sessionManager.GetSession(sessionId);
+        if (session == null)
+            return NotFound(new { error = "Session not found" });
+
+        if (source != "WPF" &&
+            !string.IsNullOrEmpty(userId) &&
+            !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(403, new { error = "Not your session", sessionOwner = session.UserId });
+        }
+
+        var logs = session.GetRecentLogs(count);
+        return Ok(new
+        {
+            sessionId,
+            logs = logs.Select(l => new
+            {
+                timestamp = l.Timestamp.ToString("HH:mm:ss.fff"),
+                l.Category,
+                l.Message,
+            }),
+            count = logs.Count,
+            sessionStatus = session.State.ToString(),
+            elapsed = (DateTime.UtcNow - session.StartedUtc).ToString(@"hh\:mm\:ss"),
+        });
+    }
+
+    /// <summary>GET /api/execution/my-sessions — user's own sessions.</summary>
+    [HttpGet("my-sessions")]
+    public IActionResult GetMySessions()
+    {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
+
+        var active = _sessionManager.GetActiveSessions()
+            .Where(s => string.Equals(s.UserId, userId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var history = _sessionManager.GetHistory(50)
+            .Where(s => string.Equals(s.UserId, userId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Ok(new
+        {
+            userId,
+            active = active.Select(ToSessionDto),
+            history = history.Select(ToSessionDto),
+        });
+    }
+
+    // ?? Cancel endpoints ????????????????????????????????????????????
+
     /// <summary>POST /api/execution/cancel — cancel all running sessions.</summary>
     [HttpPost("cancel")]
     public async Task<IActionResult> CancelAll()
     {
+        // Snapshot active session IDs before cancellation moves them to history
+        var activeSessionIds = _sessionManager.GetActiveSessions()
+            .Select(s => s.SessionId).ToList();
+
         var cancelledTags = _sessionManager.CancelAll();
+
+        // Release locks for the actual cancelled sessions
+        foreach (var sid in activeSessionIds)
+            _lockManager.ReleaseSession(sid);
+
         foreach (var tag in cancelledTags)
         {
             await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
@@ -293,6 +525,10 @@ public class ExecutionController : ControllerBase
                 timestamp = DateTime.UtcNow.ToString("o"),
             });
         }
+
+        if (cancelledTags.Count > 0)
+            BroadcastLockChange("All sessions cancelled");
+
         return Ok(new
         {
             message = $"Cancelled {cancelledTags.Count} execution(s).",
@@ -300,12 +536,35 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a specific session.</summary>
+    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a specific session (ownership enforced).</summary>
     [HttpPost("{sessionId}/cancel")]
     public async Task<IActionResult> CancelSession(string sessionId)
     {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
+
+        var session = _sessionManager.GetSession(sessionId);
+        if (session == null)
+            return NotFound(new { error = "Session not found or not running" });
+
+        // Ownership check: WebClient users can only cancel their own sessions
+        if (source != "WPF" &&
+            !string.IsNullOrEmpty(userId) &&
+            !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(403, new
+            {
+                error = "Cannot cancel another user's session",
+                sessionOwner = session.UserId,
+                yourId = userId,
+            });
+        }
+
         var cancelled = _sessionManager.CancelSession(sessionId);
         if (!cancelled) return NotFound(new { error = "Session not found or not running" });
+
+        _lockManager.ReleaseSession(sessionId);
+        BroadcastLockChange($"Session {sessionId} cancelled");
 
         await _hub.Clients.Group("global").SendAsync("ExecutionCancelled", new
         {
@@ -313,7 +572,91 @@ public class ExecutionController : ControllerBase
             timestamp = DateTime.UtcNow.ToString("o"),
         });
 
-        return Ok(new { message = "Cancellation requested" });
+        return Ok(new { message = "Cancellation requested", cancelledBy = userId });
+    }
+
+    // ?? Force-release endpoints (admin only) ?????????????????????????
+
+    /// <summary>POST /api/execution/force-release/{agentName} — admin force-release a single agent.</summary>
+    [HttpPost("force-release/{agentName}")]
+    public IActionResult ForceReleaseAgent(string agentName)
+    {
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
+        if (source != "WPF")
+            return StatusCode(403, new { error = "Only WPF Controller admin can force-release agents" });
+
+        var currentLock = _lockManager.GetLock(agentName);
+        if (currentLock == null)
+            return NotFound(new { error = $"Agent '{agentName}' is not locked" });
+
+        _lockManager.ForceRelease(agentName);
+        BroadcastLockChange($"Force-released: {agentName}");
+
+        return Ok(new
+        {
+            message = $"Agent '{agentName}' force-released",
+            previousLock = new { currentLock.SessionId, currentLock.UserId, currentLock.WatchItemTag },
+        });
+    }
+
+    /// <summary>POST /api/execution/force-release-all — admin emergency release all locks.</summary>
+    [HttpPost("force-release-all")]
+    public IActionResult ForceReleaseAll()
+    {
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
+        if (source != "WPF")
+            return StatusCode(403, new { error = "Admin only" });
+
+        var count = _lockManager.ForceReleaseAll();
+        BroadcastLockChange("All locks force-released");
+
+        return Ok(new { message = $"Released {count} agent locks" });
+    }
+
+    // ?? Helpers ??????????????????????????????????????????????????????
+
+    private void BroadcastLockChange(string reason)
+    {
+        var locks = _lockManager.GetAllLocks()
+            .Select(l => new AgentLockInfo
+            {
+                AgentName = l.AgentName,
+                SessionId = l.SessionId,
+                WatchItemTag = l.WatchItemTag,
+                UserId = l.UserId,
+                Source = l.Source,
+                LockedAtUtc = l.LockedAtUtc,
+                Duration = FormatDuration(DateTime.UtcNow - l.LockedAtUtc),
+            }).ToList();
+
+        _ = _notifier.NotifyAgentLocksChanged(new AgentLocksChangedEvent
+        {
+            Locks = locks,
+            Reason = reason,
+        });
+    }
+
+    private static string FormatDuration(TimeSpan d)
+    {
+        if (d.TotalHours >= 1) return $"{(int)d.TotalHours}h {d.Minutes}m";
+        if (d.TotalMinutes >= 1) return $"{d.Minutes}m {d.Seconds}s";
+        return $"{d.Seconds}s";
+    }
+
+    private static Dictionary<string, string> LoadParametersForWatchItem(WatchItemConfig watchItem)
+    {
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
+        if (paramFile != null && System.IO.File.Exists(paramFile))
+        {
+            foreach (var (key, value) in ParameterResolver.ParseParameterFile(paramFile))
+            {
+                parameters[key] = value;
+                if (key.StartsWith('_'))
+                    parameters[key[1..]] = value;
+            }
+        }
+        return parameters;
     }
 
     private static object ToSessionDto(ExecutionSession s) => new
@@ -324,6 +667,9 @@ public class ExecutionController : ControllerBase
         startedUtc = s.StartedUtc,
         completedUtc = s.CompletedUtc,
         state = s.State.ToString(),
+        userId = s.UserId,
+        source = s.Source,
+        lockedAgents = s.LockedAgents,
         totalActions = s.TotalActions,
         succeededCount = s.SucceededCount,
         failedCount = s.FailedCount,

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -32,6 +33,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ILogger<MainViewModel> _logger;
     private readonly IAppLogger _appLogger;
     private readonly IEventAggregator _events;
+    private readonly AgentLockManager _lockManager;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
@@ -77,6 +79,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // ── Execution Dashboard state ───────────────────────────────────
     /// <summary>Per-agent execution progress for the dashboard.</summary>
     public ObservableCollection<AgentExecutionProgress> AgentProgress { get; } = new();
+
+    // ── Agent Lock Display ──────────────────────────────────────────
+    /// <summary>Current agent lock state for admin dashboard binding.</summary>
+    public ObservableCollection<AgentLockDisplayItem> AgentLocks { get; } = new();
 
     /// <summary>True when execution dashboard should be shown instead of normal properties.</summary>
     [ObservableProperty] private bool _showExecutionDashboard;
@@ -293,7 +299,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IActionPipelineExecutor executor, IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
         BuildResultsViewModel buildResultsVM, IAppLogger appLogger,
-        IEventAggregator events)
+        IEventAggregator events, AgentLockManager lockManager)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -303,6 +309,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _logger = logger;
         _appLogger = appLogger;
         _events = events;
+        _lockManager = lockManager;
         BuildResultsVM = buildResultsVM;
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
@@ -321,6 +328,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             e => OnAgentSelfUnregistered(e.AgentName)));
         _subscriptions.Add(events.Subscribe<AgentHeartbeatEvent>(
             e => OnAgentHeartbeat(e.AgentName, e.State, e.Metrics)));
+
+        // Subscribe to lock changes for admin display refresh
+        _subscriptions.Add(events.Subscribe<AgentLocksChangedEvent>(_ =>
+            Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
+        _subscriptions.Add(events.Subscribe<ExecutionCompletedEvent>(_ =>
+            Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
 
         // Always start with a single empty WatchList root
         InitializeEmptyWatchList();
@@ -451,6 +464,82 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _ = Task.Delay(30_000).ContinueWith(_ =>
         {
             Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+        });
+    }
+
+    // ── Agent Lock Admin ────────────────────────────────────────────
+
+    /// <summary>Refreshes the lock display from AgentLockManager.</summary>
+    public void RefreshLockDisplay()
+    {
+        AgentLocks.Clear();
+        foreach (var l in _lockManager.GetAllLocks())
+        {
+            var elapsed = DateTime.UtcNow - l.LockedAtUtc;
+            AgentLocks.Add(new AgentLockDisplayItem
+            {
+                AgentName = l.AgentName,
+                SessionId = l.SessionId,
+                WatchItemTag = l.WatchItemTag,
+                UserId = l.UserId,
+                Source = l.Source,
+                Duration = elapsed.TotalHours >= 1
+                    ? $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m"
+                    : elapsed.TotalMinutes >= 1
+                        ? $"{elapsed.Minutes}m {elapsed.Seconds}s"
+                        : $"{elapsed.Seconds}s",
+            });
+        }
+    }
+
+    /// <summary>Admin force-release a single agent's lock.</summary>
+    [RelayCommand]
+    private void AdminForceRelease(string? agentName)
+    {
+        if (string.IsNullOrEmpty(agentName)) return;
+
+        var currentLock = _lockManager.GetLock(agentName);
+        if (currentLock == null)
+        {
+            AddLog($"Agent '{agentName}' is not locked");
+            return;
+        }
+
+        _lockManager.ForceRelease(agentName);
+        AddLog($"Admin force-released agent {agentName} (was: {currentLock.WatchItemTag}/{currentLock.UserId})", LogSeverity.Warning);
+        RefreshLockDisplay();
+
+        _events.Publish(new AgentLocksChangedEvent
+        {
+            Locks = _lockManager.GetAllLocks()
+                .Select(l => new AgentLockInfo
+                {
+                    AgentName = l.AgentName,
+                    SessionId = l.SessionId,
+                    WatchItemTag = l.WatchItemTag,
+                    UserId = l.UserId,
+                    Source = l.Source,
+                    LockedAtUtc = l.LockedAtUtc,
+                }).ToList(),
+            Reason = $"Admin force-released {agentName}",
+        });
+    }
+
+    /// <summary>Admin emergency: release all agent locks.</summary>
+    [RelayCommand]
+    private void AdminForceReleaseAll()
+    {
+        var count = _lockManager.GetAllLocks().Count;
+        if (count == 0) { AddLog("No agents are currently locked"); return; }
+
+        _lockManager.ForceReleaseAll();
+        AddLog($"Admin force-released ALL {count} agent locks", LogSeverity.Warning);
+        RefreshLockDisplay();
+
+        _events.Publish(new AgentLocksChangedEvent
+        {
+            Locks = [],
+            Reason = "All locks force-released",
         });
     }
 

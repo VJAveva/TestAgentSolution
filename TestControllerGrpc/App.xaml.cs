@@ -73,6 +73,15 @@ public partial class App : Application
                 services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
                 services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
                 services.AddSingleton<ExecutionSessionManager>();
+                services.AddSingleton(sp =>
+                {
+                    var cfg = sp.GetRequiredService<IConfiguration>();
+                    var logDir = cfg.GetValue<string>("Logging:LogDirectory")
+                        ?? cfg.GetValue<string>("LogDirectory")
+                        ?? AppLogger.DefaultLogDirectory;
+                    var lockFile = Path.Combine(logDir, "agent-locks.json");
+                    return new AgentLockManager(lockFile);
+                });
                 services.AddSingleton<IActionPipelineExecutor, ActionPipelineExecutor>();
                 services.AddSingleton<IFileWatcherManager, FileWatcherManager>();
                 services.AddSingleton<IWatchListXmlParser, WatchListXmlParserService>();

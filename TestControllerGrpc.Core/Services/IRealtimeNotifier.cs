@@ -41,4 +41,7 @@ public interface IRealtimeNotifier
 
     /// <summary>Broadcast WatchList reloaded. Event: "WatchListReloaded"</summary>
     Task NotifyWatchListReloaded();
+
+    /// <summary>Broadcast agent lock state changed. Event: "AgentLocksChanged"</summary>
+    Task NotifyAgentLocksChanged(AgentLocksChangedEvent e);
 }

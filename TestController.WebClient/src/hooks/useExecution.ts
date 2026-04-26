@@ -28,7 +28,7 @@ export function useExecution() {
 
   const triggerByTag = useCallback(async (
     tag: string,
-    params?: { buildNumber?: string; dropLocation?: string; parameters?: Record<string, string> }
+    params?: { buildNumber?: string; dropLocation?: string; parameters?: Record<string, string>; lockVersion?: number }
   ) => {
     const { data } = await axios.post(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
     await fetchSessions();

@@ -14,13 +14,23 @@ public sealed class ExecutionSessionManager
     private readonly List<ExecutionSession> _history = [];
     private const int MaxHistory = 50;
 
-    /// <summary>Begins a new execution session and tracks it as active.</summary>
+    /// <summary>
+    /// Begins a new execution session and tracks it as active.
+    /// If a session with the given <paramref name="sessionId"/> already exists
+    /// (e.g. pre-created by the controller to set UserId/Source/LockedAgents),
+    /// returns the existing session instead of overwriting it.
+    /// </summary>
     public ExecutionSession BeginSession(
         string watchItemTag, string eventType,
         Dictionary<string, string> resolvedParameters,
         List<IActionNode> snapshotNodes,
         string? sessionId = null)
     {
+        // If a session with this ID was already pre-registered (e.g. by ExecutionController
+        // before handing off to the executor), return it to preserve UserId/Source/LockedAgents.
+        if (sessionId != null && _active.TryGetValue(sessionId, out var existing))
+            return existing;
+
         var session = new ExecutionSession
         {
             SessionId = sessionId ?? Guid.NewGuid().ToString("N")[..12],

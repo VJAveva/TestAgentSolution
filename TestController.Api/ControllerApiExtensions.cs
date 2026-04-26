@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using TestController.Api.Hubs;
@@ -22,9 +23,19 @@ public static class ControllerApiExtensions
     /// </summary>
     public static IMvcBuilder AddControllerApi(this IServiceCollection services)
     {
+        // AgentLockManager: only register if not already provided by the host (WPF bridges its own instance)
+        if (!services.Any(d => d.ServiceType == typeof(AgentLockManager)))
+        {
+            var lockFilePath = Path.Combine(AppLogger.DefaultLogDirectory, "agent-locks.json");
+            services.AddSingleton(new AgentLockManager(lockFilePath));
+        }
+
         services.AddSingleton<CachedBuildResultsProvider>();
         services.AddSingleton<SignalRNotifier>();
         services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
+
+        // Lock recovery: validates persisted locks against agent state on startup
+        services.AddHostedService<LockRecoveryService>();
 
         // Add controllers from the shared assembly
         return services.AddControllers()

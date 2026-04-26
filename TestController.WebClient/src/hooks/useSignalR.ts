@@ -1,11 +1,15 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import axios from 'axios';
 import { useWatchListStore } from '../stores/watchlistStore';
 import { useAgentStore } from '../stores/agentStore';
 import { useExecutionStore } from '../stores/executionStore';
 import { useConnectionStore } from '../stores/connectionStore';
+import { getUserId } from '../lib/userIdentity';
 import type { NodeStatus, WatchListConfig } from '../types/api';
+
+/** Tracks joined sessions for auto-rejoin after reconnect. */
+const joinedSessions = new Set<string>();
 
 export function useSignalR(): HubConnection | null {
   const [connection, setConnection] = useState<HubConnection | null>(null);
@@ -30,6 +34,11 @@ export function useSignalR(): HubConnection | null {
     conn.onreconnected((connectionId) => {
       console.log('[SignalR] Reconnected:', connectionId);
       useConnectionStore.getState().setStatus('connected');
+      // Rejoin all session groups after reconnect
+      for (const sid of joinedSessions) {
+        conn.invoke('JoinSession', sid).catch(() => {});
+      }
+      conn.invoke('JoinAsUser', getUserId()).catch(() => {});
     });
     conn.onclose((error) => {
       console.error('[SignalR] Connection closed:', error?.message);
@@ -148,11 +157,20 @@ export function useSignalR(): HubConnection | null {
       }
     });
 
+    // Agent lock state changes: broadcast to all clients
+    conn.on('AgentLocksChanged', (data: { locks?: any[]; reason?: string }) => {
+      window.dispatchEvent(new CustomEvent('agent-locks-changed', {
+        detail: { locks: data.locks || [], reason: data.reason },
+      }));
+    });
+
     conn.start().then(() => {
       console.log('[SignalR] Connected to /hubs/controller');
       setConnection(conn);
       useConnectionStore.getState().setConnection(conn);
       useConnectionStore.getState().setStatus('connected');
+      // Join user-specific group for filtered events
+      conn.invoke('JoinAsUser', getUserId()).catch(() => {});
     }).catch(err => {
       console.error('[SignalR] Connection failed:', err.message);
       useConnectionStore.getState().setStatus('disconnected');
@@ -167,4 +185,16 @@ export function useSignalR(): HubConnection | null {
   }, []);
 
   return connection;
+}
+
+/** Join a session's SignalR group for filtered log events. */
+export function joinSession(conn: HubConnection | null, sessionId: string) {
+  joinedSessions.add(sessionId);
+  conn?.invoke('JoinSession', sessionId).catch(() => {});
+}
+
+/** Leave a session's SignalR group. */
+export function leaveSession(conn: HubConnection | null, sessionId: string) {
+  joinedSessions.delete(sessionId);
+  conn?.invoke('LeaveSession', sessionId).catch(() => {});
 }

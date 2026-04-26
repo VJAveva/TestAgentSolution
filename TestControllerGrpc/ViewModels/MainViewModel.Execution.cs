@@ -42,6 +42,25 @@ public sealed partial class MainViewModel
             SessionId = session.SessionId,
         };
 
+        // Acquire agent locks
+        var requiredAgents = wiConfig != null
+            ? AgentResolver.ExtractAgentNames(ev, ctx.Parameters)
+            : [];
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} — locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{tag}' — agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                return;
+            }
+        }
+
         eventNode.SetStatusRecursive("Running");
         eventNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered Event: {ev.Type} on {tag}");
@@ -74,6 +93,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockManager.ReleaseSession(session.SessionId);
             CompleteSession(session);
         }
     }
@@ -96,6 +116,24 @@ public sealed partial class MainViewModel
 
         var session = CreateSession(wi.Tag);
         var wiNode = SelectedNode;
+
+        // Acquire agent locks for all agents across all events
+        var parameters = CollectInitializeParameters(SelectedNode);
+        var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, wi.Tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} — locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{wi.Tag}' — agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                return;
+            }
+        }
 
         wiNode.SetStatusRecursive("Running");
         wiNode.PropagateStatusUp();
@@ -156,6 +194,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockManager.ReleaseSession(session.SessionId);
             CompleteSession(session);
         }
     }

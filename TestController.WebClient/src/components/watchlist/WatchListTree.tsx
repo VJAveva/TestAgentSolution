@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import { useWatchListStore } from '../../stores/watchlistStore';
+import { apiFetch } from '../../lib/api';
 import type { TreeNode, NodeKind } from '../../types/api';
 import { ChevronDown, ChevronRight, Eye, Zap, FolderTree, Play, Settings, Link2, FileText, List } from 'lucide-react';
 
@@ -25,6 +27,24 @@ export default function WatchListTree() {
   const treeRoots = useWatchListStore(s => s.treeRoots);
   const loading = useWatchListStore(s => s.loading);
   const error = useWatchListStore(s => s.error);
+  const [locks, setLocks] = useState<any[]>([]);
+
+  // Load initial lock state
+  useEffect(() => {
+    apiFetch<{ locks: any[] }>('/api/execution/locks')
+      .then(data => setLocks(data.locks || []))
+      .catch(() => {});
+  }, []);
+
+  // Subscribe to real-time lock changes
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setLocks(detail?.locks || []);
+    };
+    window.addEventListener('agent-locks-changed', handler);
+    return () => window.removeEventListener('agent-locks-changed', handler);
+  }, []);
 
   if (loading) {
     return <p className="p-3 text-xs text-text-muted">Loading WatchList…</p>;
@@ -40,12 +60,12 @@ export default function WatchListTree() {
 
   return (
     <div className="py-1 select-none">
-      {treeRoots.map(root => <TreeNodeRow key={root.id} node={root} />)}
+      {treeRoots.map(root => <TreeNodeRow key={root.id} node={root} locks={locks} />)}
     </div>
   );
 }
 
-function TreeNodeRow({ node }: { node: TreeNode }) {
+function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
   const selectNode = useWatchListStore(s => s.selectNode);
   const toggleExpand = useWatchListStore(s => s.toggleExpand);
   const selectedNode = useWatchListStore(s => s.selectedNode);
@@ -82,11 +102,24 @@ function TreeNodeRow({ node }: { node: TreeNode }) {
         {/* Icon + label */}
         {kindIcon[node.nodeKind]}
         <span className="truncate">{node.displayText}</span>
+
+        {/* Lock indicator for WatchItem nodes */}
+        {node.nodeKind === 'WatchItem' && (() => {
+          const lockForTag = locks.find(l => l.watchItemTag === node.tag);
+          if (lockForTag) {
+            return (
+              <span className="ml-auto px-2 py-0.5 bg-amber-900/30 text-amber-400 text-[9px] font-bold rounded-full uppercase shrink-0">
+                Locked ({lockForTag.userId})
+              </span>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Recursive children */}
       {node.isExpanded && hasChildren && (
-        <div>{node.children.map(c => <TreeNodeRow key={c.id} node={c} />)}</div>
+        <div>{node.children.map(c => <TreeNodeRow key={c.id} node={c} locks={locks} />)}</div>
       )}
     </div>
   );

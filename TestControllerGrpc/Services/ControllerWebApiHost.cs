@@ -29,6 +29,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly TrxResultsParser _parser;
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _resultsConfig;
+    private readonly AgentLockManager _lockManager;
     private readonly IAppLogger _appLogger;
     private readonly ILogger<ControllerWebApiHost> _logger;
     private readonly int _port;
@@ -45,6 +46,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildResultsConfig resultsConfig,
+        AgentLockManager lockManager,
         IAppLogger appLogger,
         IConfiguration config,
         ILogger<ControllerWebApiHost> logger)
@@ -58,6 +60,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _parser = parser;
         _aggregator = aggregator;
         _resultsConfig = resultsConfig;
+        _lockManager = lockManager;
         _appLogger = appLogger;
         _logger = logger;
         _port = config.GetValue<int>("WebApiPort", 5200);
@@ -97,6 +100,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_parser);
             builder.Services.AddSingleton(_aggregator);
             builder.Services.AddSingleton(_resultsConfig);
+            builder.Services.AddSingleton(_lockManager);
             builder.Services.AddSingleton(_appLogger);
 
             // Use the shared API library for controllers, hub, and bridge

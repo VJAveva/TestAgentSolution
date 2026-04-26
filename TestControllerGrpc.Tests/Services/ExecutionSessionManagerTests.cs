@@ -53,6 +53,47 @@ public class ExecutionSessionManagerTests
         Assert.Equal("1.0", session.ResolvedParameters["BuildNumber"]);
     }
 
+    [Fact]
+    public void BeginSession_Should_ReturnExisting_When_SessionIdAlreadyActive()
+    {
+        var mgr = CreateManager();
+
+        // Pre-create session (as ExecutionController does)
+        var first = mgr.BeginSession("Set1", "Renamed",
+            new Dictionary<string, string>(),
+            new List<IActionNode>(),
+            "pre-created-id");
+        first.UserId = "Vinod";
+        first.Source = "WebClient";
+        first.LockedAgents = new[] { "agent1", "agent2" };
+
+        // Second call with same sessionId (as ExecuteEventTrackedAsync does)
+        var second = mgr.BeginSession("Set1", "Renamed",
+            new Dictionary<string, string>(),
+            new List<IActionNode>(),
+            "pre-created-id");
+
+        // Must be the SAME object — not a new one that overwrites UserId/Source/LockedAgents
+        Assert.Same(first, second);
+        Assert.Equal("Vinod", second.UserId);
+        Assert.Equal("WebClient", second.Source);
+        Assert.Equal(new[] { "agent1", "agent2" }, second.LockedAgents);
+    }
+
+    [Fact]
+    public void BeginSession_Should_CreateNew_When_SessionIdNotActive()
+    {
+        var mgr = CreateManager();
+
+        var session = mgr.BeginSession("Set1", "Renamed",
+            new Dictionary<string, string>(),
+            new List<IActionNode>(),
+            "new-id");
+
+        Assert.Equal("new-id", session.SessionId);
+        Assert.Equal(1, mgr.ActiveExecutionCount);
+    }
+
     // ???????????????????????????????????????????????????????????????????
     // RecordResult
     // ???????????????????????????????????????????????????????????????????

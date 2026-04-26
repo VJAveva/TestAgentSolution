@@ -16,6 +16,7 @@ public class HealthController : ControllerBase
     private readonly ExecutionSessionManager _sessionManager;
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly CachedBuildResultsProvider _buildResults;
+    private readonly AgentLockManager _lockManager;
     private readonly IAppLogger _appLogger;
 
     public HealthController(
@@ -23,12 +24,14 @@ public class HealthController : ControllerBase
         ExecutionSessionManager sessionManager,
         IAgentGrpcDispatcher dispatcher,
         CachedBuildResultsProvider buildResults,
+        AgentLockManager lockManager,
         IAppLogger appLogger)
     {
         _vocabMonitor = vocabMonitor;
         _sessionManager = sessionManager;
         _dispatcher = dispatcher;
         _buildResults = buildResults;
+        _lockManager = lockManager;
         _appLogger = appLogger;
     }
 
@@ -115,6 +118,19 @@ public class HealthController : ControllerBase
                 uptime = (DateTime.UtcNow - process.StartTime.ToUniversalTime()).ToString(@"dd\.hh\:mm\:ss"),
             },
             resultsCache = _buildResults.GetStats(),
+            agentLocks = new
+            {
+                currentLocks = _lockManager.GetAllLocks().Count,
+                lockVersion = _lockManager.Version,
+                persistFilePath = _lockManager.PersistPath ?? "(in-memory only)",
+                persistFileExists = _lockManager.PersistPath != null && System.IO.File.Exists(_lockManager.PersistPath),
+                orphanedLocks = _lockManager.FindOrphanedLocks(
+                    sid => _sessionManager.GetSession(sid) != null).Count,
+                locks = _lockManager.GetAllLocks().Select(l => new
+                {
+                    l.AgentName, l.SessionId, l.WatchItemTag, l.UserId, l.Source, l.LockedAtUtc,
+                }),
+            },
         });
     }
 

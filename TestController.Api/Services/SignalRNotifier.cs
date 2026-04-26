@@ -38,6 +38,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private IDisposable? _subHeartbeat;
     private IDisposable? _subExecutionStarted;
     private IDisposable? _subExecutionCompleted;
+    private IDisposable? _subLocksChanged;
 
     // Heartbeat throttling
     private readonly object _heartbeatLock = new();
@@ -82,6 +83,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subHeartbeat = _events.Subscribe<AgentHeartbeatEvent>(OnHeartbeat);
         _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
         _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
+        _subLocksChanged = _events.Subscribe<AgentLocksChangedEvent>(e => _ = NotifyAgentLocksChanged(e));
 
         // Config reload
         _vocabMonitor.ConfigReloaded += OnWatchListReloaded;
@@ -281,6 +283,16 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     public Task NotifyAgentRegistered(AgentRegisteredEvent e) { OnAgentRegistered(e); return Task.CompletedTask; }
     public Task NotifyAgentUnregistered(AgentUnregisteredEvent e) { OnAgentUnregistered(e); return Task.CompletedTask; }
     public Task NotifyWatchListReloaded() { SendSafe("WatchListReloaded", null); return Task.CompletedTask; }
+    public Task NotifyAgentLocksChanged(AgentLocksChangedEvent e)
+    {
+        // Lock changes go to all connected clients (everyone needs to update UI)
+        return _hub.Clients.Group("global").SendAsync("AgentLocksChanged", new
+        {
+            locks = e.Locks,
+            reason = e.Reason,
+            timestamp = e.Timestamp.ToString("o"),
+        });
+    }
 
     // ?? Transport ??????????????????????????????????????????????????????
 
@@ -317,5 +329,6 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subHeartbeat?.Dispose();
         _subExecutionStarted?.Dispose();
         _subExecutionCompleted?.Dispose();
+        _subLocksChanged?.Dispose();
     }
 }
