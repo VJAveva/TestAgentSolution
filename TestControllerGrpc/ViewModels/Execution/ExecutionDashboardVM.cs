@@ -87,6 +87,14 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
     public ObservableCollection<SessionCardVM> Sessions { get; } = new();
     public RangeObservableCollection<LogEntryVM> LogEntries { get; } = new();
 
+    /// <summary>Timeline VM created by the dashboard window; set externally after construction.</summary>
+    private TimelineVM? _timelineVm;
+    public TimelineVM? Timeline
+    {
+        get => _timelineVm;
+        set => SetProperty(ref _timelineVm, value);
+    }
+
     // ?? Selection state (drives log filtering) ??????????????????????
 
     [ObservableProperty] private string? _selectedSessionId;
@@ -470,28 +478,12 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         SelectedAgentName = null;
     }
 
-    // ?? Window launch commands ??????????????????????????????????????????????????
+    // ?? Window launch command ????????????????????????????????????????????????????
 
     [RelayCommand]
-    private void OpenPipelineWindow()
+    private void OpenDashboardWindow()
     {
-        var win = new Views.PipelineWindow { DataContext = this };
-        win.Show();
-    }
-
-    [RelayCommand]
-    private void OpenTimelineWindow()
-    {
-        var timeline = new TimelineVM(this, _dispatcher);
-        var ctx = new Views.TimelineWindowContext { Dashboard = this, Timeline = timeline };
-        var win = new Views.TimelineWindow { DataContext = ctx };
-        win.Show();
-    }
-
-    [RelayCommand]
-    private void OpenLogWindow()
-    {
-        var win = new Views.LogWindow { DataContext = this };
+        var win = new ExecutionDashboardWindow { DataContext = this };
         win.Show();
     }
 
