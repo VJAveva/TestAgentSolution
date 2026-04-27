@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.Views;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.ViewModels.Execution;
@@ -467,6 +468,31 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         SelectedSessionId =
             SelectedSessionId == sessionId ? null : sessionId;
         SelectedAgentName = null;
+    }
+
+    // ?? Window launch commands ??????????????????????????????????????????????????
+
+    [RelayCommand]
+    private void OpenPipelineWindow()
+    {
+        var win = new Views.PipelineWindow { DataContext = this };
+        win.Show();
+    }
+
+    [RelayCommand]
+    private void OpenTimelineWindow()
+    {
+        var timeline = new TimelineVM(this, _dispatcher);
+        var ctx = new Views.TimelineWindowContext { Dashboard = this, Timeline = timeline };
+        var win = new Views.TimelineWindow { DataContext = ctx };
+        win.Show();
+    }
+
+    [RelayCommand]
+    private void OpenLogWindow()
+    {
+        var win = new Views.LogWindow { DataContext = this };
+        win.Show();
     }
 
     /// <summary>Stops the refresh timer and releases all event subscriptions.</summary>

@@ -17,6 +17,8 @@ public partial class ActionPillVM : ObservableObject
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _duration = "";
     [ObservableProperty] private int _progressPercent;
+    [ObservableProperty] private DateTime _startedUtc = DateTime.UtcNow;
+    [ObservableProperty] private double _durationSeconds;
 
     /// <summary>Stable identity used to update an existing pill in place.</summary>
     public string Key => string.IsNullOrEmpty(Tag)
