@@ -21,8 +21,16 @@ export function useSignalR(): HubConnection | null {
 
     useConnectionStore.getState().setStatus('connecting');
 
+    // Hub URL must be absolute when WebClient and WebApi live on different
+    // origins (production split-origin deployment). VITE_API_BASE_URL is
+    // the same value used by apiFetch and the configured axios baseURL.
+    // In dev (empty base) the relative URL goes through the Vite proxy.
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const hubUrl = `${apiBase}/hubs/controller`;
+    console.log(`[SignalR] Connecting to ${hubUrl}`);
+
     const conn = new HubConnectionBuilder()
-      .withUrl('/hubs/controller')
+      .withUrl(hubUrl)
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(LogLevel.Warning)
       .build();
@@ -165,14 +173,19 @@ export function useSignalR(): HubConnection | null {
     });
 
     conn.start().then(() => {
-      console.log('[SignalR] Connected to /hubs/controller');
+      console.log(`[SignalR] Connected to ${hubUrl}`);
       setConnection(conn);
       useConnectionStore.getState().setConnection(conn);
       useConnectionStore.getState().setStatus('connected');
       // Join user-specific group for filtered events
-      conn.invoke('JoinAsUser', getUserId()).catch(() => {});
+      conn.invoke('JoinAsUser', getUserId()).catch(err =>
+        console.warn('[SignalR] JoinAsUser failed:', err?.message ?? err));
     }).catch(err => {
-      console.error('[SignalR] Connection failed:', err.message);
+      // Surface enough info to diagnose: URL, status, and full error.
+      // The relative-URL bug previously hid this with just `err.message`.
+      console.error(
+        `[SignalR] Connection failed to ${hubUrl} ? ${err?.message ?? err}`,
+        err);
       useConnectionStore.getState().setStatus('disconnected');
     });
 
