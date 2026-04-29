@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useExecutionStore } from '../../stores/executionStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { useExecution } from '../../hooks/useExecution';
+import { logCatch } from '../../lib/logger';
 import type { SessionInfo, AgentInfo } from '../../types/api';
 
 export default function ExecutionMonitor() {
@@ -13,7 +14,7 @@ export default function ExecutionMonitor() {
   // Poll sessions every 2s while executing
   useEffect(() => {
     if (!isExecuting) return;
-    const id = setInterval(() => fetchSessions().catch(() => {}), 2000);
+    const id = setInterval(() => fetchSessions().catch(logCatch('ExecutionMonitor', 'fetchSessions')), 2000);
     return () => clearInterval(id);
   }, [isExecuting, fetchSessions]);
 
