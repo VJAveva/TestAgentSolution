@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
 
 namespace TestControllerGrpc.Views;
@@ -20,6 +21,19 @@ public partial class ExecutionDashboardWindow : Window
     private ComboBox? _severityFilter;
     private ItemsControl? _agentTogglePanel;
     private TextBox? _logSearchBox;
+
+    // Tray + close interception
+    private TrayIconService? _tray;
+
+    /// <summary>
+    /// When true, the next close request actually closes the window. Set this
+    /// before calling <see cref="Window.Close"/> from a tray "Exit" handler.
+    /// Default behavior on close is to hide the window to the tray.
+    /// </summary>
+    public bool AllowClose { get; set; }
+
+    /// <summary>Raised when the window hides itself to the system tray.</summary>
+    public event EventHandler? TrayClosed;
 
     public ExecutionDashboardWindow()
     {
@@ -52,6 +66,35 @@ public partial class ExecutionDashboardWindow : Window
 
         PopulateSessionFilter();
         PopulateAgentToggles();
+
+        // Install tray icon (hides instead of closing)
+        _tray = new TrayIconService(this, "Execution Dashboard - TestControllerGrpc");
+        _tray.Install();
+        _tray.ExitRequested += (_, _) =>
+        {
+            AllowClose = true;
+            Close();
+        };
+    }
+
+    /// <summary>
+    /// Window close interception: hide-to-tray unless <see cref="AllowClose"/>
+    /// has been set (e.g. by the tray "Exit" menu, or app shutdown).
+    /// Pressing X / Alt+F4 follows the spec behavior.
+    /// </summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!AllowClose && _tray != null)
+        {
+            e.Cancel = true;
+            Hide();
+            _tray.ShowBalloon(
+                "Execution Dashboard",
+                "Still running in the system tray. Double-click the icon to reopen.");
+            TrayClosed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+        base.OnClosing(e);
     }
 
     // ?? Pipeline Tab ????????????????????????????????????????????????
@@ -285,6 +328,8 @@ public partial class ExecutionDashboardWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _timeline?.Dispose();
+        _tray?.Dispose();
+        _tray = null;
         base.OnClosed(e);
     }
 

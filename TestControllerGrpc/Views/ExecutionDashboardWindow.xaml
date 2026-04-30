@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:exec="clr-namespace:TestControllerGrpc.ViewModels.Execution"
+    xmlns:controls="clr-namespace:TestControllerGrpc.Views.Controls"
     Title="Execution Dashboard"
     Height="800" Width="1300" MinWidth="800" MinHeight="500"
     WindowStartupLocation="CenterScreen"
@@ -386,69 +387,11 @@
                                                        FontWeight="Medium" Foreground="{StaticResource TextPrimary}"
                                                        VerticalAlignment="Center"/>
                                         </Border>
-                                        <!-- Action bars canvas -->
-                                        <Canvas Grid.Column="1" Background="Transparent"
-                                                SizeChanged="BarCanvas_SizeChanged" ClipToBounds="True">
-                                            <ItemsControl ItemsSource="{Binding Bars}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <Canvas/>
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemContainerStyle>
-                                                    <Style TargetType="ContentPresenter">
-                                                        <Setter Property="Canvas.Top" Value="4"/>
-                                                    </Style>
-                                                </ItemsControl.ItemContainerStyle>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate DataType="{x:Type exec:TimelineBar}">
-                                                        <Border Height="28" CornerRadius="4" Padding="4,0"
-                                                                ToolTip="{Binding Tooltip}" Cursor="Hand">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="{StaticResource StatusIdleBg}"/>
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                            <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                            <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                            <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                            <TextBlock Text="{Binding ActionTag}" FontSize="10"
-                                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                                <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-
-                                            <!-- Time cursor line -->
-                                            <Line Y1="0" Y2="40" Stroke="{StaticResource StatusRunningFg}"
-                                                  StrokeThickness="1" StrokeDashArray="4 2" Opacity="0.6"
-                                                  x:Name="CursorLine"/>
-                                        </Canvas>
+                                        <!-- Action bars: rendered by the custom GanttRow control
+                                             (single OnRender pass instead of a per-bar ItemsControl) -->
+                                        <controls:GanttRow Grid.Column="1"
+                                                           Actions="{Binding Bars}"
+                                                           Background="{StaticResource BgCard}"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
