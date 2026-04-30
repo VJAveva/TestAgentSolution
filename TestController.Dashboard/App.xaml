@@ -1,0 +1,15 @@
+<Application x:Class="TestController.Dashboard.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Reuse the existing dark theme + dashboard styles from the
+                     in-process project so this standalone tool looks identical. -->
+                <ResourceDictionary Source="pack://application:,,,/TestControllerGrpc;component/Themes/DarkTheme.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/TestControllerGrpc;component/Views/Styles/ExecutionDashboardStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

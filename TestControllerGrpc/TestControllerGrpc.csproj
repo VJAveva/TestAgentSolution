@@ -8,10 +8,20 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>TestControllerGrpc</RootNamespace>
     <AssemblyName>TestControllerGrpc</AssemblyName>
+    <ApplicationIcon>Assets\dashboard.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="TestControllerGrpc.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tray icon (loaded via pack URI by TrayIconService) and copied next to
+         the exe so the file-path fallback also works without rebuild. -->
+    <Resource Include="Assets\dashboard.ico" />
+    <None Update="Assets\dashboard.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
