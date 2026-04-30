@@ -12,6 +12,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- ?????????????????????????????????????????????????????????? -->
@@ -115,17 +116,37 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Filter bar -->
-                    <Border Grid.Row="0" Padding="8,4"
-                            BorderBrush="{StaticResource RowBorder}" BorderThickness="0,0,0,0.5">
+                    <!-- Filter bar (text + status RadioButtons per spec) -->
+                    <Border Grid.Row="0" Padding="8,6"
+                            BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
                         <DockPanel>
+                            <!-- Status RadioButtons (right side) -->
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <RadioButton x:Name="PipelineFilterAll" Content="All"
+                                             GroupName="PipelineStatus" IsChecked="True"
+                                             Style="{StaticResource FilterButtonStyle}"
+                                             Checked="PipelineStatusFilter_Checked"
+                                             Tag="All"/>
+                                <RadioButton x:Name="PipelineFilterRunning" Content="Running"
+                                             GroupName="PipelineStatus"
+                                             Style="{StaticResource FilterButtonStyle}"
+                                             Checked="PipelineStatusFilter_Checked"
+                                             Tag="Running"/>
+                                <RadioButton x:Name="PipelineFilterFailed" Content="Failed"
+                                             GroupName="PipelineStatus"
+                                             Style="{StaticResource FilterButtonStyle}"
+                                             Checked="PipelineStatusFilter_Checked"
+                                             Tag="Failed"/>
+                            </StackPanel>
+
+                            <!-- Free-text filter (fills remaining space) -->
                             <TextBlock Text="Filter:" FontSize="11"
-                                       Foreground="{StaticResource TextSecondary}"
-                                       VerticalAlignment="Center" DockPanel.Dock="Left" Margin="0,0,6,0"/>
+                                       Foreground="{StaticResource SpecTextSecondary}"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBox x:Name="PipelineFilterBox" FontSize="11" MinWidth="220"
-                                     Background="{StaticResource CardBg}"
-                                     Foreground="{StaticResource TextPrimary}"
-                                     BorderBrush="{StaticResource CardBorder}" Padding="6,3"
+                                     Background="{StaticResource BgCard}"
+                                     Foreground="{StaticResource SpecTextPrimary}"
+                                     BorderBrush="{StaticResource BorderSubtle}" Padding="6,3"
                                      TextChanged="PipelineFilterBox_TextChanged"/>
                         </DockPanel>
                     </Border>
@@ -568,5 +589,30 @@
                 </Grid>
             </TabItem>
         </TabControl>
+
+        <!-- ?????????????????????????????????????????????????????????? -->
+        <!-- Connection status footer (per spec)                       -->
+        <!-- ?????????????????????????????????????????????????????????? -->
+        <Border Grid.Row="2" Background="{StaticResource BgCard}"
+                BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0"
+                Padding="12,6">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Style="{StaticResource ConnectionDotStyle}"/>
+                <TextBlock VerticalAlignment="Center" FontSize="11"
+                           Foreground="{StaticResource SpecTextSecondary}">
+                    <Run Text="{Binding ConnectionStatus, Mode=OneWay}"/>
+                    <Run Text=" - "/>
+                    <Run Text="ControllerService"/>
+                </TextBlock>
+                <Border Width="1" Background="{StaticResource BorderSubtle}" Margin="14,2"/>
+                <TextBlock VerticalAlignment="Center" FontSize="11"
+                           Foreground="{StaticResource SpecTextMuted}">
+                    <Run Text="{Binding Sessions.Count, Mode=OneWay}"/>
+                    <Run Text="sessions |"/>
+                    <Run Text="{Binding LogEntries.Count, Mode=OneWay}"/>
+                    <Run Text="log entries"/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

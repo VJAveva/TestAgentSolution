@@ -108,16 +108,34 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
     [ObservableProperty] private int _totalFailedActions;
     [ObservableProperty] private int _overallProgressPercent;
 
+    // ?? Connection / filter state (Dashboard v2 spec) ?????????????????
+
+    /// <summary>
+    /// Status of the dashboard's data feed. For the in-process WPF dashboard
+    /// this is "Connected" whenever the controller services are alive; if
+    /// background event subscriptions throw it flips to "Disconnected". The
+    /// UI footer binds to this and shows a colored dot.
+    /// Values: "Connected" | "Connecting" | "Disconnected".
+    /// </summary>
+    [ObservableProperty] private string _connectionStatus = "Connected";
+
+    /// <summary>Pipeline view status filter: "All" | "Running" | "Failed".</summary>
+    [ObservableProperty] private string _pipelineStatusFilter = "All";
+
+    /// <summary>Pipeline view free-text filter (matches session/agent/action).</summary>
+    [ObservableProperty] private string _pipelineSearchText = "";
+
+    /// <summary>Unified-log severity filter: "All" | "Error" | "Warning" | "Success" | "Info".</summary>
+    [ObservableProperty] private string _logSeverityFilter = "All";
+
+    /// <summary>Unified-log free-text filter.</summary>
+    [ObservableProperty] private string _logSearchText = "";
+
     // ?? Commands ????????????????????????????????????????????????????
 
     public System.Windows.Input.ICommand CancelSessionCommand { get; }
     public System.Windows.Input.ICommand ClearSelectionCommand { get; }
     public System.Windows.Input.ICommand ClearLogsCommand { get; }
-
-    // ?? Filter properties for log panel ?????????????????????????????
-
-    [ObservableProperty] private string _logSearchText = "";
-    [ObservableProperty] private string _logSeverityFilter = "All";
 
     /// <summary>
     /// Predicate used by CollectionViewSource.Filter in XAML.
@@ -149,6 +167,37 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             if (!entry.Message.ToLowerInvariant().Contains(lower) &&
                 !entry.AgentName.ToLowerInvariant().Contains(lower))
                 return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Predicate used by the Pipeline view to filter session cards by status
+    /// (All / Running / Failed) and free-text search across session name,
+    /// owner, agent name, and action name.
+    /// </summary>
+    public bool FilterSessionCard(SessionCardVM card)
+    {
+        // Status filter
+        if (PipelineStatusFilter == "Running" && card.Status != "Running") return false;
+        if (PipelineStatusFilter == "Failed"  && card.Status != "Failed")  return false;
+
+        // Free-text search
+        if (!string.IsNullOrEmpty(PipelineSearchText))
+        {
+            var q = PipelineSearchText.Trim();
+            if (q.Length == 0) return true;
+
+            bool match = card.WatchItemTag.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || (card.UserId?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+                || card.Agents.Any(a =>
+                       a.AgentName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || a.Actions.Any(act =>
+                           act.DisplayLabel.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || act.Status.Contains(q, StringComparison.OrdinalIgnoreCase)));
+
+            if (!match) return false;
         }
 
         return true;

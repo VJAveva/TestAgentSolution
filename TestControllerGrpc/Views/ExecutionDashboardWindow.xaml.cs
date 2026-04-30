@@ -74,26 +74,28 @@ public partial class ExecutionDashboardWindow : Window
 
     private void PipelineFilterBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (sender is not TextBox tb || _pipelineSessionList == null) return;
-        var filter = tb.Text.Trim().ToLowerInvariant();
+        if (sender is not TextBox tb || VM == null) return;
+        VM.PipelineSearchText = tb.Text;
+        ApplyPipelineFilter();
+    }
 
-        foreach (var item in _pipelineSessionList.Items)
-        {
-            if (item is SessionCardVM card)
-            {
-                var container = _pipelineSessionList.ItemContainerGenerator
-                    .ContainerFromItem(card) as FrameworkElement;
-                if (container == null) continue;
+    private void PipelineStatusFilter_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb || VM == null) return;
+        VM.PipelineStatusFilter = rb.Tag as string ?? "All";
+        ApplyPipelineFilter();
+    }
 
-                container.Visibility = string.IsNullOrEmpty(filter)
-                    || card.WatchItemTag.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                    || card.Agents.Any(a => a.AgentName.Contains(filter, StringComparison.OrdinalIgnoreCase))
-                    || card.Agents.Any(a => a.Actions.Any(act =>
-                        act.Status.Contains(filter, StringComparison.OrdinalIgnoreCase)))
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
-            }
-        }
+    /// <summary>
+    /// Applies the Pipeline view's combined status + free-text filter using the
+    /// VM's predicate. Uses CollectionView.Filter so virtualization is preserved
+    /// and the source ObservableCollection isn't mutated.
+    /// </summary>
+    private void ApplyPipelineFilter()
+    {
+        if (VM == null) return;
+        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(VM.Sessions);
+        view.Filter = obj => obj is not SessionCardVM card || VM.FilterSessionCard(card);
     }
 
     // ?? Timeline Tab ????????????????????????????????????????????????
