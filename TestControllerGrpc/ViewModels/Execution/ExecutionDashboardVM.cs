@@ -318,7 +318,30 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         _dispatcher.InvokeAsync(() =>
         {
             var card = Sessions.FirstOrDefault(s => s.SessionId == e.SessionId);
-            if (card == null) return;
+
+            // B7: Tolerate NodeProgress arriving before ExecutionStarted
+            // (race condition when both events publish via ThreadPool).
+            // Create a placeholder card so action pills are not silently dropped.
+            if (card == null)
+            {
+                var session = _sessionManager.GetSession(e.SessionId);
+                card = new SessionCardVM
+                {
+                    SessionId = e.SessionId,
+                    WatchItemTag = session?.WatchItemTag ?? e.SessionId,
+                    UserId = session?.UserId ?? "",
+                    Source = session?.Source ?? "",
+                    Status = "Running",
+                    BuildNumber = session != null &&
+                        session.ResolvedParameters.TryGetValue(WatchListConstants.BuildNumberKey, out var bn)
+                            ? bn : "",
+                    LockedAgentsList = session != null
+                        ? string.Join(", ", session.LockedAgents)
+                        : "",
+                    IsExpanded = true,
+                };
+                Sessions.Insert(0, card);
+            }
 
             var agentName = string.IsNullOrEmpty(e.AgentName) ? "Controller" : e.AgentName;
             var row = card.GetOrCreateAgent(agentName);

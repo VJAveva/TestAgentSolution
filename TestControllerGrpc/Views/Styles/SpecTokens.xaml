@@ -1,0 +1,79 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!--
+        SpecTokens.xaml
+
+        Re-exposes the Execution Dashboard spec's design tokens (Section 4
+        of the original net8.0 spec) as resources keyed exactly per spec
+        (i.e. all brushes use the "Brush" suffix). Existing color brushes
+        declared in ExecutionDashboardStyles.xaml are kept intact; this
+        dictionary is purely additive so new templates that target the
+        spec's keys can resolve them while the legacy XAML keeps working.
+
+        Merge order matters: this file must be merged AFTER
+        ExecutionDashboardStyles.xaml so x:Static-style references stay
+        deterministic, but it does not redefine any existing keys.
+    -->
+
+    <!-- ?? Backgrounds ??????????????????????????????????????????????????? -->
+    <SolidColorBrush x:Key="BgCanvasBrush"    Color="#111418"/>
+    <SolidColorBrush x:Key="BgPrimaryBrush"   Color="#1A1F26"/>
+    <SolidColorBrush x:Key="BgSecondaryBrush" Color="#222831"/>
+    <SolidColorBrush x:Key="BgChipBrush"      Color="#2A313C"/>
+
+    <!-- ?? Borders ??????????????????????????????????????????????????????? -->
+    <SolidColorBrush x:Key="BorderTertiaryBrush" Color="#2D343F"/>
+    <SolidColorBrush x:Key="BorderInfoBrush"     Color="#4A9EFF"/>
+    <SolidColorBrush x:Key="BorderSuccessBrush"  Color="#3DDC84"/>
+    <SolidColorBrush x:Key="BorderDangerBrush"   Color="#FF5C6C"/>
+    <SolidColorBrush x:Key="BorderWarningBrush"  Color="#E0B341"/>
+
+    <!-- ?? Tinted backgrounds (~20% alpha of accent) ???????????????????? -->
+    <SolidColorBrush x:Key="BgInfoBrush"    Color="#334A9EFF"/>
+    <SolidColorBrush x:Key="BgSuccessBrush" Color="#333DDC84"/>
+    <SolidColorBrush x:Key="BgDangerBrush"  Color="#33FF5C6C"/>
+    <SolidColorBrush x:Key="BgWarningBrush" Color="#33E0B341"/>
+
+    <!-- ?? Text ?????????????????????????????????????????????????????????? -->
+    <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#E6E9EE"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#9098A4"/>
+    <SolidColorBrush x:Key="TextTertiaryBrush"  Color="#6B7280"/>
+    <SolidColorBrush x:Key="TextInfoBrush"      Color="#4A9EFF"/>
+    <SolidColorBrush x:Key="TextSuccessBrush"   Color="#3DDC84"/>
+    <SolidColorBrush x:Key="TextDangerBrush"    Color="#FF5C6C"/>
+    <SolidColorBrush x:Key="TextWarningBrush"   Color="#E0B341"/>
+
+    <!-- ?? Border radii ?????????????????????????????????????????????????? -->
+    <CornerRadius x:Key="RadiusSm">3</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">4</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">8</CornerRadius>
+
+    <!-- ?? Typography ??????????????????????????????????????????????????? -->
+    <FontFamily x:Key="FontSans">Segoe UI</FontFamily>
+    <FontFamily x:Key="FontMono">Consolas</FontFamily>
+
+    <sys:Double x:Key="Fs9">9</sys:Double>
+    <sys:Double x:Key="Fs10">10</sys:Double>
+    <sys:Double x:Key="Fs11">11</sys:Double>
+    <sys:Double x:Key="Fs12">12</sys:Double>
+    <sys:Double x:Key="Fs13">13</sys:Double>
+    <sys:Double x:Key="Fs14">14</sys:Double>
+    <sys:Double x:Key="Fs20">20</sys:Double>
+
+    <!-- ?? Pulse animation (running-chip glyph) ?????????????????????????
+         Apply via DataTrigger on ActionStatus = Running:
+             <DataTrigger.EnterActions>
+               <BeginStoryboard Storyboard="{StaticResource PulseAnim}"/>
+             </DataTrigger.EnterActions>
+         x:Shared="False" lets the same storyboard be applied per-chip
+         without WPF complaining about a frozen instance.
+         =============================================================== -->
+    <Storyboard x:Key="PulseAnim" x:Shared="False" RepeatBehavior="Forever" AutoReverse="True">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="1.0" To="0.4" Duration="0:0:0.75"/>
+    </Storyboard>
+
+</ResourceDictionary>

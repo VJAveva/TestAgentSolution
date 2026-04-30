@@ -340,6 +340,79 @@
                                                                                 <WrapPanel Orientation="Horizontal"/>
                                                                             </ItemsPanelTemplate>
                                                                         </ItemsControl.ItemsPanel>
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate DataType="{x:Type exec:ActionPillVM}">
+                                                                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                                                                    <Border ToolTip="{Binding Tooltip}">
+                                                                                        <Border.Style>
+                                                                                            <Style TargetType="Border" BasedOn="{StaticResource ActionPillBase}">
+                                                                                                <Setter Property="Background" Value="{StaticResource StatusIdleBg}"/>
+                                                                                                <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+                                                                                                <Style.Triggers>
+                                                                                                    <DataTrigger Binding="{Binding Status}" Value="Running">
+                                                                                                        <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
+                                                                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                                                                                                    </DataTrigger>
+                                                                                                    <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                                                        <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
+                                                                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                    </DataTrigger>
+                                                                                                    <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                                                        <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
+                                                                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                    </DataTrigger>
+                                                                                                </Style.Triggers>
+                                                                                            </Style>
+                                                                                        </Border.Style>
+                                                                                        <StackPanel Orientation="Horizontal">
+                                                                                            <TextBlock Text="{Binding StatusIcon}" FontSize="9" Margin="0,0,3,0"
+                                                                                                       VerticalAlignment="Center">
+                                                                                                <TextBlock.Style>
+                                                                                                    <Style TargetType="TextBlock">
+                                                                                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                                                                                        <Style.Triggers>
+                                                                                                            <DataTrigger Binding="{Binding Status}" Value="Running">
+                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                                                                                            </DataTrigger>
+                                                                                                            <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                            </DataTrigger>
+                                                                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                            </DataTrigger>
+                                                                                                        </Style.Triggers>
+                                                                                                    </Style>
+                                                                                                </TextBlock.Style>
+                                                                                            </TextBlock>
+                                                                                            <TextBlock Text="{Binding DisplayLabel}" FontSize="11"
+                                                                                                       VerticalAlignment="Center"
+                                                                                                       TextTrimming="CharacterEllipsis" MaxWidth="180">
+                                                                                                <TextBlock.Style>
+                                                                                                    <Style TargetType="TextBlock">
+                                                                                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                                                                                        <Style.Triggers>
+                                                                                                            <DataTrigger Binding="{Binding Status}" Value="Running">
+                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                                                                                            </DataTrigger>
+                                                                                                            <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                            </DataTrigger>
+                                                                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                            </DataTrigger>
+                                                                                                        </Style.Triggers>
+                                                                                                    </Style>
+                                                                                                </TextBlock.Style>
+                                                                                            </TextBlock>
+                                                                                        </StackPanel>
+                                                                                    </Border>
+                                                                                    <!-- Arrow separator between chips -->
+                                                                                    <TextBlock Text="&#x2192;" FontSize="9" Margin="4,0"
+                                                                                               Foreground="{StaticResource TextDim}"
+                                                                                               VerticalAlignment="Center"/>
+                                                                                </StackPanel>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
                                                                     </ItemsControl>
                                                                 </Border>
                                                             </Grid>

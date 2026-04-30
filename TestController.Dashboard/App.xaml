@@ -9,6 +9,8 @@
                      in-process project so this standalone tool looks identical. -->
                 <ResourceDictionary Source="pack://application:,,,/TestControllerGrpc;component/Themes/DarkTheme.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/TestControllerGrpc;component/Views/Styles/ExecutionDashboardStyles.xaml"/>
+                <!-- Spec design tokens (BgCanvasBrush, TextInfoBrush, FontSans, RadiusMd, PulseAnim, ?) -->
+                <ResourceDictionary Source="pack://application:,,,/TestControllerGrpc;component/Views/Styles/SpecTokens.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
