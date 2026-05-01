@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace TestControllerGrpc.Services;

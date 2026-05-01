@@ -16,7 +16,7 @@ public class ScalabilityFixTests
     // ???????????????????????????????????????????????????????????????????
 
     [Fact]
-    public void AddResult_Should_NotLoseItems_When_CalledFromMultipleThreads()
+    public async Task AddResult_Should_NotLoseItems_When_CalledFromMultipleThreads()
     {
         // Simulates parallel action groups recording results concurrently
         var session = new ExecutionSession { WatchItemTag = "ParallelTest" };
@@ -37,13 +37,13 @@ public class ScalabilityFixTests
             }
         })).ToArray();
 
-        Task.WaitAll(threads);
+        await Task.WhenAll(threads);
 
         Assert.Equal(threadCount * itemsPerThread, session.TotalActions);
     }
 
     [Fact]
-    public void ActionResults_Should_BeReadableWhileWriting_When_EnumeratedConcurrently()
+    public async Task ActionResults_Should_BeReadableWhileWriting_When_EnumeratedConcurrently()
     {
         // Verifies that iterating ActionResults while another thread adds
         // does not throw (ConcurrentBag takes a snapshot for enumeration)
@@ -78,12 +78,13 @@ public class ScalabilityFixTests
         }, cts.Token);
 
         // Should complete without exceptions
-        Assert.True(Task.WaitAll([writer, reader], TimeSpan.FromSeconds(5)));
+        var completedTask = await Task.WhenAny(Task.WhenAll([writer, reader]), Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.True(completedTask != null);
         Assert.True(session.TotalActions > 0);
     }
 
     [Fact]
-    public void RecordResult_Should_BeThreadSafe_When_CalledViaSessionManager()
+    public async Task RecordResult_Should_BeThreadSafe_When_CalledViaSessionManager()
     {
         var mgr = new ExecutionSessionManager();
         var session = mgr.BeginSession("ConcurrentItem", "Renamed",
@@ -99,7 +100,7 @@ public class ScalabilityFixTests
             });
         })).ToArray();
 
-        Task.WaitAll(tasks);
+        await Task.WhenAll(tasks);
 
         Assert.Equal(count, session.TotalActions);
         mgr.CompleteSession(session.SessionId);

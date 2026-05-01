@@ -82,7 +82,7 @@ public class ExecutionSessionExtensionsTests
     }
 
     [Fact]
-    public void GetRecentLogs_Should_ReturnSnapshot_When_CalledConcurrently()
+    public async Task GetRecentLogs_Should_ReturnSnapshot_When_CalledConcurrently()
     {
         var session = new ExecutionSession();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -104,7 +104,7 @@ public class ExecutionSessionExtensionsTests
         });
 
         cts.CancelAfter(1000);
-        Task.WaitAll([writer, reader]);
+        await Task.WhenAll([writer, reader]);
         // No exceptions = thread-safe
     }
 

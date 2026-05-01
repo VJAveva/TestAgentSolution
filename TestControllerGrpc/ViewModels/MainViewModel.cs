@@ -69,7 +69,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // ── Execution state ─────────────────────────────────────────────
     [ObservableProperty] private bool _isExecuting;
-    private CancellationTokenSource? _executionCts;
+    private CancellationTokenSource? _executionCts = new();
 
     /// <summary>All currently running pipeline sessions.</summary>
     public ObservableCollection<PipelineSession> ActiveSessions { get; } = new();

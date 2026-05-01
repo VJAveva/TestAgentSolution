@@ -67,7 +67,7 @@ public class AgentLockManagerTests : IDisposable
 
         // agent2 should NOT be locked (atomic: all-or-nothing)
         Assert.Null(mgr.GetLock("agent2"));
-        Assert.Equal(1, mgr.GetAllLocks().Count);
+        Assert.Single(mgr.GetAllLocks());
     }
 
     [Fact]
@@ -495,7 +495,7 @@ public class AgentLockManagerTests : IDisposable
     // ?????????????????????????????????????????????????????????????????
 
     [Fact]
-    public void TryLockAgents_Should_BeAtomic_When_ConcurrentCalls()
+    public async Task TryLockAgents_Should_BeAtomic_When_ConcurrentCalls()
     {
         var mgr = Create();
         int successCount = 0;
@@ -508,7 +508,7 @@ public class AgentLockManagerTests : IDisposable
             if (ok) Interlocked.Increment(ref successCount);
         })).ToArray();
 
-        Task.WaitAll(tasks);
+        await Task.WhenAll(tasks);
 
         // Exactly one should win
         Assert.Equal(1, successCount);
