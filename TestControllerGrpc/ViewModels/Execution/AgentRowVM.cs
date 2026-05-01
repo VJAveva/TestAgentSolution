@@ -34,7 +34,8 @@ public partial class AgentRowVM : ObservableObject
         string tag, string actionType, string command,
         string status, int exitCode = 0,
         string errorMessage = "", string duration = "",
-        int progressPercent = 0)
+        int progressPercent = 0,
+        DateTime? startedUtc = null, double durationSeconds = 0)
     {
         var key = string.IsNullOrEmpty(tag)
             ? $"{actionType}|{command}"
@@ -60,6 +61,8 @@ public partial class AgentRowVM : ObservableObject
             existing.ErrorMessage = errorMessage;
             existing.Duration = duration;
             existing.ProgressPercent = progressPercent;
+            if (startedUtc.HasValue) existing.StartedUtc = startedUtc.Value;
+            if (durationSeconds > 0) existing.DurationSeconds = durationSeconds;
         }
         else
         {
@@ -74,6 +77,8 @@ public partial class AgentRowVM : ObservableObject
                 ErrorMessage = errorMessage,
                 Duration = duration,
                 ProgressPercent = progressPercent,
+                StartedUtc = startedUtc ?? DateTime.UtcNow,
+                DurationSeconds = durationSeconds,
             });
             TotalCount = Actions.Count;
         }

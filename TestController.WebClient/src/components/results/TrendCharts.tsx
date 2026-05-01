@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
+import { logCatch } from '../../lib/logger';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -24,8 +25,8 @@ export default function TrendCharts() {
   const { fetchTrends, fetchAlerts } = useResults();
 
   useEffect(() => {
-    fetchTrends().catch(() => {});
-    fetchAlerts().catch(() => {});
+    fetchTrends().catch(logCatch('TrendCharts', 'fetchTrends'));
+    fetchAlerts().catch(logCatch('TrendCharts', 'fetchAlerts'));
   }, [fetchTrends, fetchAlerts]);
 
   return (

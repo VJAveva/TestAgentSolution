@@ -39,6 +39,10 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private IDisposable? _subExecutionStarted;
     private IDisposable? _subExecutionCompleted;
     private IDisposable? _subLocksChanged;
+    // Session-aware progress/output subscriptions (carry SessionId so the
+    // WebClient/standalone dashboard can route messages to the right card).
+    private IDisposable? _subNodeProgress;
+    private IDisposable? _subAgentOutput;
 
     // Heartbeat throttling
     private readonly object _heartbeatLock = new();
@@ -69,7 +73,10 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     /// </summary>
     public void Start()
     {
-        // C# events from pipeline executor
+        // C# events from pipeline executor (kept for back-compat / non-tracked
+        // single-action runs). Session-aware ActionProgress/AgentOutput now
+        // come from the EventAggregator subscriptions below, so the WebClient
+        // can route messages to the correct session card.
         _executor.LogEntry += OnLogEntry;
         _executor.NodeProgress += OnNodeProgress;
 
@@ -84,6 +91,10 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
         _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
         _subLocksChanged = _events.Subscribe<AgentLocksChangedEvent>(e => _ = NotifyAgentLocksChanged(e));
+        // ? These carry SessionId — fixes "Pipeline view not updating" because
+        //   the WebClient looks up the card by sessionId on every ActionProgress.
+        _subNodeProgress = _events.Subscribe<NodeProgressEvent>(OnNodeProgressEvent);
+        _subAgentOutput = _events.Subscribe<AgentOutputEvent>(OnAgentOutputEvent);
 
         // Config reload
         _vocabMonitor.ConfigReloaded += OnWatchListReloaded;
@@ -94,33 +105,41 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _logger.LogInformation(
             "SignalRNotifier started — subscribed to: LogEntry, NodeProgress, " +
             "OutputReceived, StatusChanged, AgentRegistered, AgentUnregistered, " +
-            "Heartbeat, ExecutionStarted, ExecutionCompleted, ConfigReloaded");
+            "Heartbeat, ExecutionStarted, ExecutionCompleted, ConfigReloaded, " +
+            "NodeProgressEvent (with SessionId), AgentOutputEvent (with SessionId)");
     }
 
     // ?? C# event handlers ? IRealtimeNotifier calls ????????????????????
 
     private void OnLogEntry(PipelineLogEntry entry)
     {
-        var sessionId = "";
+        // Prefer the structured SessionId on the entry; fall back to parsing
+        // the legacy "[<sessionId>] message" prefix if older callers don't
+        // populate it. This is critical for the WebClient to filter logs
+        // per session.
+        var sessionId = entry.SessionId ?? "";
         var message = entry.Message;
-        if (message.StartsWith('[') && message.IndexOf(']') is > 0 and var endBracket)
+        if (string.IsNullOrEmpty(sessionId)
+            && message.StartsWith('[') && message.IndexOf(']') is > 0 and var endBracket)
         {
             sessionId = message[1..endBracket];
         }
 
-        var severity = message.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+        var severity = entry.Severity
+            ?? (message.Contains("Failed", StringComparison.OrdinalIgnoreCase)
                     || message.Contains("?", StringComparison.Ordinal)
-            ? "Error"
-            : message.Contains("Success", StringComparison.OrdinalIgnoreCase)
-                    || message.Contains("?", StringComparison.Ordinal)
-              ? "Success"
-              : message.Contains("?", StringComparison.Ordinal)
-                    || message.Contains("Warning", StringComparison.OrdinalIgnoreCase)
-                ? "Warning"
-                : "Info";
+                ? "Error"
+                : message.Contains("Success", StringComparison.OrdinalIgnoreCase)
+                        || message.Contains("?", StringComparison.Ordinal)
+                  ? "Success"
+                  : message.Contains("?", StringComparison.Ordinal)
+                        || message.Contains("Warning", StringComparison.OrdinalIgnoreCase)
+                    ? "Warning"
+                    : "Info");
 
-        var agentName = entry.Category == "Action" || entry.Category == "Retry"
-            ? "Controller" : "";
+        var agentName = entry.AgentName
+            ?? (entry.Category == "Action" || entry.Category == "Retry"
+                ? "Controller" : "");
 
         SendSafe("LogEntry", new
         {
@@ -158,6 +177,53 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
                 timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
             });
         }
+    }
+
+    /// <summary>
+    /// Session-aware action progress (preferred). Fired by
+    /// <c>ExecutionSessionManager.BeginAction</c> / <c>RecordResult</c>; carries
+    /// the SessionId so the WebClient/standalone Dashboard can route the
+    /// message to the correct session card. The legacy
+    /// <see cref="OnNodeProgress"/> handler above still fires for non-tracked
+    /// runs (single-action / ad-hoc trigger).
+    /// </summary>
+    private void OnNodeProgressEvent(NodeProgressEvent e)
+    {
+        SendSafe("ActionProgress", new
+        {
+            sessionId       = e.SessionId,
+            agentName       = e.AgentName,
+            actionTag       = e.NodeTag,
+            actionType      = e.ActionType,
+            command         = e.Command,
+            status          = e.Status,
+            exitCode        = e.ExitCode,
+            errorMessage    = e.ErrorMessage,
+            duration        = e.Duration,
+            progressPercent = e.ProgressPercent,
+            timestamp       = DateTime.Now.ToString("HH:mm:ss.fff"),
+        });
+    }
+
+    /// <summary>
+    /// Session-aware agent stdout/stderr (preferred over <see cref="OnOutputReceived"/>).
+    /// Carries SessionId + Kind so the dashboard can colour-code and filter.
+    /// </summary>
+    private void OnAgentOutputEvent(AgentOutputEvent e)
+    {
+        var severity = string.Equals(e.Kind, "stderr", StringComparison.OrdinalIgnoreCase)
+            ? "Error" : "Info";
+        SendSafe("AgentOutput", new
+        {
+            sessionId = e.SessionId,
+            agentName = e.AgentName,
+            line      = e.Line,
+            kind      = e.Kind,
+            timestamp = e.Timestamp.ToString("HH:mm:ss.fff"),
+            severity,
+            category  = "Output",
+            message   = $"[{e.AgentName}:{e.Kind}] {e.Line}",
+        });
     }
 
     private void OnOutputReceived(string agentName, string line, string kind)
@@ -330,5 +396,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subExecutionStarted?.Dispose();
         _subExecutionCompleted?.Dispose();
         _subLocksChanged?.Dispose();
+        _subNodeProgress?.Dispose();
+        _subAgentOutput?.Dispose();
     }
 }

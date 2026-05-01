@@ -51,6 +51,8 @@ export interface ActionExecution {
   errorMessage?: string;
   duration?: string;
   progressPercent?: number;
+  startedUtc?: string;
+  durationSeconds?: number;
 }
 
 export type ActionStatus =

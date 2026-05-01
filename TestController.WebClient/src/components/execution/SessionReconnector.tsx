@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/api';
+import { logCatch } from '../../lib/logger';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { useExecutionStore } from '../../stores/executionStore';
 import { joinSession } from '../../hooks/useSignalR';
@@ -28,7 +29,7 @@ export default function SessionReconnector() {
           setActiveSessions(data.activeSessions);
         }
       })
-      .catch(() => {});
+      .catch(logCatch('SessionReconnector', 'fetchReconnect'));
   }, []);
 
   if (activeSessions.length === 0 || dismissed) return null;

@@ -81,15 +81,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Current agent lock state for admin dashboard binding.</summary>
     public ObservableCollection<AgentLockDisplayItem> AgentLocks { get; } = new();
 
-    /// <summary>True when the multi-session execution dashboard overlay is visible.</summary>
-    [ObservableProperty] private bool _showMultiSessionDashboard;
-
     /// <summary>Multi-session execution dashboard ViewModel.</summary>
     public ExecutionDashboardVM ExecutionDashboard { get; private set; } = null!;
-
-    [RelayCommand]
-    private void ToggleMultiSessionDashboard()
-        => ShowMultiSessionDashboard = !ShowMultiSessionDashboard;
 
     partial void OnIsExecutingChanged(bool value)
     {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
+import { logCatch } from '../../lib/logger';
 import { Download, Mail, ChevronDown, ChevronRight, Search, Filter } from 'lucide-react';
 import type { BuildDetailTest } from '../../types/api';
 
@@ -19,7 +20,7 @@ export default function BuildDetail() {
   // Fetch detail when a build is selected
   useEffect(() => {
     if (build) {
-      fetchBuildDetail(build.buildNumber).catch(() => {});
+      fetchBuildDetail(build.buildNumber).catch(logCatch('BuildDetail', 'fetchBuildDetail'));
     }
   }, [build, fetchBuildDetail]);
 

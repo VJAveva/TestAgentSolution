@@ -5,6 +5,7 @@ import React, {
 import { useConnectionStore, type SignalRStatus } from '../stores/connectionStore';
 import { joinSession } from './useSignalR';
 import { apiFetch } from '../lib/api';
+import { logCatch } from '../lib/logger';
 import type {
   SessionSummary, ActionExecution,
   DashboardLogEntry, ActionStatus, SessionStatus
@@ -276,7 +277,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
           joinSession(connection, s.sessionId);
         }
       })
-      .catch(() => {});
+      .catch(logCatch('useExecutionDashboard', 'fetchSessions'));
   }, [connection]);
 
   // Subscribe to SignalR events for dashboard-specific state

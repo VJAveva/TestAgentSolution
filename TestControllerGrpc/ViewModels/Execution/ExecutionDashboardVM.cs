@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.Views;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.ViewModels.Execution;
@@ -81,10 +82,54 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
     }
 
+    /// <summary>
+    /// Private feed-only constructor used by <see cref="CreateForFeed"/>.
+    /// Skips event-aggregator subscriptions and the polling timer because
+    /// the data feed (e.g. <c>SignalRExecutionFeed</c>) drives mutations
+    /// directly via the public collection members.
+    /// </summary>
+    private ExecutionDashboardVM(Dispatcher dispatcher)
+    {
+        _sessionManager = null!;
+        _lockManager    = null!;
+        _eventAggregator = null!;
+        _dispatcher = dispatcher;
+        // No timer, no subscriptions.
+        _refreshTimer = null!;
+
+        // CancelSession requires the in-process session manager. In feed-only
+        // mode the command is a no-op (a remote dashboard cannot directly
+        // cancel a session running in another process); a future iteration
+        // can route this through a hub method.
+        CancelSessionCommand = new RelayCommand<string>(_ => { /* no-op in remote mode */ });
+        ClearSelectionCommand = new RelayCommand(() =>
+        {
+            SelectedSessionId = null;
+            SelectedAgentName = null;
+        });
+        ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
+    }
+
+    /// <summary>
+    /// Factory for the standalone Dashboard process (no in-process services).
+    /// The VM exposes <see cref="Sessions"/>, <see cref="LogEntries"/>, and
+    /// <see cref="ConnectionStatus"/> for an external feed adapter to mutate.
+    /// </summary>
+    public static ExecutionDashboardVM CreateForFeed(Dispatcher dispatcher)
+        => new(dispatcher);
+
     // ?? Collections ?????????????????????????????????????????????????
 
     public ObservableCollection<SessionCardVM> Sessions { get; } = new();
     public RangeObservableCollection<LogEntryVM> LogEntries { get; } = new();
+
+    /// <summary>Timeline VM created by the dashboard window; set externally after construction.</summary>
+    private TimelineVM? _timelineVm;
+    public TimelineVM? Timeline
+    {
+        get => _timelineVm;
+        set => SetProperty(ref _timelineVm, value);
+    }
 
     // ?? Selection state (drives log filtering) ??????????????????????
 
@@ -99,16 +144,34 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
     [ObservableProperty] private int _totalFailedActions;
     [ObservableProperty] private int _overallProgressPercent;
 
+    // ?? Connection / filter state (Dashboard v2 spec) ?????????????????
+
+    /// <summary>
+    /// Status of the dashboard's data feed. For the in-process WPF dashboard
+    /// this is "Connected" whenever the controller services are alive; if
+    /// background event subscriptions throw it flips to "Disconnected". The
+    /// UI footer binds to this and shows a colored dot.
+    /// Values: "Connected" | "Connecting" | "Disconnected".
+    /// </summary>
+    [ObservableProperty] private string _connectionStatus = "Connected";
+
+    /// <summary>Pipeline view status filter: "All" | "Running" | "Failed".</summary>
+    [ObservableProperty] private string _pipelineStatusFilter = "All";
+
+    /// <summary>Pipeline view free-text filter (matches session/agent/action).</summary>
+    [ObservableProperty] private string _pipelineSearchText = "";
+
+    /// <summary>Unified-log severity filter: "All" | "Error" | "Warning" | "Success" | "Info".</summary>
+    [ObservableProperty] private string _logSeverityFilter = "All";
+
+    /// <summary>Unified-log free-text filter.</summary>
+    [ObservableProperty] private string _logSearchText = "";
+
     // ?? Commands ????????????????????????????????????????????????????
 
     public System.Windows.Input.ICommand CancelSessionCommand { get; }
     public System.Windows.Input.ICommand ClearSelectionCommand { get; }
     public System.Windows.Input.ICommand ClearLogsCommand { get; }
-
-    // ?? Filter properties for log panel ?????????????????????????????
-
-    [ObservableProperty] private string _logSearchText = "";
-    [ObservableProperty] private string _logSeverityFilter = "All";
 
     /// <summary>
     /// Predicate used by CollectionViewSource.Filter in XAML.
@@ -140,6 +203,37 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             if (!entry.Message.ToLowerInvariant().Contains(lower) &&
                 !entry.AgentName.ToLowerInvariant().Contains(lower))
                 return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Predicate used by the Pipeline view to filter session cards by status
+    /// (All / Running / Failed) and free-text search across session name,
+    /// owner, agent name, and action name.
+    /// </summary>
+    public bool FilterSessionCard(SessionCardVM card)
+    {
+        // Status filter
+        if (PipelineStatusFilter == "Running" && card.Status != "Running") return false;
+        if (PipelineStatusFilter == "Failed"  && card.Status != "Failed")  return false;
+
+        // Free-text search
+        if (!string.IsNullOrEmpty(PipelineSearchText))
+        {
+            var q = PipelineSearchText.Trim();
+            if (q.Length == 0) return true;
+
+            bool match = card.WatchItemTag.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || (card.UserId?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+                || card.Agents.Any(a =>
+                       a.AgentName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || a.Actions.Any(act =>
+                           act.DisplayLabel.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || act.Status.Contains(q, StringComparison.OrdinalIgnoreCase)));
+
+            if (!match) return false;
         }
 
         return true;
@@ -224,7 +318,30 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         _dispatcher.InvokeAsync(() =>
         {
             var card = Sessions.FirstOrDefault(s => s.SessionId == e.SessionId);
-            if (card == null) return;
+
+            // B7: Tolerate NodeProgress arriving before ExecutionStarted
+            // (race condition when both events publish via ThreadPool).
+            // Create a placeholder card so action pills are not silently dropped.
+            if (card == null)
+            {
+                var session = _sessionManager.GetSession(e.SessionId);
+                card = new SessionCardVM
+                {
+                    SessionId = e.SessionId,
+                    WatchItemTag = session?.WatchItemTag ?? e.SessionId,
+                    UserId = session?.UserId ?? "",
+                    Source = session?.Source ?? "",
+                    Status = "Running",
+                    BuildNumber = session != null &&
+                        session.ResolvedParameters.TryGetValue(WatchListConstants.BuildNumberKey, out var bn)
+                            ? bn : "",
+                    LockedAgentsList = session != null
+                        ? string.Join(", ", session.LockedAgents)
+                        : "",
+                    IsExpanded = true,
+                };
+                Sessions.Insert(0, card);
+            }
 
             var agentName = string.IsNullOrEmpty(e.AgentName) ? "Controller" : e.AgentName;
             var row = card.GetOrCreateAgent(agentName);
@@ -469,13 +586,22 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         SelectedAgentName = null;
     }
 
+    // ?? Window launch command ????????????????????????????????????????????????????
+
+    [RelayCommand]
+    private void OpenDashboardWindow()
+    {
+        var win = new ExecutionDashboardWindow { DataContext = this };
+        win.Show();
+    }
+
     /// <summary>Stops the refresh timer and releases all event subscriptions.</summary>
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
 
-        _refreshTimer.Stop();
+        _refreshTimer?.Stop();
 
         foreach (var sub in _subscriptions) sub.Dispose();
         _subscriptions.Clear();

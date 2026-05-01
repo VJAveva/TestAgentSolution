@@ -3,6 +3,54 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:exec="clr-namespace:TestControllerGrpc.ViewModels.Execution">
 
+    <!-- ???????????????????????????????????????????????????????????????????????
+         SPEC COLOR PALETTE (TestAgentSolution.ControllerService.Dashboard)
+         These map the original .NET 8 standalone dashboard spec onto the
+         existing .NET 10 in-process implementation. Old StatusXxxBg/Fg keys
+         remain below for backward compatibility with the original styles.
+         ??????????????????????????????????????????????????????????????????? -->
+
+    <!-- Backgrounds -->
+    <SolidColorBrush x:Key="BgCanvas"       Color="#111418"/>
+    <SolidColorBrush x:Key="BgCard"         Color="#1A1F26"/>
+    <SolidColorBrush x:Key="BgCardElevated" Color="#222831"/>
+    <SolidColorBrush x:Key="BgChip"         Color="#2A313C"/>
+
+    <!-- Borders -->
+    <SolidColorBrush x:Key="BorderSubtle"   Color="#2D343F"/>
+    <SolidColorBrush x:Key="BorderStrong"   Color="#3A4250"/>
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="SpecTextPrimary"   Color="#E6E9EE"/>
+    <SolidColorBrush x:Key="SpecTextSecondary" Color="#9098A4"/>
+    <SolidColorBrush x:Key="SpecTextMuted"     Color="#6B7280"/>
+
+    <!-- Accents -->
+    <SolidColorBrush x:Key="AccentBlue"   Color="#4A9EFF"/>
+    <SolidColorBrush x:Key="AccentGreen"  Color="#3DDC84"/>
+    <SolidColorBrush x:Key="AccentRed"    Color="#FF5C6C"/>
+    <SolidColorBrush x:Key="AccentYellow" Color="#E0B341"/>
+    <SolidColorBrush x:Key="AccentPurple" Color="#B57BFF"/>
+
+    <!-- Chip backgrounds (20% alpha versions) -->
+    <SolidColorBrush x:Key="ChipDoneBg"    Color="#333DDC84"/>
+    <SolidColorBrush x:Key="ChipRunningBg" Color="#334A9EFF"/>
+    <SolidColorBrush x:Key="ChipFailedBg"  Color="#33FF5C6C"/>
+    <SolidColorBrush x:Key="ChipPendingBg" Color="#222A313C"/>
+
+    <!-- Typography -->
+    <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
+    <FontFamily x:Key="MonoFontFamily">Consolas</FontFamily>
+    <system:Double x:Key="FontXs"  xmlns:system="clr-namespace:System;assembly=mscorlib">11</system:Double>
+    <system:Double x:Key="FontSm"  xmlns:system="clr-namespace:System;assembly=mscorlib">12</system:Double>
+    <system:Double x:Key="FontMd"  xmlns:system="clr-namespace:System;assembly=mscorlib">13</system:Double>
+    <system:Double x:Key="FontLg"  xmlns:system="clr-namespace:System;assembly=mscorlib">15</system:Double>
+    <system:Double x:Key="FontXl"  xmlns:system="clr-namespace:System;assembly=mscorlib">22</system:Double>
+    <system:Double x:Key="FontXxl" xmlns:system="clr-namespace:System;assembly=mscorlib">28</system:Double>
+
+    <!-- ???????????????????????????????????????????????????????????????????????
+         LEGACY COLOR KEYS (used by existing dashboard XAML)
+         ??????????????????????????????????????????????????????????????????? -->
     <!-- Color scheme (dark-theme tuned) -->
     <SolidColorBrush x:Key="StatusRunningBg" Color="#1A3A5C"/>
     <SolidColorBrush x:Key="StatusRunningFg" Color="#4D9CF5"/>
@@ -97,4 +145,125 @@
             </StackPanel>
         </Border>
     </DataTemplate>
+
+    <!-- ???????????????????????????????????????????????????????????????????????
+         SPEC-ALIGNED STYLES (Dashboard window v2)
+         ??????????????????????????????????????????????????????????????????? -->
+
+    <!-- Pill-style RadioButton used for the top tab strip
+         (Pipeline view / Timeline view / Unified log) -->
+    <Style x:Key="TabButtonStyle" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{StaticResource SpecTextSecondary}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="14,6"/>
+        <Setter Property="Margin" Value="2,0"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" CornerRadius="14"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource BgChip}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource BgCardElevated}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush"
+                                    Value="{StaticResource BorderStrong}"/>
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource AccentBlue}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Filter strip RadioButton (smaller, square-ish) -->
+    <Style x:Key="FilterButtonStyle" TargetType="RadioButton" BasedOn="{StaticResource TabButtonStyle}">
+        <Setter Property="Padding" Value="10,4"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" CornerRadius="4"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource BgChip}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource BgCardElevated}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush"
+                                    Value="{StaticResource AccentBlue}"/>
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource AccentBlue}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Metric card (5 across the header) -->
+    <Style x:Key="MetricCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource BgCard}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="12,10"/>
+        <Setter Property="Margin" Value="3"/>
+    </Style>
+    <Style x:Key="MetricValueStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="22"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{StaticResource SpecTextPrimary}"/>
+    </Style>
+    <Style x:Key="MetricLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{StaticResource SpecTextMuted}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,2,0,0"/>
+    </Style>
+
+    <!-- Connection status dot -->
+    <Style x:Key="ConnectionDotStyle" TargetType="Ellipse">
+        <Setter Property="Width" Value="9"/>
+        <Setter Property="Height" Value="9"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,0,6,0"/>
+        <Setter Property="Fill" Value="{StaticResource AccentRed}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding ConnectionStatus}" Value="Connected">
+                <Setter Property="Fill" Value="{StaticResource AccentGreen}"/>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding ConnectionStatus}" Value="Connecting">
+                <Setter Property="Fill" Value="{StaticResource AccentYellow}"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
 </ResourceDictionary>

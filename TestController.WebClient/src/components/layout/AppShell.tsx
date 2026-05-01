@@ -8,6 +8,8 @@ import AgentDetail from '../agents/AgentDetail';
 import LiveLogger from '../execution/LiveLogger';
 import SessionList from '../execution/SessionList';
 import ExecutionDashboard from '../execution/ExecutionDashboard';
+import TimelineView from '../execution/TimelineView';
+import UnifiedLogView from '../execution/UnifiedLogView';
 import LogViewer from '../execution/LogViewer';
 import BuildList from '../results/BuildList';
 import BuildDetail from '../results/BuildDetail';
@@ -133,9 +135,35 @@ function ResultsPage() {
 }
 
 function MonitorPage() {
+  const [subTab, setSubTab] = useState<'pipeline' | 'timeline' | 'log'>('pipeline');
+
   return (
-    <main className="flex-1 overflow-hidden">
-      <ExecutionDashboard />
+    <main className="flex-1 flex flex-col overflow-hidden">
+      {/* Sub-tab bar */}
+      <div className="flex items-center gap-1 px-4 py-1.5 border-b border-bdr shrink-0">
+        {([
+          { id: 'pipeline' as const, label: 'Pipeline' },
+          { id: 'timeline' as const, label: 'Timeline' },
+          { id: 'log' as const, label: 'Unified Log' },
+        ]).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSubTab(t.id)}
+            className={`text-xs px-3 py-1 rounded transition-colors ${
+              subTab === t.id
+                ? 'bg-white/10 text-accent font-medium'
+                : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-hidden">
+        {subTab === 'pipeline' && <ExecutionDashboard />}
+        {subTab === 'timeline' && <TimelineView />}
+        {subTab === 'log' && <UnifiedLogView />}
+      </div>
     </main>
   );
 }

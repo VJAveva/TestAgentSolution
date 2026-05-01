@@ -1,0 +1,439 @@
+
+<h2 class="sr-only">Multi-session execution dashboard mockup showing hierarchical session-agent-action view for scaling to 50+ agents</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.root{font-family:var(--font-sans);color:var(--color-text-primary);padding:1rem 0}
+.tabs{display:flex;gap:2px;margin-bottom:1.5rem;border-bottom:0.5px solid var(--color-border-tertiary)}
+.tab{padding:8px 16px;font-size:13px;font-weight:400;color:var(--color-text-secondary);cursor:pointer;border-bottom:2px solid transparent;background:transparent;border-top:none;border-left:none;border-right:none}
+.tab.active{color:var(--color-text-primary);font-weight:500;border-bottom-color:var(--color-text-info)}
+.tab:hover{color:var(--color-text-primary)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:1.5rem}
+.stat{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px;text-align:center}
+.stat-v{font-size:20px;font-weight:500}
+.stat-l{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+
+.session{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:12px;overflow:hidden}
+.session-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;gap:8px}
+.session-hdr:hover{background:var(--color-background-secondary)}
+.session-title{font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px}
+.session-meta{font-size:11px;color:var(--color-text-secondary);display:flex;gap:12px;align-items:center}
+.caret{font-size:10px;color:var(--color-text-tertiary);transition:transform .2s;margin-right:2px}
+.session.open .caret{transform:rotate(90deg)}
+.session-body{display:none;border-top:0.5px solid var(--color-border-tertiary)}
+.session.open .session-body{display:block}
+
+.badge{display:inline-block;font-size:10px;font-weight:500;padding:2px 8px;border-radius:var(--border-radius-md)}
+.b-run{background:var(--color-background-info);color:var(--color-text-info)}
+.b-pass{background:var(--color-background-success);color:var(--color-text-success)}
+.b-fail{background:var(--color-background-danger);color:var(--color-text-danger)}
+.b-wait{background:var(--color-background-warning);color:var(--color-text-warning)}
+.b-idle{background:var(--color-background-secondary);color:var(--color-text-secondary)}
+.b-user{background:var(--color-background-secondary);color:var(--color-text-secondary);font-family:var(--font-mono);font-size:9px}
+
+.agent-row{display:flex;align-items:stretch;border-bottom:0.5px solid var(--color-border-tertiary)}
+.agent-row:last-child{border-bottom:none}
+.agent-name{width:120px;flex-shrink:0;padding:10px 16px;display:flex;flex-direction:column;justify-content:center;border-right:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)}
+.agent-nm{font-family:var(--font-mono);font-size:12px;font-weight:500}
+.agent-st{font-size:10px;margin-top:2px}
+
+.pipeline{flex:1;padding:8px 12px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.action{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.action.done{background:var(--color-background-success);border-color:var(--color-border-success);color:var(--color-text-success)}
+.action.running{background:var(--color-background-info);border-color:var(--color-border-info);color:var(--color-text-info)}
+.action.fail{background:var(--color-background-danger);border-color:var(--color-border-danger);color:var(--color-text-danger)}
+.action.pending{color:var(--color-text-tertiary)}
+.action .icon{font-size:10px;flex-shrink:0}
+.action .running .icon{animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.arrow{color:var(--color-text-tertiary);font-size:9px;flex-shrink:0}
+
+.progress-bar{height:3px;background:var(--color-background-secondary);border-radius:2px;margin:4px 0 0;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px;transition:width .5s}
+
+.view-toggle{display:flex;gap:2px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:2px}
+.vt-btn{font-size:11px;padding:4px 10px;border-radius:calc(var(--border-radius-md) - 2px);border:none;background:transparent;color:var(--color-text-secondary);cursor:pointer}
+.vt-btn.active{background:var(--color-background-primary);color:var(--color-text-primary);box-shadow:0 0 0 0.5px var(--color-border-tertiary)}
+
+.log-row{display:flex;align-items:center;padding:4px 12px;font-size:11px;font-family:var(--font-mono);border-bottom:0.5px solid var(--color-border-tertiary);gap:8px}
+.log-row:hover{background:var(--color-background-secondary)}
+.log-ts{color:var(--color-text-tertiary);width:60px;flex-shrink:0}
+.log-session{font-size:9px;padding:1px 6px;border-radius:3px;flex-shrink:0}
+.log-agent{color:var(--color-text-info);width:60px;flex-shrink:0}
+.log-msg{color:var(--color-text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log-err{color:var(--color-text-danger)}
+
+.search-bar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+.search-bar input{flex:1}
+.search-bar select{width:auto}
+.filter-pills{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.pill{font-size:10px;padding:3px 10px;border-radius:99px;border:0.5px solid var(--color-border-tertiary);background:transparent;color:var(--color-text-secondary);cursor:pointer}
+.pill.active{background:var(--color-background-info);border-color:var(--color-border-info);color:var(--color-text-info)}
+</style>
+
+<div class="root">
+
+<div class="tabs">
+  <button class="tab active" onclick="showView('pipeline')">Pipeline view</button>
+  <button class="tab" onclick="showView('timeline')">Timeline view</button>
+  <button class="tab" onclick="showView('log')">Unified log</button>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-v" style="color:var(--color-text-info)">4</div><div class="stat-l">Active sessions</div></div>
+  <div class="stat"><div class="stat-v">18</div><div class="stat-l">Agents locked</div></div>
+  <div class="stat"><div class="stat-v" style="color:var(--color-text-success)">47</div><div class="stat-l">Actions passed</div></div>
+  <div class="stat"><div class="stat-v" style="color:var(--color-text-danger)">2</div><div class="stat-l">Actions failed</div></div>
+  <div class="stat"><div class="stat-v">68%</div><div class="stat-l">Overall progress</div></div>
+</div>
+
+<!-- ═══ PIPELINE VIEW ═══ -->
+<div id="view-pipeline">
+
+<div class="search-bar">
+  <input type="text" placeholder="Filter by session, agent, or action..." />
+  <div class="view-toggle">
+    <button class="vt-btn active">All</button>
+    <button class="vt-btn">Running</button>
+    <button class="vt-btn">Failed</button>
+  </div>
+</div>
+
+<!-- Session 1 -->
+<div class="session open">
+  <div class="session-hdr" onclick="this.parentElement.classList.toggle('open')">
+    <div class="session-title">
+      <span class="caret">▶</span>
+      <span class="badge b-run">Running</span>
+      SmokeTest Set1
+    </div>
+    <div class="session-meta">
+      <span class="badge b-user">vinod</span>
+      <span>3 agents</span>
+      <span>01:23:45</span>
+      <span>76%</span>
+    </div>
+  </div>
+  <div class="session-body">
+    <div class="agent-row">
+      <div class="agent-name">
+        <div class="agent-nm">jvgr1</div>
+        <div class="agent-st" style="color:var(--color-text-info)">Executing</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:82%;background:var(--color-text-info)"></div></div>
+      </div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Copy files</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Unblock</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install WSP</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Reboot</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Copy binaries</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action running"><span class="icon">&#9679;</span> Run WASSet1 (82%)</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> Copy results</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> Email</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name">
+        <div class="agent-nm">jvkpri</div>
+        <div class="agent-st" style="color:var(--color-text-info)">Executing</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:65%;background:var(--color-text-info)"></div></div>
+      </div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Copy files</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install WSP</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Reboot</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> ConfigureRemote</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action running"><span class="icon">&#9679;</span> S1_04 Deploy (65%)</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> S1_05</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> S1_06</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name">
+        <div class="agent-nm">jvkbak</div>
+        <div class="agent-st" style="color:var(--color-text-success)">Idle</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--color-text-success)"></div></div>
+      </div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install WSP</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Reboot</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> ConfigureRemote</span>
+        <span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Reboot</span>
+        <span style="font-size:10px;color:var(--color-text-secondary);margin-left:8px">Waiting for jvgr1 to finish...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Session 2 -->
+<div class="session open">
+  <div class="session-hdr" onclick="this.parentElement.classList.toggle('open')">
+    <div class="session-title">
+      <span class="caret">▶</span>
+      <span class="badge b-run">Running</span>
+      Sanity Test
+    </div>
+    <div class="session-meta">
+      <span class="badge b-user">ravi</span>
+      <span>5 agents</span>
+      <span>00:45:12</span>
+      <span>40%</span>
+    </div>
+  </div>
+  <div class="session-body">
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">warmpsr</div><div class="agent-st" style="color:var(--color-text-info)">Executing</div><div class="progress-bar"><div class="progress-fill" style="width:55%;background:var(--color-text-info)"></div></div></div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span><span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install</span><span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Reboot</span><span class="arrow">&#8594;</span>
+        <span class="action running"><span class="icon">&#9679;</span> SanityRun (55%)</span><span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> Copy results</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">warmpri</div><div class="agent-st" style="color:var(--color-text-info)">Executing</div><div class="progress-bar"><div class="progress-fill" style="width:48%;background:var(--color-text-info)"></div></div></div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span><span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install</span><span class="arrow">&#8594;</span>
+        <span class="action running"><span class="icon">&#9679;</span> SanityRun (48%)</span><span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> Copy results</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">warmbak</div><div class="agent-st" style="color:var(--color-text-danger)">Failed</div><div class="progress-bar"><div class="progress-fill" style="width:30%;background:var(--color-text-danger)"></div></div></div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span><span class="arrow">&#8594;</span>
+        <span class="action fail"><span class="icon">&#10007;</span> Install WSP (exit 1603)</span><span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> Reboot</span><span class="arrow">&#8594;</span>
+        <span class="action pending"><span class="icon">&#9675;</span> SanityRun</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">warmhist</div><div class="agent-st" style="color:var(--color-text-info)">Executing</div><div class="progress-bar"><div class="progress-fill" style="width:52%;background:var(--color-text-info)"></div></div></div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span><span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install</span><span class="arrow">&#8594;</span>
+        <span class="action running"><span class="icon">&#9679;</span> SanityRun (52%)</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">warmtest</div><div class="agent-st" style="color:var(--color-text-warning)">Rebooting</div><div class="progress-bar"><div class="progress-fill" style="width:25%;background:var(--color-text-warning)"></div></div></div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span><span class="arrow">&#8594;</span>
+        <span class="action done"><span class="icon">&#10003;</span> Install</span><span class="arrow">&#8594;</span>
+        <span class="action" style="background:var(--color-background-warning);border-color:var(--color-border-warning);color:var(--color-text-warning)"><span class="icon">&#8635;</span> Rebooting...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Session 3 - collapsed -->
+<div class="session">
+  <div class="session-hdr" onclick="this.parentElement.classList.toggle('open')">
+    <div class="session-title">
+      <span class="caret">▶</span>
+      <span class="badge b-pass">Completed</span>
+      Customer App
+    </div>
+    <div class="session-meta">
+      <span class="badge b-user">priya</span>
+      <span>10 agents</span>
+      <span>02:15:00</span>
+      <span>100%</span>
+    </div>
+  </div>
+  <div class="session-body">
+    <div style="padding:16px;text-align:center;color:var(--color-text-secondary);font-size:13px">
+      All 10 agents completed successfully. 142 actions passed, 0 failed.
+      <div style="margin-top:8px"><button onclick="sendPrompt('Show me the results for Customer App session')">View results &#8599;</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Session 4 - collapsed -->
+<div class="session">
+  <div class="session-hdr" onclick="this.parentElement.classList.toggle('open')">
+    <div class="session-title">
+      <span class="caret">▶</span>
+      <span class="badge b-fail">Failed</span>
+      5-Node Setup
+    </div>
+    <div class="session-meta">
+      <span class="badge b-user">vinod</span>
+      <span>5 agents</span>
+      <span>01:05:30</span>
+      <span>60%</span>
+    </div>
+  </div>
+  <div class="session-body">
+    <div style="padding:12px 16px;font-size:12px;color:var(--color-text-danger);background:var(--color-background-danger);border-bottom:0.5px solid var(--color-border-tertiary)">
+      2 agents failed installation. 3 agents completed successfully.
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">jv5n1</div><div class="agent-st" style="color:var(--color-text-success)">Done</div></div>
+      <div class="pipeline"><span class="action done"><span class="icon">&#10003;</span> All 8 actions passed</span></div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">jv5n2</div><div class="agent-st" style="color:var(--color-text-danger)">Failed</div></div>
+      <div class="pipeline">
+        <span class="action done"><span class="icon">&#10003;</span> Initialize</span><span class="arrow">&#8594;</span>
+        <span class="action fail"><span class="icon">&#10007;</span> Install WSP (timeout)</span>
+      </div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-name"><div class="agent-nm">jv5n3</div><div class="agent-st" style="color:var(--color-text-success)">Done</div></div>
+      <div class="pipeline"><span class="action done"><span class="icon">&#10003;</span> All 8 actions passed</span></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══ TIMELINE VIEW ═══ -->
+<div id="view-timeline" style="display:none">
+<p style="font-size:13px;color:var(--color-text-secondary);text-align:center;padding:2rem">
+  Timeline view renders a horizontal Gantt chart per session.<br>
+  Each agent is a row, actions are bars positioned by start time and duration.<br>
+  Color-coded: green = done, blue = running, red = failed, gray = pending.<br>
+  Overlapping parallel actions shown on stacked lanes within the agent row.
+</p>
+<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:16px;font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary)">
+<div style="display:flex;gap:4px;margin-bottom:8px">
+  <span style="color:var(--color-text-tertiary)">0:00</span>
+  <span style="flex:1;border-bottom:0.5px dashed var(--color-border-tertiary)"></span>
+  <span style="color:var(--color-text-tertiary)">0:30</span>
+  <span style="flex:1;border-bottom:0.5px dashed var(--color-border-tertiary)"></span>
+  <span style="color:var(--color-text-tertiary)">1:00</span>
+  <span style="flex:1;border-bottom:0.5px dashed var(--color-border-tertiary)"></span>
+  <span style="color:var(--color-text-tertiary)">1:30</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+  <span style="width:60px">jvgr1</span>
+  <div style="flex:1;display:flex;gap:2px">
+    <div style="width:8%;background:var(--color-background-success);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 4px;font-size:9px;color:var(--color-text-success)">Init</div>
+    <div style="width:15%;background:var(--color-background-success);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 4px;font-size:9px;color:var(--color-text-success)">Install</div>
+    <div style="width:5%;background:var(--color-background-warning);height:18px;border-radius:3px;font-size:9px;display:flex;align-items:center;padding:0 2px;color:var(--color-text-warning)">&#8635;</div>
+    <div style="width:50%;background:var(--color-background-info);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 4px;font-size:9px;color:var(--color-text-info)">WASSet1 &#9679;</div>
+  </div>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+  <span style="width:60px">jvkpri</span>
+  <div style="flex:1;display:flex;gap:2px">
+    <div style="width:8%;background:var(--color-background-success);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 4px;font-size:9px;color:var(--color-text-success)">Init</div>
+    <div style="width:18%;background:var(--color-background-success);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 4px;font-size:9px;color:var(--color-text-success)">Install</div>
+    <div style="width:5%;background:var(--color-background-warning);height:18px;border-radius:3px;font-size:9px;display:flex;align-items:center;padding:0 2px;color:var(--color-text-warning)">&#8635;</div>
+    <div style="width:40%;background:var(--color-background-info);height:18px;border-radius:3px;display:flex;align-items:center;padding:0 4px;font-size:9px;color:var(--color-text-info)">S1_04 Deploy &#9679;</div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ═══ UNIFIED LOG VIEW ═══ -->
+<div id="view-log" style="display:none">
+
+<div class="search-bar">
+  <input type="text" placeholder="Search logs..." />
+  <select>
+    <option>All sessions</option>
+    <option>SmokeTest Set1</option>
+    <option>Sanity Test</option>
+    <option>Customer App</option>
+  </select>
+  <select>
+    <option>All levels</option>
+    <option>Errors only</option>
+  </select>
+</div>
+<div class="filter-pills">
+  <button class="pill active">All</button>
+  <button class="pill">jvgr1</button>
+  <button class="pill">jvkpri</button>
+  <button class="pill">warmpsr</button>
+  <button class="pill">warmbak</button>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden">
+  <div class="log-row">
+    <span class="log-ts">20:04:51</span>
+    <span class="log-session badge b-run" style="font-size:9px">Set1</span>
+    <span class="log-agent">jvgr1</span>
+    <span class="log-msg">Progress: 82% - Still running... PID 2156</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:49</span>
+    <span class="log-session badge b-run" style="font-size:9px">Sanity</span>
+    <span class="log-agent">warmpsr</span>
+    <span class="log-msg">Progress: 55% - Running SanityTest_CoreValidation</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:48</span>
+    <span class="log-session badge b-fail" style="font-size:9px">Sanity</span>
+    <span class="log-agent">warmbak</span>
+    <span class="log-msg log-err">FAILED: Install WSP exit code 1603 - insufficient disk space</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:45</span>
+    <span class="log-session badge b-run" style="font-size:9px">Set1</span>
+    <span class="log-agent">jvkpri</span>
+    <span class="log-msg">S1_04_SmokeTestDeploy: deploying 12 objects...</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:42</span>
+    <span class="log-session badge b-run" style="font-size:9px">Sanity</span>
+    <span class="log-agent">warmhist</span>
+    <span class="log-msg">Progress: 52% - Running SanityTest_ImportExport</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:40</span>
+    <span class="log-session badge b-run" style="font-size:9px">Sanity</span>
+    <span class="log-agent">warmtest</span>
+    <span class="log-msg" style="color:var(--color-text-warning)">Rebooting... waiting for agent to come back online</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:38</span>
+    <span class="log-session badge b-pass" style="font-size:9px">CustApp</span>
+    <span class="log-agent">jvcust3</span>
+    <span class="log-msg" style="color:var(--color-text-success)">All 14 actions completed successfully</span>
+  </div>
+  <div class="log-row">
+    <span class="log-ts">20:04:35</span>
+    <span class="log-session badge b-run" style="font-size:9px">Set1</span>
+    <span class="log-agent">jvkbak</span>
+    <span class="log-msg">ConfigureRemote completed. Waiting for parallel group...</span>
+  </div>
+</div>
+</div>
+
+</div>
+
+<script>
+function showView(id) {
+  document.querySelectorAll('[id^="view-"]').forEach(v => v.style.display = 'none');
+  document.getElementById('view-' + id).style.display = 'block';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+}
+</script>
