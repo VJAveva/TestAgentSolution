@@ -21,6 +21,19 @@ public class ExecutionDashboardLifecycleTests
 {
     private static ExecutionDashboardVM CreateVm()
     {
+        // Use feed-only factory: no DispatcherTimer, no event subscriptions.
+        // This avoids CI failures on headless runners where Dispatcher message
+        // pumps are unavailable.
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        return ExecutionDashboardVM.CreateForFeed(dispatcher);
+    }
+
+    /// <summary>
+    /// Creates a VM with full in-process services (timer + event aggregator).
+    /// Use only for tests that specifically need the event-driven path.
+    /// </summary>
+    private static ExecutionDashboardVM CreateFullVm()
+    {
         var sessionMgr = new ExecutionSessionManager();
         var lockMgr = new AgentLockManager();
         var events = new EventAggregator();
@@ -500,7 +513,7 @@ public class ExecutionDashboardLifecycleTests
     [Fact]
     public void RecalculateStats_Computes_ActiveSessions_And_Totals()
     {
-        var vm = CreateVm();
+        var vm = CreateFullVm();
         vm.Sessions.Add(new SessionCardVM { SessionId = "S1", Status = "Running", PassedActions = 3, FailedActions = 1 });
         vm.Sessions.Add(new SessionCardVM { SessionId = "S2", Status = "Success", PassedActions = 5, FailedActions = 0 });
         vm.Sessions.Add(new SessionCardVM { SessionId = "S3", Status = "Failed", PassedActions = 0, FailedActions = 4 });
