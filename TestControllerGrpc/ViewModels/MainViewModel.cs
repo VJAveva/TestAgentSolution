@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
-using TestControllerGrpc.ViewModels.Execution;
 using System.Windows;
 
 namespace TestControllerGrpc.ViewModels;
@@ -77,16 +76,42 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Count of active sessions for display.</summary>
     [ObservableProperty] private int _activeSessionCount;
 
+    // ── Execution Dashboard state ───────────────────────────────────
+    /// <summary>Per-agent execution progress for the dashboard.</summary>
+    public ObservableCollection<AgentExecutionProgress> AgentProgress { get; } = new();
+
     // ── Agent Lock Display ──────────────────────────────────────────
     /// <summary>Current agent lock state for admin dashboard binding.</summary>
     public ObservableCollection<AgentLockDisplayItem> AgentLocks { get; } = new();
 
-    /// <summary>Multi-session execution dashboard ViewModel.</summary>
-    public ExecutionDashboardVM ExecutionDashboard { get; private set; } = null!;
+    /// <summary>True when execution dashboard should be shown instead of normal properties.</summary>
+    [ObservableProperty] private bool _showExecutionDashboard;
+
+    /// <summary>Total actions across all agents in current execution.</summary>
+    [ObservableProperty] private string _executionTotals = "";
+
+    /// <summary>Overall execution elapsed time.</summary>
+    [ObservableProperty] private string _executionElapsed = "";
+
+    private DateTime _executionStartTime;
+    private System.Windows.Threading.DispatcherTimer? _elapsedTimer;
 
     partial void OnIsExecutingChanged(bool value)
     {
         NotifyExecutionCanExecuteChanged();
+
+        if (value)
+        {
+            ShowExecutionDashboard = true;
+            _executionStartTime = DateTime.Now;
+            BuildAgentProgressList();
+            StartElapsedTimer();
+        }
+        else
+        {
+            StopElapsedTimer();
+            UpdateExecutionTotals();
+        }
     }
 
     /// <summary>Notifies all execution-related commands to re-evaluate their CanExecute state.</summary>
@@ -323,24 +348,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ActiveSessionCount = ActiveSessions.Count;
             IsExecuting = ActiveSessions.Count > 0;
         };
-
-        // ── Multi-session execution dashboard ──────────────────────
-        ExecutionDashboard = new ExecutionDashboardVM(
-            sessionManager, lockManager, events,
-            Application.Current?.Dispatcher
-                ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
-
-        // Cancel requests raised from the dashboard cancel the matching
-        // PipelineSession's CTS via the existing ActiveSessions tracking.
-        _subscriptions.Add(events.Subscribe<CancelSessionRequestEvent>(req =>
-            Application.Current?.Dispatcher.InvokeAsync(() =>
-            {
-                var session = ActiveSessions.FirstOrDefault(s =>
-                    s.SessionId == req.SessionId);
-                session?.Cancel();
-                if (session is not null)
-                    AddLog($"[{session.SessionId}] Cancellation requested from dashboard for {session.WatchItemTag}");
-            })));
     }
 
     /// <summary>Creates the single WatchList + TemplateList root nodes on startup.</summary>
@@ -422,9 +429,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         StopPeriodicHealthCheck();
         _logBuffer?.Dispose();
         _executionCts?.Dispose();
-
-        // Stop the multi-session dashboard's refresh timer + event subscriptions.
-        ExecutionDashboard?.Dispose();
 
         // Cancel all active sessions
         foreach (var session in ActiveSessions.ToList())

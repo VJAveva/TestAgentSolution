@@ -20,11 +20,6 @@ public static class WatchListXmlParser
 
         var config = new WatchListConfig { FilePath = filePath };
 
-        // Phase 3.22: detect deprecated install-log attributes once and emit a
-        // single warning so users know the attributes will be silently dropped
-        // on the next save.
-        DetectDeprecatedAttributes(root, config);
-
         // Parse <Templates> section first (needed for Ref resolution)
         var templatesEl = root.Element("Templates");
         if (templatesEl is not null)
@@ -97,6 +92,9 @@ public static class WatchListXmlParser
                         Order = Attr(el, "Order"),
                         CompletionCheckCommand = Attr(el, "CompletionCheckCommand"),
                         CompletionPollIntervalSeconds = AttrInt(el, "CompletionPollIntervalSeconds", 30),
+                        EnableInstallLog = AttrBool(el, "EnableInstallLog"),
+                        InstallLogPollSeconds = AttrInt(el, "InstallLogPollSeconds", 5),
+                        InstallLogRoot = Attr(el, "InstallLogRoot"),
                         UserName = Attr(el, "UserName"),
                         Password = Attr(el, "Password"),
                         From = Attr(el, "From"),
@@ -205,6 +203,10 @@ public static class WatchListXmlParser
                     AddIfNotEmpty(aEl, "CompletionCheckCommand", a.CompletionCheckCommand);
                     if (a.CompletionPollIntervalSeconds != 30 && !string.IsNullOrEmpty(a.CompletionCheckCommand))
                         aEl.Add(new XAttribute("CompletionPollIntervalSeconds", a.CompletionPollIntervalSeconds));
+                    if (a.EnableInstallLog) aEl.Add(new XAttribute("EnableInstallLog", "true"));
+                    if (a.InstallLogPollSeconds != 5 && a.EnableInstallLog)
+                        aEl.Add(new XAttribute("InstallLogPollSeconds", a.InstallLogPollSeconds));
+                    AddIfNotEmpty(aEl, "InstallLogRoot", a.InstallLogRoot);
                     AddIfNotEmpty(aEl, "UserName", a.UserName);
                     AddIfNotEmpty(aEl, "Password", a.Password);
                     AddIfNotEmpty(aEl, "From", a.From);
@@ -409,30 +411,6 @@ public static class WatchListXmlParser
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Phase 3.22: scans the document once for deprecated install-log attributes
-    /// and emits a single warning into <see cref="WatchListConfig.LoadWarnings"/>.
-    /// The attributes have been removed from the model (see <c>WatchListConfig.cs</c>)
-    /// and will be silently dropped on the next save; this notice gives users
-    /// a chance to migrate their workflow before that happens.
-    /// </summary>
-    private static void DetectDeprecatedAttributes(XElement root, WatchListConfig config)
-    {
-        // Names retired when the InstallLog feature was removed.
-        var deprecated = new[] { "EnableInstallLog", "InstallLogPollSeconds", "InstallLogRoot" };
-
-        var hits = root.Descendants("Action")
-            .SelectMany(a => deprecated.Where(name => a.Attribute(name) is not null))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (hits.Count == 0) return;
-
-        config.LoadWarnings.Add(
-            $"Deprecated attribute(s) on <Action>: {string.Join(", ", hits)}. " +
-            "These were removed with the InstallLog feature and will be dropped on the next save.");
-    }
 
     private static string Attr(XElement el, string name, string def = "")
         => el.Attribute(name)?.Value?.Trim() ?? def;

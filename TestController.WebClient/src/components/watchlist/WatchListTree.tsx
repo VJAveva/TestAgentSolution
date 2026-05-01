@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useWatchListStore } from '../../stores/watchlistStore';
 import { apiFetch } from '../../lib/api';
-import { logCatch } from '../../lib/logger';
 import type { TreeNode, NodeKind } from '../../types/api';
 import { ChevronDown, ChevronRight, Eye, Zap, FolderTree, Play, Settings, Link2, FileText, List } from 'lucide-react';
 
@@ -34,7 +33,7 @@ export default function WatchListTree() {
   useEffect(() => {
     apiFetch<{ locks: any[] }>('/api/execution/locks')
       .then(data => setLocks(data.locks || []))
-      .catch(logCatch('WatchListTree', 'fetchLocks'));
+      .catch(() => {});
   }, []);
 
   // Subscribe to real-time lock changes

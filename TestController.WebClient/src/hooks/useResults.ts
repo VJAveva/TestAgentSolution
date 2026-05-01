@@ -45,13 +45,10 @@ export function useResults() {
   }, [setAlerts]);
 
   const exportReport = useCallback(async (buildNumber: string, format: 'html' | 'csv' = 'html') => {
-    // Blob downloads can't go through apiFetch (which assumes JSON).
-    // axios is now configured with baseURL in main.tsx, so this works
-    // in both dev (relative ? Vite proxy) and production (absolute via
-    // VITE_API_BASE_URL).
-    const { data } = await axios.get<Blob>(
-      `/api/results/export/${encodeURIComponent(buildNumber)}`,
-      { params: { format }, responseType: 'blob' });
+    const { data } = await axios.get(`/api/results/export/${encodeURIComponent(buildNumber)}`, {
+      params: { format },
+      responseType: 'blob',
+    });
     const url = URL.createObjectURL(data);
     const a = document.createElement('a');
     a.href = url;
@@ -61,9 +58,7 @@ export function useResults() {
   }, []);
 
   const sendReport = useCallback(async (buildNumber: string, recipients?: string) => {
-    const { data } = await axios.post(
-      '/api/results/send-report',
-      { buildNumber, recipients });
+    const { data } = await axios.post('/api/results/send-report', { buildNumber, recipients });
     return data;
   }, []);
 

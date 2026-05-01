@@ -1,14 +1,13 @@
 import { useEffect } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
-import { logCatch } from '../../lib/logger';
 
 export default function BuildList() {
   const builds = useResultsStore(s => s.builds);
   const selectedBuild = useResultsStore(s => s.selectedBuild);
   const { fetchBuilds, fetchBuild } = useResults();
 
-  useEffect(() => { fetchBuilds().catch(logCatch('BuildList', 'fetchBuilds')); }, [fetchBuilds]);
+  useEffect(() => { fetchBuilds().catch(() => {}); }, [fetchBuilds]);
 
   return (
     <div className="flex flex-col">
@@ -29,7 +28,7 @@ export default function BuildList() {
               key={b.buildNumber}
               className={`px-3 py-2 cursor-pointer border-b border-bdr/50 text-xs transition-colors
                 ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}`}
-              onClick={() => fetchBuild(b.buildNumber).catch(logCatch('BuildList', 'fetchBuild'))}
+              onClick={() => fetchBuild(b.buildNumber)}
             >
               <div className="flex items-center justify-between">
                 <span className="font-medium truncate">{b.buildNumber}</span>

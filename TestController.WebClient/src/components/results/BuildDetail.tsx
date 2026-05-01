@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
-import { logCatch } from '../../lib/logger';
-import { Download, Mail, ChevronDown, ChevronRight, Search, Filter } from 'lucide-react';
+import { Download, Mail, ChevronDown, ChevronRight, Search, Filter, Copy, Check } from 'lucide-react';
 import type { BuildDetailTest } from '../../types/api';
 
 type DetailTab = 'usecases' | 'failed' | 'all';
@@ -20,7 +19,7 @@ export default function BuildDetail() {
   // Fetch detail when a build is selected
   useEffect(() => {
     if (build) {
-      fetchBuildDetail(build.buildNumber).catch(logCatch('BuildDetail', 'fetchBuildDetail'));
+      fetchBuildDetail(build.buildNumber).catch(() => {});
     }
   }, [build, fetchBuildDetail]);
 
@@ -208,6 +207,23 @@ export default function BuildDetail() {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button onClick={handleCopy} title="Copy to clipboard"
+      className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors">
+      {copied ? <Check size={11} className="text-acc-green" /> : <Copy size={11} />}
+    </button>
+  );
+}
+
 function TestRow({ test, expanded, onToggle }: { test: BuildDetailTest; expanded: boolean; onToggle: () => void }) {
   const outcomeIcon = test.outcome === 'Passed' ? '✔' : test.outcome === 'Failed' ? '✖' : '○';
   const outcomeColor = test.outcome === 'Passed' ? 'text-acc-green' : test.outcome === 'Failed' ? 'text-acc-red' : 'text-acc-yellow';
@@ -227,25 +243,37 @@ function TestRow({ test, expanded, onToggle }: { test: BuildDetailTest; expanded
           )}
           {test.errorMessage && (
             <div>
-              <div className="text-[10px] text-acc-red font-semibold uppercase tracking-wider mb-0.5">Error Message</div>
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[10px] text-acc-red font-semibold uppercase tracking-wider">Error Message</span>
+                <CopyButton text={test.errorMessage} />
+              </div>
               <pre className="text-[11px] text-acc-red/80 bg-acc-red/5 rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-32">{test.errorMessage}</pre>
             </div>
           )}
           {test.stackTrace && (
             <div>
-              <div className="text-[10px] text-text-muted font-semibold uppercase tracking-wider mb-0.5">Stack Trace</div>
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[10px] text-text-muted font-semibold uppercase tracking-wider">Stack Trace</span>
+                <CopyButton text={test.stackTrace} />
+              </div>
               <pre className="text-[10px] text-text-secondary bg-bg rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-48 font-mono">{test.stackTrace}</pre>
             </div>
           )}
           {test.debugTrace && (
             <details className="text-[10px]">
-              <summary className="text-text-muted cursor-pointer hover:text-text-secondary">Debug Trace ({test.debugTrace.length} chars)</summary>
+              <summary className="text-text-muted cursor-pointer hover:text-text-secondary">
+                Debug Trace ({test.debugTrace.length} chars)
+                <CopyButton text={test.debugTrace} />
+              </summary>
               <pre className="mt-1 text-[10px] text-text-muted bg-bg rounded p-2 overflow-x-auto max-h-32 font-mono">{test.debugTrace}</pre>
             </details>
           )}
           {test.stdOut && (
             <details className="text-[10px]">
-              <summary className="text-text-muted cursor-pointer hover:text-text-secondary">Stdout ({test.stdOut.length} chars)</summary>
+              <summary className="text-text-muted cursor-pointer hover:text-text-secondary">
+                Stdout ({test.stdOut.length} chars)
+                <CopyButton text={test.stdOut} />
+              </summary>
               <pre className="mt-1 text-[10px] text-text-muted bg-bg rounded p-2 overflow-x-auto max-h-32 font-mono">{test.stdOut}</pre>
             </details>
           )}

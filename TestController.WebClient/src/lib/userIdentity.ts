@@ -1,10 +1,17 @@
 const STORAGE_KEY = 'tc-user-id';
 const NAME_KEY = 'tc-user-name';
 
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID().slice(0, 8);
+  }
+  return Math.random().toString(36).slice(2, 10);
+}
+
 export function getUserId(): string {
   let id = localStorage.getItem(STORAGE_KEY);
   if (!id) {
-    id = crypto.randomUUID().slice(0, 8);
+    id = generateId();
     localStorage.setItem(STORAGE_KEY, id);
   }
   return id;

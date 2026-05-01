@@ -14,20 +14,6 @@ public sealed class ExecutionSessionManager
     private readonly List<ExecutionSession> _history = [];
     private const int MaxHistory = 50;
 
-    private readonly IEventAggregator? _events;
-
-    /// <summary>
-    /// Default ctor for legacy/test code paths that don't need event publishing.
-    /// </summary>
-    public ExecutionSessionManager() { }
-
-    /// <summary>
-    /// DI ctor: when an event aggregator is supplied, the session manager
-    /// publishes <see cref="NodeProgressEvent"/> on every action start and
-    /// finish so the dashboard can update without polling.
-    /// </summary>
-    public ExecutionSessionManager(IEventAggregator events) { _events = events; }
-
     /// <summary>
     /// Begins a new execution session and tracks it as active.
     /// If a session with the given <paramref name="sessionId"/> already exists
@@ -57,48 +43,12 @@ public sealed class ExecutionSessionManager
         return session;
     }
 
-    /// <summary>
-    /// Notifies subscribers that an action has started running. Executors should
-    /// call this immediately before invoking the action, so the dashboard can
-    /// flip the pill from Pending to Running without waiting for completion.
-    /// </summary>
-    public void BeginAction(string sessionId, ActionExecutionResult result)
-    {
-        _events?.Publish(new NodeProgressEvent(
-            SessionId: sessionId,
-            AgentName: result.AgentName ?? "Controller",
-            NodeTag: result.ActionTag,
-            ActionType: result.ActionType,
-            Command: result.Command,
-            Status: "Running"));
-    }
-
     /// <summary>Records a per-action result into the active session. Thread-safe for parallel execution.</summary>
     public void RecordResult(string sessionId, ActionExecutionResult result)
     {
         if (_active.TryGetValue(sessionId, out var session))
             session.AddResult(result);
-
-        _events?.Publish(new NodeProgressEvent(
-            SessionId: sessionId,
-            AgentName: result.AgentName ?? "Controller",
-            NodeTag: result.ActionTag,
-            ActionType: result.ActionType,
-            Command: result.Command,
-            Status: MapOutcome(result.Outcome),
-            ExitCode: result.ExitCode,
-            ErrorMessage: result.ErrorMessage,
-            Duration: result.DurationText));
     }
-
-    private static string MapOutcome(ActionOutcome outcome) => outcome switch
-    {
-        ActionOutcome.Success    => "Success",
-        ActionOutcome.Failed     => "Failed",
-        ActionOutcome.Terminated => "Failed",
-        ActionOutcome.TimedOut   => "Failed",
-        _                        => "Running",
-    };
 
     /// <summary>Marks a session complete and archives it into history.</summary>
     public void CompleteSession(string sessionId)

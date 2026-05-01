@@ -22,34 +22,3 @@ public sealed record ExecutionStartedEvent(string SessionId, string WatchItemTag
 
 /// <summary>Fired when a WatchItem execution completes (from WPF or WebApi).</summary>
 public sealed record ExecutionCompletedEvent(string SessionId, string WatchItemTag, string State, int Passed, int Failed, int Total);
-
-/// <summary>
-/// Fired by pipeline executors as a node (Action / Group / Initialize / Ref)
-/// transitions through its lifecycle. Status values are the same strings used
-/// by the dashboard pills: "Pending" | "Running" | "Success" | "Failed" | "Skipped".
-///
-/// Replaces the 1-second polling adapter the dashboard previously used to
-/// scrape <see cref="ExecutionSession.GetAgentSummaries"/>.
-/// </summary>
-public sealed record NodeProgressEvent(
-    string SessionId,
-    string AgentName,
-    string NodeTag,
-    string ActionType,
-    string Command,
-    string Status,
-    int? ExitCode = null,
-    string? ErrorMessage = null,
-    string? Duration = null,
-    int? ProgressPercent = null);
-
-/// <summary>
-/// Fired for each line of stdout/stderr produced by an agent during action
-/// execution. <see cref="Kind"/> is "stdout" or "stderr".
-/// </summary>
-public sealed record AgentOutputEvent(
-    DateTime Timestamp,
-    string AgentName,
-    string SessionId,
-    string Kind,
-    string Line);

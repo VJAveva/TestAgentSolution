@@ -32,7 +32,6 @@ public sealed partial class MainViewModel
         try
         {
             var importedConfig = WatchListXmlParser.Load(dlg.FileName);
-            foreach (var w in importedConfig.LoadWarnings) AddLog(w, LogSeverity.Warning);
             var imported = importedConfig.WatchItems;
 
             if (imported.Count == 0)

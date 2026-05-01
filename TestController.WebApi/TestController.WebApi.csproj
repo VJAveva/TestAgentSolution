@@ -33,8 +33,8 @@
     <Copy SourceFiles="@(ReactBuildFiles)" DestinationFolder="wwwroot\%(RecursiveDir)" />
   </Target>
 
-  <!-- Always rebuild React on publish -->
-  <Target Name="PublishReactApp" AfterTargets="ComputeFilesToPublish">
+  <!-- Always rebuild React on publish (skip if PublishWeb.ps1 already built it) -->
+  <Target Name="PublishReactApp" AfterTargets="ComputeFilesToPublish" Condition="'$(SkipSpaPublish)' != 'true'">
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
     <ItemGroup>

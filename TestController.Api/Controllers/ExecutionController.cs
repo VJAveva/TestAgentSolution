@@ -49,7 +49,7 @@ public class ExecutionController : ControllerBase
         _notifier = notifier;
     }
 
-    /// <summary>GET /api/execution/sessions ï¿½ list active sessions.</summary>
+    /// <summary>GET /api/execution/sessions — list active sessions.</summary>
     [HttpGet("sessions")]
     public IActionResult GetSessions()
     {
@@ -76,19 +76,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/execution/dashboard-sessions â€“ active + recent sessions with per-agent details.</summary>
-    [HttpGet("dashboard-sessions")]
-    public IActionResult GetDashboardSessions()
-    {
-        var active = _sessionManager.GetActiveSessions()
-            .Select(MapDashboardSession).ToList();
-        var history = _sessionManager.GetHistory(20)
-            .Select(MapDashboardSession).ToList();
-
-        return Ok(new { active, history });
-    }
-
-    /// <summary>GET /api/execution/status â€“ current execution state overview.</summary>
+    /// <summary>GET /api/execution/status — current execution state overview.</summary>
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
@@ -99,7 +87,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/execution/{sessionId} ï¿½ detailed session info.</summary>
+    /// <summary>GET /api/execution/{sessionId} — detailed session info.</summary>
     [HttpGet("{sessionId}")]
     public IActionResult GetSession(string sessionId)
     {
@@ -109,7 +97,7 @@ public class ExecutionController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/execution/trigger/{watchItemTag}?eventType=Renamed ï¿½ trigger a WatchItem.
+    /// POST /api/execution/trigger/{watchItemTag}?eventType=Renamed — trigger a WatchItem.
     /// Accepts an optional JSON body with build number, drop location, and custom parameters.
     /// Uses agent-level locking to prevent concurrent pipelines from sharing agents.
     /// </summary>
@@ -222,7 +210,7 @@ public class ExecutionController : ControllerBase
                         message = isRace
                             ? $"Another user just triggered '{newestConflict.WatchItemTag}' moments ago. " +
                               $"The agent was free when you opened the dialog but was claimed by {newestConflict.UserId} first."
-                            : $"Cannot start '{watchItemTag}' ï¿½ {conflicts.Count} required agent(s) are locked by other sessions",
+                            : $"Cannot start '{watchItemTag}' — {conflicts.Count} required agent(s) are locked by other sessions",
                         conflicts = conflicts.Select(c => new
                         {
                             c.AgentName,
@@ -236,7 +224,7 @@ public class ExecutionController : ControllerBase
                         requiredAgents,
                         yourUserId = userId,
                         retryAdvice = isRace
-                            ? "Try again in a few seconds ï¿½ or wait for the other pipeline to finish."
+                            ? "Try again in a few seconds — or wait for the other pipeline to finish."
                             : "Wait for the blocking pipeline to complete.",
                     });
                 }
@@ -275,7 +263,7 @@ public class ExecutionController : ControllerBase
         // Broadcast lock state to all clients
         BroadcastLockChange("Pipeline started");
 
-        // Fire and forget ï¿½ ExecuteEventTrackedAsync handles session lifecycle
+        // Fire and forget — ExecuteEventTrackedAsync handles session lifecycle
         _ = Task.Run(async () =>
         {
             try
@@ -378,7 +366,7 @@ public class ExecutionController : ControllerBase
 
     // ?? Lock & availability endpoints ????????????????????????????????
 
-    /// <summary>GET /api/execution/locks ï¿½ all current agent locks.</summary>
+    /// <summary>GET /api/execution/locks — all current agent locks.</summary>
     [HttpGet("locks")]
     public IActionResult GetLocks()
     {
@@ -397,7 +385,7 @@ public class ExecutionController : ControllerBase
         return Ok(new { locks, lockVersion = _lockManager.Version, timestamp = DateTime.UtcNow });
     }
 
-    /// <summary>GET /api/execution/can-trigger/{watchItemTag} ï¿½ pre-flight availability check.</summary>
+    /// <summary>GET /api/execution/can-trigger/{watchItemTag} — pre-flight availability check.</summary>
     [HttpGet("can-trigger/{watchItemTag}")]
     public IActionResult CanTrigger(string watchItemTag)
     {
@@ -432,7 +420,7 @@ public class ExecutionController : ControllerBase
 
     // ?? Reconnection & session endpoints ?????????????????????????????
 
-    /// <summary>GET /api/execution/reconnect ï¿½ returns user's active sessions for reconnection.</summary>
+    /// <summary>GET /api/execution/reconnect — returns user's active sessions for reconnection.</summary>
     [HttpGet("reconnect")]
     public IActionResult Reconnect()
     {
@@ -457,7 +445,7 @@ public class ExecutionController : ControllerBase
         return Ok(new { userId, activeSessions = active });
     }
 
-    /// <summary>GET /api/execution/{sessionId}/recent-logs ï¿½ backfill logs after reconnect.</summary>
+    /// <summary>GET /api/execution/{sessionId}/recent-logs — backfill logs after reconnect.</summary>
     [HttpGet("{sessionId}/recent-logs")]
     public IActionResult GetRecentLogs(string sessionId, [FromQuery] int count = 200)
     {
@@ -491,7 +479,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/execution/my-sessions ï¿½ user's own sessions.</summary>
+    /// <summary>GET /api/execution/my-sessions — user's own sessions.</summary>
     [HttpGet("my-sessions")]
     public IActionResult GetMySessions()
     {
@@ -514,7 +502,7 @@ public class ExecutionController : ControllerBase
 
     // ?? Cancel endpoints ????????????????????????????????????????????
 
-    /// <summary>POST /api/execution/cancel ï¿½ cancel all running sessions.</summary>
+    /// <summary>POST /api/execution/cancel — cancel all running sessions.</summary>
     [HttpPost("cancel")]
     public async Task<IActionResult> CancelAll()
     {
@@ -548,7 +536,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/{sessionId}/cancel ï¿½ cancel a specific session (ownership enforced).</summary>
+    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a specific session (ownership enforced).</summary>
     [HttpPost("{sessionId}/cancel")]
     public async Task<IActionResult> CancelSession(string sessionId)
     {
@@ -589,7 +577,7 @@ public class ExecutionController : ControllerBase
 
     // ?? Force-release endpoints (admin only) ?????????????????????????
 
-    /// <summary>POST /api/execution/force-release/{agentName} ï¿½ admin force-release a single agent.</summary>
+    /// <summary>POST /api/execution/force-release/{agentName} — admin force-release a single agent.</summary>
     [HttpPost("force-release/{agentName}")]
     public IActionResult ForceReleaseAgent(string agentName)
     {
@@ -611,7 +599,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/force-release-all ï¿½ admin emergency release all locks.</summary>
+    /// <summary>POST /api/execution/force-release-all — admin emergency release all locks.</summary>
     [HttpPost("force-release-all")]
     public IActionResult ForceReleaseAll()
     {
@@ -686,47 +674,5 @@ public class ExecutionController : ControllerBase
         succeededCount = s.SucceededCount,
         failedCount = s.FailedCount,
         summary = s.SummaryText,
-    };
-
-    private static object MapDashboardSession(ExecutionSession s) => new
-    {
-        sessionId = s.SessionId,
-        watchItemTag = s.WatchItemTag,
-        userId = s.UserId,
-        source = s.Source,
-        status = s.State.ToString(),
-        startedUtc = s.StartedUtc.ToString("o"),
-        elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
-        lockedAgents = s.LockedAgents,
-        buildNumber = s.ResolvedParameters
-            .GetValueOrDefault("_BuildNumber", ""),
-        totalActions = s.SnapshotNodes.Count,
-        completedActions = s.ActionResults.Count,
-        passedActions = s.SucceededCount,
-        failedActions = s.FailedCount,
-        progressPercent = s.SnapshotNodes.Count > 0
-            ? (int)((double)s.ActionResults.Count / s.SnapshotNodes.Count * 100)
-            : 0,
-        agents = s.GetAgentSummaries().Select(a => new
-        {
-            agentName = a.AgentName,
-            status = a.Status,
-            completedCount = a.CompletedCount,
-            totalCount = a.TotalCount,
-            progressPercent = a.TotalCount > 0
-                ? (int)((double)a.CompletedCount / a.TotalCount * 100)
-                : 0,
-            actions = a.Actions.Select(act => new
-            {
-                tag = act.ActionTag,
-                actionType = act.ActionType,
-                agentName = act.AgentName,
-                command = act.Command,
-                status = act.Outcome.ToString(),
-                exitCode = act.ExitCode,
-                errorMessage = act.ErrorMessage,
-                duration = act.Duration.ToString(@"mm\:ss"),
-            }),
-        }),
     };
 }

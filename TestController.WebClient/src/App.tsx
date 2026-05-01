@@ -1,22 +1,24 @@
 import { useEffect } from 'react';
 import AppShell from './components/layout/AppShell';
+import AppLogPanel from './components/layout/AppLogPanel';
 import SessionReconnector from './components/execution/SessionReconnector';
-import { ExecutionDashboardProvider } from './hooks/useExecutionDashboard';
 import { useSignalR } from './hooks/useSignalR';
+import { appLogger } from './lib/logger';
 
 export default function App() {
   const connection = useSignalR();
 
   useEffect(() => {
     if (connection) {
-      console.log('[App] SignalR connection established');
+      appLogger.info('SignalR', 'Connection established');
     }
   }, [connection]);
 
   return (
-    <ExecutionDashboardProvider>
+    <>
       <SessionReconnector />
       <AppShell />
-    </ExecutionDashboardProvider>
+      <AppLogPanel />
+    </>
   );
 }
