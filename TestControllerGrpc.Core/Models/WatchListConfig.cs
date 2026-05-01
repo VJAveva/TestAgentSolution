@@ -13,6 +13,13 @@ public sealed class WatchListConfig
 
     /// <summary>Path to the vocabulary XML file itself (for hot-reload).</summary>
     public string FilePath { get; set; } = "";
+
+    /// <summary>
+    /// Non-fatal diagnostic messages produced during <c>WatchListXmlParser.Load</c>
+    /// (e.g. deprecated attribute usage). UI hosts surface these via their
+    /// log panel after a successful load. Empty for files that parse cleanly.
+    /// </summary>
+    public List<string> LoadWarnings { get; } = new();
 }
 
 // =============================================================================
@@ -109,16 +116,6 @@ public sealed class ActionConfig : IActionNode
     /// </summary>
     public int CompletionPollIntervalSeconds { get; set; } = 30;
 
-    /// <summary>When true, monitors ILog + MSI log + EventViewer during execution
-    /// and streams per-component install status to the execution log.</summary>
-    public bool EnableInstallLog { get; set; }
-
-    /// <summary>How often (seconds) to poll install logs. Default 5.</summary>
-    public int InstallLogPollSeconds { get; set; } = 5;
-
-    /// <summary>Root path for {GUID} log folders. Empty = auto-detect default path.</summary>
-    public string InstallLogRoot { get; set; } = "";
-
     // Credentials (RunRemoteCommand)
     public string UserName { get; set; } = "";
     public string Password { get; set; } = "";
@@ -200,13 +197,6 @@ public enum ActionType
 // =============================================================================
 public sealed class PipelineExecutionContext
 {
-    /// <summary>
-    /// Ambient session ID accessible from event handlers (e.g. SignalRNotifier)
-    /// that subscribe to NodeProgress but don't have direct access to the context.
-    /// Flows automatically through async continuations.
-    /// </summary>
-    public static readonly AsyncLocal<string?> AmbientSessionId = new();
-
     public string WatchItemPath { get; set; } = "";
     public string TriggerFileName { get; set; } = "";
     public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -283,6 +273,32 @@ public sealed class ExecutionSession
         _ => ""
     };
 
+    // ── Per-agent tracking for dashboard ────────────────────────────
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, AgentSessionSummary>
+        _agentSummaries = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Track a per-agent action result for dashboard rendering.</summary>
+    public void TrackAgentAction(ActionExecutionResult result)
+    {
+        var agentName = result.AgentName ?? "Controller";
+        _agentSummaries.AddOrUpdate(
+            agentName,
+            _ => new AgentSessionSummary
+            {
+                AgentName = agentName,
+                Actions = new System.Collections.Concurrent.ConcurrentBag<ActionExecutionResult> { result },
+            },
+            (_, existing) =>
+            {
+                existing.Actions.Add(result);
+                return existing;
+            });
+    }
+
+    /// <summary>Returns per-agent summaries for dashboard API.</summary>
+    public IReadOnlyList<AgentSessionSummary> GetAgentSummaries()
+        => _agentSummaries.Values.ToList();
+
     // ── Per-session log buffer for reconnection backfill ─────────────
     private readonly List<PipelineLogEntry> _logBuffer = new(500);
     private readonly object _logLock = new();
@@ -313,6 +329,16 @@ public enum SessionState { Running, Completed, PartialFailure, Failed }
 
 public sealed class ActionExecutionResult
 {
+    private static long _sequenceCounter;
+
+    /// <summary>
+    /// Monotonically-increasing creation order. Used by the dashboard to render
+    /// pills in a stable, deterministic sequence even though they are stored
+    /// in a <see cref="System.Collections.Concurrent.ConcurrentBag{T}"/>
+    /// (which has no defined enumeration order).
+    /// </summary>
+    public long Sequence { get; init; } = System.Threading.Interlocked.Increment(ref _sequenceCounter);
+
     public string ActionTag { get; init; } = "";
     public string ActionType { get; init; } = "";
     public string? AgentName { get; init; }
@@ -346,6 +372,31 @@ public sealed class ActionExecutionResult
 }
 
 public enum ActionOutcome { Unknown, Success, Failed, Terminated, TimedOut }
+
+/// <summary>
+/// Well-known parameter keys used across the WatchList pipeline.
+/// Centralized so dashboards, log writers, and the file watcher can't
+/// silently disagree on the spelling.
+/// </summary>
+public static class WatchListConstants
+{
+    /// <summary>Underscore-prefixed key written by the file watcher so token
+    /// substitution works as <c>[BuildNumber]</c>. The dashboard reads from
+    /// this key when displaying the build number on a session card.</summary>
+    public const string BuildNumberKey = "_BuildNumber";
+}
+
+/// <summary>Per-agent execution summary for dashboard rendering.</summary>
+public sealed class AgentSessionSummary
+{
+    public string AgentName { get; set; } = "";
+    public string Status => Actions.Any(a => a.Outcome == ActionOutcome.Failed) ? "Failed"
+        : Actions.All(a => a.Outcome == ActionOutcome.Success) && Actions.Count > 0 ? "Success"
+        : "Executing";
+    public System.Collections.Concurrent.ConcurrentBag<ActionExecutionResult> Actions { get; set; } = new();
+    public int CompletedCount => Actions.Count(a => a.Outcome != ActionOutcome.Unknown);
+    public int TotalCount => Actions.Count;
+}
 
 /// <summary>
 /// Documents common Windows/MSI/PowerShell exit codes

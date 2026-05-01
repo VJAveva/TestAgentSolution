@@ -226,19 +226,12 @@ export interface ConsecutiveFailureAlert {
 
 // ?? Agent models ????????????????????????????????????????????????????
 
-export interface AgentHealth {
-  agentName: string;
-  isHealthy: boolean;
-  consecutiveFailures: number;
-}
-
 export interface AgentInfo {
   name: string;
   address: string;
   status: string;
   lastStatusDetail?: string;
   lastCheckedUtc?: string;
-  health?: AgentHealth;
 }
 
 export interface DiagnosticStep {
@@ -280,53 +273,6 @@ export interface LogEntry {
   timestamp: string;
   kind?: 'stdout' | 'stderr';
   severity?: 'info' | 'success' | 'warning' | 'error';
-}
-
-// ?? Pipeline monitoring models ??????????????????????????????????????????
-
-export type ActionOutcome = 'Pending' | 'Running' | 'Success' | 'Failed' | 'Cancelled' | 'TimedOut' | 'Rebooting';
-
-export interface PipelineAction {
-  actionTag: string;
-  command: string;
-  agentName: string;
-  status: ActionOutcome;
-  startedUtc?: string;
-  duration?: string;
-  exitCode?: number;
-  errorMessage?: string;
-  progressPercent?: number;
-}
-
-export interface AgentPipeline {
-  agentName: string;
-  state: 'Idle' | 'Executing' | 'Done' | 'Failed' | 'Rebooting';
-  actions: PipelineAction[];
-  progressPercent: number;
-}
-
-export interface SessionPipeline {
-  sessionId: string;
-  watchItemTag: string;
-  state: string;
-  userId?: string;
-  startedUtc: string;
-  elapsed?: string;
-  agents: AgentPipeline[];
-  totalActions: number;
-  passedActions: number;
-  failedActions: number;
-  progressPercent: number;
-}
-
-export interface AgentHeartbeat {
-  agentName: string;
-  state: string;
-  cpuUsagePct?: number;
-  memoryUsedMb?: number;
-  memoryTotalMb?: number;
-  diskFreeGb?: number;
-  timestamp: string;
 }
 
 // ?? Tree node (UI-side flattened model) ?????????????????????????????

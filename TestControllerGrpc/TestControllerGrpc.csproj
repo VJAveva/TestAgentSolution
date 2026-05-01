@@ -8,10 +8,20 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>TestControllerGrpc</RootNamespace>
     <AssemblyName>TestControllerGrpc</AssemblyName>
+    <ApplicationIcon>Assets\dashboard.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="TestControllerGrpc.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tray icon (loaded via pack URI by TrayIconService) and copied next to
+         the exe so the file-path fallback also works without rebuild. -->
+    <Resource Include="Assets\dashboard.ico" />
+    <None Update="Assets\dashboard.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +44,7 @@
     <PackageReference Include="AvalonEdit" Version="6.2.0.78" />
     <PackageReference Include="Polly.Core" Version="8.5.2" />
     <PackageReference Include="Svg.Skia" Version="2.0.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -58,14 +69,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Controllers\**" />
+    <Compile Remove="Hubs\**" />
+    <EmbeddedResource Remove="Controllers\**" />
+    <EmbeddedResource Remove="Hubs\**" />
+    <None Remove="Controllers\**" />
+    <None Remove="Hubs\**" />
+    <Page Remove="Controllers\**" />
+    <Page Remove="Hubs\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Help\TestController_Help.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Controllers\" />
-    <Folder Include="Hubs\" />
+    <Folder Include="Protos\" />
   </ItemGroup>
 
 </Project>

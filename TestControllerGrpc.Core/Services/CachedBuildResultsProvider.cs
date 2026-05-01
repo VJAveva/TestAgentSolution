@@ -52,8 +52,25 @@ public sealed class CachedBuildResultsProvider
     public IReadOnlyList<BuildNode> GetAllBuilds()
     {
         var rootPath = _config.ResultsRootPath;
-        if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
+        if (string.IsNullOrEmpty(rootPath))
+        {
+            _logger.LogWarning(
+                "BuildResults: ResultsRootPath is not configured. " +
+                "Set BuildResults:ResultsRootPath in appsettings to enable the Results dashboard.");
+            _appLogger.Log(LogLevel.Warning, "BuildResults",
+                "ResultsRootPath is not configured ? Results dashboard will be empty.");
             return [];
+        }
+        if (!Directory.Exists(rootPath))
+        {
+            _logger.LogWarning(
+                "BuildResults: ResultsRootPath '{Path}' does not exist or is not accessible. " +
+                "Verify the deployment environment has read access to this folder.",
+                rootPath);
+            _appLogger.Log(LogLevel.Warning, "BuildResults",
+                $"ResultsRootPath '{rootPath}' not found or not accessible ? Results dashboard will be empty.");
+            return [];
+        }
 
         var buildFolders = _parser.DiscoverBuilds(rootPath);
         var results = new List<BuildNode>(buildFolders.Count);

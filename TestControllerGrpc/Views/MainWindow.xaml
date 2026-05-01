@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.MainWindow"
+﻿<Window x:Class="TestControllerGrpc.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
@@ -35,6 +35,9 @@
 
         <!-- Help -->
         <KeyBinding Key="F1" Command="{Binding OpenHelpCommand}" />
+
+        <!-- Multi-session Execution Dashboard (standalone window) -->
+        <KeyBinding Key="F12" Command="{Binding ExecutionDashboard.OpenDashboardWindowCommand}" />
     </Window.InputBindings>
 
     <Window.Icon>
@@ -1046,8 +1049,8 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding ToggleExecutionDashboardCommand}"
-                                                    ToolTip="Show/Hide Execution Dashboard">
+                                            <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding ExecutionDashboard.OpenDashboardWindowCommand}"
+                                                    ToolTip="Open Multi-Session Execution Dashboard (F12)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" Foreground="{DynamicResource Accent}" />
                                                     <TextBlock Text="Dashboard" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -1329,119 +1332,6 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- CENTER PANEL (Col 2, Row 0): Node Properties          -->
             <!-- ═══════════════════════════════════════════════════════ -->
-
-            <!-- EXECUTION DASHBOARD (overlays Node Properties during execution) -->
-            <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
-                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1" Panel.ZIndex="10"
-                    Visibility="{Binding ShowExecutionDashboard, Converter={StaticResource BoolVis}}">
-                <DockPanel>
-                    <!-- Header -->
-                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6" CornerRadius="6,6,0,0">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="Dismiss" Style="{StaticResource SmBtn}"
-                                    Command="{Binding ToggleExecutionDashboardCommand}"
-                                    Foreground="{DynamicResource TextS}" Padding="8,2" />
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Execution Dashboard" FontSize="14" FontWeight="Bold"
-                                           Foreground="{DynamicResource Accent}" Margin="0,0,12,0" />
-                                <TextBlock Text="{Binding ExecutionElapsed}" FontSize="12" FontFamily="Consolas"
-                                           Foreground="{DynamicResource AccGreen}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-
-                    <!-- Totals bar at bottom -->
-                    <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource BgCard}"
-                            CornerRadius="0,0,6,6" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
-                        <TextBlock Text="{Binding ExecutionTotals}" FontSize="11" FontFamily="Consolas"
-                                   Foreground="{DynamicResource TextS}" />
-                    </Border>
-
-                    <!-- Agent progress list -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
-                        <ItemsControl ItemsSource="{Binding AgentProgress}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="{DynamicResource BgCard}" CornerRadius="6" Padding="12,8"
-                                            Margin="4,3" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
-                                        <StackPanel>
-                                            <!-- Row 1: Agent name + percentage + ETA -->
-                                            <DockPanel Margin="0,0,0,6">
-                                                <TextBlock DockPanel.Dock="Right" FontSize="11" FontFamily="Consolas"
-                                                           Foreground="{DynamicResource TextS}" VerticalAlignment="Center">
-                                                    <Run Text="{Binding EtaText, Mode=OneWay}" />
-                                                </TextBlock>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{Binding AgentName}" FontSize="13" FontWeight="Bold"
-                                                               Foreground="{DynamicResource TextP}" Margin="0,0,12,0" />
-                                                    <TextBlock FontSize="12" FontWeight="Bold" VerticalAlignment="Center">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                        <Run Text="{Binding ProgressPercent, StringFormat={}{0:F0}%, Mode=OneWay}" />
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </DockPanel>
-
-                                            <!-- Row 2: Progress bar -->
-                                            <Grid Height="6" Margin="0,0,0,6">
-                                                <Border Background="{DynamicResource BgSurface}" CornerRadius="3" />
-                                                <Border CornerRadius="3" HorizontalAlignment="Left"
-                                                        Width="{Binding ProgressPercent, Converter={StaticResource ProgressPercentToWidth}}">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{DynamicResource Accent}" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                    <Setter Property="Background" Value="{DynamicResource AccGreen}" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                    <Setter Property="Background" Value="{DynamicResource AccRed}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                </Border>
-                                            </Grid>
-
-                                            <!-- Row 3: Stats -->
-                                            <DockPanel>
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding ElapsedText, Mode=OneWay}"
-                                                           FontSize="10" FontFamily="Consolas"
-                                                           Foreground="{DynamicResource TextS}" />
-                                                <TextBlock FontSize="10" Foreground="{DynamicResource TextS}">
-                                                    <Run Text="{Binding CompletedActions, Mode=OneWay}" />/<Run Text="{Binding TotalActions, Mode=OneWay}" /> actions  |
-                                                    <Run Text="{Binding PassedActions, Mode=OneWay}" Foreground="{DynamicResource AccGreen}" /> pass
-                                                    <Run Text="{Binding FailedActions, Mode=OneWay}" Foreground="{DynamicResource AccRed}" /> fail
-                                                </TextBlock>
-                                            </DockPanel>
-
-                                            <!-- Row 4: Current action -->
-                                            <TextBlock Text="{Binding CurrentAction, Mode=OneWay}" FontSize="9.5"
-                                                       FontFamily="Consolas" Foreground="{DynamicResource TextS}"
-                                                       Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
-                                                       Opacity="0.7" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
-            </Border>
 
             <!-- Node Properties panel -->
             <Border Grid.Column="2" Grid.Row="0" Margin="5" Background="{DynamicResource BgPanel}" CornerRadius="6"
@@ -1766,24 +1656,6 @@
                                         <CheckBox Content="FailAndContinue" IsChecked="{Binding FailAndContinue}" Foreground="{DynamicResource TextP}" Margin="0,0,16,0" />
                                         <CheckBox Content="IsReboot" IsChecked="{Binding IsReboot}" Foreground="{DynamicResource TextP}" />
                                     </StackPanel>
-                                    <!-- Install Log Monitoring -->
-                                    <DockPanel Margin="0,4,0,2">
-                                        <CheckBox DockPanel.Dock="Right" Content="Enable Install Log"
-                                                  IsChecked="{Binding EnableInstallLog}"
-                                                  Foreground="{DynamicResource TextP}" FontSize="11"
-                                                  VerticalAlignment="Center" Margin="8,0,0,0"
-                                                  ToolTip="Monitor ILog + MSI log + EventViewer during execution" />
-                                        <StackPanel Orientation="Horizontal">
-                                            <Label Content="LOG POLL (sec)" Style="{StaticResource Lbl}"
-                                                   Padding="0" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                            <TextBox Text="{Binding InstallLogPollSeconds, UpdateSourceTrigger=PropertyChanged}"
-                                                     Style="{StaticResource Fld}" Width="50" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </DockPanel>
-                                         <TextBlock Text="Polls ILog + MSI log + EventViewer and streams per-component PASS/FAIL status."
-                                                   FontSize="10" Foreground="{DynamicResource TextS}" FontStyle="Italic"
-                                                   TextWrapping="Wrap" Margin="0,0,0,6"
-                                                   Visibility="{Binding EnableInstallLog, Converter={StaticResource BoolVis}}" />
                                         <!-- Smart Retry -->
                                         <TextBlock Text="SMART RETRY" Style="{StaticResource Sec}" />
                                         <Grid Margin="0,2">

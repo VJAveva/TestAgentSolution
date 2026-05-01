@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
+import { logCatch } from '../../lib/logger';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 
 const CHART_COLORS = {
@@ -24,8 +25,8 @@ export default function TrendCharts() {
   const { fetchTrends, fetchAlerts } = useResults();
 
   useEffect(() => {
-    fetchTrends().catch(() => {});
-    fetchAlerts().catch(() => {});
+    fetchTrends().catch(logCatch('TrendCharts', 'fetchTrends'));
+    fetchAlerts().catch(logCatch('TrendCharts', 'fetchAlerts'));
   }, [fetchTrends, fetchAlerts]);
 
   return (
@@ -44,8 +45,6 @@ export default function TrendCharts() {
                 labelStyle={{ color: '#CDD6F4' }}
                 formatter={(v: number) => [`${v.toFixed(1)}%`, 'Pass Rate']}
               />
-              <ReferenceLine y={95} stroke={CHART_COLORS.green} strokeDasharray="6 3" label={{ value: 'Good (95%)', position: 'right', fill: CHART_COLORS.green, fontSize: 10 }} />
-              <ReferenceLine y={85} stroke={CHART_COLORS.yellow} strokeDasharray="6 3" label={{ value: 'Warning (85%)', position: 'right', fill: CHART_COLORS.yellow, fontSize: 10 }} />
               <Line type="monotone" dataKey="passRate" stroke={CHART_COLORS.blue} strokeWidth={2} dot={{ r: 3, fill: CHART_COLORS.blue }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>

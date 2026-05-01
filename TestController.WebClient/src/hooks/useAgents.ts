@@ -3,25 +3,13 @@ import axios from 'axios';
 import { useAgentStore } from '../stores/agentStore';
 import type { AgentInfo, DiagnosticStep } from '../types/api';
 
-function normalizeAgent(raw: any): AgentInfo {
-  return {
-    name: raw.name,
-    address: raw.address,
-    status: raw.status || (raw.health?.isHealthy ? 'Online' : raw.health ? 'Offline' : 'Unknown'),
-    lastStatusDetail: raw.lastStatusDetail,
-    lastCheckedUtc: raw.lastCheckedUtc,
-    health: raw.health,
-  };
-}
-
 export function useAgents() {
   const setAgents = useAgentStore(s => s.setAgents);
 
   const fetchAgents = useCallback(async () => {
-    const { data } = await axios.get<any[]>('/api/agents');
-    const agents = data.map(normalizeAgent);
-    setAgents(agents);
-    return agents;
+    const { data } = await axios.get<AgentInfo[]>('/api/agents');
+    setAgents(data);
+    return data;
   }, [setAgents]);
 
   const registerAgent = useCallback(async (name: string, address: string) => {

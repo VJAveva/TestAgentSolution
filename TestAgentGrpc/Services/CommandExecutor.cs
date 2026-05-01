@@ -91,7 +91,6 @@ public sealed class CommandExecutor : IDisposable
         int timeoutMs = 0,
         string? executionId = null, string? userName = null, string? password = null,
         string? completionCheckCommand = null, int completionPollIntervalSeconds = 30,
-        bool enableInstallLog = false, int installLogPollSeconds = 5, string? installLogRoot = null,
         CancellationToken externalCt = default)
     {
         if (_state == AgentState.Running)
@@ -119,9 +118,6 @@ public sealed class CommandExecutor : IDisposable
                     userName: userName, password: password,
                     completionCheckCommand: completionCheckCommand,
                     completionPollIntervalSeconds: completionPollIntervalSeconds,
-                    enableInstallLog: enableInstallLog,
-                    installLogPollSeconds: installLogPollSeconds,
-                    installLogRoot: installLogRoot,
                     timeoutMs: timeoutMs);
             }
             finally
@@ -145,9 +141,6 @@ public sealed class CommandExecutor : IDisposable
         string? password = null,
         string? completionCheckCommand = null,
         int completionPollIntervalSeconds = 30,
-        bool enableInstallLog = false,
-        int installLogPollSeconds = 5,
-        string? installLogRoot = null,
         int timeoutMs = 0)
     {
         // Acquire the execution lock — if cancelled here, we must NOT release in finally
@@ -215,16 +208,6 @@ public sealed class CommandExecutor : IDisposable
             SetActivity($"Executing: {command} {arguments}");
             _lastError = string.Empty;
 
-            // ── START INSTALL PROGRESS MONITOR (if enabled) ────────
-            InstallProgressMonitor? installMonitor = null;
-            if (enableInstallLog && perCallChannel is not null)
-            {
-                installMonitor = new InstallProgressMonitor(perCallChannel, executionId);
-                installMonitor.Start(
-                    installRoot: string.IsNullOrEmpty(installLogRoot) ? null : installLogRoot,
-                    pollMs: Math.Max(installLogPollSeconds, 1) * 1000);
-            }
-
             // ── STREAM STDOUT + STDERR concurrently ────────────────
             var stdoutTask = StreamOutputAsync(executionId, _currentProcess.StandardOutput,
                 OutputKind.OutputStdout, record, perCallChannel);
@@ -232,19 +215,6 @@ public sealed class CommandExecutor : IDisposable
                 OutputKind.OutputStderr, record, perCallChannel);
 
             // ── HEARTBEAT for long-running silent processes ────────
-            // Track the last install event message from the monitor
-            string lastInstallEvent = "";
-            var lastInstallEventLock = new object();
-
-            // If install monitor is active, capture its events for the heartbeat line
-            if (installMonitor is not null)
-            {
-                installMonitor.OnProgress += (msg) =>
-                {
-                    lock (lastInstallEventLock) { lastInstallEvent = msg; }
-                };
-            }
-
             var process = _currentProcess;
             var heartbeatTask = Task.Run(async () =>
             {
@@ -268,20 +238,7 @@ public sealed class CommandExecutor : IDisposable
                     var elapsedStr = elapsed.ToString(@"mm\:ss");
                     var totalStr = timeoutTotal.ToString(@"mm\:ss");
 
-                    // Use the last install event if available, otherwise generic message
-                    string detail;
-                    lock (lastInstallEventLock)
-                    {
-                        if (!string.IsNullOrEmpty(lastInstallEvent))
-                        {
-                            detail = lastInstallEvent;
-                            lastInstallEvent = ""; // consume it
-                        }
-                        else
-                        {
-                            detail = $"Still running... (PID {process.Id}, {elapsedStr} / {totalStr})";
-                        }
-                    }
+                    var detail = $"Still running... (PID {process.Id}, {elapsedStr} / {totalStr})";
 
                     EmitEvent(executionId, ExecutionEventType.EventProgress,
                         detail: detail, progressPct: percent,
@@ -337,28 +294,6 @@ public sealed class CommandExecutor : IDisposable
                         break;
                     }
                 }
-            }
-
-            // ── FINALIZE INSTALL MONITOR ──────────────────────────
-            if (installMonitor is not null)
-            {
-                // Give the monitor one final poll cycle to catch last entries
-                try { await Task.Delay(3000, CancellationToken.None); }
-                catch { /* ignore */ }
-
-                var summary = installMonitor.GetSummary();
-                EmitEvent(executionId, ExecutionEventType.EventProgress,
-                    detail: summary, perCallChannel: perCallChannel);
-
-                if (installMonitor.FailedCount > 0 && _lastExitCode == 0)
-                {
-                    EmitEvent(executionId, ExecutionEventType.EventStderrLine,
-                        outputLine: $"WARNING: Process exited 0 but {installMonitor.FailedCount} component(s) failed in MSI log",
-                        outputKind: OutputKind.OutputStderr,
-                        perCallChannel: perCallChannel);
-                }
-
-                installMonitor.Dispose();
             }
 
             record.Complete(_lastExitCode);

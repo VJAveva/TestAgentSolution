@@ -44,9 +44,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isReboot;
     [ObservableProperty] private string _completionCheckCommand = "";
     [ObservableProperty] private int _completionPollIntervalSeconds = 30;
-    [ObservableProperty] private bool _enableInstallLog;
-    [ObservableProperty] private int _installLogPollSeconds = 5;
-    [ObservableProperty] private string _installLogRoot = "";
     [ObservableProperty] private string _userName = "";
     [ObservableProperty] private string _password = "";
     [ObservableProperty] private string _from = "";
@@ -478,9 +475,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
             CompletionCheckCommand = a.CompletionCheckCommand,
             CompletionPollIntervalSeconds = a.CompletionPollIntervalSeconds,
-            EnableInstallLog = a.EnableInstallLog,
-            InstallLogPollSeconds = a.InstallLogPollSeconds,
-            InstallLogRoot = a.InstallLogRoot,
             UserName = a.UserName, Password = a.Password,
             From = a.From, To = a.To, Title = a.Title, Body = a.Body,
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
@@ -563,9 +557,6 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 a.FailAndContinue = FailAndContinue; a.IsReboot = IsReboot;
                 a.CompletionCheckCommand = CompletionCheckCommand;
                 a.CompletionPollIntervalSeconds = CompletionPollIntervalSeconds;
-                a.EnableInstallLog = EnableInstallLog;
-                a.InstallLogPollSeconds = InstallLogPollSeconds;
-                a.InstallLogRoot = InstallLogRoot;
                 a.UserName = UserName; a.Password = Password;
                 a.From = From; a.To = To; a.Title = Title; a.Body = Body;
                 a.Attachment = Attachment; a.Embed = Embed; a.LargeFilesShare = LargeFilesShare;

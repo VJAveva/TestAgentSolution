@@ -1,12 +1,39 @@
 <Application x:Class="TestControllerGrpc.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
+             xmlns:spec="clr-namespace:TestControllerGrpc.ViewModels.Converters.Spec"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/DarkTheme.xaml" />
+                <ResourceDictionary Source="Views/Styles/ExecutionDashboardStyles.xaml" />
+                <!-- Spec design tokens (BgCanvasBrush, TextInfoBrush, FontSans, RadiusMd, PulseAnim, ?) -->
+                <ResourceDictionary Source="Views/Styles/SpecTokens.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converters for the Execution Dashboard view -->
+            <vm:DashboardPercentToWidthConverter x:Key="PercentToWidth"/>
+            <vm:RunningToVisibleConverter x:Key="RunningToVisible"/>
+            <vm:NullToCollapsedConverter  x:Key="NullToCollapsed"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+            <!-- Spec-aligned converters (Section 10.2 of the dashboard spec) -->
+            <spec:ActionStatusToBgConverter        x:Key="ActionStatusToBg"/>
+            <spec:ActionStatusToBorderConverter    x:Key="ActionStatusToBorder"/>
+            <spec:ActionStatusToFgConverter        x:Key="ActionStatusToFg"/>
+            <spec:ActionStatusToGlyphConverter     x:Key="ActionStatusToGlyph"/>
+            <spec:SessionStatusToBgConverter       x:Key="SessionStatusToBg"/>
+            <spec:SessionStatusToFgConverter       x:Key="SessionStatusToFg"/>
+            <spec:SessionStatusToLabelConverter    x:Key="SessionStatusToLabel"/>
+            <spec:AgentStateToFgConverter          x:Key="AgentStateToFg"/>
+            <spec:AgentStateToProgressBrushConverter x:Key="AgentStateToProgressBrush"/>
+            <spec:LogLevelToBrushConverter         x:Key="LogLevelToBrush"/>
+            <spec:BoolToVisConverter               x:Key="SpecBoolToVis"/>
+            <spec:NotEmptyToVisConverter           x:Key="NotEmptyToVis"/>
+            <spec:EnumEqualsConverter              x:Key="EnumEquals"/>
+            <spec:PercentToWidthConverter          x:Key="SpecPercentToWidth"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

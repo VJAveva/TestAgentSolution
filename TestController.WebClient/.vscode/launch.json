@@ -1,23 +1,45 @@
 {
     "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "Dev + Chrome",
+            "configurations": [
+                "Run Vite Dev Server",
+                "Launch Chrome (Vite dev)"
+            ]
+        }
+    ],
     "configurations": [
         {
-            "name": "Debug Web Client (auto Vite port)",
-            "type": "node-terminal",
-            "request": "launch",
-            "command": "npm run dev",
-            "cwd": "${workspaceFolder}",
-            "serverReadyAction": {
-                "action": "debugWithChrome",
-                "pattern": "Local:\\s+(https?://localhost:\\d+/?)",
-                "uriFormat": "%s",
-                "webRoot": "${workspaceFolder}"
-            }
+            "name": "Attach to Chrome",
+            "port": 9222,
+            "request": "attach",
+            "type": "chrome",
+            "webRoot": "${workspaceFolder}"
         },
         {
-            "name": "Launch Chrome (localhost:3000)",
+            "name": "Launch Chrome",
             "request": "launch",
             "type": "chrome",
+            "url": "http://localhost:3000",
+            "webRoot": "${workspaceFolder}"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run Vite Dev Server",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Launch Chrome (Vite dev)",
             "url": "http://localhost:3000",
             "webRoot": "${workspaceFolder}"
         }

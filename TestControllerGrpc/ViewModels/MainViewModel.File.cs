@@ -93,6 +93,7 @@ public sealed partial class MainViewModel
         {
             var config = WatchListXmlParser.Load(VocabFilePath);
             config.FilePath = VocabFilePath;
+            foreach (var w in config.LoadWarnings) AddLog(w, LogSeverity.Warning);
 
             if (_sessionManager.HasAnyActiveExecution)
             {

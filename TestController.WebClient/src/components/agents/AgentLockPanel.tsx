@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api';
+import { logCatch } from '../../lib/logger';
 
 interface AgentLockInfo {
   agentName: string;
@@ -22,7 +23,7 @@ export default function AgentLockPanel() {
   useEffect(() => {
     apiFetch<{ locks: AgentLockInfo[] }>('/api/execution/locks')
       .then(data => setLocks(data.locks || []))
-      .catch(() => {});
+      .catch(logCatch('AgentLockPanel', 'fetchLocks'));
   }, []);
 
   // Subscribe to real-time lock changes

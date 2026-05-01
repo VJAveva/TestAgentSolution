@@ -38,13 +38,13 @@ export default function LogViewer() {
   useEffect(() => {
     if (!connection) return;
 
-    const handleLog = (entry: { message?: string; agent?: string; agentName?: string; sessionId?: string; timestamp?: string; severity?: string; category?: string }) => {
+    const handleLog = (entry: { message?: string; agent?: string; sessionId?: string; timestamp?: string; severity?: string }) => {
       const logEntry: LogEntry = {
         message: entry.message ?? '',
-        agent: entry.agentName || entry.agent || entry.category || '',
+        agent: entry.agent ?? '',
         sessionId: entry.sessionId ?? '',
         timestamp: entry.timestamp ?? new Date().toISOString(),
-        severity: (entry.severity?.toLowerCase()) ?? 'info',
+        severity: entry.severity ?? 'info',
       };
 
       if (paused) {
@@ -60,41 +60,21 @@ export default function LogViewer() {
       });
     };
 
-    const handleAgentOutput = (data: { agentName?: string; line?: string; kind?: string; timestamp?: string }) => {
+    const handleEvent = (agent: string, line: string, kind: string) => {
       handleLog({
-        message: data.line ?? '',
-        agentName: data.agentName,
-        timestamp: data.timestamp ?? new Date().toISOString(),
-        severity: data.kind === 'stderr' ? 'error' : 'info',
+        message: line,
+        agent,
+        timestamp: new Date().toISOString(),
+        severity: kind === 'stderr' ? 'error' : 'info',
       });
     };
 
-    const handleExecutionStarted = (data: { sessionId?: string; watchItemTag?: string; eventType?: string }) => {
-      handleLog({
-        message: `Execution started: ${data.watchItemTag} (${data.eventType})`,
-        sessionId: data.sessionId,
-        severity: 'info',
-      });
-    };
-
-    const handleExecutionCompleted = (data: { sessionId?: string; watchItemTag?: string; state?: string }) => {
-      handleLog({
-        message: `Execution ${data.state}: ${data.watchItemTag}`,
-        sessionId: data.sessionId,
-        severity: data.state === 'Success' ? 'success' : data.state === 'Failed' ? 'error' : 'warning',
-      });
-    };
-
-    connection.on('LogEntry', handleLog);
-    connection.on('AgentOutput', handleAgentOutput);
-    connection.on('ExecutionStarted', handleExecutionStarted);
-    connection.on('ExecutionCompleted', handleExecutionCompleted);
+    connection.on('ExecutionLog', handleLog);
+    connection.on('ExecutionEvent', handleEvent);
 
     return () => {
-      connection.off('LogEntry', handleLog);
-      connection.off('AgentOutput', handleAgentOutput);
-      connection.off('ExecutionStarted', handleExecutionStarted);
-      connection.off('ExecutionCompleted', handleExecutionCompleted);
+      connection.off('ExecutionLog', handleLog);
+      connection.off('ExecutionEvent', handleEvent);
     };
   }, [connection, paused]);
 

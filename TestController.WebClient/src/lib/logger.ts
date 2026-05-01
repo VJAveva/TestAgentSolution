@@ -1,78 +1,76 @@
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+/**
+ * Centralized client-side error logger.
+ *
+ * Goal: when any page fails to load, surface a clear, structured log entry
+ * in the browser console (and optionally POST to the server) instead of
+ * silently swallowing the error with `.catch(() => {})`.
+ *
+ * Usage:
+ *   import { logError } from '../lib/logger';
+ *   useEffect(() => { fetchBuilds().catch(err => logError('BuildList', 'fetchBuilds', err)); }, []);
+ */
 
-export interface AppLogEntry {
-  id: string;
-  timestamp: string;
-  level: LogLevel;
-  category: string;
-  message: string;
-  data?: unknown;
+interface ApiError {
+  status?: number;
+  error?: string;
+  detail?: string;
   correlationId?: string;
+  message?: string;
+  config?: { url?: string; method?: string; baseURL?: string };
+  response?: { status?: number; data?: unknown };
 }
 
-const MAX_ENTRIES = 500;
-const STORAGE_KEY = 'app-log';
+/**
+ * Logs an error to the browser console with a consistent, grep-able format.
+ * Always returns the original error so callers can chain `.catch(logError(...))`
+ * when they want to swallow without losing visibility.
+ *
+ * @param scope    Component or hook name (e.g. 'BuildList', 'useResults')
+ * @param action   What was being attempted (e.g. 'fetchBuilds')
+ * @param err      The thrown error (apiFetch error object, axios error, or Error)
+ */
+export function logError(scope: string, action: string, err: unknown): void {
+  const e = err as ApiError;
+  const cid = e?.correlationId ?? '?';
+  const status = e?.status ?? e?.response?.status ?? 0;
+  const url = e?.config?.url
+    ? `${e.config.baseURL ?? ''}${e.config.url}`
+    : '';
+  const detail = e?.detail ?? e?.error ?? e?.message ?? String(err);
 
-type Listener = () => void;
-const listeners = new Set<Listener>();
+  // Single, consistent line ? easy to grep in the console:
+  //   [ERR] [BuildList:fetchBuilds] [cid=ab12cd34] 500 GET /api/results/builds ? reason
+  console.error(
+    `[ERR] [${scope}:${action}] [cid=${cid}] ${status}${url ? ` ${url}` : ''} ? ${detail}`,
+    err);
 
-let entries: AppLogEntry[] = [];
-
-// Hydrate from sessionStorage on load
-try {
-  const stored = sessionStorage.getItem(STORAGE_KEY);
-  if (stored) entries = JSON.parse(stored);
-} catch { /* ignore parse errors */ }
-
-function persist() {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
-  } catch { /* quota exceeded — drop oldest */ }
-}
-
-function notify() {
-  listeners.forEach(fn => fn());
-}
-
-function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID().slice(0, 8);
+  // Optional: POST to a server-side ingestion endpoint for centralized logs.
+  // Disabled by default to avoid request loops if the server itself is down.
+  // Enable by setting VITE_REPORT_CLIENT_ERRORS=true and implementing
+  // POST /api/clientlogs on the server.
+  if (import.meta.env.VITE_REPORT_CLIENT_ERRORS === 'true') {
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      void fetch(`${baseUrl}/api/clientlogs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope, action, status, url, detail, correlationId: cid,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          page: window.location.pathname,
+        }),
+        keepalive: true,
+      }).catch(() => { /* never throw from a logger */ });
+    } catch { /* swallow ? logger must never break the app */ }
   }
-  return Math.random().toString(36).slice(2, 10);
 }
 
-function write(level: LogLevel, category: string, message: string, data?: unknown, correlationId?: string) {
-  const entry: AppLogEntry = {
-    id: generateId(),
-    timestamp: new Date().toISOString(),
-    level,
-    category,
-    message,
-    data: data !== undefined ? data : undefined,
-    correlationId,
-  };
-  entries.push(entry);
-  if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
-  persist();
-  notify();
+/**
+ * Curried helper for `.catch(...)`:
+ *   .catch(logCatch('BuildList', 'fetchBuilds'))
+ * Always swallows the error after logging, returning undefined.
+ */
+export function logCatch(scope: string, action: string): (err: unknown) => void {
+  return (err) => logError(scope, action, err);
 }
-
-export const appLogger = {
-  debug: (category: string, message: string, data?: unknown) => write('debug', category, message, data),
-  info:  (category: string, message: string, data?: unknown) => write('info', category, message, data),
-  warn:  (category: string, message: string, data?: unknown) => write('warn', category, message, data),
-  error: (category: string, message: string, data?: unknown, correlationId?: string) =>
-    write('error', category, message, data, correlationId),
-
-  getEntries: () => entries,
-  clear: () => { entries = []; persist(); notify(); },
-
-  subscribe: (fn: Listener) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
-
-  /** Count entries by level */
-  counts: () => {
-    const c = { debug: 0, info: 0, warn: 0, error: 0 };
-    for (const e of entries) c[e.level]++;
-    return c;
-  },
-};

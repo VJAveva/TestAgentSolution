@@ -133,9 +133,6 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             completionCheckCommand: request.CompletionCheckCommand,
             completionPollIntervalSeconds: request.CompletionPollIntervalSeconds > 0
                 ? request.CompletionPollIntervalSeconds : 30,
-            enableInstallLog: request.EnableInstallLog,
-            installLogPollSeconds: request.InstallLogPollSeconds > 0 ? request.InstallLogPollSeconds : 5,
-            installLogRoot: request.InstallLogRoot,
             externalCt: context.CancellationToken);
 
         if (!accepted || reader is null)

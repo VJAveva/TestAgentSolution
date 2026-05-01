@@ -318,71 +318,21 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     ? CancellationTokenSource.CreateLinkedTokenSource(resilienceCt, timeoutCts.Token)
                     : CancellationTokenSource.CreateLinkedTokenSource(resilienceCt);
 
-                // Send timeout to agent so it can enforce server-side (already in seconds)
-                var timeoutSeconds = resolved.Timeout;
-
-                using var call = client.RunCommandStreamed(new RunCommandRequest
-                {
-                    Command = resolved.Command,
-                    Arguments = resolved.Parameters,
-                    IsReboot = resolved.IsReboot,
-                    UserName = resolved.UserName ?? "",
-                    Password = resolved.Password ?? "",
-                    TimeoutSeconds = timeoutSeconds,
-                    CompletionCheckCommand = resolved.CompletionCheckCommand ?? "",
-                    CompletionPollIntervalSeconds = resolved.CompletionPollIntervalSeconds,
-                    EnableInstallLog = resolved.EnableInstallLog,
-                    InstallLogPollSeconds = resolved.InstallLogPollSeconds > 0 ? resolved.InstallLogPollSeconds : 5,
-                    InstallLogRoot = resolved.InstallLogRoot ?? "",
-                }, cancellationToken: linked.Token);
-
-                int exitCode = 0;
-                string errorMessage = "";
-                var stderrLines = new List<string>();
-                bool receivedCompleted = false;
-                var startTimestamp = Stopwatch.GetTimestamp();
-                var lastProgressLog = startTimestamp;
-                var progressInterval = TimeSpan.FromMinutes(5);
-
-                await foreach (var evt in call.ResponseStream.ReadAllAsync(linked.Token))
-                {
-                    switch (evt.EventType)
+                // Phase 2.15 spike: streaming + result synthesis is shared with
+                // the WebApi dispatcher. We keep the resilience wrapper, the
+                // long-running progress log (WPF-only), reboot wait, exit-code
+                // classification, and health tracking outside the helper.
+                var streamResult = await RemoteCommandStreamRunner.StreamAsync(
+                    client, agentName, resolved, linked.Token,
+                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                    onProgressTick: (a, cmd, elapsed) =>
                     {
-                        case ExecutionEventType.EventStdoutLine:
-                            OutputReceived?.Invoke(agentName, evt.OutputLine, "stdout");
-                            break;
-                        case ExecutionEventType.EventStderrLine:
-                            OutputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
-                            stderrLines.Add(evt.OutputLine);
-                            if (stderrLines.Count > 20) stderrLines.RemoveAt(0);
-                            break;
-                        case ExecutionEventType.EventProgress:
-                            OutputReceived?.Invoke(agentName,
-                                $"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}", "info");
-                            break;
-                        case ExecutionEventType.EventCompleted:
-                            exitCode = evt.ExitCode;
-                            receivedCompleted = true;
-                            break;
-                        case ExecutionEventType.EventFailed:
-                            errorMessage = evt.ErrorMessage;
-                            exitCode = -1;
-                            break;
-                    }
-
-                    // Periodic progress logging for long-running actions
-                    var now = Stopwatch.GetTimestamp();
-                    if (Stopwatch.GetElapsedTime(lastProgressLog, now) >= progressInterval)
-                    {
-                        var elapsed = Stopwatch.GetElapsedTime(startTimestamp, now);
                         _logger.LogInformation(
                             "Long-running action on {Agent}: {Command} running for {Elapsed}",
-                            agentName, resolved.Command, elapsed.ToString(@"hh\:mm\:ss"));
-                        StatusChanged?.Invoke(agentName,
-                            $"Running: {resolved.Command} ({elapsed:hh\\:mm\\:ss})");
-                        lastProgressLog = now;
-                    }
-                }
+                            a, cmd, elapsed.ToString(@"hh\:mm\:ss"));
+                        StatusChanged?.Invoke(a,
+                            $"Running: {cmd} ({elapsed:hh\\:mm\\:ss})");
+                    });
 
                 // Reboot handling: wait for agent to come back
                 if (resolved.IsReboot)
@@ -391,22 +341,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), resilienceCt);
                 }
 
-                // Build comprehensive error report
-                if (!receivedCompleted && string.IsNullOrEmpty(errorMessage))
-                {
-                    exitCode = -1;
-                    errorMessage = $"Agent '{agentName}' did not report completion. " +
-                        "Process may have crashed, been killed, or gRPC connection was lost.";
-                }
-
-                if (exitCode != 0 && string.IsNullOrEmpty(errorMessage))
-                {
-                    errorMessage = stderrLines.Count > 0
-                        ? $"Process exited with code {exitCode}. Last stderr: " +
-                          string.Join(" | ", stderrLines.TakeLast(5))
-                        : $"Process exited with code {exitCode}. No error output captured. " +
-                          "Check if the process requires user interaction (security dialogs, UAC prompts).";
-                }
+                var exitCode = streamResult.ExitCode;
+                var errorMessage = streamResult.ErrorMessage;
 
                 var exitDetail = ClassifyExitCode(exitCode, resolved.Command, errorMessage);
                 if (!string.IsNullOrEmpty(exitDetail))

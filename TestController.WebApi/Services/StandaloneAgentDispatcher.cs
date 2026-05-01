@@ -192,52 +192,12 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
                 : CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-            using var call = client.RunCommandStreamed(new RunCommandRequest
-            {
-                Command = resolved.Command,
-                Arguments = resolved.Parameters,
-                IsReboot = resolved.IsReboot,
-                UserName = resolved.UserName ?? "",
-                Password = resolved.Password ?? "",
-                TimeoutSeconds = resolved.Timeout,
-                CompletionCheckCommand = resolved.CompletionCheckCommand ?? "",
-                CompletionPollIntervalSeconds = resolved.CompletionPollIntervalSeconds,
-                EnableInstallLog = resolved.EnableInstallLog,
-                InstallLogPollSeconds = resolved.InstallLogPollSeconds > 0 ? resolved.InstallLogPollSeconds : 5,
-                InstallLogRoot = resolved.InstallLogRoot ?? "",
-            }, cancellationToken: linked.Token);
-
-            int exitCode = 0;
-            string errorMessage = "";
-            var stderrLines = new List<string>();
-            bool receivedCompleted = false;
-
-            await foreach (var evt in call.ResponseStream.ReadAllAsync(linked.Token))
-            {
-                switch (evt.EventType)
-                {
-                    case ExecutionEventType.EventStdoutLine:
-                        OutputReceived?.Invoke(agentName, evt.OutputLine, "stdout");
-                        break;
-                    case ExecutionEventType.EventStderrLine:
-                        OutputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
-                        stderrLines.Add(evt.OutputLine);
-                        if (stderrLines.Count > 20) stderrLines.RemoveAt(0);
-                        break;
-                    case ExecutionEventType.EventProgress:
-                        OutputReceived?.Invoke(agentName,
-                            $"Progress: {evt.ProgressPct:F0}% — {evt.Detail}", "info");
-                        break;
-                    case ExecutionEventType.EventCompleted:
-                        exitCode = evt.ExitCode;
-                        receivedCompleted = true;
-                        break;
-                    case ExecutionEventType.EventFailed:
-                        errorMessage = evt.ErrorMessage;
-                        exitCode = -1;
-                        break;
-                }
-            }
+            // Phase 2.15 spike: shared with the WPF dispatcher. WebApi has no
+            // Polly resilience or health tracking, so we call the helper
+            // directly and only keep the policy-specific bits below.
+            var streamResult = await RemoteCommandStreamRunner.StreamAsync(
+                client, agentName, resolved, linked.Token,
+                outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
 
             // Reboot handling
             if (resolved.IsReboot)
@@ -246,19 +206,8 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
             }
 
-            if (!receivedCompleted && string.IsNullOrEmpty(errorMessage))
-            {
-                exitCode = -1;
-                errorMessage = $"Agent '{agentName}' did not report completion. Process may have crashed.";
-            }
-
-            if (exitCode != 0 && string.IsNullOrEmpty(errorMessage))
-            {
-                errorMessage = stderrLines.Count > 0
-                    ? $"Process exited with code {exitCode}. Last stderr: " +
-                      string.Join(" | ", stderrLines.TakeLast(5))
-                    : $"Process exited with code {exitCode}. No error output captured.";
-            }
+            var exitCode = streamResult.ExitCode;
+            var errorMessage = streamResult.ErrorMessage;
 
             var exitDetail = ExitCodeReference.Describe(exitCode);
             if (exitCode != 0 && exitDetail != $"Unknown exit code {exitCode}")

@@ -292,6 +292,55 @@ public class ResultsController : ControllerBase
         return Ok(_buildResults.GetStats());
     }
 
+    /// <summary>
+    /// GET /api/results/health — diagnostic endpoint that confirms the
+    /// Results subsystem is configured correctly. Use this from production
+    /// to quickly tell the difference between "API not reachable",
+    /// "wrong path configured", and "path empty/no builds".
+    /// </summary>
+    [HttpGet("health")]
+    public IActionResult GetHealth()
+    {
+        var corr = Corr;
+        var rootPath = _config.ResultsRootPath ?? "";
+        var rootExists = !string.IsNullOrEmpty(rootPath) && Directory.Exists(rootPath);
+        var buildCount = 0;
+        string? rootError = null;
+
+        if (rootExists)
+        {
+            try { buildCount = _parser.DiscoverBuilds(rootPath).Count; }
+            catch (Exception ex) { rootError = ex.Message; }
+        }
+        else if (!string.IsNullOrEmpty(rootPath))
+        {
+            rootError = $"Path '{rootPath}' does not exist or is not accessible.";
+        }
+        else
+        {
+            rootError = "BuildResults:ResultsRootPath is not configured in appsettings.";
+        }
+
+        var ok = rootExists && rootError == null;
+        var payload = new
+        {
+            ok,
+            resultsRootPath = rootPath,
+            rootExists,
+            buildCount,
+            error = rootError,
+            cache = _buildResults.GetStats(),
+            correlationId = corr,
+        };
+
+        _appLogger.Log(ok ? LogLevel.Information : LogLevel.Warning,
+            "ResultsController",
+            $"Health: ok={ok} root='{rootPath}' exists={rootExists} builds={buildCount} error={rootError}",
+            corr);
+
+        return ok ? Ok(payload) : StatusCode(503, payload);
+    }
+
     private static object ToBuildDto(BuildNode node) => new
     {
         buildNumber = node.BuildNumber,
