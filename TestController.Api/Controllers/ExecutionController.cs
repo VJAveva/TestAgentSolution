@@ -327,9 +327,10 @@ public class ExecutionController : ControllerBase
             }
             finally
             {
-                // CRITICAL: Always release locks
-                _lockManager.ReleaseSession(sessionId);
-                BroadcastLockChange("Pipeline completed");
+                // Release locks only if not already released (e.g., by cancel endpoint)
+                var released = _lockManager.ReleaseSession(sessionId);
+                if (released > 0)
+                    BroadcastLockChange("Pipeline completed");
             }
         });
 
@@ -517,21 +518,23 @@ public class ExecutionController : ControllerBase
     [HttpPost("cancel")]
     public async Task<IActionResult> CancelAll()
     {
-        // Snapshot active session IDs before cancellation moves them to history
-        var activeSessionIds = _sessionManager.GetActiveSessions()
-            .Select(s => s.SessionId).ToList();
+        // Snapshot active sessions (ID + tag) before cancellation moves them to history
+        var activeSessions = _sessionManager.GetActiveSessions()
+            .Select(s => new { s.SessionId, s.WatchItemTag }).ToList();
 
         var cancelledTags = _sessionManager.CancelAll();
 
         // Release locks for the actual cancelled sessions
-        foreach (var sid in activeSessionIds)
-            _lockManager.ReleaseSession(sid);
+        foreach (var s in activeSessions)
+            _lockManager.ReleaseSession(s.SessionId);
 
-        foreach (var tag in cancelledTags)
+        // Notify per-session with sessionId so WebClient can correlate
+        foreach (var s in activeSessions.Where(a => cancelledTags.Contains(a.WatchItemTag)))
         {
             await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
             {
-                watchItemTag = tag,
+                sessionId = s.SessionId,
+                watchItemTag = s.WatchItemTag,
                 state = "Cancelled",
                 timestamp = DateTime.UtcNow.ToString("o"),
             });
@@ -555,7 +558,7 @@ public class ExecutionController : ControllerBase
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
 
         var session = _sessionManager.GetSession(sessionId);
-        if (session == null)
+        if (session == null || session.State != SessionState.Running)
             return NotFound(new { error = "Session not found or not running" });
 
         // Ownership check: WebClient users can only cancel their own sessions

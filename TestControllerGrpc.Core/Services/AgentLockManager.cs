@@ -14,7 +14,7 @@ namespace TestControllerGrpc.Services;
 ///   - Only the session owner or WPF admin can release locks
 ///   - Lock state is persisted to disk and restored on startup
 ///
-/// DESIGN DECISION — SESSION-LEVEL LOCKING:
+/// DESIGN DECISION ï¿½ SESSION-LEVEL LOCKING:
 ///   Locks are released at the SESSION level, never at the action level.
 ///   Even when one agent finishes early in a parallel pipeline, it stays
 ///   locked until the entire session completes. This prevents another
@@ -120,25 +120,34 @@ public sealed class AgentLockManager
     /// <summary>
     /// Releases all agents locked by a specific session.
     /// Called when a session completes, fails, or is cancelled.
+    /// Uses _atomicLock to prevent race with TryLockAgents.
     /// </summary>
     public int ReleaseSession(string sessionId)
     {
-        int released = 0;
-        foreach (var kvp in _locks)
+        lock (_atomicLock)
         {
-            if (string.Equals(kvp.Value.SessionId, sessionId,
-                StringComparison.OrdinalIgnoreCase))
+            int released = 0;
+            foreach (var kvp in _locks)
             {
-                if (_locks.TryRemove(kvp.Key, out _))
-                    released++;
+                if (string.Equals(kvp.Value.SessionId, sessionId,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    // Verify value still belongs to this session before removing
+                    if (_locks.TryGetValue(kvp.Key, out var current) &&
+                        string.Equals(current.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _locks.TryRemove(kvp.Key, out _);
+                        released++;
+                    }
+                }
             }
+            if (released > 0)
+            {
+                Interlocked.Increment(ref _version);
+                PersistToDisk();
+            }
+            return released;
         }
-        if (released > 0)
-        {
-            Interlocked.Increment(ref _version);
-            PersistToDisk();
-        }
-        return released;
     }
 
     /// <summary>Force-releases a single agent. WPF admin only.</summary>
@@ -197,7 +206,7 @@ public sealed class AgentLockManager
     }
 
     /// <summary>
-    /// Detects orphaned locks — locks whose session is no longer active.
+    /// Detects orphaned locks ï¿½ locks whose session is no longer active.
     /// </summary>
     public IReadOnlyList<AgentLock> FindOrphanedLocks(
         Func<string, bool> isSessionActive)

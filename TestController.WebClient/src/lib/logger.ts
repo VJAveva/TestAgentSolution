@@ -10,6 +10,53 @@
  *   useEffect(() => { fetchBuilds().catch(err => logError('BuildList', 'fetchBuilds', err)); }, []);
  */
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface AppLogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  category: string;
+  message: string;
+  data?: unknown;
+  correlationId?: string;
+}
+
+type Listener = () => void;
+
+let nextId = 1;
+let entries: AppLogEntry[] = [];
+let listeners: Set<Listener> = new Set();
+
+function emit() {
+  listeners.forEach(l => l());
+}
+
+export const appLogger = {
+  log(level: LogLevel, category: string, message: string, data?: unknown, correlationId?: string) {
+    entries = [...entries, { id: String(nextId++), timestamp: new Date().toISOString(), level, category, message, data, correlationId }];
+    emit();
+  },
+  debug(category: string, message: string, data?: unknown) { appLogger.log('debug', category, message, data); },
+  info(category: string, message: string, data?: unknown) { appLogger.log('info', category, message, data); },
+  warn(category: string, message: string, data?: unknown) { appLogger.log('warn', category, message, data); },
+  error(category: string, message: string, data?: unknown, correlationId?: string) { appLogger.log('error', category, message, data, correlationId); },
+  subscribe(listener: Listener) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  },
+  getEntries() { return entries; },
+  counts(): Record<LogLevel, number> {
+    const c: Record<LogLevel, number> = { debug: 0, info: 0, warn: 0, error: 0 };
+    for (const e of entries) c[e.level]++;
+    return c;
+  },
+  clear() {
+    entries = [];
+    emit();
+  },
+};
+
 interface ApiError {
   status?: number;
   error?: string;
