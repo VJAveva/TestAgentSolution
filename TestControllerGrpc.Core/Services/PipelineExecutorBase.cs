@@ -10,9 +10,9 @@ namespace TestControllerGrpc.Services;
 ///
 /// Concrete executors:
 /// <list type="bullet">
-///   <item><c>TestControllerGrpc.Services.ActionPipelineExecutor</c> (WPF host) —
+///   <item><c>TestControllerGrpc.Services.ActionPipelineExecutor</c> (WPF host) ï¿½
 ///     adds Polly resilience, smart retry, TRX parsing and SendMail.</item>
-///   <item><c>TestController.WebApi.Services.StandalonePipelineExecutor</c> (WebApi host) —
+///   <item><c>TestController.WebApi.Services.StandalonePipelineExecutor</c> (WebApi host) ï¿½
 ///     simple Local/Remote dispatch via <c>IAgentGrpcDispatcher</c>.</item>
 /// </list>
 /// Methods are <c>protected virtual</c> where useful overrides are plausible
@@ -187,7 +187,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var success = await ExecuteNodeAsync(child, ctx, ct);
             if (!success && !parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping — FailAndContinue=false");
+                Log("Pipeline", "Stopping ï¿½ FailAndContinue=false");
                 return false;
             }
         }
@@ -231,7 +231,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found ï¿½ skipping");
             return false;
         }
 
@@ -259,7 +259,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct);
             if (!success && !parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping — FailAndContinue=false");
+                Log("Pipeline", "Stopping ï¿½ FailAndContinue=false");
                 return false;
             }
         }
@@ -298,7 +298,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found ï¿½ skipping");
             return false;
         }
 
@@ -327,7 +327,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         var result = new ActionExecutionResult
         {
-            ActionTag = !string.IsNullOrWhiteSpace(action.Order) ? action.Order : action.Command,
+            ActionTag = action.ResolvedTag,
             ActionType = action.Type.ToString(),
             AgentName = action.AgentName,
             Command = action.Command,
@@ -423,7 +423,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             Command = a.Command, Parameters = a.Parameters,
             Timeout = a.Timeout, PollInterval = a.PollInterval,
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
-            Order = a.Order, UserName = a.UserName, Password = a.Password,
+            Order = a.Order, Tag = a.Tag,
+            UserName = a.UserName, Password = a.Password,
             From = a.From, To = a.To, Title = a.Title, Body = a.Body,
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
             MaxRetries = a.MaxRetries, RetryDelaySeconds = a.RetryDelaySeconds,

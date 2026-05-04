@@ -11,10 +11,10 @@ namespace TestController.Api.Services;
 /// to a single <see cref="ControllerHub"/> via <see cref="IHubContext{THub}"/>.
 ///
 /// Subscribes to:
-///   • C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
-///   • C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
-///   • C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
-///   • <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
+///   ï¿½ C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
+///   ï¿½ C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
+///   ï¿½ C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
+///   ï¿½ <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
 ///     AgentHeartbeat, ExecutionStarted, ExecutionCompleted)
 ///
 /// Includes heartbeat throttling: coalesces rapid heartbeats into a single
@@ -91,7 +91,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
         _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
         _subLocksChanged = _events.Subscribe<AgentLocksChangedEvent>(e => _ = NotifyAgentLocksChanged(e));
-        // ? These carry SessionId — fixes "Pipeline view not updating" because
+        // ? These carry SessionId ï¿½ fixes "Pipeline view not updating" because
         //   the WebClient looks up the card by sessionId on every ActionProgress.
         _subNodeProgress = _events.Subscribe<NodeProgressEvent>(OnNodeProgressEvent);
         _subAgentOutput = _events.Subscribe<AgentOutputEvent>(OnAgentOutputEvent);
@@ -103,7 +103,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _heartbeatTimer = new Timer(FlushHeartbeats, null, 1000, 1000);
 
         _logger.LogInformation(
-            "SignalRNotifier started — subscribed to: LogEntry, NodeProgress, " +
+            "SignalRNotifier started ï¿½ subscribed to: LogEntry, NodeProgress, " +
             "OutputReceived, StatusChanged, AgentRegistered, AgentUnregistered, " +
             "Heartbeat, ExecutionStarted, ExecutionCompleted, ConfigReloaded, " +
             "NodeProgressEvent (with SessionId), AgentOutputEvent (with SessionId)");
@@ -159,7 +159,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             var agentName = string.IsNullOrEmpty(action.AgentName) ? "Controller" : action.AgentName;
             SendSafe("ActionProgress", new
             {
-                actionTag = action.Order,
+                actionTag = action.ResolvedTag,
                 actionType = action.Type.ToString(),
                 agentName,
                 command = action.Command,

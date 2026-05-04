@@ -237,4 +237,50 @@ public class WatchListConfigModelTests
 
         Assert.Contains(expectedSubstring, session.SummaryText, StringComparison.OrdinalIgnoreCase);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // ActionConfig.ResolvedTag
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolvedTag_Should_ReturnTag_When_TagIsSet()
+    {
+        var action = new ActionConfig { Tag = "Install WSP", Order = "Step3", Command = "install.bat" };
+        Assert.Equal("Install WSP", action.ResolvedTag);
+    }
+
+    [Fact]
+    public void ResolvedTag_Should_ReturnOrder_When_TagIsEmpty()
+    {
+        var action = new ActionConfig { Order = "Step3", Command = "install.bat" };
+        Assert.Equal("Step3", action.ResolvedTag);
+    }
+
+    [Fact]
+    public void ResolvedTag_Should_GenerateShortLabel_When_TagAndOrderEmpty()
+    {
+        var action = new ActionConfig { Command = @"C:\Scripts\InstallBuild.bat" };
+        Assert.Equal("InstallBuild", action.ResolvedTag);
+    }
+
+    [Fact]
+    public void ResolvedTag_Should_ReturnSendMail_When_TypeIsSendMail()
+    {
+        var action = new ActionConfig { Type = ActionType.SendMail, To = "team@example.com" };
+        Assert.Equal("Email: team@example.com", action.ResolvedTag);
+    }
+
+    [Fact]
+    public void ResolvedTag_Should_TruncateLongCommand_When_NoTagOrOrder()
+    {
+        var action = new ActionConfig { Command = "VeryLongCommandNameThatExceedsTwentyFourCharsLimit.exe" };
+        Assert.True(action.ResolvedTag.Length <= 24);
+    }
+
+    [Fact]
+    public void ResolvedTag_Should_FallbackToTypeName_When_AllEmpty()
+    {
+        var action = new ActionConfig();
+        Assert.Equal("RunCommand", action.ResolvedTag);
+    }
 }

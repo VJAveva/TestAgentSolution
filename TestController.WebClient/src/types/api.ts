@@ -52,6 +52,7 @@ export interface ActionConfig {
   failAndContinue: boolean;
   isReboot: boolean;
   order: string;
+  tag: string;
   userName: string;
   password: string;
   from: string;

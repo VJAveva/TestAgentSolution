@@ -105,6 +105,47 @@ public sealed class ActionConfig : IActionNode
     public string Order { get; set; } = "";
 
     /// <summary>
+    /// Human-readable tag for this action, displayed in the Pipeline view as the
+    /// action pill label. Resolution order: Tag → Order → generated short label.
+    /// Example: "Install WSP", "Copy files", "Reboot".
+    /// </summary>
+    public string Tag { get; set; } = "";
+
+    /// <summary>
+    /// Returns the best available display tag for this action.
+    /// Resolution: explicit Tag → explicit Order → generated short label from Command/Type.
+    /// </summary>
+    [JsonIgnore]
+    public string ResolvedTag
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Tag)) return Tag;
+            if (!string.IsNullOrWhiteSpace(Order)) return Order;
+            return GenerateShortLabel();
+        }
+    }
+
+    private string GenerateShortLabel()
+    {
+        if (Type == ActionType.SendMail)
+            return !string.IsNullOrEmpty(To) ? $"Email: {To.Split(',')[0].Trim()}" : "SendMail";
+
+        var cmd = Command;
+        if (string.IsNullOrEmpty(cmd)) return Type.ToString();
+
+        // Extract filename without extension from path-like commands
+        if (cmd.Contains('\\') || cmd.Contains('/'))
+            cmd = System.IO.Path.GetFileNameWithoutExtension(cmd);
+
+        // Trim to reasonable length
+        if (cmd.Length > 24)
+            cmd = cmd[..22] + "..";
+
+        return cmd;
+    }
+
+    /// <summary>
     /// Optional command to run after the main process exits to check if child processes (e.g. msiexec)
     /// have completed. The poll loop runs until this command returns exit code 1 or its output contains "DONE".
     /// Example: <c>cmd /c tasklist | findstr msiexec || echo DONE</c>

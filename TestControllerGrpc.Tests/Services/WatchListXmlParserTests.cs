@@ -385,4 +385,107 @@ public class WatchListXmlParserTests : IDisposable
         Assert.Single(config.WatchItems);
         Assert.Single(config.Templates);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Action Tag XML roundtrip
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Load_Should_ParseActionTag_When_TagAttributePresent()
+    {
+        var xml = """
+            <WatchList>
+              <WatchItem Tag="Test" Path="C:\" Filter="*.*">
+                <Event Type="Renamed" ExecutionType="Sequential">
+                  <Action Type="RunRemoteCommand" AgentName="Agent1"
+                          Command="install.bat" Tag="Install WSP" Order="Step3" />
+                </Event>
+              </WatchItem>
+            </WatchList>
+            """;
+        var path = WriteTempXml("tag_attr.xml", xml);
+
+        var config = WatchListXmlParser.Load(path);
+        var action = config.WatchItems[0].Events[0].Children[0] as ActionConfig;
+
+        Assert.NotNull(action);
+        Assert.Equal("Install WSP", action.Tag);
+        Assert.Equal("Step3", action.Order);
+        Assert.Equal("Install WSP", action.ResolvedTag);
+    }
+
+    [Fact]
+    public void Save_Should_RoundTripActionTag_When_TagIsSet()
+    {
+        var config = new WatchListConfig();
+        config.WatchItems.Add(new WatchItemConfig
+        {
+            Tag = "TagRT",
+            Path = @"C:\Triggers",
+            Filter = "*.txt",
+            Events =
+            [
+                new EventConfig
+                {
+                    Type = "Renamed",
+                    ExecutionType = ExecutionMode.Sequential,
+                    Children =
+                    [
+                        new ActionConfig
+                        {
+                            Type = ActionType.RunRemoteCommand,
+                            AgentName = "Agent1",
+                            Command = "install.bat",
+                            Tag = "Install WSP",
+                            Order = "Step3",
+                        },
+                    ]
+                }
+            ]
+        });
+
+        var path = Path.Combine(_tempDir, "tag_roundtrip.xml");
+        WatchListXmlParser.Save(config, path);
+        var reloaded = WatchListXmlParser.Load(path);
+
+        var action = reloaded.WatchItems[0].Events[0].Children[0] as ActionConfig;
+        Assert.NotNull(action);
+        Assert.Equal("Install WSP", action.Tag);
+        Assert.Equal("Step3", action.Order);
+    }
+
+    [Fact]
+    public void Save_Should_OmitTagAttribute_When_TagIsEmpty()
+    {
+        var config = new WatchListConfig();
+        config.WatchItems.Add(new WatchItemConfig
+        {
+            Tag = "NoTag",
+            Path = @"C:\Triggers",
+            Filter = "*.txt",
+            Events =
+            [
+                new EventConfig
+                {
+                    Type = "Renamed",
+                    ExecutionType = ExecutionMode.Sequential,
+                    Children =
+                    [
+                        new ActionConfig
+                        {
+                            Type = ActionType.RunCommand,
+                            Command = "echo hello",
+                        },
+                    ]
+                }
+            ]
+        });
+
+        var path = Path.Combine(_tempDir, "no_tag.xml");
+        WatchListXmlParser.Save(config, path);
+        var xml = File.ReadAllText(path);
+
+        // Tag="" should not appear in the XML (AddIfNotEmpty skips empty strings)
+        Assert.DoesNotContain("Tag=\"\"", xml);
+    }
 }

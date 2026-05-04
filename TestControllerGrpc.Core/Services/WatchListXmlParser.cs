@@ -95,6 +95,7 @@ public static class WatchListXmlParser
                         FailAndContinue = AttrBool(el, "FailAndContinue"),
                         IsReboot = AttrBool(el, "IsReboot"),
                         Order = Attr(el, "Order"),
+                        Tag = Attr(el, "Tag"),
                         CompletionCheckCommand = Attr(el, "CompletionCheckCommand"),
                         CompletionPollIntervalSeconds = AttrInt(el, "CompletionPollIntervalSeconds", 30),
                         UserName = Attr(el, "UserName"),
@@ -202,6 +203,7 @@ public static class WatchListXmlParser
                     if (a.FailAndContinue) aEl.Add(new XAttribute("FailAndContinue", "true"));
                     if (a.IsReboot) aEl.Add(new XAttribute("IsReboot", "true"));
                     AddIfNotEmpty(aEl, "Order", a.Order);
+                    AddIfNotEmpty(aEl, "Tag", a.Tag);
                     AddIfNotEmpty(aEl, "CompletionCheckCommand", a.CompletionCheckCommand);
                     if (a.CompletionPollIntervalSeconds != 30 && !string.IsNullOrEmpty(a.CompletionCheckCommand))
                         aEl.Add(new XAttribute("CompletionPollIntervalSeconds", a.CompletionPollIntervalSeconds));
