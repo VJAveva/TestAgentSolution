@@ -78,6 +78,7 @@ function EventProps({ model }: { model: EventConfig }) {
 function ActionProps({ model }: { model: ActionConfig }) {
   return (
     <Card>
+      <PropRow label="Tag" value={model.tag} />
       <PropRow label="Type" value={model.type} />
       <PropRow label="Agent" value={model.agentName} />
       <PropRow label="Command" value={model.command} />

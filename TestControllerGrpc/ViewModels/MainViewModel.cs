@@ -566,6 +566,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (value is null) return;
 
         ActiveEditNode = value;
+        if (value.NodeKind == NodeKinds.Action)
+            value.EnsureDefaultActionTag();
         ActiveEditingContext = value.NodeKind is NodeKinds.Template or NodeKinds.TemplateList ? "Templates" : "WatchList";
 
         // Context-sensitive execute button visibility

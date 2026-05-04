@@ -1604,6 +1604,8 @@
                             </StackPanel>
                             <!-- ===== Action ===== -->
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Action, FallbackValue=Collapsed}">
+                                <Label Content="TAG" Style="{StaticResource Lbl}" />
+                                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
                                 <Label Content="ACTION TYPE" Style="{StaticResource Lbl}" />
                                 <ComboBox ItemsSource="{StaticResource ActionTypes}" SelectedItem="{Binding ActionTypeText}" Style="{StaticResource Cmb}" />
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunCommand|RunRemoteCommand}">

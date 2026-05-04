@@ -453,7 +453,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public static TreeNodeViewModel FromAction(ActionConfig a)
     {
         var icon = ResolveCommandIcon(a.Command, a.Type);
-        var tag = DeriveActionTag(a);
+        var tag = a.ResolvedTag;
         var label = a.Type switch
         {
             ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(a.AgentName)
@@ -513,6 +513,26 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         }
     }
 
+    public void EnsureDefaultActionTag()
+    {
+        if (NodeKind != NodeKinds.Action || !string.IsNullOrWhiteSpace(Tag)) return;
+
+        var actionType = Enum.TryParse<ActionType>(ActionTypeText, out var at)
+            ? at
+            : ActionType.RunCommand;
+
+        var action = new ActionConfig
+        {
+            Type = actionType,
+            AgentName = AgentName,
+            Command = Command,
+            To = To,
+            Title = Title
+        };
+
+        Tag = action.ResolvedTag;
+    }
+
     public static TreeNodeViewModel FromInitialize(InitializeConfig init) => new()
     {
         NodeKind = NodeKinds.Initialize, NodeIcon = "i",
@@ -551,7 +571,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 ag.ExecutionType = Enum.TryParse<ExecutionMode>(ExecutionTypeText, out var am) ? am : ExecutionMode.Sequential;
                 ag.FailAndContinue = FailAndContinue; break;
             case ActionConfig a:
+                EnsureDefaultActionTag();
                 a.Type = Enum.TryParse<ActionType>(ActionTypeText, out var at) ? at : ActionType.RunCommand;
+                a.Tag = Tag;
                 a.AgentName = AgentName; a.Command = Command; a.Parameters = Parameters;
                 a.Timeout = Timeout; a.PollInterval = PollInterval;
                 a.FailAndContinue = FailAndContinue; a.IsReboot = IsReboot;
