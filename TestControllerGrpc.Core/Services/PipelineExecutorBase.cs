@@ -132,6 +132,64 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         }
     }
 
+    public async Task<bool> ExecuteGroupTrackedAsync(
+        string watchItemTag, ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        var snapshotChildren = group.Children.Select(DeepCloneNode).ToList();
+        var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
+
+        var session = _sessionManager.BeginSession(
+            watchItemTag, $"Group:{group.Tag}",
+            new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
+            snapshotChildren,
+            callerSessionId);
+
+        ctx.SessionId = session.SessionId;
+        Log("Session", $"Started {session.SessionId} for {watchItemTag}:Group:{group.Tag}");
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
+
+        try
+        {
+            var success = await ExecuteChildrenTrackedAsync(
+                snapshotChildren, group.ExecutionType, group.FailAndContinue, ctx, session, linkedCts.Token);
+            return success || group.FailAndContinue;
+        }
+        finally
+        {
+            _sessionManager.CompleteSession(session.SessionId);
+            Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
+        }
+    }
+
+    public async Task<bool> ExecuteSingleActionTrackedAsync(
+        string watchItemTag, ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        var clonedAction = (ActionConfig)DeepCloneNode(action);
+        var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
+
+        var session = _sessionManager.BeginSession(
+            watchItemTag, $"Action:{action.ResolvedTag}",
+            new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
+            [clonedAction],
+            callerSessionId);
+
+        ctx.SessionId = session.SessionId;
+        Log("Session", $"Started {session.SessionId} for {watchItemTag}:Action:{action.ResolvedTag}");
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
+
+        try
+        {
+            return await ExecuteActionTrackedAsync(clonedAction, ctx, session, linkedCts.Token);
+        }
+        finally
+        {
+            _sessionManager.CompleteSession(session.SessionId);
+            Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
+        }
+    }
+
     public async Task RetryFailedAsync(ExecutionSession previousSession, CancellationToken ct)
     {
         var failedNodes = previousSession.FailedActions

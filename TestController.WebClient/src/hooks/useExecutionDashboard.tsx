@@ -80,8 +80,8 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
         next.set(d.sessionId, {
           ...existing,
           status: d.state as SessionStatus,
-          passedActions: d.passed ?? existing.passedActions,
-          failedActions: d.failed ?? existing.failedActions,
+          passedActions: d.passed > 0 ? d.passed : existing.passedActions,
+          failedActions: d.failed > 0 ? d.failed : existing.failedActions,
           elapsed: d.totalDuration ?? existing.elapsed,
           progressPercent: 100,
         });

@@ -98,6 +98,144 @@ public class ExecutionController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// GET /api/execution/demo-sessions – returns fake sessions for dashboard UI testing.
+    /// Use this when no real pipeline is running to verify the dashboard renders correctly.
+    /// </summary>
+    [HttpGet("demo-sessions")]
+    public IActionResult GetDemoSessions()
+    {
+        var now = DateTime.UtcNow;
+
+        var active = new[]
+        {
+            new
+            {
+                sessionId = "demo01",
+                watchItemTag = "Deploy.WebApi",
+                userId = "developer1",
+                source = "WebClient",
+                status = "Running",
+                startedUtc = now.AddMinutes(-2).ToString("o"),
+                elapsed = "02:15",
+                lockedAgents = new[] { "Agent-01", "Agent-02", "Agent-03" },
+                buildNumber = "2026.05.04.1",
+                totalActions = 8,
+                completedActions = 5,
+                passedActions = 5,
+                failedActions = 0,
+                progressPercent = 62,
+                agents = new object[]
+                {
+                    new
+                    {
+                        agentName = "Agent-01", status = "Success", completedCount = 3, totalCount = 3, progressPercent = 100,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "45s" },
+                            new { tag = "Run Smoke Tests", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\smoke.cmd", status = "Success", exitCode = 0, duration = "30s" },
+                            new { tag = "Reboot", actionType = "RunRemoteCommand", agentName = "Agent-01", command = "shutdown /r /t 0", status = "Success", exitCode = 0, duration = "60s" },
+                        }
+                    },
+                    new
+                    {
+                        agentName = "Agent-02", status = "Executing", completedCount = 1, totalCount = 3, progressPercent = 33,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-02", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "48s" },
+                            new { tag = "Run Integration", actionType = "RunRemoteCommand", agentName = "Agent-02", command = @"\\server\integration.cmd", status = "Running", progressPercent = 65 },
+                            new { tag = "Email: Results", actionType = "SendMail", agentName = "Agent-02", command = "qa-team@company.com", status = "Pending" },
+                        }
+                    },
+                    new
+                    {
+                        agentName = "Agent-03", status = "Executing", completedCount = 1, totalCount = 2, progressPercent = 50,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-03", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "52s" },
+                            new { tag = "Run Perf Suite", actionType = "RunRemoteCommand", agentName = "Agent-03", command = @"\\server\perf.cmd", status = "Running", progressPercent = 30 },
+                        }
+                    },
+                }
+            }
+        };
+
+        var history = new[]
+        {
+            new
+            {
+                sessionId = "demo02",
+                watchItemTag = "Nightly.FullSuite",
+                userId = "scheduler",
+                source = "WebClient",
+                status = "Failed",
+                startedUtc = now.AddMinutes(-16).ToString("o"),
+                elapsed = "15:42",
+                lockedAgents = new[] { "Agent-04", "Agent-05" },
+                buildNumber = "2026.05.03.7",
+                totalActions = 6,
+                completedActions = 5,
+                passedActions = 4,
+                failedActions = 1,
+                progressPercent = 100,
+                agents = new object[]
+                {
+                    new
+                    {
+                        agentName = "Agent-04", status = "Success", completedCount = 3, totalCount = 3, progressPercent = 100,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-04", command = @"\\nightly\install.cmd", status = "Success", exitCode = 0, duration = "01:10" },
+                            new { tag = "Run Unit Tests", actionType = "RunRemoteCommand", agentName = "Agent-04", command = "dotnet test", status = "Success", exitCode = 0, duration = "08:30" },
+                            new { tag = "Collect Results", actionType = "RunCommand", agentName = "Agent-04", command = @"copy *.trx \\results", status = "Success", exitCode = 0, duration = "5s" },
+                        }
+                    },
+                    new
+                    {
+                        agentName = "Agent-05", status = "Failed", completedCount = 2, totalCount = 3, progressPercent = 67,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-05", command = @"\\nightly\install.cmd", status = "Success", exitCode = 0, duration = "01:15" },
+                            new { tag = "Run E2E Tests", actionType = "RunRemoteCommand", agentName = "Agent-05", command = @"\\nightly\e2e.cmd", status = "Failed", exitCode = 1, errorMessage = "3 test cases failed: LoginTest, PaymentTest, CheckoutTest", duration = "12:05" },
+                            new { tag = "Cleanup", actionType = "RunRemoteCommand", agentName = "Agent-05", command = @"\\nightly\cleanup.cmd", status = "Skipped" },
+                        }
+                    },
+                }
+            },
+            new
+            {
+                sessionId = "demo03",
+                watchItemTag = "Build.QuickVerify",
+                userId = "ci-bot",
+                source = "WebClient",
+                status = "Success",
+                startedUtc = now.AddMinutes(-4).ToString("o"),
+                elapsed = "03:20",
+                lockedAgents = new[] { "Agent-01" },
+                buildNumber = "2026.05.04.3",
+                totalActions = 2,
+                completedActions = 2,
+                passedActions = 2,
+                failedActions = 0,
+                progressPercent = 100,
+                agents = new object[]
+                {
+                    new
+                    {
+                        agentName = "Agent-01", status = "Success", completedCount = 2, totalCount = 2, progressPercent = 100,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "40s" },
+                            new { tag = "Quick BVT", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\bvt.cmd", status = "Success", exitCode = 0, duration = "02:30" },
+                        }
+                    },
+                }
+            },
+        };
+
+        return Ok(new { active, history });
+    }
+
     /// <summary>GET /api/execution/{sessionId} � detailed session info.</summary>
     [HttpGet("{sessionId}")]
     public IActionResult GetSession(string sessionId)
@@ -657,6 +795,27 @@ public class ExecutionController : ControllerBase
         return $"{d.Seconds}s";
     }
 
+    /// <summary>Maps SessionState enum to WebClient-expected status strings.</summary>
+    private static string MapSessionStatus(SessionState state) => state switch
+    {
+        SessionState.Running         => "Running",
+        SessionState.Completed       => "Success",
+        SessionState.PartialFailure  => "Failed",
+        SessionState.Failed          => "Failed",
+        _                            => "Running",
+    };
+
+    /// <summary>Maps ActionOutcome enum to WebClient-expected status strings.</summary>
+    private static string MapActionStatus(ActionOutcome outcome) => outcome switch
+    {
+        ActionOutcome.Success    => "Success",
+        ActionOutcome.Failed     => "Failed",
+        ActionOutcome.Terminated => "Failed",
+        ActionOutcome.TimedOut   => "Failed",
+        ActionOutcome.Unknown    => "Pending",
+        _                        => "Pending",
+    };
+
     private static Dictionary<string, string> LoadParametersForWatchItem(WatchItemConfig watchItem)
     {
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -696,7 +855,7 @@ public class ExecutionController : ControllerBase
         watchItemTag = s.WatchItemTag,
         userId = s.UserId,
         source = s.Source,
-        status = s.State.ToString(),
+        status = MapSessionStatus(s.State),
         startedUtc = s.StartedUtc.ToString("o"),
         elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
         lockedAgents = s.LockedAgents,
@@ -724,7 +883,7 @@ public class ExecutionController : ControllerBase
                 actionType = act.ActionType,
                 agentName = act.AgentName,
                 command = act.Command,
-                status = act.Outcome.ToString(),
+                status = MapActionStatus(act.Outcome),
                 exitCode = act.ExitCode,
                 errorMessage = act.ErrorMessage,
                 duration = act.Duration.ToString(@"mm\:ss"),

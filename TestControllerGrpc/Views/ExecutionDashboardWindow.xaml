@@ -121,8 +121,12 @@
                     <Border Grid.Row="0" Padding="8,6"
                             BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
                         <DockPanel>
-                            <!-- Status RadioButtons (right side) -->
+                            <!-- Status RadioButtons + Demo button (right side) -->
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="&#x25B6; Demo" FontSize="10" Padding="8,3" Margin="0,0,10,0"
+                                        Foreground="{StaticResource AccentBlue}"
+                                        Command="{Binding LoadDemoDataCommand}"
+                                        ToolTip="Load demo data to test the dashboard UI"/>
                                 <RadioButton x:Name="PipelineFilterAll" Content="All"
                                              GroupName="PipelineStatus" IsChecked="True"
                                              Style="{StaticResource FilterButtonStyle}"

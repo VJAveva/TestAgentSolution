@@ -55,8 +55,8 @@ public sealed partial class MainViewModel
             if (!locked)
             {
                 var conflictMsg = string.Join("\n",
-                    conflicts.Select(c => $"  {c.AgentName} — locked by {c.UserId} ({c.WatchItemTag})"));
-                AddLog($"Cannot start '{tag}' — agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                    conflicts.Select(c => $"  {c.AgentName} ï¿½ locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{tag}' ï¿½ agents are busy:\n{conflictMsg}", LogSeverity.Warning);
                 Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
                 return;
             }
@@ -70,11 +70,14 @@ public sealed partial class MainViewModel
 
         try
         {
-            await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
+            await _executor.ExecuteEventTrackedAsync(tag, ev, ctx, session.Cts.Token);
             eventNode.ExecutionStatus = "Success";
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event completed: {ev.Type}", LogSeverity.Success);
-            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success", 0, 0, 0));
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
@@ -88,7 +91,7 @@ public sealed partial class MainViewModel
             _logger.LogError(ex, "Event execution failed: {EventType}", ev.Type);
             eventNode.SetFailed(ex.Message);
             eventNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Event failed: {ev.Type} ï¿½ {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
@@ -129,8 +132,8 @@ public sealed partial class MainViewModel
             if (!locked)
             {
                 var conflictMsg = string.Join("\n",
-                    conflicts.Select(c => $"  {c.AgentName} — locked by {c.UserId} ({c.WatchItemTag})"));
-                AddLog($"Cannot start '{wi.Tag}' — agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                    conflicts.Select(c => $"  {c.AgentName} ï¿½ locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{wi.Tag}' ï¿½ agents are busy:\n{conflictMsg}", LogSeverity.Warning);
                 Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
                 return;
             }
@@ -154,6 +157,7 @@ public sealed partial class MainViewModel
                     WatchItemPath = wi.Path,
                     TriggerFileName = $"[ManualTrigger:{ev.Type}]",
                     SessionId = session.SessionId,
+                    Parameters = parameters,
                 };
                 var evNode = wiNode.Children.FirstOrDefault(c =>
                     ReferenceEquals(c.ModelObject, ev));
@@ -161,7 +165,7 @@ public sealed partial class MainViewModel
 
                 try
                 {
-                    await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
+                    await _executor.ExecuteEventTrackedAsync(wi.Tag, ev, ctx, session.Cts.Token);
                     if (evNode is not null)
                     {
                         evNode.ExecutionStatus = "Success";
@@ -176,7 +180,7 @@ public sealed partial class MainViewModel
                         evNode.SetFailed(ex.Message);
                         evNode.PropagateStatusUp();
                     }
-                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} ï¿½ {ex.Message}", LogSeverity.Error);
                 }
             }
             wiNode.ExecutionStatus = allSuccess ? "Success" : "Failed";
@@ -184,7 +188,10 @@ public sealed partial class MainViewModel
             AddLog($"[{session.SessionId}] WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}",
                 allSuccess ? LogSeverity.Success : LogSeverity.Error);
             if (!allSuccess) ScrollLogToLastError();
-            _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, allSuccess ? "Success" : "Failed", 0, 0, 0));
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(wi.Tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, allSuccess ? "Success" : "Failed",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
@@ -217,8 +224,8 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Cancel a specific pipeline session.
     /// Phase 1.12: funnels through <c>CancelSessionRequestEvent</c> so every
-    /// cancel request — from the tree context menu, the multi-session
-    /// dashboard, or any future caller — flows through the single handler
+    /// cancel request ï¿½ from the tree context menu, the multi-session
+    /// dashboard, or any future caller ï¿½ flows through the single handler
     /// in <c>MainViewModel.cs</c> that owns the <c>PipelineSession</c> CTS.
     /// </summary>
     [RelayCommand]
@@ -252,13 +259,13 @@ public sealed partial class MainViewModel
         WatchListRoot?.SetStatusRecursive("Running");
 
         var enabledItems = _config.WatchItems.Where(wi => wi.IsEnabled).ToList();
-        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) — parallel");
+        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) ï¿½ parallel");
 
         var tasks = enabledItems.Select(async wi =>
         {
             if (IsWatchItemRunning(wi.Tag))
             {
-                AddLog($"WatchItem '{wi.Tag}' is already running — skipping");
+                AddLog($"WatchItem '{wi.Tag}' is already running ï¿½ skipping");
                 return true;
             }
 
@@ -270,6 +277,8 @@ public sealed partial class MainViewModel
             {
                 if (wiNode is not null) wiNode.SetStatusRecursive("Running");
             });
+
+            _events.Publish(new ExecutionStartedEvent(session.SessionId, wi.Tag, "All", "WPF"));
 
             var wiSuccess = true;
             try
@@ -286,12 +295,12 @@ public sealed partial class MainViewModel
                     };
                     try
                     {
-                        await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
+                        await _executor.ExecuteEventTrackedAsync(wi.Tag, ev, ctx, session.Cts.Token);
                     }
                     catch (Exception ex)
                     {
                         wiSuccess = false;
-                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
+                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} ï¿½ {ex.Message}", LogSeverity.Error);
                     }
                 }
 
@@ -304,6 +313,9 @@ public sealed partial class MainViewModel
                         wiNode.PropagateStatusUp();
                     }
                 });
+
+                _events.Publish(new ExecutionCompletedEvent(
+                    session.SessionId, wi.Tag, wiSuccess ? "Success" : "Failed", 0, 0, 0));
             }
             catch (OperationCanceledException)
             {
@@ -311,6 +323,8 @@ public sealed partial class MainViewModel
                 {
                     if (wiNode is not null) wiNode.SetFailed("Cancelled");
                 });
+                _events.Publish(new ExecutionCompletedEvent(
+                    session.SessionId, wi.Tag, "Cancelled", 0, 0, 0));
             }
             finally
             {
@@ -362,25 +376,33 @@ public sealed partial class MainViewModel
         groupNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered ActionGroup: {ag.Tag}");
 
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, $"Group:{ag.Tag}", "WPF"));
+
         try
         {
-            await _executor.ExecuteGroupAsync(ag, ctx, session.Cts.Token);
+            await _executor.ExecuteGroupTrackedAsync(tag, ag, ctx, session.Cts.Token);
             groupNode.ExecutionStatus = "Success";
             groupNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] ActionGroup completed: {ag.Tag}", LogSeverity.Success);
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
             groupNode.SetFailed("Cancelled by user");
             groupNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] ActionGroup cancelled: {ag.Tag}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
         }
         catch (Exception ex)
         {
             groupNode.SetFailed(ex.Message);
             groupNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} ï¿½ {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
         finally
         {
@@ -418,27 +440,35 @@ public sealed partial class MainViewModel
         var actionNode = SelectedNode;
         actionNode.ExecutionStatus = "Running";
         actionNode.PropagateStatusUp();
-        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} — {action.Command}");
+        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} ï¿½ {action.Command}");
+
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, $"Action:{action.ResolvedTag}", "WPF"));
 
         try
         {
-            await _executor.ExecuteSingleActionAsync(action, ctx, session.Cts.Token);
+            await _executor.ExecuteSingleActionTrackedAsync(tag, action, ctx, session.Cts.Token);
             actionNode.ExecutionStatus = "Success";
             actionNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Action completed: {action.Command}", LogSeverity.Success);
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
             actionNode.SetFailed("Cancelled by user");
             actionNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Action cancelled: {action.Command}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
         }
         catch (Exception ex)
         {
             actionNode.SetFailed(ex.Message);
             actionNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] Action failed: {action.Command} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Action failed: {action.Command} ï¿½ {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
         finally
         {
