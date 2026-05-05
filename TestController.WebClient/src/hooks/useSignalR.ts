@@ -204,11 +204,12 @@ export function useSignalR(): HubConnection | null {
 
     // Agent output (stdout/stderr from remote agents)
     conn.on('AgentOutput', (data: {
-      agentName?: string; line?: string; kind?: string;
+      agentName?: string; line?: string; kind?: string; sessionId?: string;
     }) => {
       useExecutionStore.getState().addLog({
         message: data.line ?? '',
         agent: data.agentName,
+        sessionId: data.sessionId,
         timestamp: new Date().toISOString(),
         kind: data.kind as 'stdout' | 'stderr',
         severity: data.kind === 'stderr' ? 'error' : 'info',
