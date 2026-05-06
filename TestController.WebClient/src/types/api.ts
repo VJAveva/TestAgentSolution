@@ -194,6 +194,8 @@ export interface TrendReport {
   builds: BuildTrendEntry[];
   weeklySummaries: PeriodSummary[];
   monthlySummaries: PeriodSummary[];
+  goodThreshold: number;
+  warningThreshold: number;
 }
 
 export interface BuildTrendEntry {

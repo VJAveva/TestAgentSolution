@@ -12,11 +12,12 @@ interface Props {
 }
 
 const statusClasses: Record<string, { badge: string; label: string }> = {
-  Running:   { badge: 'bg-accent/10 text-accent', label: 'Running' },
-  Success:   { badge: 'bg-acc-green/10 text-acc-green', label: 'Completed' },
-  Failed:    { badge: 'bg-acc-red/10 text-acc-red', label: 'Failed' },
-  Cancelled: { badge: 'bg-acc-amber/10 text-acc-amber', label: 'Cancelled' },
-  Queued:    { badge: 'bg-bg-surface text-text-muted', label: 'Queued' },
+  Running:        { badge: 'bg-accent/10 text-accent', label: 'Running' },
+  Success:        { badge: 'bg-acc-green/10 text-acc-green', label: 'Completed' },
+  Failed:         { badge: 'bg-acc-red/10 text-acc-red', label: 'Failed' },
+  PartialFailure: { badge: 'bg-acc-amber/10 text-acc-amber', label: 'Partial Failure' },
+  Cancelled:      { badge: 'bg-acc-amber/10 text-acc-amber', label: 'Cancelled' },
+  Queued:         { badge: 'bg-bg-surface text-text-muted', label: 'Queued' },
 };
 
 export function SessionCard({
@@ -75,9 +76,9 @@ export function SessionCard({
             {session.userId}
           </span>
 
-          <span>{session.agents.length} agents</span>
+          <span>{(session.agents || []).length} agents</span>
           <span className="font-mono">{session.elapsed}</span>
-          <span className="font-medium">{session.progressPercent}%</span>
+          <span className="font-medium">{session.progressPercent ?? 0}%</span>
 
           {session.status === 'Running' && (
             <button
@@ -93,7 +94,7 @@ export function SessionCard({
       {/* Agent rows (expanded) */}
       {isExpanded && (
         <div className="border-t border-bdr">
-          {session.agents.map(agent => (
+          {(session.agents || []).map(agent => (
             <AgentRow
               key={agent.agentName}
               agent={agent}
@@ -101,7 +102,7 @@ export function SessionCard({
             />
           ))}
 
-          {session.agents.length === 0 && (
+          {(session.agents || []).length === 0 && (
             <div className="p-4 text-center text-xs text-text-muted">
               Waiting for agent assignment...
             </div>

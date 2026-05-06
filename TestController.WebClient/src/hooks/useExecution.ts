@@ -48,7 +48,7 @@ export function useExecution() {
   }, [fetchSessions]);
 
   const cancelSession = useCallback(async (sessionId: string) => {
-    const { data } = await axios.post(`/api/execution/cancel/${encodeURIComponent(sessionId)}`);
+    const { data } = await axios.post(`/api/execution/${encodeURIComponent(sessionId)}/cancel`);
     await fetchSessions();
     return data;
   }, [fetchSessions]);

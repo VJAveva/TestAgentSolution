@@ -97,7 +97,23 @@ var app = builder.Build();
 
 app.UseCors();
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Hashed assets (e.g. /assets/index-B-0ZyQQJ.js) can be cached forever.
+        // index.html must never be cached so browsers always fetch fresh bundle refs.
+        var path = ctx.Context.Request.Path.Value ?? "";
+        if (path.StartsWith("/assets/"))
+        {
+            ctx.Context.Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        }
+        else
+        {
+            ctx.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+        }
+    }
+});
 
 // Shared API: controllers (execution, watchlist, agents, health, results) + single SignalR hub
 app.UseControllerApi("/hubs/controller");
@@ -111,6 +127,15 @@ app.MapGroup("/api/watchlist").MapWatchListEndpoints();
 app.MapGroup("/api/agents").MapAgentEndpoints();
 app.MapGroup("/api/execution").MapExecutionEndpoints();
 app.MapGroup("/api/results").MapResultsEndpoints();
+
+// Client-side error logs ingestion (WebClient AppLogPanel → server logs)
+app.MapPost("/api/clientlogs", (HttpContext ctx, IAppLogger logger) =>
+{
+    using var reader = new StreamReader(ctx.Request.Body);
+    var body = reader.ReadToEndAsync().GetAwaiter().GetResult();
+    logger.Warn("ClientLog", body);
+    return Results.Ok();
+});
 
 // SPA fallback
 app.MapFallbackToFile("index.html");

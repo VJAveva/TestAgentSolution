@@ -50,6 +50,8 @@ public class BuildTrendAnalyzer
             Builds = ordered,
             WeeklySummaries = GroupByWeek(ordered),
             MonthlySummaries = GroupByMonth(ordered),
+            GoodThreshold = _config.GoodThreshold,
+            WarningThreshold = _config.WarningThreshold,
         };
     }
 
@@ -148,6 +150,8 @@ public record TrendReport
     public List<BuildTrendEntry> Builds { get; init; } = new();
     public List<PeriodSummary> WeeklySummaries { get; init; } = new();
     public List<PeriodSummary> MonthlySummaries { get; init; } = new();
+    public double GoodThreshold { get; init; } = 95.0;
+    public double WarningThreshold { get; init; } = 85.0;
 }
 
 public record PeriodSummary

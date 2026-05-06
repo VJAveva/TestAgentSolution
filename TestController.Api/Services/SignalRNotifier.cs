@@ -335,6 +335,13 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             total = e.Total,
             timestamp = DateTime.UtcNow.ToString("o"),
         });
+
+        // Notify Results page to refresh build list
+        SendSafe("ResultsUpdated", new
+        {
+            watchItemTag = e.WatchItemTag,
+            timestamp = DateTime.UtcNow.ToString("o"),
+        });
     }
 
     // ?? IRealtimeNotifier (for direct calls from services) ?????????????

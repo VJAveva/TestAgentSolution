@@ -341,10 +341,17 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
                 _                       => true,
             };
         }
+        catch (OperationCanceledException)
+        {
+            OnNodeProgress(node, "Cancelled");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Node execution error");
-            success = false;
+            OnNodeFailed(node, -1, ex.Message);
+            OnNodeProgress(node, "Failed");
+            return false;
         }
         OnNodeProgress(node, success ? "Success" : "Failed");
         return success;
@@ -477,6 +484,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         ActionConfig a => new ActionConfig
         {
+            NodeId = a.NodeId,
             Type = a.Type, AgentName = a.AgentName,
             Command = a.Command, Parameters = a.Parameters,
             Timeout = a.Timeout, PollInterval = a.PollInterval,
@@ -492,12 +500,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         },
         ActionGroupConfig g => new ActionGroupConfig
         {
+            NodeId = g.NodeId,
             Tag = g.Tag, ExecutionType = g.ExecutionType,
             FailAndContinue = g.FailAndContinue,
             Children = g.Children.Select(DeepCloneNode).ToList()
         },
-        InitializeConfig i => new InitializeConfig { Tag = i.Tag, ParameterFile = i.ParameterFile },
-        RefConfig r => new RefConfig { TemplateID = r.TemplateID },
+        InitializeConfig i => new InitializeConfig { NodeId = i.NodeId, Tag = i.Tag, ParameterFile = i.ParameterFile },
+        RefConfig r => new RefConfig { NodeId = r.NodeId, TemplateID = r.TemplateID },
         _ => node
     };
 }

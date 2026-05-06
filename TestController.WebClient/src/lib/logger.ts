@@ -85,11 +85,13 @@ export function logError(scope: string, action: string, err: unknown): void {
     : '';
   const detail = e?.detail ?? e?.error ?? e?.message ?? String(err);
 
-  // Single, consistent line ? easy to grep in the console:
-  //   [ERR] [BuildList:fetchBuilds] [cid=ab12cd34] 500 GET /api/results/builds ? reason
-  console.error(
-    `[ERR] [${scope}:${action}] [cid=${cid}] ${status}${url ? ` ${url}` : ''} ? ${detail}`,
-    err);
+  const message = `[${scope}:${action}] ${status}${url ? ` ${url}` : ''} \u2014 ${detail}`;
+
+  // Write to appLogger so AppLogPanel can display it
+  appLogger.error(scope, message, err, cid);
+
+  // Also write to console for dev tools
+  console.error(`[ERR] [cid=${cid}] ${message}`, err);
 
   // Optional: POST to a server-side ingestion endpoint for centralized logs.
   // Disabled by default to avoid request loops if the server itself is down.

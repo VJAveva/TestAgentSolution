@@ -44,7 +44,9 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
   switch (action.type) {
     case 'SET_SESSIONS': {
       const map = new Map<string, SessionSummary>();
-      for (const s of action.sessions) map.set(s.sessionId, s);
+      for (const s of action.sessions) {
+        map.set(s.sessionId, { ...s, agents: s.agents || [] });
+      }
       return { ...state, sessions: map };
     }
 
@@ -52,13 +54,13 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
       const d = action.data;
       const session: SessionSummary = {
         sessionId: d.sessionId,
-        watchItemTag: d.watchItemTag,
+        watchItemTag: d.watchItemTag || '',
         userId: d.userId || '',
         source: d.source || 'WebClient',
         status: 'Running',
         startedUtc: d.startTime || new Date().toISOString(),
         elapsed: '00:00',
-        agents: [],
+        agents: d.agents || [],
         totalActions: d.totalActions || 0,
         completedActions: 0,
         passedActions: 0,
@@ -301,8 +303,13 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
       dispatch({ type: 'LOG_ENTRY', data });
     };
 
+    const onCancelled = (data: any) => {
+      dispatch({ type: 'EXECUTION_COMPLETED', data: { ...data, state: 'Cancelled' } });
+    };
+
     connection.on('ExecutionStarted', onStarted);
     connection.on('ExecutionCompleted', onCompleted);
+    connection.on('ExecutionCancelled', onCancelled);
     connection.on('ActionProgress', onProgress);
     connection.on('AgentOutput', onOutput);
     connection.on('LogEntry', onLog);
@@ -310,6 +317,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     return () => {
       connection.off('ExecutionStarted', onStarted);
       connection.off('ExecutionCompleted', onCompleted);
+      connection.off('ExecutionCancelled', onCancelled);
       connection.off('ActionProgress', onProgress);
       connection.off('AgentOutput', onOutput);
       connection.off('LogEntry', onLog);

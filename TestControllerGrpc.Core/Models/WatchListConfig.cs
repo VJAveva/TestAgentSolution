@@ -71,6 +71,13 @@ public interface IActionNode
 {
     [JsonIgnore]
     string NodeType { get; }
+
+    /// <summary>
+    /// Stable identity that survives deep-clone (snapshot isolation).
+    /// Used by the UI to match progress events back to tree nodes.
+    /// </summary>
+    [JsonIgnore]
+    string NodeId { get; set; }
 }
 
 // =============================================================================
@@ -80,6 +87,8 @@ public sealed class ActionGroupConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "ActionGroup";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string Tag { get; set; } = "";
     public ExecutionMode ExecutionType { get; set; } = ExecutionMode.Sequential;
     public bool FailAndContinue { get; set; }
@@ -93,6 +102,8 @@ public sealed class ActionConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "Action";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public ActionType Type { get; set; } = ActionType.RunCommand;
     public string AgentName { get; set; } = "";
     public string Command { get; set; } = "";
@@ -194,6 +205,8 @@ public sealed class InitializeConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "Initialize";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string Tag { get; set; } = "";
     public string ParameterFile { get; set; } = "";
 }
@@ -205,6 +218,8 @@ public sealed class RefConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "Ref";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string TemplateID { get; set; } = "";
 }
 

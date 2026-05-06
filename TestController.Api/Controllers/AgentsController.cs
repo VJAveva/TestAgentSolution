@@ -14,15 +14,24 @@ public class AgentsController : ControllerBase
         _dispatcher = dispatcher;
     }
 
-    /// <summary>GET /api/agents — all registered agents with health status.</summary>
+    /// <summary>GET /api/agents ï¿½ all registered agents with health status.</summary>
     [HttpGet]
     public IActionResult GetAgents()
     {
-        var agents = _dispatcher.RegisteredAgents.Select(name => new
+        var agents = _dispatcher.RegisteredAgents.Select(name =>
         {
-            name,
-            address = _dispatcher.GetAgentAddress(name),
-            health = _dispatcher.GetAgentHealth(name),
+            var health = _dispatcher.GetAgentHealth(name);
+            return new
+            {
+                name,
+                address = _dispatcher.GetAgentAddress(name),
+                status = health is null ? "Unknown"
+                       : health.IsHealthy ? "Healthy"
+                       : health.CircuitOpenedUtc.HasValue ? "CircuitOpen"
+                       : "Unhealthy",
+                lastCheckedUtc = health?.LastSuccessUtc?.ToString("o"),
+                health,
+            };
         });
         return Ok(agents);
     }

@@ -625,10 +625,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         return label.Length > 100 ? label[..100] + "\u2026" : label;
     }
 
-    /// <summary>Find the TreeNodeViewModel whose ModelObject matches the given IActionNode.</summary>
+    /// <summary>Find the TreeNodeViewModel whose ModelObject matches the given IActionNode (by NodeId or reference).</summary>
     public TreeNodeViewModel? FindByModel(object model)
     {
         if (ReferenceEquals(ModelObject, model)) return this;
+        // Match by stable NodeId so snapshot-cloned nodes resolve correctly
+        if (model is IActionNode target && ModelObject is IActionNode mine
+            && target.NodeId == mine.NodeId)
+            return this;
         foreach (var c in Children)
         {
             var found = c.FindByModel(model);

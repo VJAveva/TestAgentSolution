@@ -46,7 +46,7 @@ export default function TimelineView() {
       const sessionStart = new Date(session.startedUtc).getTime();
       if (sessionStart < earliest) earliest = sessionStart;
 
-      for (const agent of session.agents) {
+      for (const agent of (session.agents || [])) {
         for (const action of agent.actions) {
           const startStr = (action as any).startedUtc;
           const startMs = startStr ? new Date(startStr).getTime() : sessionStart;
@@ -63,7 +63,7 @@ export default function TimelineView() {
 
     for (const session of allSessions) {
       const sessionStart = new Date(session.startedUtc).getTime();
-      for (const agent of session.agents) {
+      for (const agent of (session.agents || [])) {
         if (!agentLanes.has(agent.agentName)) {
           agentLanes.set(agent.agentName, []);
         }

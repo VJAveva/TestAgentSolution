@@ -420,29 +420,98 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <!-- Status symbol inline -->
-                <TextBlock Text="{Binding StatusSymbol}" FontSize="11" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Foreground" Value="Transparent" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <!-- Status indicator: animated spinner (Running) / MDL2 glyphs (terminal states) -->
+                <Grid Margin="6,0,0,0" VerticalAlignment="Center" Width="14" Height="14">
+                    <!-- Running: spinning sync glyph -->
+                    <TextBlock x:Name="SpinnerGlyph" Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource Accent}" RenderTransformOrigin="0.5,0.5"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="0" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard x:Name="SpinStory">
+                                                <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="30">
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                     From="0" To="360" Duration="0:0:1.2" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <StopStoryboard BeginStoryboardName="SpinStory" />
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Success: CheckMark -->
+                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccGreen}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Failed: Cancel/X -->
+                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccRed}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- PartialFailure: Warning -->
+                    <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccYellow}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Cancelled: Blocked -->
+                    <TextBlock Text="&#xE25B;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource StatusGray}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </StackPanel>
         </HierarchicalDataTemplate>
 
@@ -513,29 +582,98 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <!-- Status symbol inline -->
-                <TextBlock Text="{Binding StatusSymbol}" FontSize="11" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Foreground" Value="Transparent" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <!-- Status indicator: animated spinner (Running) / MDL2 glyphs (terminal states) -->
+                <Grid Margin="6,0,0,0" VerticalAlignment="Center" Width="14" Height="14">
+                    <!-- Running: spinning sync glyph -->
+                    <TextBlock x:Name="TplSpinnerGlyph" Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource Accent}" RenderTransformOrigin="0.5,0.5"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="0" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard x:Name="TplSpinStory">
+                                                <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="30">
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                     From="0" To="360" Duration="0:0:1.2" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <StopStoryboard BeginStoryboardName="TplSpinStory" />
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Success: CheckMark -->
+                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccGreen}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Failed: Cancel/X -->
+                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccRed}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- PartialFailure: Warning -->
+                    <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccYellow}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Cancelled: Blocked -->
+                    <TextBlock Text="&#xE25B;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource StatusGray}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </StackPanel>
         </HierarchicalDataTemplate>
     </Window.Resources>

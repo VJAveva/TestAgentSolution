@@ -20,6 +20,7 @@ export type SessionStatus =
   | 'Running'
   | 'Success'
   | 'Failed'
+  | 'PartialFailure'
   | 'Cancelled'
   | 'Queued';
 

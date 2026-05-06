@@ -31,8 +31,8 @@ export default function ExecutionDashboard() {
 
   const filteredActive = activeSessions.filter(s =>
     !filterText ||
-    s.watchItemTag.toLowerCase().includes(filterText.toLowerCase()) ||
-    s.userId.toLowerCase().includes(filterText.toLowerCase())
+    (s.watchItemTag || '').toLowerCase().includes(filterText.toLowerCase()) ||
+    (s.userId || '').toLowerCase().includes(filterText.toLowerCase())
   );
 
   return (
