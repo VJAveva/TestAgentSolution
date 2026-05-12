@@ -1,43 +1,10 @@
 import { useEffect, useState } from 'react';
 import { X, AlertTriangle, FileText } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
+import type { FailureAnalysisReport, FailureSignature, TestExecutionRecord } from '../../types/api';
 
-interface FailureSignature {
-  buildName: string;
-  failedStepIndex: number;
-  failedStepName: string;
-  errorType: string;
-  normalizedMessage: string;
-  topStackFrame: string;
-  agent: string;
-  duration: string;
-}
-
-interface HistoryEntry {
-  buildName: string;
-  buildDate: string;
-  outcome: string;
-  duration: string;
-  errorMessage: string;
-  agent: string;
-}
-
-interface AnalysisReport {
-  testCaseName: string;
-  pattern: string;
-  verdict: string;
-  confidence: number;
-  consecutiveFailures: number;
-  totalBuildsAnalyzed: number;
-  totalFailures: number;
-  flakeRate: number;
-  lastPassBuild?: string;
-  firstFailBuild?: string;
-  allSignaturesMatch: boolean;
-  suggestedAction: string;
-  signatures: FailureSignature[];
-  history: HistoryEntry[];
-}
+type AnalysisReport = FailureAnalysisReport;
+type HistoryEntry = TestExecutionRecord;
 
 const PATTERN_COLORS: Record<string, { bg: string; fg: string; label: string }> = {
   SystemicRegression: { bg: 'bg-red-500/15', fg: 'text-red-400', label: 'SYSTEMIC REGRESSION' },
@@ -90,7 +57,7 @@ export default function FailureAnalysisDialog({ testName, onClose, onViewLog }: 
           )}
 
           {!report && !error && (
-            <div className="text-center text-text-muted py-12">Analyzing failure pattern…</div>
+            <div className="text-center text-text-muted py-12">Analyzing failure patternï¿½</div>
           )}
 
           {report && (
@@ -121,13 +88,13 @@ export default function FailureAnalysisDialog({ testName, onClose, onViewLog }: 
                   {report.history.map((h, i) => (
                     <div
                       key={i}
-                      title={`${h.buildName} — ${h.outcome} (${new Date(h.buildDate).toLocaleString()})`}
+                      title={`${h.buildName} ï¿½ ${h.outcome} (${new Date(h.buildDate).toLocaleString()})`}
                       className={`w-7 h-7 rounded flex items-center justify-center text-white text-xs font-bold ${
                         h.outcome === 'Passed' ? 'bg-green-600' :
                         h.outcome === 'Failed' ? 'bg-red-600' : 'bg-slate-600'
                       }`}
                     >
-                      {h.outcome === 'Passed' ? '?' : h.outcome === 'Failed' ? '?' : '·'}
+                      {h.outcome === 'Passed' ? '?' : h.outcome === 'Failed' ? '?' : 'ï¿½'}
                     </div>
                   ))}
                 </div>
@@ -143,7 +110,7 @@ export default function FailureAnalysisDialog({ testName, onClose, onViewLog }: 
                 <div className="bg-white/5 rounded p-3">
                   <div className="text-[10px] font-bold uppercase text-text-muted mb-2">
                     Failure signatures {report.allSignaturesMatch && (
-                      <span className="ml-2 text-green-400">(all match — same root cause)</span>
+                      <span className="ml-2 text-green-400">(all match ï¿½ same root cause)</span>
                     )}
                   </div>
                   <div className="overflow-x-auto">
@@ -161,12 +128,12 @@ export default function FailureAnalysisDialog({ testName, onClose, onViewLog }: 
                         {report.signatures.map((s, i) => (
                           <tr key={i} className="border-b border-bdr/50">
                             <td className="py-1.5 px-2 font-mono">{s.buildName}</td>
-                            <td className="py-1.5 px-2">{s.failedStepName || '—'}</td>
-                            <td className="py-1.5 px-2 text-red-300">{s.errorType || '—'}</td>
+                            <td className="py-1.5 px-2">{s.failedStepName || 'ï¿½'}</td>
+                            <td className="py-1.5 px-2 text-red-300">{s.errorType || 'ï¿½'}</td>
                             <td className="py-1.5 px-2 font-mono truncate max-w-[300px]" title={s.normalizedMessage}>
                               {s.normalizedMessage}
                             </td>
-                            <td className="py-1.5 px-2">{s.agent || '—'}</td>
+                            <td className="py-1.5 px-2">{s.agent || 'ï¿½'}</td>
                           </tr>
                         ))}
                       </tbody>

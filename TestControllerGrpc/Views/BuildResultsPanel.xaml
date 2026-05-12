@@ -452,6 +452,34 @@
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                     <Border Padding="4,3" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,0.5">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <ContextMenu.Style>
+                                                    <Style TargetType="ContextMenu">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding NodeLevel}" Value="TestResult">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ContextMenu.Style>
+                                                <MenuItem Header="Analyze Failure Pattern"
+                                                          Command="{Binding DataContext.AnalyzeFailurePatternCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          CommandParameter="{Binding Name}">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                                <Separator />
+                                                <MenuItem Header="Copy test name"
+                                                          Click="OnCopyTestName" Tag="{Binding Name}">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="Transparent" />

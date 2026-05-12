@@ -11,10 +11,12 @@ namespace TestControllerGrpc.Services;
 public class BuildReportHtmlGenerator
 {
     private readonly BuildResultsConfig _config;
+    private readonly FailurePatternAnalyzer? _patternAnalyzer;
 
-    public BuildReportHtmlGenerator(BuildResultsConfig config)
+    public BuildReportHtmlGenerator(BuildResultsConfig config, FailurePatternAnalyzer? patternAnalyzer = null)
     {
         _config = config;
+        _patternAnalyzer = patternAnalyzer;
     }
 
     private double GoodThreshold => _config.GoodThreshold;
@@ -26,8 +28,23 @@ public class BuildReportHtmlGenerator
     private static string Enc(string? s) => WebUtility.HtmlEncode(s ?? "");
 
     private static string TruncateError(string? msg) =>
-        msg is null ? "" : msg.Length > 120 ? msg[..120] + "…" : msg;
+        msg is null ? "" : msg.Length > 120 ? msg[..120] + "ï¿½" : msg;
+    private string GetPatternLabel(string testName)
+    {
+        try { return _patternAnalyzer?.GetCompactLabel(testName) ?? "\u2014"; }
+        catch { return "\u2014"; }
+    }
 
+    private static (string bg, string color) GetPatternBadgeColors(string label)
+    {
+        if (label.StartsWith("REGRESSION", StringComparison.Ordinal)) return ("#FFE5E5", "#C00000");
+        if (label.StartsWith("CASCADING", StringComparison.Ordinal))  return ("#FFE5C0", "#9C5500");
+        if (label.StartsWith("FLAKY", StringComparison.Ordinal))      return ("#FFF4D6", "#7A5C00");
+        if (label.StartsWith("CHRONIC", StringComparison.Ordinal))    return ("#E5D6FF", "#5C00C0");
+        if (label == "NEW FAILURE")                                   return ("#FFD6D6", "#990000");
+        if (label == "RESOLVED")                                      return ("#D6F5D6", "#005C00");
+        return ("#FFFFFF", "#64748b");
+    }
     private static string Timestamp() => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
     // ?? Shared CSS blocks ???????????????????????????????????????????
@@ -191,7 +208,7 @@ public class BuildReportHtmlGenerator
         sb.AppendLine("</style></head><body>");
 
         sb.AppendLine($"<h2>Build Results: {node.BuildNumber}</h2>");
-        sb.AppendLine($"<div class='health-bar' style='background:{healthBg}'>{node.PassRate:F1}% — {node.Health}</div>");
+        sb.AppendLine($"<div class='health-bar' style='background:{healthBg}'>{node.PassRate:F1}% ï¿½ {node.Health}</div>");
 
         AppendStatCards(sb, node.TotalTests, node.PassedTests, node.FailedTests, node.TimeoutTests);
 
@@ -270,7 +287,7 @@ public class BuildReportHtmlGenerator
     {
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine($"<title>Trend Report — {trend.Builds.Count} Builds</title>");
+        sb.AppendLine($"<title>Trend Report ï¿½ {trend.Builds.Count} Builds</title>");
         sb.AppendLine("<style>");
         sb.AppendLine(DarkThemeBase());
         sb.AppendLine(KpiCss());
@@ -597,22 +614,26 @@ public class BuildReportHtmlGenerator
             sb.AppendLine("<tr>");
             sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Test Name</td>");
             sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Use Case</td>");
+            sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Pattern</td>");
             sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Error</td>");
             sb.AppendLine("</tr>");
 
             foreach (var t in build.AllFailedTests.Take(30))
             {
                 var errText = TruncateError(t.ErrorMessage);
+                var patternLabel = GetPatternLabel(t.TestName);
+                var (patBg, patColor) = GetPatternBadgeColors(patternLabel);
                 sb.AppendLine("<tr style=\"background-color:#fef2f2;\">");
                 sb.AppendLine($"<td style=\"padding:8px 14px;font-size:12px;font-weight:600;color:#991b1b;border-bottom:1px solid #fecaca;\">{Enc(t.TestName)}</td>");
                 sb.AppendLine($"<td style=\"padding:8px 14px;font-size:12px;color:#64748b;border-bottom:1px solid #fecaca;\">{Enc(t.UseCaseName)}</td>");
+                sb.AppendLine($"<td style=\"padding:8px 14px;font-size:11px;font-weight:700;text-align:center;border-bottom:1px solid #fecaca;background:{patBg};color:{patColor};\">{Enc(patternLabel)}</td>");
                 sb.AppendLine($"<td style=\"padding:8px 14px;font-size:11px;color:#991b1b;font-family:'Courier New',monospace;border-bottom:1px solid #fecaca;\">{Enc(errText)}</td>");
                 sb.AppendLine("</tr>");
             }
 
             if (build.AllFailedTests.Count > 30)
             {
-                sb.AppendLine($"<tr><td colspan=\"3\" style=\"padding:10px 14px;font-size:12px;color:#64748b;text-align:center;\">... and {build.AllFailedTests.Count - 30} more failed tests</td></tr>");
+                sb.AppendLine($"<tr><td colspan=\"4\" style=\"padding:10px 14px;font-size:12px;color:#64748b;text-align:center;\">... and {build.AllFailedTests.Count - 30} more failed tests</td></tr>");
             }
             sb.AppendLine("</table></td></tr>");
         }

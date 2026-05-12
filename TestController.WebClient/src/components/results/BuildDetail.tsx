@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
 import { logCatch } from '../../lib/logger';
-import { Download, Mail, ChevronDown, ChevronRight, Search, Filter } from 'lucide-react';
+import { Download, Mail, ChevronDown, ChevronRight, Search, Filter, Activity, FileSearch } from 'lucide-react';
 import type { BuildDetailTest } from '../../types/api';
+import FailureAnalysisDialog from './FailureAnalysisDialog';
+import ExecutionLogDialog from './ExecutionLogDialog';
 
 type DetailTab = 'usecases' | 'failed' | 'all';
 
@@ -16,6 +18,8 @@ export default function BuildDetail() {
   const [outcomeFilter, setOutcomeFilter] = useState('All');
   const [expandedUseCase, setExpandedUseCase] = useState<string | null>(null);
   const [expandedTest, setExpandedTest] = useState<string | null>(null);
+  const [analysisTarget, setAnalysisTarget] = useState<string | null>(null);
+  const [logTarget, setLogTarget] = useState<{ build: string; testName: string; stepIndex?: number } | null>(null);
 
   // Fetch detail when a build is selected
   useEffect(() => {
@@ -159,7 +163,9 @@ export default function BuildDetail() {
                   {detail.tests.filter(t => t.useCase === uc.useCaseName).map((test, i) => (
                     <TestRow key={`${test.testName}-${i}`} test={test}
                       expanded={expandedTest === `${uc.useCaseName}/${test.testName}/${i}`}
-                      onToggle={() => setExpandedTest(expandedTest === `${uc.useCaseName}/${test.testName}/${i}` ? null : `${uc.useCaseName}/${test.testName}/${i}`)} />
+                      onToggle={() => setExpandedTest(expandedTest === `${uc.useCaseName}/${test.testName}/${i}` ? null : `${uc.useCaseName}/${test.testName}/${i}`)}
+                      onAnalyze={() => setAnalysisTarget(test.testName)}
+                      onViewLog={() => build && setLogTarget({ build: build.buildNumber, testName: test.testName })} />
                   ))}
                 </div>
               )}
@@ -174,7 +180,9 @@ export default function BuildDetail() {
           {filteredTests.length > 0 ? filteredTests.map((test, i) => (
             <TestRow key={`${test.testName}-${i}`} test={test}
               expanded={expandedTest === `flat/${test.testName}/${i}`}
-              onToggle={() => setExpandedTest(expandedTest === `flat/${test.testName}/${i}` ? null : `flat/${test.testName}/${i}`)} />
+              onToggle={() => setExpandedTest(expandedTest === `flat/${test.testName}/${i}` ? null : `flat/${test.testName}/${i}`)}
+              onAnalyze={() => setAnalysisTarget(test.testName)}
+              onViewLog={() => build && setLogTarget({ build: build.buildNumber, testName: test.testName })} />
           )) : (
             <div className="px-3 py-6 text-center text-xs text-text-muted">
               {searchText ? 'No tests match your search' : 'No tests to display'}
@@ -192,7 +200,16 @@ export default function BuildDetail() {
           <div className="max-h-64 overflow-auto">
             {build.allFailedTests.map((t, i) => (
               <div key={i} className="px-3 py-2 border-b border-bdr/30 text-xs">
-                <div className="font-medium text-acc-red">{t.testName}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-acc-red flex-1">{t.testName}</span>
+                  <button
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                    onClick={() => setAnalysisTarget(t.testName)}
+                    title="Analyze failure pattern"
+                  >
+                    <Activity size={10} /> Analyze
+                  </button>
+                </div>
                 <div className="text-text-muted">{t.useCaseName} · {t.trxFileName}</div>
                 {t.errorMessage && (
                   <div className="mt-1 text-text-secondary bg-bg-panel rounded p-1.5 whitespace-pre-wrap break-all max-h-20 overflow-auto">
@@ -204,11 +221,36 @@ export default function BuildDetail() {
           </div>
         </div>
       )}
+
+      {/* Failure Analysis Dialog */}
+      {analysisTarget && (
+        <FailureAnalysisDialog
+          testName={analysisTarget}
+          onClose={() => setAnalysisTarget(null)}
+          onViewLog={(buildName, stepIndex) => {
+            setAnalysisTarget(null);
+            setLogTarget({ build: buildName, testName: analysisTarget, stepIndex });
+          }}
+        />
+      )}
+
+      {/* Execution Log Dialog */}
+      {logTarget && (
+        <ExecutionLogDialog
+          build={logTarget.build}
+          testName={logTarget.testName}
+          stepIndex={logTarget.stepIndex}
+          onClose={() => setLogTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
-function TestRow({ test, expanded, onToggle }: { test: BuildDetailTest; expanded: boolean; onToggle: () => void }) {
+function TestRow({ test, expanded, onToggle, onAnalyze, onViewLog }: {
+  test: BuildDetailTest; expanded: boolean; onToggle: () => void;
+  onAnalyze?: () => void; onViewLog?: () => void;
+}) {
   const outcomeIcon = test.outcome === 'Passed' ? '✔' : test.outcome === 'Failed' ? '✖' : '○';
   const outcomeColor = test.outcome === 'Passed' ? 'text-acc-green' : test.outcome === 'Failed' ? 'text-acc-red' : 'text-acc-yellow';
 
@@ -224,6 +266,26 @@ function TestRow({ test, expanded, onToggle }: { test: BuildDetailTest; expanded
         <div className="px-8 pb-3 space-y-2">
           {test.className && (
             <div className="text-[10px] text-text-muted">Class: {test.className}</div>
+          )}
+          {test.outcome === 'Failed' && (
+            <div className="flex items-center gap-2">
+              {onAnalyze && (
+                <button
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                  onClick={e => { e.stopPropagation(); onAnalyze(); }}
+                >
+                  <Activity size={10} /> Analyze Failure Pattern
+                </button>
+              )}
+              {onViewLog && (
+                <button
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                  onClick={e => { e.stopPropagation(); onViewLog(); }}
+                >
+                  <FileSearch size={10} /> View Execution Log
+                </button>
+              )}
+            </div>
           )}
           {test.errorMessage && (
             <div>
