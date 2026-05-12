@@ -537,7 +537,7 @@
                                             Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}" FontSize="10" Padding="8,3" />
                                 </StackPanel>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
-                                    <ItemsControl ItemsSource="{Binding FailureAlerts}">
+                                            <ItemsControl ItemsSource="{Binding FailureAlerts}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Background="#10EF4444" CornerRadius="3" Padding="8,3" Margin="0,1">
@@ -564,6 +564,14 @@
                                                             <Run Text="{Binding ConsecutiveFailCount, Mode=OneWay}" />
                                                             <Run Text=" builds" />
                                                         </TextBlock>
+                                                        <Button DockPanel.Dock="Right" Content="Analyze ?"
+                                                                ToolTip="Run failure pattern analysis across recent builds"
+                                                                Command="{Binding DataContext.AnalyzeFailurePatternCommand,
+                                                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding TestName}"
+                                                                Background="#1E293B" Foreground="#60A5FA" BorderBrush="#334155"
+                                                                FontSize="10" FontWeight="SemiBold" Padding="6,2" Margin="6,0,0,0"
+                                                                Cursor="Hand" />
                                                         <TextBlock FontSize="11" Foreground="#EF4444" TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center" ToolTip="{Binding LastError}">
                                                             <Run Text="{Binding TestName, Mode=OneWay}" FontWeight="SemiBold" />

@@ -19,6 +19,7 @@ public partial class BuildResultsViewModel : ObservableObject
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
     private readonly BuildReportHtmlGenerator _htmlGenerator;
+    private readonly FailurePatternAnalyzer? _patternAnalyzer;
 
     public ObservableCollection<BuildListItem> AvailableBuilds { get; } = new();
     public ObservableCollection<ResultsTreeNode> ResultsTree { get; } = new();
@@ -99,16 +100,58 @@ public partial class BuildResultsViewModel : ObservableObject
     // Constructor
     // ???????????????????????????????????????????????????????????????
 
-    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator)
+    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator, FailurePatternAnalyzer? patternAnalyzer = null)
     {
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
         _htmlGenerator = htmlGenerator;
+        _patternAnalyzer = patternAnalyzer;
         _goodThreshold = config.GoodThreshold;
         _warningThreshold = config.WarningThreshold;
         _resultsRootPath = config.ResultsRootPath;
         PassRateConverter = new PassRateToColorConverter(config);
+        AnalyzeFailurePatternCommand = new RelayCommand<string>(OnAnalyzeFailurePattern, name => !string.IsNullOrWhiteSpace(name));
+    }
+
+    /// <summary>
+    /// Command bound to the "Analyze Failure Pattern" button on each
+    /// consecutive-failure alert / failed test row. Parameter is the test name.
+    /// </summary>
+    public IRelayCommand<string> AnalyzeFailurePatternCommand { get; }
+
+    private async void OnAnalyzeFailurePattern(string? testName)
+    {
+        if (string.IsNullOrWhiteSpace(testName)) return;
+        if (_patternAnalyzer == null)
+        {
+            StatusMessage = "Failure analyzer is not available in this host.";
+            return;
+        }
+
+        StatusMessage = $"Analyzing failure pattern for '{testName}'…";
+        try
+        {
+            // Run TRX scan off the UI thread (network shares can take seconds).
+            var report = await Task.Run(() =>
+                _patternAnalyzer.AnalyzeTest(testName, lookbackBuilds: 10));
+
+            var vm = new FailureAnalysisVM(report);
+            var dialog = new TestControllerGrpc.Views.Dialogs.FailureAnalysisDialog(vm)
+            {
+                Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive),
+            };
+            StatusMessage = $"Analysis complete: {report.Pattern} ({report.Confidence}%).";
+            dialog.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failure analysis failed: {ex.Message}";
+            MessageBox.Show(
+                $"Failure analysis failed for '{testName}':\n\n{ex.Message}",
+                "Failure Pattern Analysis",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     // ???????????????????????????????????????????????????????????????

@@ -16,19 +16,25 @@ public class ResultsController : ControllerBase
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
     private readonly IAppLogger _appLogger;
+    private readonly FailurePatternAnalyzer _patternAnalyzer;
+    private readonly ExecutionLogCorrelator _logCorrelator;
 
     public ResultsController(
         CachedBuildResultsProvider buildResults,
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildResultsConfig config,
-        IAppLogger appLogger)
+        IAppLogger appLogger,
+        FailurePatternAnalyzer patternAnalyzer,
+        ExecutionLogCorrelator logCorrelator)
     {
         _buildResults = buildResults;
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
         _appLogger = appLogger;
+        _patternAnalyzer = patternAnalyzer;
+        _logCorrelator = logCorrelator;
     }
 
     private string Corr => HttpContext.Items["CorrelationId"] as string ?? "";
@@ -251,6 +257,127 @@ public class ResultsController : ControllerBase
         var detector = new ConsecutiveFailureDetector();
         var alerts = detector.Detect(_config.ResultsRootPath, _parser);
         return Ok(alerts);
+    }
+
+    /// <summary>
+    /// GET /api/results/analyze/{testName}?builds=10 — failure pattern analysis for a specific test.
+    /// </summary>
+    [HttpGet("analyze/{testName}")]
+    public IActionResult AnalyzeTest(string testName, [FromQuery] int builds = 10)
+    {
+        var corr = Corr;
+        try
+        {
+            var report = _patternAnalyzer.AnalyzeTest(testName, builds);
+
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"AnalyzeTest '{testName}': pattern={report.Pattern}, confidence={report.Confidence}%", corr);
+
+            return Ok(new
+            {
+                testCaseName = report.TestCaseName,
+                pattern = report.Pattern.ToString(),
+                verdict = report.Verdict,
+                confidence = report.Confidence,
+                consecutiveFailures = report.ConsecutiveFailures,
+                totalBuildsAnalyzed = report.TotalBuildsAnalyzed,
+                totalFailures = report.TotalFailures,
+                flakeRate = report.FlakeRate,
+                lastPassBuild = report.LastPassBuild,
+                firstFailBuild = report.FirstFailBuild,
+                allSignaturesMatch = report.AllSignaturesMatch,
+                suggestedAction = report.SuggestedAction,
+                signatures = report.FailureSignatures.Select(s => new
+                {
+                    buildName = s.BuildName,
+                    buildDate = s.BuildDate,
+                    failedStepIndex = s.FailedStepIndex,
+                    failedStepName = s.FailedStepName,
+                    errorType = s.ErrorType,
+                    normalizedMessage = s.NormalizedMessage,
+                    topStackFrame = s.TopStackFrame,
+                    agent = s.Agent,
+                    duration = s.Duration,
+                }),
+                history = report.History.Select(h => new
+                {
+                    buildName = h.BuildName,
+                    buildDate = h.BuildDate,
+                    outcome = h.Outcome,
+                    duration = h.Duration,
+                    errorMessage = h.ErrorMessage.Length > 200
+                        ? h.ErrorMessage[..200] + "…" : h.ErrorMessage,
+                    agent = h.Agent,
+                }),
+                correlationId = corr,
+            });
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"AnalyzeTest FAILED for '{testName}': {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = "Analysis failed", detail = ex.Message, correlationId = corr });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/results/test/{testName}/compact-label — short pattern badge label
+    /// (e.g. "REGRESSION (4x)") suitable for the QA email "Pattern" column.
+    /// </summary>
+    [HttpGet("test/{testName}/compact-label")]
+    public IActionResult GetCompactLabel(string testName, [FromQuery] int builds = 10)
+    {
+        try
+        {
+            var label = _patternAnalyzer.GetCompactLabel(testName, builds);
+            return Ok(new { testName, label });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Compact-label failed", detail = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/results/builds/{build}/test/{testName}/log?stepIndex=N
+    /// Returns merged TRX + Agent + Controller log filtered to the test's time window.
+    /// </summary>
+    [HttpGet("builds/{build}/test/{testName}/log")]
+    public IActionResult GetTestLog(
+        string build, string testName, [FromQuery] int? stepIndex = null)
+    {
+        var corr = Corr;
+        try
+        {
+            var report = _logCorrelator.BuildReport(build, testName, stepIndex);
+            if (!string.IsNullOrEmpty(report.Error))
+                return NotFound(new { error = report.Error, correlationId = corr });
+
+            return Ok(new
+            {
+                buildName = report.BuildName,
+                testCaseName = report.TestCaseName,
+                outcome = report.Outcome,
+                agent = report.Agent,
+                startTime = report.StartTime,
+                endTime = report.EndTime,
+                duration = report.Duration,
+                failedStepIndex = report.FailedStepIndex,
+                errorMessage = report.ErrorMessage,
+                stackTrace = report.StackTrace,
+                steps = report.Steps,
+                agentLogLines = report.AgentLogLines,
+                controllerLogLines = report.ControllerLogLines,
+                mergedTimeline = report.MergedTimeline,
+                correlationId = corr,
+            });
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"GetTestLog FAILED for build='{build}' test='{testName}': {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = "Log retrieval failed", detail = ex.Message, correlationId = corr });
+        }
     }
 
     /// <summary>

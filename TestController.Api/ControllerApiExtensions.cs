@@ -30,6 +30,8 @@ public static class ControllerApiExtensions
         }
 
         services.AddSingleton<CachedBuildResultsProvider>();
+        services.AddSingleton<FailurePatternAnalyzer>();
+        services.AddSingleton<ExecutionLogCorrelator>();
         services.AddSingleton<SignalRNotifier>();
         services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
 
