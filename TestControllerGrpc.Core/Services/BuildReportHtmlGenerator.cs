@@ -130,7 +130,7 @@ public class BuildReportHtmlGenerator
     public record TestDetailContext(
         string TestName, string UseCaseName, string BuildNumber,
         string Outcome, string Duration,
-        string ErrorMessage, string StackTrace, string StdOut, string TrxFilePath,
+        string ErrorMessage, string StackTrace, string StdOut, string DebugTrace, string TrxFilePath,
         IReadOnlyList<StepInfo> ExecutionSteps);
 
     public record StepInfo(string StepName, string Outcome, string OutcomeIcon, string DurationText);
@@ -145,6 +145,14 @@ public class BuildReportHtmlGenerator
         sb.AppendLine(".card{background:#1A2238;border-radius:8px;padding:16px;margin:12px 0}");
         sb.AppendLine(".badge{display:inline-block;padding:4px 12px;border-radius:4px;font-weight:bold;color:#fff}");
         sb.AppendLine("pre{background:#0F1629;border:1px solid #334155;border-radius:6px;padding:12px;overflow-x:auto;font-size:12px;color:#94A3B8;white-space:pre-wrap}");
+        sb.AppendLine(".debug-trace-pre{font-size:14px;line-height:1.6;padding:16px}");
+        sb.AppendLine(".debug-line{padding:2px 4px;border-radius:2px}");
+        sb.AppendLine(".debug-line-fail{color:#FCA5A5;background:#450A0A;font-weight:bold}");
+        sb.AppendLine(".debug-filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:8px}");
+        sb.AppendLine(".debug-filter-btn{background:#334155;color:#E2E8F0;border:1px solid #475569;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;font-family:inherit}");
+        sb.AppendLine(".debug-filter-btn:hover{background:#475569}");
+        sb.AppendLine(".debug-filter-btn.active{background:#7F1D1D;border-color:#EF4444;color:#FCA5A5}");
+        sb.AppendLine(".debug-fail-count{color:#FCA5A5;font-size:12px}");
         sb.AppendLine(".pass{background:#10B981} .fail{background:#EF4444} .warn{background:#F59E0B}");
         sb.AppendLine("h1{color:#89B4FA;margin:0 0 4px} h3{color:#94A3B8;margin:16px 0 8px;font-size:13px}");
         sb.AppendLine("table{width:100%;border-collapse:collapse} td,th{padding:6px 10px;border-bottom:1px solid #1E293B;font-size:12px;text-align:left}");
@@ -171,6 +179,7 @@ public class BuildReportHtmlGenerator
 
         AppendOptionalSection(sb, "ERROR MESSAGE", ctx.ErrorMessage, "(no error message)", "color:#EF4444");
         AppendOptionalSection(sb, "STACK TRACE", ctx.StackTrace, "(no stack trace)", null);
+        AppendDebugTraceSection(sb, ctx.DebugTrace);
         AppendOptionalSection(sb, "STDOUT", ctx.StdOut, "(no stdout captured)", null);
 
         if (!string.IsNullOrEmpty(ctx.TrxFilePath))
@@ -178,6 +187,71 @@ public class BuildReportHtmlGenerator
 
         AppendFooter(sb);
         return sb.ToString();
+    }
+
+    private static readonly string[] FailureKeywords = ["fail", "error", "exception", "assert", "timeout", "abort"];
+
+    private static void AppendDebugTraceSection(StringBuilder sb, string debugTrace)
+    {
+        if (string.IsNullOrWhiteSpace(debugTrace) || debugTrace == "(no debug trace)") return;
+
+        var lines = debugTrace.Split('\n');
+        int failCount = 0;
+        var lineMarkup = new StringBuilder();
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.TrimEnd('\r');
+            var lower = line.ToLowerInvariant();
+            bool isFail = Array.Exists(FailureKeywords, kw => lower.Contains(kw));
+            if (isFail) failCount++;
+            var cls = isFail ? "debug-line debug-line-fail" : "debug-line";
+            var dataAttr = isFail ? " data-fail='1'" : "";
+            lineMarkup.AppendLine($"<span class='{cls}'{dataAttr}>{Enc(line)}</span>");
+        }
+
+        sb.AppendLine("<div class='card'>");
+        sb.AppendLine("<div class='debug-filter-bar'>");
+        sb.AppendLine("<h3 style='margin:0'>DEBUG TRACE</h3>");
+        if (failCount > 0)
+        {
+            sb.AppendLine($"<button class='debug-filter-btn' id='btnFilterFailed' onclick='toggleFailFilter()'>Show Failed Only</button>");
+            sb.AppendLine($"<span class='debug-fail-count'>{failCount} failed line{(failCount == 1 ? "" : "s")}</span>");
+            sb.AppendLine("<button class='debug-filter-btn' id='btnPrevFail' onclick='navigateFail(-1)'>&#9650; Prev</button>");
+            sb.AppendLine("<button class='debug-filter-btn' id='btnNextFail' onclick='navigateFail(1)'>&#9660; Next</button>");
+        }
+        sb.AppendLine("</div>");
+        sb.AppendLine($"<pre class='debug-trace-pre' id='debugTracePre'>{lineMarkup}</pre></div>");
+
+        if (failCount > 0)
+        {
+            sb.AppendLine("<script>");
+            sb.AppendLine(@"var failFilterActive=false, failIdx=-1;
+function toggleFailFilter(){
+  failFilterActive=!failFilterActive;
+  var btn=document.getElementById('btnFilterFailed');
+  var pre=document.getElementById('debugTracePre');
+  var spans=pre.querySelectorAll('span.debug-line');
+  btn.textContent=failFilterActive?'Show All':'Show Failed Only';
+  if(failFilterActive){btn.classList.add('active')}else{btn.classList.remove('active')}
+  for(var i=0;i<spans.length;i++){
+    spans[i].style.display=failFilterActive&&!spans[i].dataset.fail?'none':'';
+  }
+  failIdx=-1;
+}
+function navigateFail(dir){
+  var pre=document.getElementById('debugTracePre');
+  var fails=pre.querySelectorAll('span[data-fail]');
+  if(!fails.length)return;
+  fails.forEach(function(f){f.style.outline='';});
+  failIdx+=dir;
+  if(failIdx<0)failIdx=fails.length-1;
+  if(failIdx>=fails.length)failIdx=0;
+  fails[failIdx].scrollIntoView({behavior:'smooth',block:'center'});
+  fails[failIdx].style.outline='2px solid #EF4444';
+}
+");
+            sb.AppendLine("</script>");
+        }
     }
 
     private static void AppendOptionalSection(StringBuilder sb, string title, string content, string placeholder, string? style)

@@ -22,7 +22,7 @@ public sealed class FailurePatternAnalyzer
     /// <summary>
     /// Analyzes a specific test case across the last N builds to detect failure patterns.
     /// </summary>
-    public FailureAnalysisReport AnalyzeTest(string testCaseName, int lookbackBuilds = 10)
+    public FailureAnalysisReport AnalyzeTest(string testCaseName, int lookbackBuilds = 5)
     {
         // 1. Find the last N builds in chronological order (newest first)
         var buildFolders = _parser.DiscoverBuilds(_config.ResultsRootPath)
@@ -34,8 +34,7 @@ public sealed class FailurePatternAnalyzer
         var history = new List<TestExecutionRecord>();
         foreach (var (buildNumber, path, modified) in buildFolders)
         {
-            var trxFiles = Directory.GetFiles(path, "*.trx", SearchOption.AllDirectories);
-            foreach (var trx in trxFiles)
+            foreach (var trx in EnumerateTrxSafe(path))
             {
                 var record = ExtractTestResult(trx, testCaseName);
                 if (record != null)
@@ -203,7 +202,7 @@ public sealed class FailurePatternAnalyzer
     /// Examples: "REGRESSION (4x)", "FLAKY (3/10)", "CHRONIC FAILURE",
     /// "NEW FAILURE", "RESOLVED".
     /// </summary>
-    public string GetCompactLabel(string testCaseName, int lookbackBuilds = 10)
+    public string GetCompactLabel(string testCaseName, int lookbackBuilds = 5)
     {
         var report = AnalyzeTest(testCaseName, lookbackBuilds);
         return report.Pattern switch
@@ -253,28 +252,80 @@ public sealed class FailurePatternAnalyzer
 
     private static string ExtractAgentFromTrx(string trxPath)
     {
-        // Try to infer agent/machine from path or filename
+        // Try to infer agent/machine from path or filename.
         var fileName = Path.GetFileNameWithoutExtension(trxPath);
-        var match = Regex.Match(fileName, @"_([A-Z0-9]+)_\d{4}", RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value : "";
+
+        // Default MSTest naming: "<user>_<machine> YYYY-MM-DD HH_MM_SS"
+        var match = Regex.Match(fileName, @"^[^_\s]+_([^\s_]+)\s+\d{4}-\d{2}-\d{2}");
+        if (match.Success) return match.Groups[1].Value;
+
+        // Alternative naming: "..._<MACHINE>_NNNN" (e.g. build pipeline output)
+        match = Regex.Match(fileName, @"_([A-Z0-9][A-Z0-9\-]+)_\d{3,}", RegexOptions.IgnoreCase);
+        if (match.Success) return match.Groups[1].Value;
+
+        // Last resort: parent folder name often carries the agent for our layouts.
+        var parent = Path.GetFileName(Path.GetDirectoryName(trxPath) ?? "");
+        return parent;
     }
 
     private static int ExtractFailedStepIndex(string? stackTrace, List<TestStep> steps)
     {
-        if (steps.Count > 0)
+        for (int i = 0; i < steps.Count; i++)
         {
-            for (int i = 0; i < steps.Count; i++)
-            {
-                if (steps[i].Outcome == "Failed")
-                    return i;
-            }
+            if (steps[i].Outcome == "Failed")
+                return i;
         }
 
         if (string.IsNullOrEmpty(stackTrace)) return -1;
+
         var match = Regex.Match(stackTrace, @"Step\s*(\d+)|TestStep\[(\d+)\]");
-        if (match.Success)
-            return int.Parse(match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value);
-        return -1;
+        if (!match.Success) return -1;
+
+        var raw = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+        return int.TryParse(raw, out var idx) ? idx : -1;
+    }
+
+    /// <summary>
+    /// Enumerates *.trx files beneath <paramref name="root"/> in a fault-tolerant way:
+    /// skips folders we cannot read (e.g., ACL-protected system directories) and
+    /// avoids reparse points / junctions to prevent infinite loops.
+    /// </summary>
+    private static IEnumerable<string> EnumerateTrxSafe(string root)
+    {
+        var stack = new Stack<string>();
+        stack.Push(root);
+
+        while (stack.Count > 0)
+        {
+            var dir = stack.Pop();
+
+            string[] files;
+            try { files = Directory.GetFiles(dir, "*.trx"); }
+            catch (UnauthorizedAccessException) { continue; }
+            catch (IOException) { continue; }
+
+            foreach (var f in files)
+                yield return f;
+
+            string[] subs;
+            try { subs = Directory.GetDirectories(dir); }
+            catch (UnauthorizedAccessException) { continue; }
+            catch (IOException) { continue; }
+
+            foreach (var s in subs)
+            {
+                // Skip reparse points / junctions (e.g., C:\ProgramData\Application Data -> itself).
+                try
+                {
+                    var attrs = File.GetAttributes(s);
+                    if ((attrs & FileAttributes.ReparsePoint) != 0) continue;
+                }
+                catch (UnauthorizedAccessException) { continue; }
+                catch (IOException) { continue; }
+
+                stack.Push(s);
+            }
+        }
     }
 
     private static string ExtractFailedStepName(string? stackTrace, List<TestStep> steps)

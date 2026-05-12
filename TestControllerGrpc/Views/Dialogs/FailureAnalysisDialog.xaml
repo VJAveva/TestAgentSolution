@@ -47,7 +47,7 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock>
                         <Run Text="Pattern: " FontWeight="Bold" Foreground="#94A3B8"/>
-                        <Run Text="{Binding PatternLabel}" FontWeight="Bold" FontSize="14"
+                        <Run Text="{Binding PatternLabel, Mode=OneWay}" FontWeight="Bold" FontSize="14"
                              Foreground="{Binding VerdictForegroundBrush}"/>
                     </TextBlock>
                     <TextBlock Text="{Binding Verdict}" TextWrapping="Wrap" Margin="0,8,0,0"/>
@@ -56,7 +56,7 @@
                         VerticalAlignment="Top">
                     <TextBlock>
                         <Run Text="Confidence: " Foreground="#94A3B8"/>
-                        <Run Text="{Binding ConfidenceText}" FontWeight="Bold"/>
+                        <Run Text="{Binding ConfidenceText, Mode=OneWay}" FontWeight="Bold"/>
                     </TextBlock>
                 </Border>
             </Grid>

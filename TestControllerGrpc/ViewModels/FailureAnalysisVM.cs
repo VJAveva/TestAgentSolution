@@ -84,9 +84,9 @@ public sealed partial class FailureAnalysisVM : ObservableObject
             ToolTipText = $"{r.BuildName} — {r.Outcome} ({r.BuildDate:yyyy-MM-dd HH:mm})";
             (OutcomeBrush, OutcomeChar) = r.Outcome switch
             {
-                "Passed" => (new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)), "?"),
-                "Failed" => (new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)), "?"),
-                _ => (new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80)), "·"),
+                "Passed" => (new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)), "\u2713"),
+                "Failed" => (new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)), "\u2717"),
+                _ => (new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80)), "\u25CB"),
             };
         }
 

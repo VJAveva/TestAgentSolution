@@ -2,6 +2,8 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
 using System.Windows;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.Views.Dialogs;
@@ -55,9 +57,22 @@ public partial class ExecutionLogViewerDialog : Window
 
     private static string ResolveApiBase()
     {
-        // WPF host runs Kestrel on the standard port; allow override via env var.
-        return Environment.GetEnvironmentVariable("TESTCONTROLLER_API_BASE")
-               ?? "http://localhost:5000";
+        // Explicit override always wins.
+        var fromEnv = Environment.GetEnvironmentVariable("TESTCONTROLLER_API_BASE");
+        if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv;
+
+        // Otherwise read the same WebApiPort that ControllerWebApiHost binds to
+        // (default 5200). Falls back to 5200 if configuration is unavailable.
+        try
+        {
+            var cfg = App.Services?.GetService<IConfiguration>();
+            var port = cfg?.GetValue("WebApiPort", 5200) ?? 5200;
+            return $"http://localhost:{port}";
+        }
+        catch
+        {
+            return "http://localhost:5200";
+        }
     }
 
     private void OnCopyClick(object sender, RoutedEventArgs e)
