@@ -21,4 +21,8 @@
     <Protobuf Include="..\TestControllerGrpc.Core\Protos\test_agent.proto" Link="Protos\test_agent.proto" GrpcServices="Both" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
+  </ItemGroup>
+
 </Project>

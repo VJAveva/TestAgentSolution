@@ -266,7 +266,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
 
   // Load existing sessions on mount
   useEffect(() => {
-    apiFetch<{ active: any[]; history: any[] }>('/api/execution/dashboard-sessions')
+    apiFetch<{ active: any[]; history: any[] }>('/api/execution/proxy/dashboard-sessions')
       .then(data => {
         const all = [
           ...(data.active || []),

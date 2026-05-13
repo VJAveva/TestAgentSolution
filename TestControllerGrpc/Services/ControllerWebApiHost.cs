@@ -125,8 +125,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                     policy.WithOrigins(
                             "http://localhost:3000",
                             "http://localhost:5173",
+                            "http://localhost:8080",
                             "http://localhost:8081",
                             $"http://{Environment.MachineName}:3000",
+                            $"http://{Environment.MachineName}:8080",
                             $"http://{Environment.MachineName}:8081",
                             $"http://{Environment.MachineName}")
                         .AllowAnyHeader()
@@ -158,7 +160,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken ct)
     {
-        _logger.LogInformation("WebApi + SignalR server stopping…");
+        _logger.LogInformation("WebApi + SignalR server stoppingï¿½");
 
         // Dispose the notifier first to unsubscribe from all events
         if (_app is not null)

@@ -6,6 +6,12 @@ using TestController.WebApi.Services;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
+// ── Crash capture — must be first so nothing escapes unglogged ─────────
+var logDir = AppLogger.DefaultLogDirectory;
+CrashDumpHelper.InstallGlobalHandlers("webapi", logDir);
+
+try
+{
 var builder = WebApplication.CreateBuilder(args);
 
 // Allow long-running executions triggered via WebClient.
@@ -53,6 +59,7 @@ builder.Services.AddSingleton<IAppLogger>(sp =>
 builder.Services.AddSingleton<AgentGrpcClientManager>();
 builder.Services.AddSingleton<AgentRegistry>();
 builder.Services.AddSingleton<WatchListFileService>();
+builder.Services.AddSingleton<ControllerProxyService>();
 builder.Services.AddHostedService<AgentEventRelayService>();
 
 // Adapters: expose standalone services as the interfaces the shared API controllers expect
@@ -96,6 +103,30 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 var app = builder.Build();
 
 app.UseCors();
+
+// Global exception handler — logs to crash infrastructure + returns 500 JSON
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var logger = context.RequestServices.GetService<IAppLogger>();
+        logger?.Error("UnhandledRequest", $"{context.Request.Method} {context.Request.Path}: {ex.Message}", ex);
+        CrashDumpHelper.AppendCrashLog($"[RequestException] {context.Request.Method} {context.Request.Path}: {ex}");
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync(JsonSerializer.Serialize(new
+        {
+            error = "Internal server error",
+            message = ex.Message,
+            timestamp = DateTime.UtcNow,
+        }));
+    }
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -141,6 +172,12 @@ app.MapPost("/api/clientlogs", (HttpContext ctx, IAppLogger logger) =>
 app.MapFallbackToFile("index.html");
 
 app.Run();
+}
+catch (Exception ex)
+{
+    CrashDumpHelper.RecordCrash("TopLevel", ex, isTerminating: true);
+    throw;
+}
 
 // Expose for WebApplicationFactory<Program> in integration tests
 public partial class Program { }

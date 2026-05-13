@@ -3,6 +3,11 @@ using TestAgentGrpc;
 using TestAgentGrpc.Clients;
 using TestAgentGrpc.Services;
 using TestAgentGrpc.UI;
+using TestControllerGrpc.Services;
+
+// ── Crash capture — must be first so nothing escapes unglogged ─────────
+var logDir = AppLogger.DefaultLogDirectory;
+CrashDumpHelper.InstallGlobalHandlers("agent", logDir);
 
 // ── Single-instance guard ──────────────────────────────────────────────
 using var mutex = new Mutex(true, "TestAgentGrpc", out bool createdNew);
@@ -14,6 +19,8 @@ if (!createdNew)
 }
 
 // ── Build host ─────────────────────────────────────────────────────────
+try
+{
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<AgentSettings>(
@@ -88,3 +95,9 @@ Application.Run(trayApp);
 // Graceful shutdown
 await app.StopAsync();
 await hostTask;
+}
+catch (Exception ex)
+{
+    CrashDumpHelper.RecordCrash("TopLevel", ex, isTerminating: true);
+    throw;
+}

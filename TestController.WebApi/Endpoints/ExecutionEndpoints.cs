@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -13,10 +14,17 @@ public static class ExecutionEndpoints
         group.MapPost("/trigger-all", TriggerAll);
         group.MapPost("/trigger-event/{tag}/{eventIndex:int}", TriggerEvent);
         group.MapPost("/retry/{sessionId}", RetrySession);
+
+        // Proxy-aware overrides: when a WPF controller is running alongside this
+        // WebApi, its embedded API (ControllerProxyUrl) has the real session data.
+        // These endpoints merge local and proxied data so the WebClient dashboard
+        // always shows execution progress regardless of which host triggered it.
+        group.MapGet("/proxy/dashboard-sessions", ProxyDashboardSessions);
+        group.MapGet("/proxy/status", ProxyExecutionStatus);
         return group;
     }
 
-    /// <summary>POST /api/execution/trigger-all � trigger all WatchItems.</summary>
+    /// <summary>POST /api/execution/trigger-all � trigger all WatchItems.</summary>
     private static IResult TriggerAll(
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
@@ -64,7 +72,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger/{tag} � trigger specific WatchItem.</summary>
+    /// <summary>POST /api/execution/trigger/{tag} � trigger specific WatchItem.</summary>
     private static IResult TriggerByTag(
         string tag,
         WatchListFileService fileService,
@@ -110,7 +118,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} � trigger specific event.</summary>
+    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} � trigger specific event.</summary>
     private static IResult TriggerEvent(
         string tag,
         int eventIndex,
@@ -158,7 +166,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/cancel � cancel all running executions.</summary>
+    /// <summary>POST /api/execution/cancel � cancel all running executions.</summary>
     private static IResult CancelAll(
         ExecutionSessionManager sessionManager,
         IRealtimeNotifier notifier)
@@ -178,7 +186,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/cancel/{sessionId} � cancel a specific session.</summary>
+    /// <summary>POST /api/execution/cancel/{sessionId} � cancel a specific session.</summary>
     private static IResult CancelBySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
@@ -199,7 +207,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/retry/{sessionId} � retry failed actions from a session.</summary>
+    /// <summary>POST /api/execution/retry/{sessionId} � retry failed actions from a session.</summary>
     private static IResult RetrySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
@@ -210,7 +218,7 @@ public static class ExecutionEndpoints
             return Results.NotFound($"No retryable actions found for session '{sessionId}'.");
 
         notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
-            $"Retry requested for session '{sessionId}' � {retryable.Count} action(s)"));
+            $"Retry requested for session '{sessionId}' � {retryable.Count} action(s)"));
 
         return Results.Ok(new
         {
@@ -220,7 +228,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/status � current execution state overview.</summary>
+    /// <summary>GET /api/execution/status � current execution state overview.</summary>
     private static IResult GetStatus(ExecutionSessionManager sessionManager)
     {
         return Results.Ok(new
@@ -230,7 +238,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/sessions � active sessions with per-session detail.</summary>
+    /// <summary>GET /api/execution/sessions � active sessions with per-session detail.</summary>
     private static IResult GetSessions(ExecutionSessionManager sessionManager)
     {
         var active = sessionManager.GetActiveSessions();
@@ -255,4 +263,150 @@ public static class ExecutionEndpoints
             })
         });
     }
+
+    // ── Proxy-aware endpoints ──────────────────────────────────────────
+
+    /// <summary>
+    /// GET /api/execution/proxy/dashboard-sessions
+    /// Merges local sessions with the WPF controller's sessions (if configured).
+    /// The WebClient should call this instead of the shared dashboard-sessions
+    /// endpoint when a WPF controller may be running pipelines.
+    /// </summary>
+    private static async Task<IResult> ProxyDashboardSessions(
+        ExecutionSessionManager sessionManager,
+        ControllerProxyService proxy)
+    {
+        // Local sessions from this WebApi's own session manager
+        var localActive = sessionManager.GetActiveSessions();
+        var localHistory = sessionManager.GetHistory(20);
+        var localActiveIds = new HashSet<string>(localActive.Select(s => s.SessionId));
+        var localHistoryIds = new HashSet<string>(localHistory.Select(s => s.SessionId));
+
+        // Try to get controller's sessions
+        var proxied = await proxy.GetDashboardSessionsAsync();
+
+        if (proxied is null)
+        {
+            // Controller unavailable — return local data only (same as shared endpoint)
+            return Results.Ok(new
+            {
+                active = localActive.Select(MapSession),
+                history = localHistory.Select(MapSession),
+            });
+        }
+
+        // Merge: proxied data takes priority (it has the real execution progress),
+        // but include any local sessions not in the controller's data.
+        var mergedActive = new List<object>();
+        var mergedHistory = new List<object>();
+
+        // Add all proxied sessions (these have the real progress data)
+        foreach (var s in proxied.Active) mergedActive.Add(s);
+        foreach (var s in proxied.History) mergedHistory.Add(s);
+
+        // Add local sessions that aren't already in the proxied data
+        // (sessions triggered directly via the standalone WebApi)
+        foreach (var s in localActive)
+        {
+            var id = s.SessionId;
+            if (!proxied.Active.Any(p => HasMatchingSessionId(p, id)))
+                mergedActive.Add(MapSession(s));
+        }
+        foreach (var s in localHistory)
+        {
+            var id = s.SessionId;
+            if (!proxied.History.Any(p => HasMatchingSessionId(p, id)))
+                mergedHistory.Add(MapSession(s));
+        }
+
+        return Results.Ok(new
+        {
+            active = mergedActive,
+            history = mergedHistory,
+            source = "merged",
+        });
+    }
+
+    /// <summary>
+    /// GET /api/execution/proxy/status
+    /// Returns combined execution status from local + controller.
+    /// </summary>
+    private static async Task<IResult> ProxyExecutionStatus(
+        ExecutionSessionManager sessionManager,
+        ControllerProxyService proxy)
+    {
+        var localExecuting = sessionManager.HasAnyActiveExecution;
+        var localCount = sessionManager.ActiveExecutionCount;
+
+        var proxied = await proxy.GetExecutionStatusAsync();
+
+        return Results.Ok(new
+        {
+            isExecuting = localExecuting || (proxied?.IsExecuting ?? false),
+            activeCount = localCount + (proxied?.ActiveCount ?? 0),
+            source = proxied is not null ? "merged" : "local",
+        });
+    }
+
+    private static bool HasMatchingSessionId(JsonElement element, string sessionId)
+    {
+        return element.TryGetProperty("sessionId", out var prop)
+            && prop.GetString() == sessionId;
+    }
+
+    private static object MapSession(ExecutionSession s) => new
+    {
+        sessionId = s.SessionId,
+        watchItemTag = s.WatchItemTag,
+        userId = s.UserId,
+        source = s.Source,
+        status = s.State switch
+        {
+            SessionState.Running => "Running",
+            SessionState.Completed => "Success",
+            SessionState.PartialFailure => "PartialFailure",
+            SessionState.Failed => "Failed",
+            _ => "Running",
+        },
+        startedUtc = s.StartedUtc.ToString("o"),
+        elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
+        lockedAgents = s.LockedAgents,
+        buildNumber = s.ResolvedParameters
+            .GetValueOrDefault("_BuildNumber", ""),
+        totalActions = s.SnapshotNodes.Count,
+        completedActions = s.ActionResults.Count,
+        passedActions = s.SucceededCount,
+        failedActions = s.FailedCount,
+        progressPercent = s.SnapshotNodes.Count > 0
+            ? (int)((double)s.ActionResults.Count / s.SnapshotNodes.Count * 100)
+            : 0,
+        agents = s.GetAgentSummaries().Select(a => new
+        {
+            agentName = a.AgentName,
+            status = a.Status,
+            completedCount = a.CompletedCount,
+            totalCount = a.TotalCount,
+            progressPercent = a.TotalCount > 0
+                ? (int)((double)a.CompletedCount / a.TotalCount * 100)
+                : 0,
+            actions = a.Actions.Select(act => new
+            {
+                tag = act.ActionTag,
+                actionType = act.ActionType,
+                agentName = act.AgentName,
+                command = act.Command,
+                status = act.Outcome switch
+                {
+                    ActionOutcome.Success => "Success",
+                    ActionOutcome.Failed => "Failed",
+                    ActionOutcome.Terminated => "Failed",
+                    ActionOutcome.TimedOut => "Failed",
+                    _ => "Running",
+                },
+                exitCode = act.ExitCode,
+                errorMessage = act.ErrorMessage,
+                duration = act.Duration.ToString(@"mm\:ss"),
+            }),
+        }),
+    };
 }

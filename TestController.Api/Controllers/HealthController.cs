@@ -34,7 +34,7 @@ public class HealthController : ControllerBase
         _appLogger = appLogger;
     }
 
-    /// <summary>GET /api/health — lightweight liveness check.</summary>
+    /// <summary>GET /api/health ï¿½ lightweight liveness check.</summary>
     [HttpGet("health")]
     public IActionResult Health()
     {
@@ -54,7 +54,7 @@ public class HealthController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/health/diagnostics — detailed system info for debugging.</summary>
+    /// <summary>GET /api/health/diagnostics ï¿½ detailed system info for debugging.</summary>
     [HttpGet("health/diagnostics")]
     public IActionResult Diagnostics()
     {
@@ -134,7 +134,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/health/logs — recent structured log entries for debugging.
+    /// GET /api/health/logs ï¿½ recent structured log entries for debugging.
     /// Supports filtering by component, level, and correlation ID.
     /// </summary>
     [HttpGet("health/logs")]
@@ -171,7 +171,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/health/log-files — lists available log files with sizes.
+    /// GET /api/health/log-files ï¿½ lists available log files with sizes.
     /// </summary>
     [HttpGet("health/log-files")]
     public IActionResult GetLogFiles()
@@ -195,7 +195,7 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/health/log-files/{fileName}?tail=100 — returns the last N lines of a log file.
+    /// GET /api/health/log-files/{fileName}?tail=100 ï¿½ returns the last N lines of a log file.
     /// </summary>
     [HttpGet("health/log-files/{fileName}")]
     public IActionResult GetLogFileContent(string fileName, [FromQuery] int tail = 100)
@@ -224,5 +224,23 @@ public class HealthController : ControllerBase
         {
             return StatusCode(500, new { error = $"Failed to read log file: {ex.Message}" });
         }
+    }
+
+    /// <summary>
+    /// GET /api/health/crashes â€” returns crash dump info and last crash summary.
+    /// </summary>
+    [HttpGet("health/crashes")]
+    public IActionResult GetCrashes()
+    {
+        var lastCrash = CrashDumpHelper.GetLastCrashSummary();
+        var dumps = CrashDumpHelper.GetCrashDumps();
+
+        return Ok(new
+        {
+            lastCrash,
+            dumps,
+            crashLogPath = CrashDumpHelper.CrashLogPath,
+            retentionDays = CrashDumpHelper.DumpRetentionDays,
+        });
     }
 }
