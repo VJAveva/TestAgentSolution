@@ -75,7 +75,7 @@
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="&#x1F9E9;" FontSize="16" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBlock Text="&#x1F9E9;" FontSize="16" FontFamily="Segoe UI Emoji" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <TextBlock Text="Template XML Editor" FontSize="14" FontWeight="Bold"
                                Foreground="{DynamicResource AccMauve}" VerticalAlignment="Center" />
                 </StackPanel>
@@ -101,7 +101,7 @@
                             Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
                             Command="{Binding AutoFixCommand}" ToolTip="Auto-fix missing defaults and normalize booleans">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F527;" FontSize="13" Margin="0,0,4,0" />
+                            <TextBlock Text="&#x1F527;" FontSize="13" FontFamily="Segoe UI Emoji" Margin="0,0,4,0" />
                             <TextBlock Text="Auto Fix" />
                         </StackPanel>
                     </Button>
@@ -123,7 +123,7 @@
                             Background="{DynamicResource TemplateRootBg}" Foreground="{DynamicResource AccMauve}"
                             Command="{Binding TogglePreviewCommand}" ToolTip="Toggle structure preview panel">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F333;" FontSize="13" Margin="0,0,4,0" />
+                            <TextBlock Text="&#x1F333;" FontSize="13" FontFamily="Segoe UI Emoji" Margin="0,0,4,0" />
                             <TextBlock Text="Preview" />
                         </StackPanel>
                     </Button>
@@ -351,7 +351,7 @@
                             Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
                             Command="{Binding SaveCommand}" ToolTip="Validate and save Template XML changes">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F4BE;" FontSize="13" Margin="0,0,4,0" />
+                            <TextBlock Text="&#x1F4BE;" FontSize="13" FontFamily="Segoe UI Emoji" Margin="0,0,4,0" />
                             <TextBlock Text="Save" FontWeight="Bold" />
                         </StackPanel>
                     </Button>

@@ -832,10 +832,12 @@
                                                     <Button Content="&#x1F4CA;" ToolTip="Export HTML Report"
                                                             Command="{Binding ExportHtmlCommand}"
                                                             Style="{StaticResource InlineExportBtn}"
+                                                            FontFamily="Segoe UI Emoji"
                                                             Foreground="{DynamicResource Accent}" />
                                                     <Button Content="&#x1F4C4;" ToolTip="Export CSV"
                                                             Command="{Binding ExportCsvCommand}"
                                                             Style="{StaticResource InlineExportBtn}"
+                                                            FontFamily="Segoe UI Emoji"
                                                             Foreground="{DynamicResource AccGreen}" Margin="4,0,0,0" />
                                                 </StackPanel>
                                             </DataTemplate>

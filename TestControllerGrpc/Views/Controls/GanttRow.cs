@@ -184,8 +184,14 @@ public sealed class GanttRow : Control
 
             if (w >= 32 && !string.IsNullOrEmpty(bar.ActionTag))
             {
+                // Sanitize: strip non-BMP characters (surrogate pairs) that can
+                // cause infinite recursion in TextShaping.dll / DWrite.dll when
+                // the default font lacks the glyph.
+                var safeTag = SanitizeForRendering(bar.ActionTag);
+                if (string.IsNullOrEmpty(safeTag)) continue;
+
                 var ft = new FormattedText(
-                    bar.ActionTag, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                    safeTag, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                     typeface, 10, Brushes.White, dpi)
                 {
                     MaxTextWidth = Math.Max(1, w - 8),
@@ -195,6 +201,39 @@ public sealed class GanttRow : Control
                 dc.DrawText(ft, new Point(x + 4, top + (barHeight - ft.Height) / 2));
             }
         }
+    }
+
+    /// <summary>
+    /// Strips characters outside the Basic Multilingual Plane (surrogate pairs)
+    /// that can cause stack overflow in DWrite / TextShaping.dll when the active
+    /// font lacks the glyph.
+    /// </summary>
+    private static string SanitizeForRendering(string text)
+    {
+        // Fast path: most strings are pure BMP.
+        if (!HasSurrogatePairs(text)) return text;
+
+        var sb = new System.Text.StringBuilder(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                sb.Append('?'); // Replace non-BMP char with safe placeholder
+                i++; // Skip low surrogate
+            }
+            else
+            {
+                sb.Append(text[i]);
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static bool HasSurrogatePairs(string text)
+    {
+        for (int i = 0; i < text.Length; i++)
+            if (char.IsHighSurrogate(text[i])) return true;
+        return false;
     }
 
     private Brush ResolveBrush(string resourceKey, string fallbackHex)

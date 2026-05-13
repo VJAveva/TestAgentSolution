@@ -2131,6 +2131,7 @@
                                         Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
                                         Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic" />
                                 <Button Content="&#x1F4CA; Monitor" Style="{StaticResource SmBtn}"
+                                        FontFamily="Segoe UI Emoji"
                                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
                                         Command="{Binding OpenAgentMonitorCommand}"
                                         CommandParameter="{Binding SelectedAgent}"
