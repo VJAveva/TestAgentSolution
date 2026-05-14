@@ -123,6 +123,10 @@
                         <DockPanel>
                             <!-- Status RadioButtons + Demo button (right side) -->
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="&#x1F504; Reload" FontSize="10" Padding="8,3" Margin="0,0,6,0"
+                                        Foreground="{StaticResource AccentBlue}"
+                                        Command="{Binding ReloadSnapshotsCommand}"
+                                        ToolTip="Reload pipeline snapshots from disk (crash recovery)"/>
                                 <Button Content="&#x25B6; Demo" FontSize="10" Padding="8,3" Margin="0,0,10,0"
                                         Foreground="{StaticResource AccentBlue}"
                                         Command="{Binding LoadDemoDataCommand}"

@@ -79,6 +79,9 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             SelectedAgentName = null;
         });
         ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
+
+        // Load any sessions persisted from a previous run (crash recovery).
+        LoadPersistedSessions();
     }
 
     /// <summary>
@@ -583,6 +586,82 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         SelectedSessionId =
             SelectedSessionId == sessionId ? null : sessionId;
         SelectedAgentName = null;
+    }
+
+    // ── Snapshot Recovery ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reloads persisted session snapshots from disk. Use after a crash to
+    /// see which pipeline step failed. Previously-loaded recovered sessions
+    /// are replaced; live running sessions are preserved.
+    /// </summary>
+    [RelayCommand]
+    private void ReloadSnapshots()
+    {
+        LoadPersistedSessions();
+        RecalculateStats();
+    }
+
+    /// <summary>
+    /// Loads completed/crashed sessions from the persisted snapshot file
+    /// and adds them as non-running cards to the dashboard.
+    /// </summary>
+    private void LoadPersistedSessions()
+    {
+        if (_sessionManager == null) return;
+
+        var persisted = _sessionManager.GetPersistedHistory();
+        if (persisted.Count == 0) return;
+
+        foreach (var entry in persisted)
+        {
+            // Skip if a card for this session already exists (it's still live)
+            if (Sessions.Any(s => s.SessionId == entry.SessionId)) continue;
+
+            // Also skip if the session is currently active in-process
+            if (_sessionManager.GetSession(entry.SessionId) is { State: SessionState.Running })
+                continue;
+
+            var state = entry.State == nameof(SessionState.Running)
+                ? "Failed"   // Was running when we crashed
+                : entry.State;
+
+            var card = new SessionCardVM
+            {
+                SessionId = entry.SessionId,
+                WatchItemTag = entry.WatchItemTag,
+                UserId = entry.UserId,
+                Source = entry.Source + (entry.State == nameof(SessionState.Running) ? " (Crashed)" : " (Recovered)"),
+                Status = state,
+                BuildNumber = entry.ResolvedParameters?.TryGetValue(WatchListConstants.BuildNumberKey, out var bn) == true
+                    ? bn : "",
+                LockedAgentsList = entry.LockedAgents != null ? string.Join(", ", entry.LockedAgents) : "",
+                IsExpanded = false,
+                ProgressPercent = 100,
+            };
+
+            // Populate agent rows and action pills from persisted results
+            foreach (var ar in entry.ActionResults ?? [])
+            {
+                var agentName = ar.AgentName ?? "Controller";
+                var row = card.GetOrCreateAgent(agentName);
+                row.UpdateAction(
+                    tag: ar.ActionTag,
+                    actionType: ar.ActionType,
+                    command: ar.Command,
+                    status: ar.Outcome == nameof(ActionOutcome.Success) ? "Success"
+                        : ar.Outcome == nameof(ActionOutcome.Failed) ? "Failed"
+                        : ar.Outcome == nameof(ActionOutcome.Terminated) ? "Failed"
+                        : ar.Outcome == nameof(ActionOutcome.TimedOut) ? "Failed"
+                        : "Unknown",
+                    exitCode: ar.ExitCode ?? 0,
+                    errorMessage: ar.ErrorMessage ?? "",
+                    duration: ar.Duration ?? "");
+            }
+
+            card.RecalculateCounters();
+            Sessions.Add(card);
+        }
     }
 
     // ── Window launch command ────────────────────────────────────────────

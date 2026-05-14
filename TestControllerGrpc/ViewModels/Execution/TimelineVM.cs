@@ -18,7 +18,7 @@ public partial class TimelineVM : ObservableObject, IDisposable
     {
         _dashboard = dashboard;
         _refreshTimer = new DispatcherTimer(
-            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(5),
             DispatcherPriority.Background,
             OnRefreshTick,
             dispatcher);

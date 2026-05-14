@@ -81,7 +81,16 @@ public partial class App : Application
                 services.AddSingleton<IEventAggregator, EventAggregator>();
                 services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
                 services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
-                services.AddSingleton<ExecutionSessionManager>();
+                services.AddSingleton(sp =>
+                {
+                    var cfg = sp.GetRequiredService<IConfiguration>();
+                    var logDir = cfg.GetValue<string>("Logging:LogDirectory")
+                        ?? cfg.GetValue<string>("LogDirectory")
+                        ?? AppLogger.DefaultLogDirectory;
+                    var sessionsFile = Path.Combine(logDir, "session-snapshots.json");
+                    var events = sp.GetRequiredService<IEventAggregator>();
+                    return new ExecutionSessionManager(events, sessionsFile);
+                });
                 services.AddSingleton(sp =>
                 {
                     var cfg = sp.GetRequiredService<IConfiguration>();
