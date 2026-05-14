@@ -21,6 +21,7 @@ public static class ExecutionEndpoints
         // always shows execution progress regardless of which host triggered it.
         group.MapGet("/proxy/dashboard-sessions", ProxyDashboardSessions);
         group.MapGet("/proxy/status", ProxyExecutionStatus);
+        group.MapGet("/proxy/logs/{sessionId}", ProxySessionLogs);
         return group;
     }
 
@@ -346,6 +347,21 @@ public static class ExecutionEndpoints
             activeCount = localCount + (proxied?.ActiveCount ?? 0),
             source = proxied is not null ? "merged" : "local",
         });
+    }
+
+    /// <summary>
+    /// GET /api/execution/proxy/logs/{sessionId}
+    /// Fetches recent log entries for a session from the WPF controller.
+    /// </summary>
+    private static async Task<IResult> ProxySessionLogs(
+        string sessionId,
+        ControllerProxyService proxy)
+    {
+        var logs = await proxy.GetRecentLogsAsync(sessionId);
+        if (logs is null)
+            return Results.Ok(new { sessionId, logs = Array.Empty<object>(), count = 0 });
+
+        return Results.Ok(logs.Value);
     }
 
     private static bool HasMatchingSessionId(JsonElement element, string sessionId)

@@ -1,5 +1,5 @@
 import React, {
-  createContext, useContext, useReducer,
+  createContext, useContext, useReducer, useRef,
   useCallback, useEffect, type ReactNode, type Dispatch
 } from 'react';
 import { useConnectionStore, type SignalRStatus } from '../stores/connectionStore';
@@ -31,6 +31,7 @@ const initialState: ExecutionDashboardState = {
 // ── Actions ──
 type Action =
   | { type: 'SET_SESSIONS'; sessions: SessionSummary[] }
+  | { type: 'MERGE_LOGS'; logs: DashboardLogEntry[] }
   | { type: 'EXECUTION_STARTED'; data: any }
   | { type: 'EXECUTION_COMPLETED'; data: any }
   | { type: 'ACTION_PROGRESS'; data: any }
@@ -45,9 +46,40 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
     case 'SET_SESSIONS': {
       const map = new Map<string, SessionSummary>();
       for (const s of action.sessions) {
-        map.set(s.sessionId, { ...s, agents: s.agents || [] });
+        const session = { ...s, agents: s.agents || [] };
+
+        // Recompute progress from agent-level data when agents are present,
+        // because the top-level totalActions from the WPF controller may be
+        // incorrect (SnapshotNodes.Count only counts top-level nodes).
+        if (session.agents.length > 0) {
+          const agentTotal = session.agents
+            .reduce((sum: number, a: any) => sum + (a.totalCount ?? 0), 0);
+          const agentCompleted = session.agents
+            .reduce((sum: number, a: any) => sum + (a.completedCount ?? 0), 0);
+          if (agentTotal > 0) {
+            session.totalActions = agentTotal;
+            session.completedActions = agentCompleted;
+            session.progressPercent = Math.round(agentCompleted / agentTotal * 100);
+          }
+        }
+
+        map.set(session.sessionId, session);
       }
       return { ...state, sessions: map };
+    }
+
+    case 'MERGE_LOGS': {
+      // Merge polled logs, avoiding duplicates by timestamp+message
+      const existing = new Set(state.logs.map(
+        (l: DashboardLogEntry) => `${l.timestamp}|${l.message}`));
+      const newEntries = action.logs.filter(
+        (l: DashboardLogEntry) => !existing.has(`${l.timestamp}|${l.message}`));
+      if (newEntries.length === 0) return state;
+      let logs = [...state.logs, ...newEntries];
+      if (logs.length > state.maxLogs) {
+        logs = logs.slice(-state.maxLogs);
+      }
+      return { ...state, logs };
     }
 
     case 'EXECUTION_STARTED': {
@@ -264,9 +296,9 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   const [state, dispatch] = useReducer(reducer, initialState);
   const connection = useConnectionStore((s: { connection: any }) => s.connection);
 
-  // Load existing sessions on mount
-  useEffect(() => {
-    apiFetch<{ active: any[]; history: any[] }>('/api/execution/proxy/dashboard-sessions')
+  // Fetch sessions from the proxy endpoint (returns WPF controller data)
+  const fetchProxySessions = useCallback(() => {
+    return apiFetch<{ active: any[]; history: any[] }>('/api/execution/proxy/dashboard-sessions')
       .then(data => {
         const all = [
           ...(data.active || []),
@@ -278,9 +310,60 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
         for (const s of data.active || []) {
           joinSession(connection, s.sessionId);
         }
-      })
-      .catch(logCatch('useExecutionDashboard', 'fetchSessions'));
+        return data;
+      });
   }, [connection]);
+
+  // Load existing sessions on mount
+  useEffect(() => {
+    fetchProxySessions().catch(logCatch('useExecutionDashboard', 'fetchSessions'));
+  }, [fetchProxySessions]);
+
+  // Poll the proxy endpoint so that sessions triggered from the WPF
+  // controller (whose SignalR events don't flow to this WebApi hub) still
+  // appear and update in real-time.
+  const hasActiveRef = useRef(false);
+  useEffect(() => {
+    // Use a faster interval (3s) when sessions are active, slower (8s) when idle.
+    const interval = hasActiveRef.current ? 3000 : 8000;
+    const id = setInterval(() => {
+      fetchProxySessions().catch(() => {/* swallow – proxy may be down */});
+    }, interval);
+    return () => clearInterval(id);
+  }, [fetchProxySessions]);
+
+  // Poll logs from WPF controller for active sessions.
+  // The WPF controller exposes /api/execution/{sessionId}/recent-logs which
+  // the WebApi proxies at /api/execution/proxy/logs/{sessionId}.
+  const activeSessionIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (activeSessionIdsRef.current.length === 0) return;
+
+    const fetchLogs = () => {
+      for (const sid of activeSessionIdsRef.current) {
+        apiFetch<{ logs: any[]; sessionId: string }>(
+          `/api/execution/proxy/logs/${encodeURIComponent(sid)}`
+        )
+          .then(data => {
+            if (!data.logs || data.logs.length === 0) return;
+            const mapped: DashboardLogEntry[] = data.logs.map((l: any) => ({
+              timestamp: l.timestamp || '',
+              sessionId: data.sessionId || sid,
+              agentName: l.agentName || '',
+              category: l.category || 'log',
+              message: l.message || '',
+              severity: l.severity || 'Info',
+            }));
+            dispatch({ type: 'MERGE_LOGS', logs: mapped });
+          })
+          .catch(() => {/* proxy may be down */});
+      }
+    };
+
+    fetchLogs();
+    const id = setInterval(fetchLogs, 4000);
+    return () => clearInterval(id);
+  }, [activeSessionIdsRef.current.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to SignalR events for dashboard-specific state
   useEffect(() => {
@@ -330,6 +413,10 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     .filter((s: SessionSummary) => s.status === 'Running' || s.status === 'Queued')
     .sort((a: SessionSummary, b: SessionSummary) =>
       new Date(b.startedUtc).getTime() - new Date(a.startedUtc).getTime());
+
+  // Track whether there are active sessions so polling can speed up
+  hasActiveRef.current = activeSessions.length > 0;
+  activeSessionIdsRef.current = activeSessions.map(s => s.sessionId);
 
   const completedSessions = sessions
     .filter((s: SessionSummary) => s.status !== 'Running' && s.status !== 'Queued')

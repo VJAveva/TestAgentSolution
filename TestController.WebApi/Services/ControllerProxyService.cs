@@ -98,6 +98,29 @@ public sealed class ControllerProxyService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Fetches recent log entries for a specific session from the WPF controller.
+    /// </summary>
+    public async Task<JsonElement?> GetRecentLogsAsync(string sessionId, int count = 200)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var response = await _http.GetAsync(
+                $"{_baseUrl}/api/execution/{Uri.EscapeDataString(sessionId)}/recent-logs?count={count}");
+            if (!response.IsSuccessStatusCode) return null;
+
+            var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            return doc.RootElement.Clone();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogDebug("Controller proxy logs unavailable: {Message}", ex.Message);
+            return null;
+        }
+    }
+
     public void Dispose() => _http.Dispose();
 }
 
