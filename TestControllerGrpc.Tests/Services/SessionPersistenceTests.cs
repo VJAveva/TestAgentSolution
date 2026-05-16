@@ -337,7 +337,7 @@ public class SessionPersistenceTests : IDisposable
 
         var mgr = CreatePersistentManager();
 
-        Assert.Equal(0, mgr.GetHistory(50).Count);
+        Assert.Empty(mgr.GetHistory(50));
         Assert.False(mgr.HasAnyActiveExecution);
     }
 
@@ -349,7 +349,7 @@ public class SessionPersistenceTests : IDisposable
         // Should not throw
         var mgr = CreatePersistentManager();
 
-        Assert.Equal(0, mgr.GetHistory(50).Count);
+        Assert.Empty(mgr.GetHistory(50));
     }
 
     // ═══════════════════════════════════════════════════════════════════
