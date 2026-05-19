@@ -1,0 +1,264 @@
+using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
+using System.Text;
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Services;
+
+namespace TestControllerGrpc.ViewModels.AgentWorkspace;
+
+public partial class RegistryVM : ObservableObject
+{
+    private readonly IAgentGrpcDispatcher _dispatcher;
+
+    public ObservableCollection<RegistryRowVM> Rows { get; } = new();
+
+    [ObservableProperty] private RegistryRowVM? _selectedRow;
+    [ObservableProperty] private bool _isEditing;
+
+    // Edit form fields
+    [ObservableProperty] private string _editName = "";
+    [ObservableProperty] private string _editAddress = "http://localhost:5200";
+    [ObservableProperty] private string _testResult = "";
+
+    /// <summary>True when editing an existing agent (not adding new).</summary>
+    private bool _isEditingExisting;
+    public bool IsEditingExisting
+    {
+        get => _isEditingExisting;
+        set => SetProperty(ref _isEditingExisting, value);
+    }
+
+    // Diagnostic
+    private string _diagnosticResult = "";
+    public string DiagnosticResult
+    {
+        get => _diagnosticResult;
+        set => SetProperty(ref _diagnosticResult, value);
+    }
+
+    private bool _hasDiagnosticResult;
+    public bool HasDiagnosticResult
+    {
+        get => _hasDiagnosticResult;
+        set => SetProperty(ref _hasDiagnosticResult, value);
+    }
+
+    public RegistryVM(IAgentGrpcDispatcher dispatcher)
+    {
+        _dispatcher = dispatcher;
+        Refresh();
+    }
+
+    public void Refresh()
+    {
+        Rows.Clear();
+        var allHealth = _dispatcher.GetAllAgentHealth();
+
+        foreach (var name in _dispatcher.RegisteredAgents)
+        {
+            var address = _dispatcher.GetAgentAddress(name) ?? "";
+            allHealth.TryGetValue(name, out var health);
+
+            Rows.Add(new RegistryRowVM
+            {
+                Name = name,
+                Address = address,
+                Status = health?.IsHealthy != false ? "Online" : "Offline",
+                LastSeen = FormatLastSeen(health?.LastSuccessUtc),
+            });
+        }
+    }
+
+    partial void OnSelectedRowChanged(RegistryRowVM? value)
+    {
+        if (value != null)
+        {
+            EditName = value.Name;
+            EditAddress = value.Address;
+            IsEditing = true;
+            IsEditingExisting = true;
+            TestResult = "";
+        }
+    }
+
+    public void StartAddNew()
+    {
+        SelectedRow = null;
+        EditName = "";
+        EditAddress = "http://localhost:5200";
+        TestResult = "";
+        IsEditing = true;
+        IsEditingExisting = false;
+    }
+
+    [RelayCommand]
+    private void Save()
+    {
+        if (string.IsNullOrWhiteSpace(EditName))
+        {
+            MessageBox.Show("Agent name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(EditAddress))
+        {
+            MessageBox.Show("Address is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var isNewAgent = SelectedRow == null;
+        var agentName = EditName.Trim();
+
+        if (SelectedRow != null)
+        {
+            // Update: unregister old, register new
+            if (SelectedRow.Name != EditName || SelectedRow.Address != EditAddress)
+            {
+                _dispatcher.UnregisterAgent(SelectedRow.Name);
+                _dispatcher.RegisterAgent(EditName, EditAddress);
+            }
+        }
+        else
+        {
+            // New registration
+            _dispatcher.RegisterAgent(EditName, EditAddress);
+        }
+
+        Refresh();
+        ClearForm();
+
+        // Show success message
+        var message = isNewAgent 
+            ? $"Agent '{agentName}' registered successfully." 
+            : $"Agent '{agentName}' updated successfully.";
+        MessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private async Task TestConnection()
+    {
+        if (string.IsNullOrWhiteSpace(EditName))
+        {
+            TestResult = "Enter agent name first";
+            return;
+        }
+
+        TestResult = "Testing...";
+
+        // Temporarily register to test, then unregister if it wasn't already registered
+        bool wasRegistered = _dispatcher.GetAgentAddress(EditName) != null;
+        if (!wasRegistered)
+            _dispatcher.RegisterAgent(EditName, EditAddress);
+
+        var (snapshot, error) = await _dispatcher.TestConnectionAsync(EditName);
+
+        if (!wasRegistered)
+            _dispatcher.UnregisterAgent(EditName);
+
+        TestResult = snapshot != null
+            ? $"✓ Connected — {snapshot.AgentName}"
+            : $"✗ Failed: {error}";
+    }
+
+    [RelayCommand]
+    private void Unregister()
+    {
+        if (SelectedRow == null) return;
+
+        var agentName = SelectedRow.Name;
+        var result = MessageBox.Show(
+            $"Unregister agent '{agentName}'?\n\nPipelines using this agent will fail.",
+            "Unregister Agent", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        _dispatcher.UnregisterAgent(agentName);
+        Refresh();
+        ClearForm();
+
+        MessageBox.Show($"Agent '{agentName}' unregistered successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private void AddNew() => StartAddNew();
+
+    [RelayCommand]
+    private void Cancel()
+    {
+        ClearForm();
+    }
+
+    [RelayCommand]
+    private async Task TestAll()
+    {
+        if (Rows.Count == 0)
+        {
+            DiagnosticResult = "No agents registered.";
+            HasDiagnosticResult = true;
+            return;
+        }
+
+        DiagnosticResult = "Testing all agents...";
+        HasDiagnosticResult = true;
+
+        var sb = new StringBuilder();
+        int online = 0, offline = 0;
+
+        foreach (var row in Rows)
+        {
+            var (snapshot, error) = await _dispatcher.TestConnectionAsync(row.Name);
+            if (snapshot != null)
+            {
+                row.Status = "Online";
+                online++;
+                sb.AppendLine($"  \u2713 {row.Name} \u2014 Online");
+            }
+            else
+            {
+                row.Status = "Offline";
+                offline++;
+                sb.AppendLine($"  \u2717 {row.Name} \u2014 {error}");
+            }
+        }
+
+        sb.Insert(0, $"Test complete: {online} online, {offline} offline\n");
+        DiagnosticResult = sb.ToString().TrimEnd();
+        HasDiagnosticResult = true;
+    }
+
+    [RelayCommand]
+    private void ClearDiagnostic()
+    {
+        DiagnosticResult = "";
+        HasDiagnosticResult = false;
+    }
+
+    /// <summary>Clears the form and hides the edit panel.</summary>
+    private void ClearForm()
+    {
+        IsEditing = false;
+        IsEditingExisting = false;
+        SelectedRow = null;
+        EditName = "";
+        EditAddress = "http://localhost:5200";
+        TestResult = "";
+    }
+
+    private static string FormatLastSeen(DateTime? lastSeen)
+    {
+        if (!lastSeen.HasValue) return "never";
+        var diff = DateTime.UtcNow - lastSeen.Value;
+        if (diff.TotalSeconds < 60) return $"{(int)diff.TotalSeconds}s ago";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+}
+
+public partial class RegistryRowVM : ObservableObject
+{
+    [ObservableProperty] private string _name = "";
+    [ObservableProperty] private string _address = "";
+    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _lastSeen = "";
+}

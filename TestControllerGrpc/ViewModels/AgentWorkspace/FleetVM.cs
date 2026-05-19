@@ -1,0 +1,120 @@
+using System.Collections.ObjectModel;
+using System.Windows.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Services;
+
+namespace TestControllerGrpc.ViewModels.AgentWorkspace;
+
+public partial class FleetVM : ObservableObject
+{
+    private readonly IAgentGrpcDispatcher _dispatcher;
+    private readonly AgentLockManager _lockManager;
+    private readonly ExecutionSessionManager _sessionManager;
+    private readonly Dispatcher _uiDispatcher;
+
+    public ObservableCollection<FleetCardVM> Cards { get; } = new();
+
+    [ObservableProperty] private int _totalCount;
+    [ObservableProperty] private int _busyCount;
+    [ObservableProperty] private int _freeCount;
+    [ObservableProperty] private int _offlineCount;
+    [ObservableProperty] private string _filterText = "";
+
+    public event Action<string>? AgentSelected;
+
+    public FleetVM(
+        IAgentGrpcDispatcher dispatcher,
+        AgentLockManager lockManager,
+        ExecutionSessionManager sessionManager,
+        IEventAggregator events,
+        Dispatcher uiDispatcher)
+    {
+        _dispatcher = dispatcher;
+        _lockManager = lockManager;
+        _sessionManager = sessionManager;
+        _uiDispatcher = uiDispatcher;
+
+        events.Subscribe<AgentLocksChangedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<ExecutionStartedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<ExecutionCompletedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<AgentHeartbeatEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<AgentRegisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<AgentUnregisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+
+        Refresh();
+    }
+
+    partial void OnFilterTextChanged(string value) => Refresh();
+
+    public void Refresh()
+    {
+        var agents = _dispatcher.RegisteredAgents.ToList();
+        var allHealth = _dispatcher.GetAllAgentHealth();
+        var allLocks = _lockManager.GetAllLocks();
+
+        Cards.Clear();
+        int busy = 0, free = 0, offline = 0;
+
+        foreach (var agentName in agents)
+        {
+            // Apply filter
+            if (!string.IsNullOrEmpty(FilterText) &&
+                !agentName.Contains(FilterText, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var card = new FleetCardVM { AgentName = agentName };
+            var address = _dispatcher.GetAgentAddress(agentName) ?? "";
+            card.Address = address;
+
+            allHealth.TryGetValue(agentName, out var health);
+            var agentLock = allLocks.FirstOrDefault(l =>
+                string.Equals(l.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+
+            if (health != null && !health.IsHealthy)
+            {
+                card.Status = "Offline";
+                card.StatusDetail = health.ConsecutiveFailures > 0
+                    ? $"{health.ConsecutiveFailures} failures"
+                    : "Unreachable";
+                offline++;
+            }
+            else if (agentLock != null)
+            {
+                card.Status = "Busy";
+                card.StatusDetail = agentLock.WatchItemTag;
+                card.SessionId = agentLock.SessionId;
+                busy++;
+            }
+            else
+            {
+                card.Status = "Free";
+                card.StatusDetail = "Idle";
+                free++;
+            }
+
+            Cards.Add(card);
+        }
+
+        TotalCount = Cards.Count;
+        BusyCount = busy;
+        FreeCount = free;
+        OfflineCount = offline;
+    }
+
+    [RelayCommand]
+    private void SelectAgent(FleetCardVM? card)
+    {
+        if (card != null)
+            AgentSelected?.Invoke(card.AgentName);
+    }
+}
+
+public partial class FleetCardVM : ObservableObject
+{
+    [ObservableProperty] private string _agentName = "";
+    [ObservableProperty] private string _address = "";
+    [ObservableProperty] private string _status = "Free";
+    [ObservableProperty] private string _statusDetail = "Idle";
+    [ObservableProperty] private string _sessionId = "";
+}

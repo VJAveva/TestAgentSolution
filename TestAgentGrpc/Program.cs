@@ -71,26 +71,42 @@ var app = builder.Build();
 app.MapGrpcService<TestAgentGrpcService>();
 app.MapGet("/", () => "TestAgent gRPC service is running.");
 
-// ── Run host on background thread, WinForms on STA main thread ────────
+// ── Run host on background thread, WinForms on dedicated STA thread ───
+// Top-level statements compile to async Main which the CLR runs on an MTA
+// thread (STAThread is ignored on async entry points). OLE operations
+// (Clipboard, SaveFileDialog) require STA, so we spin up a dedicated
+// STA thread for the WinForms message loop.
 var hostTask = app.RunAsync();
 
-Application.EnableVisualStyles();
-Application.SetCompatibleTextRenderingDefault(false);
+// Resolve services on the main thread (DI is thread-safe).
+var cmdExec     = app.Services.GetRequiredService<CommandExecutor>();
+var broadcaster = app.Services.GetRequiredService<EventBroadcaster>();
+var tracker     = app.Services.GetRequiredService<ExecutionTracker>();
+var metrics     = app.Services.GetRequiredService<SystemMetricsCollector>();
+var healthMon   = app.Services.GetRequiredService<ConnectionHealthMonitor>();
+var ctrlClient  = app.Services.GetRequiredService<TestControllerClient>();
+var lifecycle   = app.Services.GetRequiredService<AgentLifecycleService>();
+var appLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var agentOpts   = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>();
+var notifOpts   = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NotificationSettings>>();
+var trayLogger  = app.Services.GetRequiredService<ILogger<TrayApplicationContext>>();
 
-var trayApp = new TrayApplicationContext(
-    app.Services.GetRequiredService<CommandExecutor>(),
-    app.Services.GetRequiredService<EventBroadcaster>(),
-    app.Services.GetRequiredService<ExecutionTracker>(),
-    app.Services.GetRequiredService<SystemMetricsCollector>(),
-    app.Services.GetRequiredService<ConnectionHealthMonitor>(),
-    app.Services.GetRequiredService<TestControllerClient>(),
-    app.Services.GetRequiredService<AgentLifecycleService>(),
-    app.Services.GetRequiredService<IHostApplicationLifetime>(),
-    app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>(),
-    app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NotificationSettings>>(),
-    app.Services.GetRequiredService<ILogger<TrayApplicationContext>>());
+var uiThread = new Thread(() =>
+{
+    Application.EnableVisualStyles();
+    Application.SetCompatibleTextRenderingDefault(false);
 
-Application.Run(trayApp);
+    var trayApp = new TrayApplicationContext(
+        cmdExec, broadcaster, tracker, metrics, healthMon,
+        ctrlClient, lifecycle, appLifetime, agentOpts, notifOpts, trayLogger);
+
+    Application.Run(trayApp);
+});
+uiThread.SetApartmentState(ApartmentState.STA);
+uiThread.IsBackground = true;
+uiThread.Name = "WinFormsUI";
+uiThread.Start();
+uiThread.Join();
 
 // Graceful shutdown
 await app.StopAsync();

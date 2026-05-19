@@ -18,6 +18,8 @@
             <vm:RunningToVisibleConverter x:Key="RunningToVisible"/>
             <vm:NullToCollapsedConverter  x:Key="NullToCollapsed"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <BooleanToVisibilityConverter x:Key="BoolVis"/>
+            <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
 
             <!-- Spec-aligned converters (Section 10.2 of the dashboard spec) -->
             <spec:ActionStatusToBgConverter        x:Key="ActionStatusToBg"/>

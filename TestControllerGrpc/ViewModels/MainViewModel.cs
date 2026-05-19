@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
+using TestControllerGrpc.ViewModels.AgentWorkspace;
 using System.Windows;
 
 namespace TestControllerGrpc.ViewModels;
@@ -268,6 +269,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // ── Build Results ────────────────────────────────────────────────
     public BuildResultsViewModel BuildResultsVM { get; }
 
+    // ── Agent Workspace ─────────────────────────────────────────────
+    public AgentWorkspaceVM AgentWorkspace { get; }
+
     // ── Constructor ─────────────────────────────────────────────────
 
     public MainViewModel(IVocabularyMonitor vocabMonitor, IFileWatcherManager watcherManager,
@@ -286,6 +290,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _events = events;
         _lockManager = lockManager;
         BuildResultsVM = buildResultsVM;
+        AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
+            Application.Current.Dispatcher);
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
         _executor.NodeProgress += OnNodeProgress;

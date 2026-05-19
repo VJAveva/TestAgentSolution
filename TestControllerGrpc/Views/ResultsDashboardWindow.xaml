@@ -16,9 +16,6 @@
     </Window.Icon>
 
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolVis" />
-        <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis" />
-
         <Style x:Key="Fld" TargetType="TextBox">
             <Setter Property="Background" Value="{DynamicResource FieldBg}" />
             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
@@ -313,7 +310,7 @@
         <Grid>
             <!-- Loading overlay -->
             <Border Background="#CC0F1629" Panel.ZIndex="10"
-                    Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}">
+                    Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="28"
                                Foreground="{DynamicResource Accent}" HorizontalAlignment="Center" FontWeight="Bold">

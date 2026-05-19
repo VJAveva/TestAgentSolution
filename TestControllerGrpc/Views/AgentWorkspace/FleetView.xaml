@@ -1,0 +1,94 @@
+<UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.FleetView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace">
+
+    <DockPanel>
+        <!-- Summary bar -->
+        <Border DockPanel.Dock="Top" Padding="10,6">
+            <DockPanel>
+                <TextBox DockPanel.Dock="Right" Width="140" Margin="8,0,0,0"
+                         Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{DynamicResource Fld}" FontSize="10"/>
+                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextS}">
+                    <Run Text="{Binding TotalCount, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"/>
+                    <Run Text=" agents ·"/>
+                    <Run Text="{Binding BusyCount, Mode=OneWay}" Foreground="{DynamicResource Accent}"/>
+                    <Run Text=" busy ·"/>
+                    <Run Text="{Binding FreeCount, Mode=OneWay}" Foreground="{DynamicResource AccGreen}"/>
+                    <Run Text=" free ·"/>
+                    <Run Text="{Binding OfflineCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
+                    <Run Text=" offline"/>
+                </TextBlock>
+            </DockPanel>
+        </Border>
+
+        <!-- Agent card grid (WrapPanel in ScrollViewer for 50+ agents) -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6">
+            <ItemsControl ItemsSource="{Binding Cards}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:FleetCardVM}">
+                        <Border Width="130" Height="50" Margin="3" CornerRadius="5"
+                                Padding="7,5" Cursor="Hand"
+                                MouseLeftButtonUp="Card_Click">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{DynamicResource BgCard}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBtnBg}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                            <Setter Property="Opacity" Value="0.5"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource AccRed}"/>
+                                        </DataTrigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource AccPeach}"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Grid.Row="0">
+                                    <Ellipse Width="7" Height="7" Margin="0,0,5,0" VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource AccGreen}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                        <Setter Property="Fill" Value="{DynamicResource Accent}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                        <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding AgentName}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextP}" TextTrimming="CharacterEllipsis"
+                                               MaxWidth="95"/>
+                                </StackPanel>
+                                <TextBlock Grid.Row="1" Text="{Binding StatusDetail}" FontSize="9"
+                                           Foreground="{DynamicResource TextS}" VerticalAlignment="Bottom"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>
