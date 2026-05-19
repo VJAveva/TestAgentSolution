@@ -19,9 +19,11 @@ public partial class FleetVM : ObservableObject
     [ObservableProperty] private int _busyCount;
     [ObservableProperty] private int _freeCount;
     [ObservableProperty] private int _offlineCount;
+    [ObservableProperty] private int _failedCount;
     [ObservableProperty] private string _filterText = "";
 
     public event Action<string>? AgentSelected;
+    public event Action? RegisterAgentClicked;
 
     public FleetVM(
         IAgentGrpcDispatcher dispatcher,
@@ -41,6 +43,7 @@ public partial class FleetVM : ObservableObject
         events.Subscribe<AgentHeartbeatEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
         events.Subscribe<AgentRegisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
         events.Subscribe<AgentUnregisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<NodeProgressEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
 
         Refresh();
     }
@@ -54,7 +57,7 @@ public partial class FleetVM : ObservableObject
         var allLocks = _lockManager.GetAllLocks();
 
         Cards.Clear();
-        int busy = 0, free = 0, offline = 0;
+        int busy = 0, free = 0, offline = 0, failed = 0;
 
         foreach (var agentName in agents)
         {
@@ -81,10 +84,25 @@ public partial class FleetVM : ObservableObject
             }
             else if (agentLock != null)
             {
-                card.Status = "Busy";
-                card.StatusDetail = agentLock.WatchItemTag;
                 card.SessionId = agentLock.SessionId;
-                busy++;
+                var session = _sessionManager.GetSession(agentLock.SessionId);
+                var agentSummary = session?.GetAgentSummaries()
+                    .FirstOrDefault(s => string.Equals(s.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+
+                if (agentSummary != null && agentSummary.Status == "Failed")
+                {
+                    card.Status = "Failed";
+                    card.StatusDetail = $"{agentSummary.CompletedCount}/{agentSummary.TotalCount} — has failures";
+                    failed++;
+                }
+                else
+                {
+                    card.Status = "Busy";
+                    card.StatusDetail = agentSummary != null
+                        ? $"{agentSummary.CompletedCount}/{agentSummary.TotalCount} actions"
+                        : agentLock.WatchItemTag;
+                    busy++;
+                }
             }
             else
             {
@@ -100,6 +118,7 @@ public partial class FleetVM : ObservableObject
         BusyCount = busy;
         FreeCount = free;
         OfflineCount = offline;
+        FailedCount = failed;
     }
 
     [RelayCommand]
@@ -108,6 +127,9 @@ public partial class FleetVM : ObservableObject
         if (card != null)
             AgentSelected?.Invoke(card.AgentName);
     }
+
+    [RelayCommand]
+    private void RequestRegisterAgent() => RegisterAgentClicked?.Invoke();
 }
 
 public partial class FleetCardVM : ObservableObject

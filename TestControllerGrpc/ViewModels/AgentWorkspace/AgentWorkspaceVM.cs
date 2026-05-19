@@ -27,6 +27,7 @@ public partial class AgentWorkspaceVM : ObservableObject
         Registry = new RegistryVM(dispatcher);
 
         Fleet.AgentSelected += OnFleetAgentSelected;
+        Fleet.RegisterAgentClicked += () => RegisterNew();
         Monitor.BackRequested += () => CurrentMode = AgentWorkspaceMode.Fleet;
     }
 

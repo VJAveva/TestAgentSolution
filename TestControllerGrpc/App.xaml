@@ -20,6 +20,7 @@
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
             <BooleanToVisibilityConverter x:Key="BoolVis"/>
             <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
+            <vm:ZeroToVisibleConverter x:Key="ZeroToVis"/>
 
             <!-- Spec-aligned converters (Section 10.2 of the dashboard spec) -->
             <spec:ActionStatusToBgConverter        x:Key="ActionStatusToBg"/>

@@ -8,7 +8,7 @@ namespace TestControllerGrpc.ViewModels;
 
 /// <summary>
 /// Converts an ActionType string to Visibility for conditional field display.
-/// Usage: ConverterParameter="RunCommand|RunRemoteCommand" — shows when current type matches any.
+/// Usage: ConverterParameter="RunCommand|RunRemoteCommand" ï¿½ shows when current type matches any.
 /// </summary>
 public sealed class ActionTypeFieldVisibilityConverter : IValueConverter
 {
@@ -29,7 +29,7 @@ public sealed class ActionTypeFieldVisibilityConverter : IValueConverter
 
 /// <summary>
 /// Converts an ActiveEditingContext string to Visibility.
-/// Usage: ConverterParameter=WatchList — shows only when context matches.
+/// Usage: ConverterParameter=WatchList ï¿½ shows only when context matches.
 /// </summary>
 public sealed class EditingContextToVisibilityConverter : IValueConverter
 {
@@ -88,7 +88,7 @@ public sealed class NodeKindToIconBgConverter : IValueConverter
 
 /// <summary>
 /// Converts a NodeKind string to Visibility.
-/// Usage: ConverterParameter=Action — shows panel only when NodeKind matches.
+/// Usage: ConverterParameter=Action ï¿½ shows panel only when NodeKind matches.
 /// </summary>
 public sealed class NodeKindToVisibilityConverter : IValueConverter
 {
@@ -197,6 +197,19 @@ public sealed class NullToCollapsedConverter : IValueConverter
         if (value is string s && string.IsNullOrEmpty(s)) return Visibility.Collapsed;
         return Visibility.Visible;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
+/// <summary>
+/// Converts an integer value: 0 â†’ Visible, non-zero â†’ Collapsed.
+/// Useful for showing "empty state" messages when a collection count is zero.
+/// </summary>
+public sealed class ZeroToVisibleConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is int n && n == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => Binding.DoNothing;

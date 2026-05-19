@@ -7,9 +7,24 @@
         <!-- Summary bar -->
         <Border DockPanel.Dock="Top" Padding="10,6">
             <DockPanel>
+                <!-- Register Agent button -->
+                <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="10,4"
+                        FontSize="10" Cursor="Hand"
+                        Command="{Binding RequestRegisterAgentCommand}"
+                        Background="{DynamicResource AccentBtnBg}"
+                        Foreground="{DynamicResource Accent}"
+                        BorderBrush="{DynamicResource Accent}"
+                        BorderThickness="1">
+                    <TextBlock Text="+ Register Agent" FontWeight="SemiBold"/>
+                </Button>
+                <!-- Filter textbox -->
                 <TextBox DockPanel.Dock="Right" Width="140" Margin="8,0,0,0"
                          Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{DynamicResource Fld}" FontSize="10"/>
+                         Background="{DynamicResource BgCard}"
+                         Foreground="{DynamicResource TextP}"
+                         BorderBrush="{DynamicResource Bdr}"
+                         FontSize="10" Padding="4,3" VerticalContentAlignment="Center"/>
+                <!-- Stats -->
                 <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextS}">
                     <Run Text="{Binding TotalCount, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"/>
                     <Run Text=" agents ·"/>
@@ -17,6 +32,8 @@
                     <Run Text=" busy ·"/>
                     <Run Text="{Binding FreeCount, Mode=OneWay}" Foreground="{DynamicResource AccGreen}"/>
                     <Run Text=" free ·"/>
+                    <Run Text="{Binding FailedCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
+                    <Run Text=" failed ·"/>
                     <Run Text="{Binding OfflineCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
                     <Run Text=" offline"/>
                 </TextBlock>
@@ -43,8 +60,12 @@
                                     <Setter Property="BorderThickness" Value="1"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Status}" Value="Busy">
-                                            <Setter Property="Background" Value="{DynamicResource AccentBtnBg}"/>
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                                            <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                            <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Status}" Value="Offline">
                                             <Setter Property="Opacity" Value="0.5"/>
@@ -69,6 +90,9 @@
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Status}" Value="Busy">
                                                         <Setter Property="Fill" Value="{DynamicResource Accent}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                        <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Status}" Value="Offline">
                                                         <Setter Property="Fill" Value="{DynamicResource AccRed}"/>

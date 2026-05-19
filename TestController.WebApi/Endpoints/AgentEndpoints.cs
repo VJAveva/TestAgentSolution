@@ -20,10 +20,14 @@ public static class AgentEndpoints
         group.MapGet("/{name}/health", GetAgentHealth);
         group.MapGet("/{name}/history", GetAgentHistory);
         group.MapGet("/{name}/audit", GetAgentAudit);
+        group.MapGet("/fleet", GetFleet);
+        group.MapGet("/{name}/details", GetDetails);
+        group.MapGet("/{name}/telemetry", GetTelemetry);
+        group.MapPut("/{name}", UpdateAgent);
         return group;
     }
 
-    /// <summary>GET /api/agents — list all registered agents with status.</summary>
+    /// <summary>GET /api/agents ï¿½ list all registered agents with status.</summary>
     private static IResult ListAgents(AgentRegistry registry)
     {
         var agents = registry.GetAll().Select(a => new
@@ -37,17 +41,61 @@ public static class AgentEndpoints
         return Results.Ok(agents);
     }
 
-    /// <summary>POST /api/agents/register — register a new agent.</summary>
-    private static IResult RegisterAgent(AgentRegisterRequest req, AgentRegistry registry)
+    /// <summary>POST /api/agents/register â€” register a new agent and verify connectivity.</summary>
+    private static async Task<IResult> RegisterAgent(
+        AgentRegisterRequest req,
+        AgentRegistry registry,
+        AgentGrpcClientManager grpcManager,
+        IRealtimeNotifier notifier)
     {
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.Address))
             return Results.BadRequest("Name and Address are required.");
 
         registry.Register(req.Name, req.Address);
-        return Results.Ok(new { message = $"Agent '{req.Name}' registered at {req.Address}." });
+
+        // Attempt connectivity check â€” agent stays registered regardless of outcome
+        string status;
+        string? detail = null;
+        try
+        {
+            var client = grpcManager.GetClient(req.Address);
+            var state = await client.GetStateAsync(new Empty());
+            status = state.State.ToString();
+        }
+        catch (RpcException ex)
+        {
+            status = "Unhealthy";
+            detail = $"Registration succeeded but agent is unreachable: {ex.Status.Detail}";
+        }
+        catch (Exception ex)
+        {
+            status = "Unhealthy";
+            detail = $"Registration succeeded but connectivity check failed: {ex.Message}";
+        }
+
+        registry.UpdateStatus(req.Name, status, detail);
+        await notifier.NotifyAgentStatusChanged(new
+        {
+            agentName = req.Name,
+            status,
+            timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+        });
+
+        var healthy = status != "Unhealthy";
+        return Results.Ok(new
+        {
+            name = req.Name,
+            address = req.Address,
+            status,
+            healthy,
+            message = healthy
+                ? $"Agent '{req.Name}' registered and online ({status})."
+                : $"Agent '{req.Name}' registered but unhealthy.",
+            detail
+        });
     }
 
-    /// <summary>DELETE /api/agents/{name} — unregister an agent.</summary>
+    /// <summary>DELETE /api/agents/{name} ï¿½ unregister an agent.</summary>
     private static IResult UnregisterAgent(string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
         if (!registry.TryGet(name, out var entry))
@@ -58,7 +106,7 @@ public static class AgentEndpoints
         return Results.Ok(new { message = $"Agent '{name}' unregistered." });
     }
 
-    /// <summary>POST /api/agents/{name}/test — test connectivity via GetState.</summary>
+    /// <summary>POST /api/agents/{name}/test ï¿½ test connectivity via GetState.</summary>
     private static async Task<IResult> TestAgent(
         string name,
         AgentRegistry registry,
@@ -105,7 +153,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>POST /api/agents/{name}/diagnose — run 6-step diagnostic.</summary>
+    /// <summary>POST /api/agents/{name}/diagnose ï¿½ run 6-step diagnostic.</summary>
     private static async Task<IResult> DiagnoseAgent(
         string name,
         AgentRegistry registry,
@@ -203,7 +251,7 @@ public static class AgentEndpoints
         return Results.Ok(new { name, steps, summary = $"{passed}/{steps.Count} diagnostic steps passed" });
     }
 
-    /// <summary>GET /api/agents/{name}/snapshot — get agent snapshot via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/snapshot ï¿½ get agent snapshot via gRPC.</summary>
     private static async Task<IResult> GetAgentSnapshot(
         string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
@@ -239,7 +287,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>GET /api/agents/{name}/health — get connection health via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/health ï¿½ get connection health via gRPC.</summary>
     private static async Task<IResult> GetAgentHealth(
         string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
@@ -270,7 +318,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>GET /api/agents/{name}/history?max=20&filter= — get execution history via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/history?max=20&filter= ï¿½ get execution history via gRPC.</summary>
     private static async Task<IResult> GetAgentHistory(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
@@ -309,7 +357,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>GET /api/agents/{name}/audit?from=&to=&filter=&max= — get audit log via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/audit?from=&to=&filter=&max= ï¿½ get audit log via gRPC.</summary>
     private static async Task<IResult> GetAgentAudit(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
@@ -351,6 +399,155 @@ public static class AgentEndpoints
         {
             return Results.Problem($"gRPC error: {ex.Status.Detail}", statusCode: 502);
         }
+    }
+
+    /// <summary>GET /api/agents/fleet â€” returns all agents with lock status and session info.</summary>
+    private static IResult GetFleet(
+        AgentRegistry registry,
+        AgentLockManager lockManager,
+        ExecutionSessionManager sessionManager)
+    {
+        var agents = registry.GetAll();
+        var locks = lockManager.GetAllLocks();
+        var lockLookup = locks.ToDictionary(l => l.AgentName, StringComparer.OrdinalIgnoreCase);
+
+        var fleet = agents.Select(a =>
+        {
+            lockLookup.TryGetValue(a.Name, out var agentLock);
+            return new
+            {
+                a.Name,
+                a.Address,
+                a.Status,
+                a.LastStatusDetail,
+                LastCheckedUtc = a.LastCheckedUtc,
+                IsLocked = agentLock != null,
+                LockedBy = agentLock?.SessionId,
+                LockSource = agentLock?.Source,
+                LockedAtUtc = agentLock?.LockedAtUtc,
+                WatchItemTag = agentLock?.WatchItemTag
+            };
+        });
+
+        return Results.Ok(new { agents = fleet, lockVersion = lockManager.Version });
+    }
+
+    /// <summary>GET /api/agents/{name}/details â€” combined snapshot + lock + session info.</summary>
+    private static async Task<IResult> GetDetails(
+        string name,
+        AgentRegistry registry,
+        AgentGrpcClientManager grpcManager,
+        AgentLockManager lockManager)
+    {
+        if (!registry.TryGet(name, out var entry))
+            return Results.NotFound($"Agent '{name}' not found.");
+
+        object? snapshot = null;
+        string? error = null;
+
+        try
+        {
+            var client = grpcManager.GetClient(entry.Address);
+            var s = await client.GetAgentSnapshotAsync(new Empty());
+            snapshot = new
+            {
+                s.AgentName,
+                State = s.State.ToString(),
+                s.CurrentActivity,
+                s.CurrentExecutionId,
+                s.CurrentCommand,
+                ExecutionStarted = s.ExecutionStarted?.ToDateTimeOffset(),
+                AgentStarted = s.AgentStarted?.ToDateTimeOffset(),
+                s.ExecutionsCompleted,
+                s.ExecutionsFailed,
+                Metrics = s.Metrics != null ? new
+                {
+                    s.Metrics.CpuUsagePct,
+                    s.Metrics.MemoryUsedMb,
+                    s.Metrics.MemoryTotalMb,
+                    s.Metrics.DiskFreeGb,
+                    s.Metrics.ActiveProcessCount
+                } : null
+            };
+        }
+        catch (RpcException ex)
+        {
+            error = $"gRPC error: {ex.Status.Detail}";
+        }
+
+        var locks = lockManager.GetAllLocks();
+        var agentLock = locks.FirstOrDefault(l =>
+            string.Equals(l.AgentName, name, StringComparison.OrdinalIgnoreCase));
+
+        return Results.Ok(new
+        {
+            entry.Name,
+            entry.Address,
+            entry.Status,
+            entry.LastStatusDetail,
+            entry.LastCheckedUtc,
+            Snapshot = snapshot,
+            SnapshotError = error,
+            Lock = agentLock != null ? new
+            {
+                agentLock.SessionId,
+                agentLock.Source,
+                agentLock.WatchItemTag,
+                agentLock.LockedAtUtc
+            } : null
+        });
+    }
+
+    /// <summary>GET /api/agents/{name}/telemetry â€” lightweight metrics-only snapshot for polling.</summary>
+    private static async Task<IResult> GetTelemetry(
+        string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
+    {
+        if (!registry.TryGet(name, out var entry))
+            return Results.NotFound($"Agent '{name}' not found.");
+
+        try
+        {
+            var client = grpcManager.GetClient(entry.Address);
+            var s = await client.GetAgentSnapshotAsync(new Empty());
+            return Results.Ok(new
+            {
+                s.AgentName,
+                State = s.State.ToString(),
+                s.CurrentActivity,
+                s.CurrentCommand,
+                s.ExecutionsCompleted,
+                s.ExecutionsFailed,
+                CpuUsagePct = s.Metrics?.CpuUsagePct ?? 0,
+                MemoryUsedMb = s.Metrics?.MemoryUsedMb ?? 0,
+                MemoryTotalMb = s.Metrics?.MemoryTotalMb ?? 0,
+                DiskFreeGb = s.Metrics?.DiskFreeGb ?? 0,
+                ActiveProcessCount = s.Metrics?.ActiveProcessCount ?? 0,
+                Timestamp = DateTime.UtcNow
+            });
+        }
+        catch (RpcException ex)
+        {
+            return Results.Problem($"gRPC error: {ex.Status.Detail}", statusCode: 502);
+        }
+    }
+
+    /// <summary>PUT /api/agents/{name} â€” update agent address (re-registration).</summary>
+    private static async Task<IResult> UpdateAgent(
+        string name, AgentRegisterRequest body, AgentRegistry registry, IRealtimeNotifier notifier)
+    {
+        if (!registry.TryGet(name, out _))
+            return Results.NotFound($"Agent '{name}' not found.");
+
+        // Unregister + re-register with new address
+        registry.Unregister(name);
+        registry.Register(body.Name ?? name, body.Address);
+        await notifier.NotifyAgentStatusChanged(new
+        {
+            agentName = body.Name ?? name,
+            status = "Registered",
+            timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
+        });
+        return Results.Ok(new { updated = true, name = body.Name ?? name, body.Address });
     }
 }
 
