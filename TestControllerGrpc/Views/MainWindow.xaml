@@ -378,6 +378,14 @@
                                         <Setter Property="Visibility" Value="Visible" />
                                         <Setter Property="Fill" Value="{DynamicResource StatusBlue}" />
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusYellow}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                                         <Setter Property="Visibility" Value="Visible" />
                                         <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
@@ -408,6 +416,14 @@
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
                                     <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                    <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                    <Setter Property="FontStyle" Value="Italic" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource TextS}" />
@@ -550,6 +566,14 @@
                                     <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
                                         <Setter Property="Visibility" Value="Visible" />
                                         <Setter Property="Fill" Value="{DynamicResource StatusBlue}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusYellow}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -871,6 +895,19 @@
                                 ToolTip="Help (F1)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" FontSize="14" Foreground="{DynamicResource Accent}" />
                         </Button>
+                        <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
+
+                        <!-- Panel toggles (compact) -->
+                        <ToggleButton IsChecked="{Binding IsAgentPanePinned}" ToolTip="Toggle Agent Panel"
+                                      Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
+                                      Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE77B;" FontSize="14" Foreground="{DynamicResource AccPeach}" />
+                        </ToggleButton>
+                        <ToggleButton IsChecked="{Binding IsLogPanePinned}" ToolTip="Toggle Log Panel"
+                                      Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
+                                      Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE7C5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
+                        </ToggleButton>
 
                         <!-- Theme (compact) -->
                         <ComboBox ItemsSource="{Binding AvailableThemes}" SelectedItem="{Binding SelectedTheme}"
@@ -1500,15 +1537,13 @@
                                     <TextBlock Text="FAILED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
                                 </Border>
                                 <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
-                                        Background="{DynamicResource RunningBadgeBg}"
+                                        Background="{DynamicResource PartialBadgeBg}"
                                         Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=PartialFailure}">
                                     <TextBlock Text="PARTIAL" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
                                 </Border>
                                 <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
+                                        Background="{DynamicResource CancelledBadgeBg}"
                                         Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=Cancelled}">
-                                    <Border.Background>
-                                        <SolidColorBrush Color="#339399B2" />
-                                    </Border.Background>
                                     <TextBlock Text="CANCELLED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
                                 </Border>
                                 <TextBlock Text="{Binding NodeKind, StringFormat='[ {0} ]'}"
@@ -1921,8 +1956,8 @@
                                           Foreground="{DynamicResource TextP}"
                                           BorderThickness="1"
                                           BorderBrush="{DynamicResource Bdr}"
-                                          RowBackground="#10FFFFFF"
-                                          AlternatingRowBackground="#18FFFFFF"
+                                          RowBackground="{DynamicResource BtnBg}"
+                                          AlternatingRowBackground="{DynamicResource InfoBoxBg}"
                                           MaxHeight="200"
                                           Margin="0,0,0,4">
                                     <DataGrid.Columns>
@@ -1936,7 +1971,7 @@
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <Button Content="✕" FontSize="10"
-                                                            Background="Transparent" Foreground="#F85149"
+                                                            Background="Transparent" Foreground="{DynamicResource AccRed}"
                                                             BorderThickness="0" Cursor="Hand" Padding="4,0"
                                                             Command="{Binding DataContext.RemoveParameterEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding}" />
@@ -1975,7 +2010,7 @@
 
                             <!-- ══ Execution Error Panel ══ -->
                             <Border Margin="0,12,0,0" Padding="8" CornerRadius="4"
-                                    Background="#20EF4444" BorderBrush="#40EF4444" BorderThickness="1">
+                                    Background="{DynamicResource AlertErrorBg}" BorderBrush="{DynamicResource AlertErrorBdr}" BorderThickness="1">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Visibility" Value="Visible" />
@@ -1988,10 +2023,10 @@
                                 </Border.Style>
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="&#x2716;" Foreground="#EF4444" FontWeight="Bold"
+                                        <TextBlock Text="&#x2716;" Foreground="{DynamicResource AccRed}" FontWeight="Bold"
                                                    FontSize="12" Margin="0,0,4,0" />
                                         <TextBlock Text="LAST EXECUTION ERROR" FontSize="10"
-                                                   FontWeight="Bold" Foreground="#EF4444" />
+                                                   FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
                                         <TextBlock Text="{Binding LastExitCode, StringFormat=' (exit {0})'}"
                                                    FontSize="10" Foreground="{DynamicResource TextS}"
                                                    Margin="4,0,0,0" />
@@ -1999,7 +2034,7 @@
                                     <TextBox Text="{Binding LastExecutionError, Mode=OneWay}"
                                              IsReadOnly="True" TextWrapping="Wrap"
                                              Background="Transparent" BorderThickness="0"
-                                             Foreground="#EF4444" FontFamily="Consolas" FontSize="11"
+                                             Foreground="{DynamicResource AccRed}" FontFamily="Consolas" FontSize="11"
                                              MaxHeight="100" VerticalScrollBarVisibility="Auto" />
                                 </StackPanel>
                             </Border>
@@ -2222,18 +2257,18 @@
                                 </TextBlock>
                                 <!-- Error count badge -->
                                 <Border CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                        Background="#33EF4444"
+                                        Background="{DynamicResource FailedBadgeBg}"
                                         Visibility="{Binding LogErrorCount, Converter={StaticResource IntToVis}}">
-                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#EF4444">
+                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccRed}">
                                         <Run Text="{Binding LogErrorCount, Mode=OneWay}" />
                                         <Run Text=" errors" />
                                     </TextBlock>
                                 </Border>
                                 <!-- Warning count badge -->
                                 <Border CornerRadius="8" Padding="6,1" Margin="4,0,0,0"
-                                        Background="#33F59E0B"
+                                        Background="{DynamicResource YellowBtnBg}"
                                         Visibility="{Binding LogWarningCount, Converter={StaticResource IntToVis}}">
-                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#F59E0B">
+                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccYellow}">
                                         <Run Text="{Binding LogWarningCount, Mode=OneWay}" />
                                         <Run Text=" warn" />
                                     </TextBlock>

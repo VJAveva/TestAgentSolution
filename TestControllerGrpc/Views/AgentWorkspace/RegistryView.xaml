@@ -117,6 +117,26 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
                     <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="60"/>
+                    <DataGridTemplateColumn Header="LATENCY" Width="60">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock FontSize="10" FontFamily="Consolas" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="{Binding LatencyMs, StringFormat={}{0}ms}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource AccGreen}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LatencyMs}" Value="-1">
+                                                    <Setter Property="Text" Value="—"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="LAST SEEN" Binding="{Binding LastSeen}" Width="70"/>
                 </DataGrid.Columns>
             </DataGrid>

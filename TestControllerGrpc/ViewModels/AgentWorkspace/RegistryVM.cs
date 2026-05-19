@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -253,16 +252,21 @@ public partial class RegistryVM : ObservableObject
 
         foreach (var row in Rows)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var (snapshot, error) = await _dispatcher.TestConnectionAsync(row.Name);
+            sw.Stop();
+
             if (snapshot != null)
             {
                 row.Status = "Online";
+                row.LatencyMs = (int)sw.ElapsedMilliseconds;
                 online++;
-                sb.AppendLine($"  \u2713 {row.Name} \u2014 Online");
+                sb.AppendLine($"  \u2713 {row.Name} \u2014 Online ({sw.ElapsedMilliseconds}ms)");
             }
             else
             {
                 row.Status = "Offline";
+                row.LatencyMs = -1;
                 offline++;
                 sb.AppendLine($"  \u2717 {row.Name} \u2014 {error}");
             }
@@ -308,4 +312,5 @@ public partial class RegistryRowVM : ObservableObject
     [ObservableProperty] private string _address = "";
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private string _lastSeen = "";
+    [ObservableProperty] private int _latencyMs = -1;  // -1 = not measured
 }

@@ -8,6 +8,9 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/DarkTheme.xaml" />
+                <ResourceDictionary Source="Views/Styles/DesignTokens.xaml" />
+                <ResourceDictionary Source="Views/Styles/Typography.xaml" />
+                <ResourceDictionary Source="Views/Styles/ControlStyles.xaml" />
                 <ResourceDictionary Source="Views/Styles/ExecutionDashboardStyles.xaml" />
                 <!-- Spec design tokens (BgCanvasBrush, TextInfoBrush, FontSans, RadiusMd, PulseAnim, ?) -->
                 <ResourceDictionary Source="Views/Styles/SpecTokens.xaml" />
@@ -21,6 +24,8 @@
             <BooleanToVisibilityConverter x:Key="BoolVis"/>
             <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
             <vm:ZeroToVisibleConverter x:Key="ZeroToVis"/>
+            <vm:LatencyToBrushConverter x:Key="LatencyToBrush"/>
+            <vm:StatusToDotBrushConverter x:Key="StatusToDotBrush"/>
 
             <!-- Spec-aligned converters (Section 10.2 of the dashboard spec) -->
             <spec:ActionStatusToBgConverter        x:Key="ActionStatusToBg"/>

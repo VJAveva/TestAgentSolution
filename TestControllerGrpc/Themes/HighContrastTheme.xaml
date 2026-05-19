@@ -41,6 +41,8 @@
     <!-- Accent button backgrounds -->
     <SolidColorBrush x:Key="AccentBtnBg"    Color="#FF003333" />
     <SolidColorBrush x:Key="GreenBtnBg"     Color="#FF003300" />
+    <SolidColorBrush x:Key="BlueBtnBg"      Color="#FF003333" />
+    <SolidColorBrush x:Key="AccBlue"        Color="#FF00FFFF" />
     <SolidColorBrush x:Key="DangerBtnBg"    Color="#FF330000" />
     <SolidColorBrush x:Key="MauveBtnBg"     Color="#FF330033" />
     <SolidColorBrush x:Key="YellowBtnBg"    Color="#FF333300" />
@@ -91,5 +93,21 @@
 
     <!-- Watermark -->
     <sys:Double x:Key="WatermarkOpacity">0.12</sys:Double>
+
+    <!-- Agent latency indicator -->
+    <SolidColorBrush x:Key="LatencyGood"    Color="#FF00FF00" />
+    <SolidColorBrush x:Key="LatencyWarn"    Color="#FFFFFF00" />
+    <SolidColorBrush x:Key="LatencyBad"     Color="#FFFF0000" />
+
+    <!-- Panel focus indicator -->
+    <SolidColorBrush x:Key="FocusRing"      Color="#FF00FFFF" />
+
+    <!-- Scrollbar track -->
+    <SolidColorBrush x:Key="ScrollbarTrack" Color="#FF222222" />
+    <SolidColorBrush x:Key="ScrollbarThumb" Color="#FF666666" />
+
+    <!-- Badge pill backgrounds -->
+    <SolidColorBrush x:Key="CancelledBadgeBg" Color="#FF333333" />
+    <SolidColorBrush x:Key="PartialBadgeBg"   Color="#FF332200" />
 
 </ResourceDictionary>

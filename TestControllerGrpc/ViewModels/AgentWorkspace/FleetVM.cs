@@ -139,4 +139,5 @@ public partial class FleetCardVM : ObservableObject
     [ObservableProperty] private string _status = "Free";
     [ObservableProperty] private string _statusDetail = "Idle";
     [ObservableProperty] private string _sessionId = "";
+    [ObservableProperty] private int _latencyMs = -1;  // -1 = not measured
 }

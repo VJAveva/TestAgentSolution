@@ -214,3 +214,57 @@ public sealed class ZeroToVisibleConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => Binding.DoNothing;
 }
+
+/// <summary>
+/// Converts a latency value (int ms) to a theme-aware brush.
+/// &lt;= 100ms → LatencyGood (green), &lt;= 500ms → LatencyWarn (yellow), &gt; 500ms → LatencyBad (red).
+/// -1 (not measured) → transparent.
+/// </summary>
+public sealed class LatencyToBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not int ms || ms < 0)
+            return Brushes.Transparent;
+
+        var key = ms switch
+        {
+            <= 100 => "LatencyGood",
+            <= 500 => "LatencyWarn",
+            _ => "LatencyBad"
+        };
+
+        return Application.Current?.TryFindResource(key) as Brush ?? Brushes.Transparent;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
+/// <summary>
+/// Converts an ExecutionStatus string to a status dot brush. Provides a unified 5-state system:
+/// Running → StatusBlue, Success → StatusGreen, Failed → StatusRed,
+/// PartialFailure → StatusYellow, Cancelled/Idle → StatusGray.
+/// </summary>
+public sealed class StatusToDotBrushConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var status = value as string ?? "";
+        var key = status switch
+        {
+            "Running" => "StatusBlue",
+            "Success" => "StatusGreen",
+            "Failed" => "StatusRed",
+            "PartialFailure" => "StatusYellow",
+            "Cancelled" => "StatusGray",
+            _ => "StatusGray"
+        };
+
+        return Application.Current?.TryFindResource(key) as Brush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x58, 0x5B, 0x70));
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

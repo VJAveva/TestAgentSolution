@@ -94,4 +94,20 @@
     <!-- Watermark -->
     <sys:Double x:Key="WatermarkOpacity">0.08</sys:Double>
 
+    <!-- Agent latency indicator -->
+    <SolidColorBrush x:Key="LatencyGood"    Color="#FFA6E3A1" />
+    <SolidColorBrush x:Key="LatencyWarn"    Color="#FFF9E2AF" />
+    <SolidColorBrush x:Key="LatencyBad"     Color="#FFF38BA8" />
+
+    <!-- Panel focus indicator -->
+    <SolidColorBrush x:Key="FocusRing"      Color="#4489B4FA" />
+
+    <!-- Scrollbar track -->
+    <SolidColorBrush x:Key="ScrollbarTrack" Color="#11FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumb" Color="#33FFFFFF" />
+
+    <!-- Badge pill backgrounds -->
+    <SolidColorBrush x:Key="CancelledBadgeBg" Color="#339399B2" />
+    <SolidColorBrush x:Key="PartialBadgeBg"   Color="#33FAB387" />
+
 </ResourceDictionary>

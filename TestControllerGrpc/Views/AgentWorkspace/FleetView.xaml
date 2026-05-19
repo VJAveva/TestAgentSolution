@@ -82,29 +82,48 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-                                <StackPanel Orientation="Horizontal" Grid.Row="0">
-                                    <Ellipse Width="7" Height="7" Margin="0,0,5,0" VerticalAlignment="Center">
-                                        <Ellipse.Style>
-                                            <Style TargetType="Ellipse">
-                                                <Setter Property="Fill" Value="{DynamicResource AccGreen}"/>
+                                <DockPanel Grid.Row="0">
+                                    <!-- Latency indicator (top-right) -->
+                                    <TextBlock DockPanel.Dock="Right" FontSize="8"
+                                               VerticalAlignment="Center" Margin="4,0,0,0"
+                                               Text="{Binding LatencyMs, StringFormat={}{0}ms}"
+                                               TextTrimming="CharacterEllipsis">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource AccGreen}"/>
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Status}" Value="Busy">
-                                                        <Setter Property="Fill" Value="{DynamicResource Accent}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                        <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                                        <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                    <DataTrigger Binding="{Binding LatencyMs}" Value="-1">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </Ellipse.Style>
-                                    </Ellipse>
-                                    <TextBlock Text="{Binding AgentName}" FontSize="11" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextP}" TextTrimming="CharacterEllipsis"
-                                               MaxWidth="95"/>
-                                </StackPanel>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="7" Height="7" Margin="0,0,5,0" VerticalAlignment="Center">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Fill" Value="{DynamicResource AccGreen}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                            <Setter Property="Fill" Value="{DynamicResource Accent}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                            <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                            <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBlock Text="{Binding AgentName}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextP}" TextTrimming="CharacterEllipsis"
+                                                   MaxWidth="80"/>
+                                    </StackPanel>
+                                </DockPanel>
                                 <TextBlock Grid.Row="1" Text="{Binding StatusDetail}" FontSize="9"
                                            Foreground="{DynamicResource TextS}" VerticalAlignment="Bottom"
                                            TextTrimming="CharacterEllipsis"/>
