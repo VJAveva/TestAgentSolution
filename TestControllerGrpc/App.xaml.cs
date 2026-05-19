@@ -20,6 +20,9 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Allow gRPC over plain HTTP/2 (without TLS) for local/intranet agent communication.
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
         // Install crash capture infrastructure FIRST — before any async work
         // can escape into a native callback and terminate the process.
         var logDir = AppLogger.DefaultLogDirectory;

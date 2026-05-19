@@ -162,11 +162,20 @@
                                 <TextBlock Text="Test" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
+                        <Button Style="{DynamicResource SmBtn}"
+                                Background="{DynamicResource YellowBtnBg}" Foreground="{DynamicResource AccYellow}"
+                                Command="{Binding DiagnoseAgentCommand}" Margin="0,0,4,0"
+                                ToolTip="Run full connectivity diagnostic (DNS, TCP, HTTP/2, gRPC)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="Diagnose" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                         <Button Content="Cancel" Style="{DynamicResource SmBtn}"
                                 Background="{DynamicResource BgSurface}" Foreground="{DynamicResource TextS}"
                                 Command="{Binding CancelCommand}"/>
                     </WrapPanel>
-                    <Button Content="?? Unregister Agent"
+                    <Button
                             Command="{Binding UnregisterCommand}" HorizontalAlignment="Left"
                             ToolTip="Remove this agent from the registry">
                         <Button.Style>
@@ -186,21 +195,41 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="Unregister Agent" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Button>
                 </StackPanel>
 
-                <TextBlock Text="{Binding TestResult}" FontSize="10" FontFamily="Consolas"
-                           Foreground="{DynamicResource TextS}" TextWrapping="Wrap" Margin="0,8,0,0">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
+                <!-- Test/Diagnose result output -->
+                <Border Margin="0,8,0,0" Padding="6" CornerRadius="4"
+                        Background="{DynamicResource BgCanvas}"
+                        BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                    <Border.Style>
+                        <Style TargetType="Border">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding TestResult}" Value="">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                    </Border.Style>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Top" HorizontalAlignment="Right"
+                                Style="{DynamicResource SmBtn}" Margin="0,0,0,4"
+                                Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                                Command="{Binding CopyDetailsCommand}"
+                                ToolTip="Copy diagnostic details to clipboard">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="Copy" FontSize="10" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding TestResult}" FontSize="10" FontFamily="Consolas"
+                                   Foreground="{DynamicResource TextS}" TextWrapping="Wrap"/>
+                    </DockPanel>
+                </Border>
             </StackPanel>
         </Border>
     </Grid>

@@ -157,8 +157,55 @@ public partial class RegistryVM : ObservableObject
             _dispatcher.UnregisterAgent(EditName);
 
         TestResult = snapshot != null
-            ? $"✓ Connected — {snapshot.AgentName}"
-            : $"✗ Failed: {error}";
+            ? $"\u2713 Connected \u2014 {snapshot.AgentName}"
+            : $"\u2717 Failed: {error}";
+    }
+
+    [RelayCommand]
+    private async Task DiagnoseAgent()
+    {
+        if (string.IsNullOrWhiteSpace(EditName))
+        {
+            TestResult = "Enter agent name first";
+            return;
+        }
+
+        TestResult = "Diagnosing...";
+
+        // Temporarily register if needed so DiagnoseAgentAsync can work
+        bool wasRegistered = _dispatcher.GetAgentAddress(EditName) != null;
+        if (!wasRegistered)
+            _dispatcher.RegisterAgent(EditName, EditAddress);
+
+        var steps = await _dispatcher.DiagnoseAgentAsync(EditName);
+
+        if (!wasRegistered)
+            _dispatcher.UnregisterAgent(EditName);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Diagnostic for: {EditName}");
+        sb.AppendLine(new string('\u2500', 30));
+        foreach (var step in steps)
+        {
+            var icon = step.Passed ? "\u2713" : "\u2717";
+            sb.AppendLine($"  {icon} [{step.Name}] {step.Detail}");
+        }
+
+        var allPassed = steps.All(s => s.Passed || !s.IsFatal);
+        sb.AppendLine();
+        sb.AppendLine(allPassed ? "\u2713 All checks passed" : "\u2717 One or more checks failed");
+
+        TestResult = sb.ToString().TrimEnd();
+    }
+
+    [RelayCommand]
+    private void CopyDetails()
+    {
+        if (string.IsNullOrWhiteSpace(TestResult))
+            return;
+
+        var details = $"Agent: {EditName}\nAddress: {EditAddress}\n\n{TestResult}";
+        Clipboard.SetText(details);
     }
 
     [RelayCommand]
