@@ -100,15 +100,25 @@ public sealed class CommandExecutor : IDisposable
         var ch = Channel.CreateUnbounded<ExecutionEvent>();
 
         // Build a CancellationToken that respects both the caller's token and the timeout
-        var cts = timeoutMs > 0
-            ? CancellationTokenSource.CreateLinkedTokenSource(externalCt)
-            : (externalCt.CanBeCanceled
-                ? CancellationTokenSource.CreateLinkedTokenSource(externalCt)
-                : null);
+        CancellationTokenSource? cts;
         if (timeoutMs > 0)
-            cts!.CancelAfter(timeoutMs);
+        {
+            cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+            cts.CancelAfter(timeoutMs);
+        }
+        else if (externalCt.CanBeCanceled)
+        {
+            cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+            // Safety-net: even with no explicit timeout, prevent a hung process
+            // from leaving the agent permanently stuck in "busy" state.
+            cts.CancelAfter(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
+        }
+        else
+        {
+            cts = new CancellationTokenSource(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
+        }
 
-        var ct = cts?.Token ?? CancellationToken.None;
+        var ct = cts.Token;
 
         _ = Task.Run(async () =>
         {
@@ -122,7 +132,7 @@ public sealed class CommandExecutor : IDisposable
             }
             finally
             {
-                cts?.Dispose();
+                cts.Dispose();
             }
         });
         return (true, execId, ch.Reader);
@@ -328,16 +338,19 @@ public sealed class CommandExecutor : IDisposable
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Cancellation from timeout or controller disconnect — kill the process tree
-            // and wait briefly for it to actually die before releasing the execution lock.
-            // Without this wait, the controller may immediately dispatch the next command
-            // and get "Agent is busy" because the lock hasn't been released yet.
+            // Cancellation from timeout, safety-net, or controller disconnect — kill the
+            // process tree and wait briefly for it to actually die before releasing the lock.
             KillCurrentProcess();
             try { _currentProcess?.WaitForExit(5000); }
             catch { /* process already disposed or exited */ }
 
+            var elapsed = DateTime.UtcNow - _executionStartedUtc!.Value;
+            var reason = timeoutMs > 0
+                ? $"Execution timed out after {elapsed:hh\\:mm\\:ss} (limit: {timeoutMs}ms)"
+                : $"Execution cancelled after {elapsed:hh\\:mm\\:ss} (safety-net {_settings.MaxExecutionTimeoutMinutes}min or client disconnect)";
+
             _lastExitCode = -1;
-            _lastError = "Execution cancelled (timeout or client disconnect)";
+            _lastError = reason;
             record.Fail(_lastError);
 
             _audit.Log("CommandTerminated", severity: "Warning",
@@ -350,7 +363,7 @@ public sealed class CommandExecutor : IDisposable
                 detail: _lastError,
                 perCallChannel: perCallChannel);
 
-            _logger.LogWarning("Execution {Id} cancelled", executionId);
+            _logger.LogWarning("Execution {Id} cancelled — {Reason}", executionId, reason);
         }
         catch (Exception ex)
         {
@@ -370,23 +383,40 @@ public sealed class CommandExecutor : IDisposable
         }
         finally
         {
-            // Always clean up process resources and release the lock
-            _currentProcess?.Dispose();
+            // CRITICAL: Guarantee the agent always returns to Ready state and releases
+            // the execution lock — even if individual cleanup steps throw (e.g. Process.Dispose()
+            // on an invalid handle, or an event handler throwing in SetActivity/StateChanged).
+            try { _currentProcess?.Dispose(); } catch { /* best effort */ }
             _currentProcess = null;
             _currentExecutionId = null;
             _currentCommand = null;
             _executionStartedUtc = null;
 
-            if (!isReboot)
+            try
             {
-                SetActivity($"Finished: {command} {arguments}");
+                SetActivity(isReboot
+                    ? $"Reboot pending: {command} {arguments}"
+                    : $"Finished: {command} {arguments}");
             }
-            else
+            catch (Exception ex)
             {
-                SetActivity($"Reboot pending: {command} {arguments}");
+                _logger.LogWarning(ex, "SetActivity threw during cleanup");
             }
 
-            SetState(AgentState.Ready);
+            // Set the volatile state field FIRST so even if the event handler
+            // throws, the agent no longer appears busy to incoming requests.
+            _state = AgentState.Ready;
+            try { StateChanged?.Invoke(this, AgentState.Ready); } catch { /* swallow */ }
+            try
+            {
+                _broadcaster.Publish(BuildEvent(
+                    executionId,
+                    ExecutionEventType.EventStateChanged,
+                    agentState: AgentState.Ready,
+                    detail: "State → Ready"));
+            }
+            catch { /* swallow */ }
+
             perCallChannel?.TryComplete();
 
             if (lockAcquired)
@@ -488,6 +518,33 @@ public sealed class CommandExecutor : IDisposable
             _logger.LogError(ex, "TerminateExecution failed");
             _lastError = ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Emergency reset: kills the current process, forcibly sets state to Ready,
+    /// and releases the execution lock. Use when the agent is permanently stuck.
+    /// </summary>
+    public void ForceReady()
+    {
+        _logger.LogWarning("ForceReady invoked — forcibly resetting agent state");
+        try { KillCurrentProcess(); } catch { /* best effort */ }
+        try { _currentProcess?.Dispose(); } catch { /* best effort */ }
+        _currentProcess = null;
+        _currentExecutionId = null;
+        _currentCommand = null;
+        _executionStartedUtc = null;
+
+        _state = AgentState.Ready;
+        try { StateChanged?.Invoke(this, AgentState.Ready); } catch { /* swallow */ }
+
+        // Release the lock if it's currently held (count will be 0 when held)
+        if (_executionLock.CurrentCount == 0)
+        {
+            try { _executionLock.Release(); } catch { /* already released */ }
+        }
+
+        _audit.Log("ForceReady", severity: "Warning",
+            detail: "Agent state forcibly reset to Ready");
     }
 
     /// <summary>

@@ -84,6 +84,32 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
 
     case 'EXECUTION_STARTED': {
       const d = action.data;
+
+      // Build agent rows from pendingActions (all actions in the pipeline scope)
+      const agentMap = new Map<string, ActionExecution[]>();
+      if (Array.isArray(d.pendingActions)) {
+        for (const pa of d.pendingActions) {
+          const name = pa.agentName || 'Controller';
+          if (!agentMap.has(name)) agentMap.set(name, []);
+          agentMap.get(name)!.push({
+            tag: pa.tag || '',
+            actionType: pa.actionType || '',
+            agentName: name,
+            command: pa.command || '',
+            status: 'Pending' as ActionStatus,
+          });
+        }
+      }
+
+      const agents = Array.from(agentMap.entries()).map(([name, actions]) => ({
+        agentName: name,
+        status: 'Idle' as const,
+        actions,
+        completedCount: 0,
+        totalCount: actions.length,
+        progressPercent: 0,
+      }));
+
       const session: SessionSummary = {
         sessionId: d.sessionId,
         watchItemTag: d.watchItemTag || '',
@@ -92,8 +118,10 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
         status: 'Running',
         startedUtc: d.startTime || new Date().toISOString(),
         elapsed: '00:00',
-        agents: d.agents || [],
-        totalActions: d.totalActions || 0,
+        agents: agents.length > 0 ? agents : (d.agents || []),
+        totalActions: agents.length > 0
+          ? agents.reduce((sum, a) => sum + a.totalCount, 0)
+          : (d.totalActions || 0),
         completedActions: 0,
         passedActions: 0,
         failedActions: 0,
@@ -182,14 +210,20 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
               duration: d.duration,
             }];
           } else if (actionIdx >= 0) {
-            agent.actions = [...agent.actions];
-            agent.actions[actionIdx] = {
-              ...agent.actions[actionIdx],
-              status: actionStatus,
-              exitCode: d.exitCode,
-              errorMessage: d.errorMessage,
-              duration: d.duration,
-            };
+            // Never downgrade a terminal status (matches WPF AgentRowVM logic)
+            const currentStatus = agent.actions[actionIdx].status;
+            const isTerminal = currentStatus === 'Success' || currentStatus === 'Failed' || currentStatus === 'Skipped';
+            const isDemotion = actionStatus === 'Running' || actionStatus === 'Pending';
+            if (!(isTerminal && isDemotion)) {
+              agent.actions = [...agent.actions];
+              agent.actions[actionIdx] = {
+                ...agent.actions[actionIdx],
+                status: actionStatus,
+                exitCode: d.exitCode,
+                errorMessage: d.errorMessage,
+                duration: d.duration,
+              };
+            }
           }
 
           // Update agent counters

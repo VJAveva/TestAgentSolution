@@ -28,6 +28,7 @@ service TestAgentService {
   rpc GetLastExitCode    (google.protobuf.Empty) returns (ExitCodeReply);
   rpc GetLastError       (google.protobuf.Empty) returns (ErrorReply);
   rpc TerminateExecution (google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc ForceReady         (google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc RunCommandStreamed (RunCommandRequest)     returns (stream ExecutionEvent);
   rpc SubscribeAgentEvents (google.protobuf.Empty) returns (stream ExecutionEvent);
   rpc GetExecutionHistory (ExecutionHistoryRequest) returns (ExecutionHistoryReply);

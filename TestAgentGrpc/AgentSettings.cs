@@ -29,6 +29,13 @@ public sealed class AgentSettings
     // Metrics
     public bool CollectSystemMetrics { get; set; } = true;
 
+    /// <summary>
+    /// Hard safety-net timeout (in minutes) for executions with no explicit timeout (Timeout=0).
+    /// Prevents the agent from being permanently stuck in "busy" state if a process hangs.
+    /// Default: 120 minutes (2 hours).
+    /// </summary>
+    public int MaxExecutionTimeoutMinutes { get; set; } = 120;
+
     public string GetResolvedEndpoint() =>
         AgentEndpoint ?? $"http://{Environment.MachineName}:{GrpcPort}";
 }

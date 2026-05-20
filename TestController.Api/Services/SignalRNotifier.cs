@@ -30,6 +30,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IEventAggregator _events;
+    private readonly ExecutionSessionManager _sessionManager;
     private readonly CachedBuildResultsProvider _buildResults;
     private readonly ILogger<SignalRNotifier> _logger;
 
@@ -55,6 +56,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         IAgentGrpcDispatcher dispatcher,
         IVocabularyMonitor vocabMonitor,
         IEventAggregator events,
+        ExecutionSessionManager sessionManager,
         CachedBuildResultsProvider buildResults,
         ILogger<SignalRNotifier> logger)
     {
@@ -63,6 +65,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _dispatcher = dispatcher;
         _vocabMonitor = vocabMonitor;
         _events = events;
+        _sessionManager = sessionManager;
         _buildResults = buildResults;
         _logger = logger;
     }
@@ -310,6 +313,13 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
 
     private void OnExecutionStarted(ExecutionStartedEvent e)
     {
+        // Include pending actions from the snapshot tree so the WebClient can
+        // pre-populate all pills as "Pending" (user sees the full pipeline scope)
+        var session = _sessionManager.GetSession(e.SessionId);
+        var pendingActions = session?.SnapshotNodes?.Count > 0
+            ? ExtractPendingActions(session.SnapshotNodes, session.ResolvedParameters)
+            : Array.Empty<object>();
+
         SendSafe("ExecutionStarted", new
         {
             sessionId = e.SessionId,
@@ -317,7 +327,55 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             eventType = e.EventType,
             startTime = DateTime.UtcNow.ToString("o"),
             source = e.Source,
+            pendingActions,
         });
+    }
+
+    /// <summary>Walks the snapshot tree and emits flat action descriptors for the WebClient.</summary>
+    private static object[] ExtractPendingActions(
+        IReadOnlyList<IActionNode> nodes, Dictionary<string, string>? parameters)
+    {
+        var result = new List<object>();
+        CollectActions(nodes, parameters, result);
+        return result.ToArray();
+    }
+
+    private static void CollectActions(
+        IReadOnlyList<IActionNode> nodes, Dictionary<string, string>? parameters, List<object> result)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    var agent = ResolveAgent(action.AgentName, parameters);
+                    result.Add(new
+                    {
+                        tag = action.ResolvedTag,
+                        actionType = action.Type.ToString(),
+                        agentName = agent,
+                        command = action.Command,
+                        status = "Pending",
+                    });
+                    break;
+
+                case ActionGroupConfig group:
+                    CollectActions(group.Children, parameters, result);
+                    break;
+            }
+        }
+    }
+
+    private static string ResolveAgent(string agentName, Dictionary<string, string>? parameters)
+    {
+        if (string.IsNullOrEmpty(agentName)) return "Controller";
+        if (parameters != null && agentName.StartsWith('[') && agentName.EndsWith(']'))
+        {
+            var varName = agentName[1..^1];
+            if (parameters.TryGetValue(varName, out var resolved)) return resolved;
+            if (varName.StartsWith('_') && parameters.TryGetValue(varName[1..], out resolved)) return resolved;
+        }
+        return agentName;
     }
 
     private void OnExecutionCompleted(ExecutionCompletedEvent e)

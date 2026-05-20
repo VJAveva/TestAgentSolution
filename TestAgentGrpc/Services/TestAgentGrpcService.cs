@@ -105,6 +105,13 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         return Task.FromResult(new Empty());
     }
 
+    public override Task<Empty> ForceReady(Empty request, ServerCallContext context)
+    {
+        _logger.LogWarning("ForceReady requested — forcibly resetting agent state");
+        _executor.ForceReady();
+        return Task.FromResult(new Empty());
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // NEW: Real-time execution monitoring RPCs
     // ═══════════════════════════════════════════════════════════════════

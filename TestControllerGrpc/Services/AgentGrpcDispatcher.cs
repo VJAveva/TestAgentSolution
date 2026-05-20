@@ -25,6 +25,7 @@ namespace TestControllerGrpc.Services;
 public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 {
     private readonly ILogger<AgentGrpcDispatcher> _logger;
+    private readonly IAppLogger _appLogger;
     private readonly IEventAggregator _events;
     private readonly ConcurrentDictionary<string, AgentEndpoint> _agents = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
@@ -35,9 +36,10 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     /// <summary>Raised when execution state changes.</summary>
     public event Action<string, string>? StatusChanged;  // agentName, status
 
-    public AgentGrpcDispatcher(ILogger<AgentGrpcDispatcher> logger, IEventAggregator events)
+    public AgentGrpcDispatcher(ILogger<AgentGrpcDispatcher> logger, IAppLogger appLogger, IEventAggregator events)
     {
         _logger = logger;
+        _appLogger = appLogger;
         _events = events;
     }
 
@@ -297,14 +299,21 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     {
         var resolved = ParameterResolver.ResolveAction(action, ctx);
         var agentName = resolved.AgentName.Trim();
+        var correlationId = ctx.SessionId ?? Guid.NewGuid().ToString("N")[..8];
+        var cmdShort = $"{resolved.Command} {resolved.Parameters}".Trim();
+        if (cmdShort.Length > 80) cmdShort = cmdShort[..80] + "…";
 
         if (!_agents.TryGetValue(agentName, out var endpoint))
         {
             var msg = $"Agent '{agentName}' not registered";
             _logger.LogWarning(msg);
+            _appLogger.Warn("Dispatch", $"[{agentName}] {msg}");
             return new ActionResult(false, -1, msg);
         }
 
+        _appLogger.Log(LogLevel.Information, "Dispatch",
+            $"[{agentName}] → {cmdShort} (timeout={resolved.Timeout}s, isReboot={resolved.IsReboot})",
+            correlationId);
         StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
         var startTimestamp = Stopwatch.GetTimestamp();
 
@@ -352,9 +361,12 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     _logger.LogWarning(
                         "Agent {Agent} rejected command (busy). Waiting for agent to become free before retrying...",
                         agentName);
+                    _appLogger.Warn("Dispatch",
+                        $"[{agentName}] BUSY — agent rejected '{cmdShort}'. Starting 2-min recovery wait...");
                     StatusChanged?.Invoke(agentName, "Agent busy \u2014 waiting to retry...");
 
                     // Wait up to 2 minutes in 10s intervals for the agent to become Ready
+                    bool becameFree = false;
                     for (int retryWait = 0; retryWait < 12; retryWait++)
                     {
                         await Task.Delay(10_000, resilienceCt);
@@ -365,16 +377,47 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                                 cancellationToken: resilienceCt);
                             if (state.State != AgentState.Running)
                             {
+                                _appLogger.Info("Dispatch",
+                                    $"[{agentName}] Agent became free after {(retryWait + 1) * 10}s — retrying command");
                                 StatusChanged?.Invoke(agentName, "Agent free \u2014 retrying command");
+                                becameFree = true;
                                 break;
                             }
                             StatusChanged?.Invoke(agentName,
                                 $"Agent still busy \u2014 waiting ({retryWait + 1}/12)");
                         }
-                        catch (RpcException) { break; } // agent unreachable, proceed to retry
+                        catch (RpcException) { becameFree = true; break; } // agent unreachable, proceed to retry
+                    }
+
+                    // If the agent is still busy after 2 minutes, it's likely permanently
+                    // stuck. Force-reset it before retrying.
+                    if (!becameFree)
+                    {
+                        _logger.LogWarning(
+                            "Agent {Agent} still busy after 2 min wait — calling ForceReady to recover stuck state",
+                            agentName);
+                        _appLogger.Warn("Dispatch",
+                            $"[{agentName}] STUCK — still busy after 2 min. Calling ForceReady to recover...");
+                        try
+                        {
+                            await client.ForceReadyAsync(new Empty(),
+                                deadline: DateTime.UtcNow.AddSeconds(5),
+                                cancellationToken: resilienceCt);
+                            await Task.Delay(1_000, resilienceCt); // brief settle
+                            _appLogger.Info("Dispatch",
+                                $"[{agentName}] ForceReady succeeded — agent state reset");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "ForceReady call failed for {Agent}", agentName);
+                            _appLogger.Error("Dispatch",
+                                $"[{agentName}] ForceReady FAILED: {ex.Message}", ex);
+                        }
                     }
 
                     // Retry the command
+                    _appLogger.Info("Dispatch",
+                        $"[{agentName}] Retrying: {cmdShort}");
                     streamResult = await RemoteCommandStreamRunner.StreamAsync(
                         client, agentName, resolved, linked.Token,
                         outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
@@ -392,8 +435,12 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 // Only wait if the command was actually accepted (not rejected as busy).
                 if (resolved.IsReboot && streamResult.ExitCode != -1)
                 {
+                    _appLogger.Info("Dispatch",
+                        $"[{agentName}] REBOOT initiated — waiting up to 5 min for agent to come back online");
                     StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                     await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), resilienceCt);
+                    _appLogger.Info("Dispatch",
+                        $"[{agentName}] REBOOT complete — agent back online");
                 }
 
                 var exitCode = streamResult.ExitCode;
@@ -404,8 +451,20 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     errorMessage = $"{exitDetail} {errorMessage}";
 
                 var success = exitCode == 0 && string.IsNullOrEmpty(errorMessage);
+                var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
                 var statusMsg = success ? "Ready" : $"Failed (exit {exitCode}): {Truncate(errorMessage, 100)}";
                 StatusChanged?.Invoke(agentName, statusMsg);
+
+                if (success)
+                {
+                    _appLogger.Log(LogLevel.Information, "Dispatch",
+                        $"[{agentName}] ✓ OK: {cmdShort}", correlationId, (long)elapsed.TotalMilliseconds);
+                }
+                else
+                {
+                    _appLogger.Log(LogLevel.Error, "Dispatch",
+                        $"[{agentName}] ✗ FAILED (exit {exitCode}): {Truncate(errorMessage, 150)}", correlationId, (long)elapsed.TotalMilliseconds);
+                }
 
                 RecordSuccess(agentName);
                 return new ActionResult(success, exitCode, errorMessage);
@@ -416,12 +475,18 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             RecordFailure(agentName);
             if (resolved.IsReboot)
             {
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] Agent went unavailable during reboot — waiting for recovery");
                 StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                 var client = endpoint.GetClient();
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] REBOOT complete — agent back online (recovered from Unavailable)");
                 RecordSuccess(agentName);
                 return new ActionResult(true, 0, "Reboot completed");
             }
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] UNAVAILABLE: {ex.Status.Detail}");
             return new ActionResult(false, -1, $"Agent {agentName} unavailable: {ex.Status.Detail}");
         }
         catch (BrokenCircuitException)
@@ -432,15 +497,20 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             _logger.LogWarning(
                 "Agent {Agent} circuit breaker is open — skipping call, will retry after break duration",
                 agentName);
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] CIRCUIT BREAKER open — skipping '{cmdShort}'");
             return new ActionResult(false, -1,
                 $"Agent {agentName} circuit breaker is open — too many recent failures");
         }
         catch (TimeoutRejectedException)
         {
             RecordFailure(agentName);
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
             _logger.LogError(
                 "Agent {Agent} hit Polly outer timeout for: {Command}",
                 agentName, resolved.Command);
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] HARD TIMEOUT (24h safety net) for '{cmdShort}' after {elapsed:hh\\:mm\\:ss}");
             return new ActionResult(false, -1,
                 $"Agent {agentName} hard timeout exceeded (24-hour resilience safety net)");
         }
@@ -450,6 +520,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             _logger.LogWarning(
                 "Action cancelled by user on {Agent} after {Elapsed}: {Command}",
                 agentName, elapsed.ToString(@"hh\:mm\:ss"), resolved.Command);
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] Cancelled by user after {elapsed:hh\\:mm\\:ss}: {cmdShort}");
             return new ActionResult(false, -1,
                 $"Cancelled by user after {elapsed:hh\\:mm\\:ss}");
         }
@@ -470,11 +542,15 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             if (elapsed.TotalSeconds >= 3590 && elapsed.TotalSeconds <= 3610)
                 detail += "HINT: Exactly 1 hour suggests IIS requestTimeout or Action Timeout=3600.";
 
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] TIMED OUT after {elapsed:hh\\:mm\\:ss}: {cmdShort}");
             return new ActionResult(false, -1, detail);
         }
         catch (Exception ex)
         {
             RecordFailure(agentName);
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] EXCEPTION: {ex.Message}", ex);
             return new ActionResult(false, -1, ex.Message);
         }
     }
@@ -682,6 +758,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         }
 
         _logger.LogWarning("Agent {Agent} still busy after 30s — proceeding anyway", agentName);
+        _appLogger.Warn("Dispatch",
+            $"[{agentName}] Pre-check: still busy after 30s polling — proceeding with dispatch");
     }
 
     private async Task WaitForAgentReady(

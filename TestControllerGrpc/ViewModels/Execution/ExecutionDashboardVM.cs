@@ -266,7 +266,13 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                 IsExpanded = true,
             };
 
+            // Pre-populate all action pills as "Pending" from the snapshot tree
+            // so the user can see the full scope of the pipeline/group being executed.
+            if (session?.SnapshotNodes?.Count > 0)
+                PopulatePendingActions(card, session.SnapshotNodes, session.ResolvedParameters);
+
             Sessions.Insert(0, card);
+            card.RecalculateCounters();
             RecalculateStats();
         });
     }
@@ -449,6 +455,52 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         ActionOutcome.TimedOut   => "Failed",
         _                        => "Running",
     };
+
+    /// <summary>
+    /// Walks the snapshot action tree and pre-populates all leaf action pills as "Pending"
+    /// so the user can see the full pipeline scope before execution progresses.
+    /// </summary>
+    private static void PopulatePendingActions(
+        SessionCardVM card, IReadOnlyList<IActionNode> nodes, Dictionary<string, string>? parameters)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    var agentName = ResolveAgentName(action.AgentName, parameters);
+                    var row = card.GetOrCreateAgent(agentName);
+                    row.UpdateAction(
+                        tag: action.ResolvedTag,
+                        actionType: action.Type.ToString(),
+                        command: action.Command,
+                        status: "Pending");
+                    break;
+
+                case ActionGroupConfig group:
+                    PopulatePendingActions(card, group.Children, parameters);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Resolves [_Variable] references for agent name display.</summary>
+    private static string ResolveAgentName(string agentName, Dictionary<string, string>? parameters)
+    {
+        if (string.IsNullOrEmpty(agentName))
+            return "Controller";
+
+        if (parameters != null && agentName.StartsWith('[') && agentName.EndsWith(']'))
+        {
+            var varName = agentName[1..^1];
+            if (parameters.TryGetValue(varName, out var resolved))
+                return resolved;
+            if (varName.StartsWith('_') && parameters.TryGetValue(varName[1..], out resolved))
+                return resolved;
+        }
+
+        return agentName;
+    }
 
     private void HarvestLogs(SessionCardVM card, ExecutionSession session)
     {

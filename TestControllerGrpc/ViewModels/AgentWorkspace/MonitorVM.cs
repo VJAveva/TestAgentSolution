@@ -284,8 +284,13 @@ public partial class MonitorVM : ObservableObject
 
         // Current command from snapshot — only update if NodeProgress hasn't set it recently
         var recentProgress = (DateTime.UtcNow - _lastNodeProgressUtc).TotalSeconds < 3;
-        if (!recentProgress && !string.IsNullOrEmpty(snapshot.CurrentCommand))
-            ActionCommand = TruncateCommand(snapshot.CurrentCommand);
+        if (!recentProgress)
+        {
+            if (!string.IsNullOrEmpty(snapshot.CurrentCommand))
+                ActionCommand = TruncateCommand(snapshot.CurrentCommand);
+            else if (snapshot.State != AgentState.Running)
+                ActionCommand = Empty; // Agent finished — clear stale command
+        }
 
         // System info from ResourceMetrics
         var m = snapshot.Metrics;

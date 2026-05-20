@@ -389,23 +389,39 @@ public static class ExecutionEndpoints
         lockedAgents = s.LockedAgents,
         buildNumber = s.ResolvedParameters
             .GetValueOrDefault("_BuildNumber", ""),
-        totalActions = s.SnapshotNodes.Count,
+        totalActions = CountLeafActions(s.SnapshotNodes),
         completedActions = s.ActionResults.Count,
         passedActions = s.SucceededCount,
         failedActions = s.FailedCount,
-        progressPercent = s.SnapshotNodes.Count > 0
-            ? (int)((double)s.ActionResults.Count / s.SnapshotNodes.Count * 100)
+        progressPercent = CountLeafActions(s.SnapshotNodes) > 0
+            ? (int)((double)s.ActionResults.Count / CountLeafActions(s.SnapshotNodes) * 100)
             : 0,
-        agents = s.GetAgentSummaries().Select(a => new
+        agents = BuildAgentDtos(s),
+    };
+
+    /// <summary>
+    /// Merges pending actions (from SnapshotNodes) with completed/running actions
+    /// (from AgentSummaries) so the full pipeline scope is always visible.
+    /// </summary>
+    private static object[] BuildAgentDtos(ExecutionSession s)
+    {
+        var summaries = s.GetAgentSummaries();
+        var startedTags = new HashSet<string>(
+            summaries.SelectMany(a => a.Actions.Select(act => act.ActionTag)),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Collect pending actions from snapshot that haven't started yet
+        var pendingByAgent = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+        CollectPendingFromSnapshot(s.SnapshotNodes, s.ResolvedParameters, startedTags, pendingByAgent);
+
+        // Build the result: started agents + pending pills appended
+        var result = new List<object>();
+        var processedAgents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var a in summaries)
         {
-            agentName = a.AgentName,
-            status = a.Status,
-            completedCount = a.CompletedCount,
-            totalCount = a.TotalCount,
-            progressPercent = a.TotalCount > 0
-                ? (int)((double)a.CompletedCount / a.TotalCount * 100)
-                : 0,
-            actions = a.Actions.Select(act => new
+            processedAgents.Add(a.AgentName);
+            var startedActions = a.Actions.Select(act => new
             {
                 tag = act.ActionTag,
                 actionType = act.ActionType,
@@ -422,7 +438,104 @@ public static class ExecutionEndpoints
                 exitCode = act.ExitCode,
                 errorMessage = act.ErrorMessage,
                 duration = act.Duration.ToString(@"mm\:ss"),
-            }),
-        }),
-    };
+            }).Cast<object>().ToList();
+
+            // Append pending actions that haven't started for this agent
+            if (pendingByAgent.TryGetValue(a.AgentName, out var pending))
+                startedActions.AddRange(pending);
+
+            result.Add(new
+            {
+                agentName = a.AgentName,
+                status = a.Status,
+                completedCount = a.CompletedCount,
+                totalCount = startedActions.Count,
+                progressPercent = startedActions.Count > 0
+                    ? (int)((double)a.CompletedCount / startedActions.Count * 100)
+                    : 0,
+                actions = startedActions,
+            });
+        }
+
+        // Add agents that have only pending actions (not yet started)
+        foreach (var (agentName, pending) in pendingByAgent)
+        {
+            if (processedAgents.Contains(agentName)) continue;
+            result.Add(new
+            {
+                agentName,
+                status = "Idle",
+                completedCount = 0,
+                totalCount = pending.Count,
+                progressPercent = 0,
+                actions = pending,
+            });
+        }
+
+        return result.ToArray();
+    }
+
+    private static void CollectPendingFromSnapshot(
+        IReadOnlyList<IActionNode> nodes,
+        Dictionary<string, string>? parameters,
+        HashSet<string> startedTags,
+        Dictionary<string, List<object>> pendingByAgent)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    if (startedTags.Contains(action.ResolvedTag)) break;
+                    var agent = ResolveAgentForApi(action.AgentName, parameters);
+                    if (!pendingByAgent.TryGetValue(agent, out var list))
+                    {
+                        list = new List<object>();
+                        pendingByAgent[agent] = list;
+                    }
+                    list.Add(new
+                    {
+                        tag = action.ResolvedTag,
+                        actionType = action.Type.ToString(),
+                        agentName = agent,
+                        command = action.Command,
+                        status = "Pending",
+                        exitCode = (int?)null,
+                        errorMessage = (string?)null,
+                        duration = (string?)null,
+                    });
+                    break;
+
+                case ActionGroupConfig group:
+                    CollectPendingFromSnapshot(group.Children, parameters, startedTags, pendingByAgent);
+                    break;
+            }
+        }
+    }
+
+    private static string ResolveAgentForApi(string agentName, Dictionary<string, string>? parameters)
+    {
+        if (string.IsNullOrEmpty(agentName)) return "Controller";
+        if (parameters != null && agentName.StartsWith('[') && agentName.EndsWith(']'))
+        {
+            var varName = agentName[1..^1];
+            if (parameters.TryGetValue(varName, out var resolved)) return resolved;
+            if (varName.StartsWith('_') && parameters.TryGetValue(varName[1..], out resolved)) return resolved;
+        }
+        return agentName;
+    }
+
+    private static int CountLeafActions(IReadOnlyList<IActionNode> nodes)
+    {
+        int count = 0;
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig: count++; break;
+                case ActionGroupConfig g: count += CountLeafActions(g.Children); break;
+            }
+        }
+        return count;
+    }
 }
