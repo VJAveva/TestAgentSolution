@@ -125,6 +125,7 @@ message ResourceMetrics {
   double memory_total_mb      = 3;
   double disk_free_gb         = 4;
   int32  active_process_count = 5;
+  string os_description       = 6;
 }
 
 message HeartbeatRequest {

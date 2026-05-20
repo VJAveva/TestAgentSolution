@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Services;
@@ -10,6 +11,7 @@ namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 public partial class RegistryVM : ObservableObject
 {
     private readonly IAgentGrpcDispatcher _dispatcher;
+    private readonly AgentLockManager _lockManager;
 
     public ObservableCollection<RegistryRowVM> Rows { get; } = new();
 
@@ -44,9 +46,15 @@ public partial class RegistryVM : ObservableObject
         set => SetProperty(ref _hasDiagnosticResult, value);
     }
 
-    public RegistryVM(IAgentGrpcDispatcher dispatcher)
+    public RegistryVM(IAgentGrpcDispatcher dispatcher, AgentLockManager lockManager, IEventAggregator events, Dispatcher uiDispatcher)
     {
         _dispatcher = dispatcher;
+        _lockManager = lockManager;
+
+        events.Subscribe<AgentLocksChangedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<ExecutionStartedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        events.Subscribe<ExecutionCompletedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+
         Refresh();
     }
 
@@ -54,18 +62,29 @@ public partial class RegistryVM : ObservableObject
     {
         Rows.Clear();
         var allHealth = _dispatcher.GetAllAgentHealth();
+        var allLocks = _lockManager.GetAllLocks();
 
         foreach (var name in _dispatcher.RegisteredAgents)
         {
             var address = _dispatcher.GetAgentAddress(name) ?? "";
             allHealth.TryGetValue(name, out var health);
 
+            var hasLock = allLocks.Any(l =>
+                string.Equals(l.AgentName, name, StringComparison.OrdinalIgnoreCase));
+
+            string status;
+            if (hasLock)
+                status = "Busy";
+            else if (health?.IsHealthy == false)
+                status = "Offline";
+            else
+                status = "Online";
+
             Rows.Add(new RegistryRowVM
             {
                 Name = name,
                 Address = address,
-                Status = health?.IsHealthy != false ? "Online" : "Offline",
-                LastSeen = FormatLastSeen(health?.LastSuccessUtc),
+                Status = status,
             });
         }
     }
@@ -108,6 +127,19 @@ public partial class RegistryVM : ObservableObject
 
         var isNewAgent = SelectedRow == null;
         var agentName = EditName.Trim();
+        var agentAddress = EditAddress.Trim();
+
+        // Prevent duplicate: another agent already uses this address
+        var existingWithAddress = Rows.FirstOrDefault(r =>
+            string.Equals(r.Address, agentAddress, StringComparison.OrdinalIgnoreCase) &&
+            (SelectedRow == null || !string.Equals(r.Name, SelectedRow.Name, StringComparison.OrdinalIgnoreCase)));
+        if (existingWithAddress != null)
+        {
+            MessageBox.Show(
+                $"Address '{agentAddress}' is already registered to agent '{existingWithAddress.Name}'.",
+                "Duplicate Address", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         if (SelectedRow != null)
         {

@@ -240,20 +240,26 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="RAM" FontSize="10"
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="OS" FontSize="10"
                                    Foreground="{StaticResource TextDim}" Padding="0,3"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SystemRamTotal}"
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SystemOs}"
+                                   FontFamily="Consolas" FontSize="11"
+                                   Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis" Padding="0,3"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="RAM" FontSize="10"
+                                   Foreground="{StaticResource TextDim}" Padding="0,3"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SystemRamTotal}"
                                    FontFamily="Consolas" FontSize="11"
                                    Foreground="{StaticResource TextPrimary}" Padding="0,3"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Disk free" FontSize="10"
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk free" FontSize="10"
                                    Foreground="{StaticResource TextDim}" Padding="0,3"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SystemDiskFree}"
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SystemDiskFree}"
                                    FontFamily="Consolas" FontSize="11"
                                    Foreground="{StaticResource TextPrimary}" Padding="0,3"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Address" FontSize="10"
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Address" FontSize="10"
                                    Foreground="{StaticResource TextDim}" Padding="0,3"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AgentAddress}"
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AgentAddress}"
                                    FontFamily="Consolas" FontSize="11"
                                    Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis" Padding="0,3"/>
                     </Grid>

@@ -24,7 +24,7 @@ public partial class AgentWorkspaceVM : ObservableObject
     {
         Fleet = new FleetVM(dispatcher, lockManager, sessionManager, events, uiDispatcher);
         Monitor = new MonitorVM(dispatcher, lockManager, sessionManager, events, uiDispatcher);
-        Registry = new RegistryVM(dispatcher);
+        Registry = new RegistryVM(dispatcher, lockManager, events, uiDispatcher);
 
         Fleet.AgentSelected += OnFleetAgentSelected;
         Fleet.RegisterAgentClicked += () => RegisterNew();

@@ -29,6 +29,7 @@ public partial class MonitorVM : ObservableObject
     private CancellationTokenSource? _pollingCts;
     private IDisposable? _agentOutputSub;
     private IDisposable? _locksChangedSub;
+    private IDisposable? _nodeProgressSub;
 
     public MonitorVM(
         IAgentGrpcDispatcher dispatcher,
@@ -78,6 +79,7 @@ public partial class MonitorVM : ObservableObject
     [ObservableProperty] private string _actionProgress = Empty;
 
     // ── System info (left panel) ──
+    [ObservableProperty] private string _systemOs = Empty;
     [ObservableProperty] private string _systemCores = Empty;
     [ObservableProperty] private string _systemRamTotal = Empty;
     [ObservableProperty] private string _systemDiskFree = Empty;
@@ -138,6 +140,7 @@ public partial class MonitorVM : ObservableObject
         _agentOutputSub = _events.Subscribe<AgentOutputEvent>(OnAgentOutput);
         _locksChangedSub = _events.Subscribe<AgentLocksChangedEvent>(_ =>
             _uiDispatcher.InvokeAsync(RefreshSessionInfo));
+        _nodeProgressSub = _events.Subscribe<NodeProgressEvent>(OnNodeProgress);
 
         StartTelemetryPolling();
         StartElapsedTimer();
@@ -151,6 +154,8 @@ public partial class MonitorVM : ObservableObject
         _agentOutputSub = null;
         _locksChangedSub?.Dispose();
         _locksChangedSub = null;
+        _nodeProgressSub?.Dispose();
+        _nodeProgressSub = null;
 
         LiveLog.Clear();
         Diagnostics.Clear();
@@ -303,6 +308,7 @@ public partial class MonitorVM : ObservableObject
             NetSub = "active processes";
             NetLevel = m.ActiveProcessCount > 200 ? "Warn" : "Ok";
 
+            SystemOs = !string.IsNullOrEmpty(m.OsDescription) ? m.OsDescription : Empty;
             SystemCores = Empty; // Not available from metrics
         }
         else
@@ -349,7 +355,7 @@ public partial class MonitorVM : ObservableObject
         SessionPipeline = Empty; SessionOwner = Empty;
         SessionStarted = Empty; SessionElapsed = Empty; SessionStep = Empty;
         ActionCommand = Empty; ActionProgress = Empty;
-        SystemCores = Empty; SystemRamTotal = Empty; SystemDiskFree = Empty;
+        SystemOs = Empty; SystemCores = Empty; SystemRamTotal = Empty; SystemDiskFree = Empty;
         ApplyEmptyMetrics();
     }
 
@@ -392,6 +398,31 @@ public partial class MonitorVM : ObservableObject
             });
             if (LiveLog.Count > 200)
                 LiveLog.RemoveAt(0);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════
+    // NODE PROGRESS (real-time action updates)
+    // ═══════════════════════════════════════════════════
+
+    private void OnNodeProgress(NodeProgressEvent e)
+    {
+        if (!string.Equals(e.AgentName, AgentName, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _uiDispatcher.Invoke(() =>
+        {
+            if (e.Status == "Running")
+            {
+                ActionCommand = !string.IsNullOrEmpty(e.Command) ? TruncateCommand(e.Command) : Empty;
+                ActionProgress = e.ProgressPercent.HasValue ? $"{e.ProgressPercent}%" : "Running";
+            }
+            else if (e.Status is "Success" or "Failed" or "Skipped")
+            {
+                ActionCommand = Empty;
+                ActionProgress = Empty;
+                RefreshSessionInfo();
+            }
         });
     }
 

@@ -137,7 +137,6 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="LAST SEEN" Binding="{Binding LastSeen}" Width="70"/>
                 </DataGrid.Columns>
             </DataGrid>
         </DockPanel>

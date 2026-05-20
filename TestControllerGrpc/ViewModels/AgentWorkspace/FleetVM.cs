@@ -74,16 +74,9 @@ public partial class FleetVM : ObservableObject
             var agentLock = allLocks.FirstOrDefault(l =>
                 string.Equals(l.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
 
-            if (health != null && !health.IsHealthy)
+            if (agentLock != null)
             {
-                card.Status = "Offline";
-                card.StatusDetail = health.ConsecutiveFailures > 0
-                    ? $"{health.ConsecutiveFailures} failures"
-                    : "Unreachable";
-                offline++;
-            }
-            else if (agentLock != null)
-            {
+                // Lock check takes priority — agent is executing work
                 card.SessionId = agentLock.SessionId;
                 var session = _sessionManager.GetSession(agentLock.SessionId);
                 var agentSummary = session?.GetAgentSummaries()
@@ -103,6 +96,14 @@ public partial class FleetVM : ObservableObject
                         : agentLock.WatchItemTag;
                     busy++;
                 }
+            }
+            else if (health != null && !health.IsHealthy)
+            {
+                card.Status = "Offline";
+                card.StatusDetail = health.ConsecutiveFailures > 0
+                    ? $"{health.ConsecutiveFailures} failures"
+                    : "Unreachable";
+                offline++;
             }
             else
             {

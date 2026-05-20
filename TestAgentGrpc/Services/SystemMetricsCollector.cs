@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace TestAgentGrpc.Services;
 
@@ -21,6 +22,7 @@ public sealed class SystemMetricsCollector
     public ResourceMetrics Collect()
     {
         var metrics = new ResourceMetrics();
+        metrics.OsDescription = RuntimeInformation.OSDescription;
 
         try
         {
