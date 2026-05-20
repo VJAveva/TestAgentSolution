@@ -8,6 +8,9 @@
     <RootNamespace>TestAgentGrpc</RootNamespace>
     <AssemblyName>TestAgentGrpc</AssemblyName>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Proto types are generated locally AND imported from TestControllerGrpc.Core (same .proto source).
+         Local generation is intentional for gRPC server hosting; suppress the expected type-conflict warnings. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

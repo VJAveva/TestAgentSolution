@@ -200,16 +200,17 @@ public partial class MonitorVM : ObservableObject
             if (summary != null)
             {
                 SessionStep = $"{summary.CompletedCount} of {summary.TotalCount}";
-                var running = summary.Actions
-                    .FirstOrDefault(a => a.Outcome == ActionOutcome.Unknown);
-                ActionCommand = running != null ? TruncateCommand(running.Command) : Empty;
-                ActionProgress = Empty;
+                // Only populate ActionCommand from session if no real-time progress is active
+                if (ActionProgress == Empty)
+                {
+                    var running = summary.Actions
+                        .FirstOrDefault(a => a.Outcome == ActionOutcome.Unknown);
+                    ActionCommand = running != null ? TruncateCommand(running.Command) : Empty;
+                }
             }
             else
             {
                 SessionStep = Empty;
-                ActionCommand = Empty;
-                ActionProgress = Empty;
             }
         }
     }

@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.Views.Dialogs;
