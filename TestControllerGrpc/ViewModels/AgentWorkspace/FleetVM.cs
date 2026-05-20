@@ -26,6 +26,7 @@ public partial class FleetVM : ObservableObject
     public event Action? RegisterAgentClicked;
 
     private readonly DispatcherTimer _healthTimer;
+    private bool _isProbing;
 
     public FleetVM(
         IAgentGrpcDispatcher dispatcher,
@@ -61,26 +62,41 @@ public partial class FleetVM : ObservableObject
     /// <summary>
     /// Probes all registered agents every 5 seconds.
     /// Updates health state so Fleet cards reflect actual status after power cycles.
+    /// Skips agents currently executing (locked) to avoid unnecessary gRPC calls.
     /// </summary>
     private async Task ProbeHealthAsync()
     {
-        var agents = _dispatcher.RegisteredAgents.ToList();
-        bool changed = false;
-
-        foreach (var name in agents)
+        // Prevent overlapping probes when agents are slow/timing out
+        if (_isProbing) return;
+        _isProbing = true;
+        try
         {
-            var health = _dispatcher.GetAgentHealth(name);
-            if (health == null) continue;
+            var agents = _dispatcher.RegisteredAgents.ToList();
+            var allLocks = _lockManager.GetAllLocks();
+            bool changed = false;
 
-            var wasHealthy = health.IsHealthy;
-            await _dispatcher.TestConnectionAsync(name);
-            // TestConnectionAsync calls RecordSuccess/RecordFailure which updates health.IsHealthy
-            if (wasHealthy != health.IsHealthy)
-                changed = true;
+            foreach (var name in agents)
+            {
+                // Skip agents that are actively executing — they're known busy
+                if (allLocks.Any(l => string.Equals(l.AgentName, name, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var health = _dispatcher.GetAgentHealth(name);
+                if (health == null) continue;
+
+                var wasHealthy = health.IsHealthy;
+                await _dispatcher.TestConnectionAsync(name);
+                if (wasHealthy != health.IsHealthy)
+                    changed = true;
+            }
+
+            if (changed)
+                Refresh();
         }
-
-        if (changed)
-            Refresh();
+        finally
+        {
+            _isProbing = false;
+        }
     }
 
     partial void OnFilterTextChanged(string value) => Refresh();

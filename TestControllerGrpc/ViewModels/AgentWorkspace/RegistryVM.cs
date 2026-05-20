@@ -48,6 +48,7 @@ public partial class RegistryVM : ObservableObject
 
     private readonly Dispatcher _uiDispatcher;
     private readonly DispatcherTimer _healthTimer;
+    private bool _isPolling;
 
     public RegistryVM(IAgentGrpcDispatcher dispatcher, AgentLockManager lockManager, IEventAggregator events, Dispatcher uiDispatcher)
     {
@@ -72,22 +73,39 @@ public partial class RegistryVM : ObservableObject
 
     private async Task PollHealthAsync()
     {
-        foreach (var row in Rows.ToList())
+        // Prevent overlapping polls (e.g. when multiple agents are timing out)
+        if (_isPolling) return;
+        _isPolling = true;
+        try
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var (snapshot, _) = await _dispatcher.TestConnectionAsync(row.Name);
-            sw.Stop();
+            foreach (var row in Rows.ToList())
+            {
+                // Skip agents that are currently locked (executing) — no need to probe them
+                if (_lockManager.GetLock(row.Name) != null)
+                {
+                    row.Status = "Busy";
+                    continue;
+                }
 
-            if (snapshot != null)
-            {
-                row.Status = _lockManager.GetLock(row.Name) != null ? "Busy" : "Online";
-                row.LatencyMs = (int)sw.ElapsedMilliseconds;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var (snapshot, _) = await _dispatcher.TestConnectionAsync(row.Name);
+                sw.Stop();
+
+                if (snapshot != null)
+                {
+                    row.Status = "Online";
+                    row.LatencyMs = (int)sw.ElapsedMilliseconds;
+                }
+                else
+                {
+                    row.Status = "Offline";
+                    row.LatencyMs = -1;
+                }
             }
-            else
-            {
-                row.Status = "Offline";
-                row.LatencyMs = -1;
-            }
+        }
+        finally
+        {
+            _isPolling = false;
         }
     }
 

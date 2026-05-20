@@ -55,8 +55,8 @@
                                 MouseLeftButtonUp="Card_Click">
                             <Border.Style>
                                 <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{DynamicResource BgCard}"/>
-                                    <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
+                                    <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
+                                    <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
                                     <Setter Property="BorderThickness" Value="1"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Status}" Value="Busy">
@@ -68,8 +68,9 @@
                                             <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                            <Setter Property="Opacity" Value="0.5"/>
-                                            <Setter Property="BorderBrush" Value="{DynamicResource AccRed}"/>
+                                            <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                            <Setter Property="Opacity" Value="0.7"/>
                                         </DataTrigger>
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter Property="BorderBrush" Value="{DynamicResource AccPeach}"/>

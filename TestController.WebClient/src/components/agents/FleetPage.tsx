@@ -51,10 +51,23 @@ function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void 
   const isOnline = ['Connected', 'Online', 'Healthy', 'AgentStateReady'].some(
     s => agent.status.toLowerCase().includes(s.toLowerCase())
   );
+  const isBusy = agent.isLocked;
+
+  const borderColor = isBusy
+    ? 'border-accent/60'
+    : isOnline
+      ? 'border-acc-green/60'
+      : 'border-acc-red/60';
+
+  const bgTint = isBusy
+    ? 'bg-accent/5'
+    : isOnline
+      ? 'bg-acc-green/5'
+      : 'bg-acc-red/5';
 
   return (
     <div
-      className="bg-bg-card rounded-lg p-3 cursor-pointer hover:ring-1 hover:ring-accent/40 transition-all"
+      className={`rounded-lg p-3 cursor-pointer border transition-all hover:ring-1 hover:ring-accent/40 ${borderColor} ${bgTint}`}
       onClick={onClick}
     >
       <div className="flex items-center gap-2 mb-2">

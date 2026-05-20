@@ -259,8 +259,20 @@ public sealed class CommandExecutor : IDisposable
             // ── WAIT FOR EXIT (cancellation-aware) ─────────────────
             await _currentProcess.WaitForExitAsync(ct);
 
-            // Ensure streams are fully drained after process exits
-            await Task.WhenAll(stdoutTask, stderrTask);
+            // Drain stdout/stderr with a timeout. After the main process exits,
+            // child processes that inherited pipe handles can hold them open
+            // indefinitely (e.g. services spawned by install scripts). We give
+            // streams 30 seconds to drain, then proceed — this prevents the
+            // agent from staying in "Running" state for 10+ minutes after the
+            // main command has already finished.
+            var drainTask = Task.WhenAll(stdoutTask, stderrTask);
+            var drainTimeout = Task.Delay(TimeSpan.FromSeconds(30), CancellationToken.None);
+            if (await Task.WhenAny(drainTask, drainTimeout) != drainTask)
+            {
+                _logger.LogWarning(
+                    "Execution {Id}: stdout/stderr streams not drained after 30s (child processes may hold pipe handles). Proceeding with exit code.",
+                    executionId);
+            }
             // Heartbeat will self-terminate since HasExited is now true
             try { await heartbeatTask; } catch (OperationCanceledException) { }
 

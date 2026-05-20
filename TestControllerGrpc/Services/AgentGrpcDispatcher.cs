@@ -344,8 +344,53 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                             $"Running: {cmd} ({elapsed:hh\\:mm\\:ss})");
                     });
 
-                // Reboot handling: wait for agent to come back
-                if (resolved.IsReboot)
+                // If agent rejected the command because it's still busy (e.g. draining
+                // stdout from a long install), wait and retry up to 2 minutes.
+                if (streamResult.ExitCode == -1 &&
+                    streamResult.ErrorMessage.Contains("busy", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Agent {Agent} rejected command (busy). Waiting for agent to become free before retrying...",
+                        agentName);
+                    StatusChanged?.Invoke(agentName, "Agent busy \u2014 waiting to retry...");
+
+                    // Wait up to 2 minutes in 10s intervals for the agent to become Ready
+                    for (int retryWait = 0; retryWait < 12; retryWait++)
+                    {
+                        await Task.Delay(10_000, resilienceCt);
+                        try
+                        {
+                            var state = await client.GetStateAsync(new Empty(),
+                                deadline: DateTime.UtcNow.AddSeconds(5),
+                                cancellationToken: resilienceCt);
+                            if (state.State != AgentState.Running)
+                            {
+                                StatusChanged?.Invoke(agentName, "Agent free \u2014 retrying command");
+                                break;
+                            }
+                            StatusChanged?.Invoke(agentName,
+                                $"Agent still busy \u2014 waiting ({retryWait + 1}/12)");
+                        }
+                        catch (RpcException) { break; } // agent unreachable, proceed to retry
+                    }
+
+                    // Retry the command
+                    streamResult = await RemoteCommandStreamRunner.StreamAsync(
+                        client, agentName, resolved, linked.Token,
+                        outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                        onProgressTick: (a, cmd, elapsed) =>
+                        {
+                            _logger.LogInformation(
+                                "Long-running action on {Agent}: {Command} running for {Elapsed}",
+                                a, cmd, elapsed.ToString(@"hh\:mm\:ss"));
+                            StatusChanged?.Invoke(a,
+                                $"Running: {cmd} ({elapsed:hh\\:mm\\:ss})");
+                        });
+                }
+
+                // Reboot handling: wait for agent to come back.
+                // Only wait if the command was actually accepted (not rejected as busy).
+                if (resolved.IsReboot && streamResult.ExitCode != -1)
                 {
                     StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                     await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), resilienceCt);
@@ -646,19 +691,37 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
 
+        // Phase 1: Wait for the agent to become unreachable (reboot in progress)
+        // or transition to Ready. If after 30s the agent is still Running,
+        // it means the reboot hasn't taken effect yet — keep waiting.
+        bool sawUnreachable = false;
+
         while (!cts.Token.IsCancellationRequested)
         {
             await Task.Delay(10_000, cts.Token);
             try
             {
                 var reply = await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);
-                if (reply.State == AgentState.Ready || reply.State == AgentState.Running)
+                if (reply.State == AgentState.Ready)
+                {
+                    // Agent is Ready — either it rebooted quickly or came back
+                    StatusChanged?.Invoke(agentName, "Back online");
+                    return;
+                }
+                // Agent still Running — only treat as "back" if we saw it go down first
+                if (reply.State == AgentState.Running && sawUnreachable)
                 {
                     StatusChanged?.Invoke(agentName, "Back online");
                     return;
                 }
+                // Still Running without having gone down — reboot hasn't kicked in yet
             }
-            catch (Exception ex) { _logger.LogDebug(ex, "Agent {Name} still rebooting", agentName); }
+            catch (Exception ex)
+            {
+                // Agent unreachable — reboot is in progress
+                sawUnreachable = true;
+                _logger.LogDebug(ex, "Agent {Name} still rebooting", agentName);
+            }
         }
     }
 
