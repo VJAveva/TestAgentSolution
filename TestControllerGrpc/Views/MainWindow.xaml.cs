@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     // ?? Drag-and-drop state ??????????????????????????????????????
     private Point _dragStartPoint;
     private TreeNodeViewModel? _draggedNode;
-    #pragma warning disable CS0414 // assigned but never read — used for drag-and-drop state tracking
+    #pragma warning disable CS0414 // assigned but never read ï¿½ used for drag-and-drop state tracking
         private bool _isDragging;
     #pragma warning restore CS0414
 
@@ -86,20 +86,11 @@ public partial class MainWindow : Window
     {
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
-            Text = "TestController",
+            Text = "TestController â€” Main",
             Visible = false,
         };
 
-        try
-        {
-            var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-            if (exePath != null)
-                _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-        }
-        catch
-        {
-            _trayIcon.Icon = System.Drawing.SystemIcons.Application;
-        }
+        _trayIcon.Icon = CreateControllerTrayIcon();
 
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
 
@@ -154,6 +145,27 @@ public partial class MainWindow : Window
             statusItem.Text = $"Status: {status}";
         };
         timer.Start();
+    }
+
+    /// <summary>
+    /// Creates a distinct 16x16 tray icon for the Controller (blue "TC" badge)
+    /// so it's visually distinguishable from the Execution Dashboard icon.
+    /// </summary>
+    private static System.Drawing.Icon CreateControllerTrayIcon()
+    {
+        using var bmp = new System.Drawing.Bitmap(16, 16);
+        using var g = System.Drawing.Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(System.Drawing.Color.FromArgb(30, 100, 200)); // blue background
+        using var font = new System.Drawing.Font("Segoe UI", 7f, System.Drawing.FontStyle.Bold);
+        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.White);
+        var sf = new System.Drawing.StringFormat
+        {
+            Alignment = System.Drawing.StringAlignment.Center,
+            LineAlignment = System.Drawing.StringAlignment.Center
+        };
+        g.DrawString("TC", font, brush, new System.Drawing.RectangleF(0, 0, 16, 16), sf);
+        return System.Drawing.Icon.FromHandle(bmp.GetHicon());
     }
 
     private void OnWindowClosing(object? sender, CancelEventArgs e)
@@ -342,7 +354,7 @@ public partial class MainWindow : Window
         if (_inlineFoldingManager is not null && _inlineFoldingStrategy is not null && _inlineEditor is not null)
         {
             try { _inlineFoldingStrategy.UpdateFoldings(_inlineFoldingManager, _inlineEditor.Document); }
-            catch (Exception) { /* XML parse errors expected during mid-edit — folding will retry on next keystroke */ }
+            catch (Exception) { /* XML parse errors expected during mid-edit ï¿½ folding will retry on next keystroke */ }
         }
     }
 
@@ -406,17 +418,17 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(CreateMenuItemWithIcon("Add WatchItem", _vm.AddWatchItemCommand, "\uE710", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems…", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
-            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItemsï¿½", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItemsï¿½", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML…", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XMLï¿½", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
         }
         else if (node.NodeKind is "WatchItem")
         {
             menu.Items.Add(CreateMenuItemWithIcon("Add Event", _vm.AddChildNodeCommand, "\uEA80", "AccYellow"));
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddActionGroupCommand, "\uE8F1", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Export WatchItem…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export WatchItemï¿½", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
         }
         else if (node.NodeKind is "Event" or "ActionGroup")
         {
@@ -589,7 +601,7 @@ public partial class MainWindow : Window
 
     private static bool CanShowMoveItems(TreeNodeViewModel node)
     {
-        // Initialize is always first — no move
+        // Initialize is always first ï¿½ no move
         if (node.NodeKind is "WatchList" or "TemplateList" or "Initialize") return false;
         return MainViewModel.CanMoveNode(node, -1) || MainViewModel.CanMoveNode(node, +1);
     }
@@ -720,13 +732,13 @@ public partial class MainWindow : Window
 
         if (targetNode.NodeKind is "Event" or "ActionGroup")
         {
-            // Drop INTO a container — append at end
+            // Drop INTO a container ï¿½ append at end
             newParent = targetNode;
             insertIndex = newParent.Children.Count;
         }
         else
         {
-            // Drop NEXT TO a sibling — insert after the target
+            // Drop NEXT TO a sibling ï¿½ insert after the target
             newParent = targetNode.Parent!;
             insertIndex = newParent.Children.IndexOf(targetNode) + 1;
         }

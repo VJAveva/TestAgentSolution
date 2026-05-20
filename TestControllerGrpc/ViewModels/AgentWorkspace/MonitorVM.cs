@@ -31,6 +31,10 @@ public partial class MonitorVM : ObservableObject
     private IDisposable? _locksChangedSub;
     private IDisposable? _nodeProgressSub;
 
+    /// <summary>Timestamp of the last real-time NodeProgress update. Used to prevent
+    /// timer-based refreshes from overwriting live action data.</summary>
+    private DateTime _lastNodeProgressUtc;
+
     public MonitorVM(
         IAgentGrpcDispatcher dispatcher,
         AgentLockManager lockManager,
@@ -175,6 +179,9 @@ public partial class MonitorVM : ObservableObject
         IsLocked = agentLock != null;
         ForceReleaseCommand.NotifyCanExecuteChanged();
 
+        // If NodeProgress set the action fields recently (< 5s), don't overwrite them
+        var recentProgress = (DateTime.UtcNow - _lastNodeProgressUtc).TotalSeconds < 5;
+
         if (agentLock == null)
         {
             SessionPipeline = Empty;
@@ -182,8 +189,11 @@ public partial class MonitorVM : ObservableObject
             SessionStarted = Empty;
             SessionElapsed = Empty;
             SessionStep = Empty;
-            ActionCommand = Empty;
-            ActionProgress = Empty;
+            if (!recentProgress)
+            {
+                ActionCommand = Empty;
+                ActionProgress = Empty;
+            }
             return;
         }
 
@@ -201,7 +211,7 @@ public partial class MonitorVM : ObservableObject
             {
                 SessionStep = $"{summary.CompletedCount} of {summary.TotalCount}";
                 // Only populate ActionCommand from session if no real-time progress is active
-                if (ActionProgress == Empty)
+                if (!recentProgress && ActionProgress == Empty)
                 {
                     var running = summary.Actions
                         .FirstOrDefault(a => a.Outcome == ActionOutcome.Unknown);
@@ -272,8 +282,9 @@ public partial class MonitorVM : ObservableObject
                 : $"{(int)uptime.TotalMinutes}m";
         }
 
-        // Current command from snapshot
-        if (!string.IsNullOrEmpty(snapshot.CurrentCommand))
+        // Current command from snapshot — only update if NodeProgress hasn't set it recently
+        var recentProgress = (DateTime.UtcNow - _lastNodeProgressUtc).TotalSeconds < 3;
+        if (!recentProgress && !string.IsNullOrEmpty(snapshot.CurrentCommand))
             ActionCommand = TruncateCommand(snapshot.CurrentCommand);
 
         // System info from ResourceMetrics
@@ -413,6 +424,8 @@ public partial class MonitorVM : ObservableObject
 
         _uiDispatcher.Invoke(() =>
         {
+            _lastNodeProgressUtc = DateTime.UtcNow;
+
             if (e.Status == "Running")
             {
                 ActionCommand = !string.IsNullOrEmpty(e.Command) ? TruncateCommand(e.Command) : Empty;

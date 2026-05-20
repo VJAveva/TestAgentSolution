@@ -371,6 +371,34 @@ public sealed partial class MainViewModel
             SessionId = session.SessionId,
         };
 
+        // Acquire agent locks so Registry/Monitor reflect live status
+        var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters);
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start group '{ag.Tag}' \u2014 agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                return;
+            }
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Group execution: {ag.Tag}",
+            });
+        }
+
         var groupNode = SelectedNode;
         groupNode.SetStatusRecursive("Running");
         groupNode.PropagateStatusUp();
@@ -406,6 +434,18 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Group completed: {ag.Tag}",
+            });
             CompleteSession(session);
         }
     }
@@ -436,6 +476,34 @@ public sealed partial class MainViewModel
             Parameters = CollectInitializeParameters(SelectedNode),
             SessionId = session.SessionId,
         };
+
+        // Acquire agent lock so Registry/Monitor reflect live status
+        var requiredAgents = AgentResolver.ExtractAgentNames(action, ctx.Parameters);
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start action '{action.ResolvedTag}' \u2014 agent is busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                return;
+            }
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Action execution: {action.ResolvedTag}",
+            });
+        }
 
         var actionNode = SelectedNode;
         actionNode.ExecutionStatus = "Running";
@@ -472,6 +540,18 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Action completed: {action.ResolvedTag}",
+            });
             CompleteSession(session);
         }
     }

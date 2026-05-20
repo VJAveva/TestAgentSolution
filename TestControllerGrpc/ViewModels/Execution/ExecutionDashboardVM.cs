@@ -666,10 +666,28 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
     // ── Window launch command ────────────────────────────────────────────
 
+    private WeakReference<ExecutionDashboardWindow>? _dashboardWindowRef;
+
     [RelayCommand]
     private void OpenDashboardWindow()
     {
+        if (_dashboardWindowRef != null && _dashboardWindowRef.TryGetTarget(out var existing))
+        {
+            if (existing.IsVisible)
+            {
+                existing.Activate();
+            }
+            else
+            {
+                existing.Show();
+                existing.Activate();
+            }
+            return;
+        }
+
         var win = new ExecutionDashboardWindow { DataContext = this };
+        _dashboardWindowRef = new WeakReference<ExecutionDashboardWindow>(win);
+        win.Closed += (_, _) => _dashboardWindowRef = null;
         win.Show();
     }
 
