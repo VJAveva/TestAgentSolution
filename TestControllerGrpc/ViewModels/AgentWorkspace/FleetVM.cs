@@ -25,6 +25,8 @@ public partial class FleetVM : ObservableObject
     public event Action<string>? AgentSelected;
     public event Action? RegisterAgentClicked;
 
+    private readonly DispatcherTimer _healthTimer;
+
     public FleetVM(
         IAgentGrpcDispatcher dispatcher,
         AgentLockManager lockManager,
@@ -45,7 +47,40 @@ public partial class FleetVM : ObservableObject
         events.Subscribe<AgentUnregisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
         events.Subscribe<NodeProgressEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
 
+        // 5-second periodic health probe to detect power cycle recovery
+        _healthTimer = new DispatcherTimer(
+            TimeSpan.FromSeconds(5),
+            DispatcherPriority.Background,
+            async (_, _) => await ProbeHealthAsync(),
+            uiDispatcher);
+        _healthTimer.Start();
+
         Refresh();
+    }
+
+    /// <summary>
+    /// Probes all registered agents every 5 seconds.
+    /// Updates health state so Fleet cards reflect actual status after power cycles.
+    /// </summary>
+    private async Task ProbeHealthAsync()
+    {
+        var agents = _dispatcher.RegisteredAgents.ToList();
+        bool changed = false;
+
+        foreach (var name in agents)
+        {
+            var health = _dispatcher.GetAgentHealth(name);
+            if (health == null) continue;
+
+            var wasHealthy = health.IsHealthy;
+            await _dispatcher.TestConnectionAsync(name);
+            // TestConnectionAsync calls RecordSuccess/RecordFailure which updates health.IsHealthy
+            if (wasHealthy != health.IsHealthy)
+                changed = true;
+        }
+
+        if (changed)
+            Refresh();
     }
 
     partial void OnFilterTextChanged(string value) => Refresh();

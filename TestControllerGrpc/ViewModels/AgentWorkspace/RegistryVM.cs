@@ -46,16 +46,49 @@ public partial class RegistryVM : ObservableObject
         set => SetProperty(ref _hasDiagnosticResult, value);
     }
 
+    private readonly Dispatcher _uiDispatcher;
+    private readonly DispatcherTimer _healthTimer;
+
     public RegistryVM(IAgentGrpcDispatcher dispatcher, AgentLockManager lockManager, IEventAggregator events, Dispatcher uiDispatcher)
     {
         _dispatcher = dispatcher;
         _lockManager = lockManager;
+        _uiDispatcher = uiDispatcher;
 
         events.Subscribe<AgentLocksChangedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
         events.Subscribe<ExecutionStartedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
         events.Subscribe<ExecutionCompletedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
 
+        // 5-second periodic health check: probes all agents for live status + latency
+        _healthTimer = new DispatcherTimer(
+            TimeSpan.FromSeconds(5),
+            DispatcherPriority.Background,
+            async (_, _) => await PollHealthAsync(),
+            uiDispatcher);
+        _healthTimer.Start();
+
         Refresh();
+    }
+
+    private async Task PollHealthAsync()
+    {
+        foreach (var row in Rows.ToList())
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var (snapshot, _) = await _dispatcher.TestConnectionAsync(row.Name);
+            sw.Stop();
+
+            if (snapshot != null)
+            {
+                row.Status = _lockManager.GetLock(row.Name) != null ? "Busy" : "Online";
+                row.LatencyMs = (int)sw.ElapsedMilliseconds;
+            }
+            else
+            {
+                row.Status = "Offline";
+                row.LatencyMs = -1;
+            }
+        }
     }
 
     public void Refresh()

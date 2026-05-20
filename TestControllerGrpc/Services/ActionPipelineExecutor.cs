@@ -78,9 +78,9 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
             {
                 case ActionType.RunRemoteCommand:
                     if (attempt == 1)
-                        Log("Action", $"RunRemoteCommand ? {resolved.AgentName}: {resolved.Command} {resolved.Parameters}");
+                        Log("Action", $"RunRemoteCommand \u2192 {resolved.AgentName}: {resolved.Command} {resolved.Parameters}");
                     else
-                        Log("Retry", $"RunRemoteCommand ? {resolved.AgentName} (attempt {attempt})");
+                        Log("Retry", $"RunRemoteCommand \u2192 {resolved.AgentName} (attempt {attempt})");
                     result = await _dispatcher.ExecuteRemoteCommandAsync(action, ctx, ct);
                     break;
 
@@ -105,9 +105,9 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
             if (result.Success)
             {
                 if (attempt > 1)
-                    Log("Retry", $"? Succeeded on attempt {attempt} of {maxAttempts}");
+                    Log("Retry", $"\u2713 Succeeded on attempt {attempt} of {maxAttempts}");
                 else
-                    Log("Action", $"? Success (exit={result.ExitCode})");
+                    Log("Action", $"\u2713 Success (exit={result.ExitCode})");
                 return true;
             }
 
@@ -115,23 +115,23 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
             if (attempt < maxAttempts && ShouldRetry(result, retryExitCodes))
             {
                 var agentCtx = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
-                Log("Action", $"? Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} — will retry");
+                Log("Action", $"\u2717 Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} \u2014 will retry");
                 continue;
             }
 
             break;
         }
 
-        // All attempts exhausted — log with full context
+        // All attempts exhausted
         {
             var agentInfo = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
             var cmdInfo = $"{resolved.Command} {resolved.Parameters}".Trim();
-            if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "…";
+            if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "\u2026";
 
             if (maxAttempts > 1)
-                Log("Action", $"? FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
+                Log("Action", $"\u2717 FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
             else
-                Log("Action", $"? FAILED on {agentInfo}: {cmdInfo}");
+                Log("Action", $"\u2717 FAILED on {agentInfo}: {cmdInfo}");
 
             Log("Action", $"  Exit code: {result.ExitCode}");
             Log("Action", $"  Error: {result.ErrorMessage}");
@@ -166,10 +166,10 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
 
     /// <summary>
     /// Sends a notification email via SMTP with support for:
-    ///   • Comma-separated attachment paths ? copied to LargeFilesShare and linked in body
-    ///   • Comma-separated embed file paths ? inlined as HTML body content
-    ///   • Files exceeding 500 KB are also redirected to LargeFilesShare as links
-    ///   • [ResultsEmail] token in Body ? auto-generates HTML email from parsed .trx results
+    ///   ï¿½ Comma-separated attachment paths ? copied to LargeFilesShare and linked in body
+    ///   ï¿½ Comma-separated embed file paths ? inlined as HTML body content
+    ///   ï¿½ Files exceeding 500 KB are also redirected to LargeFilesShare as links
+    ///   ï¿½ [ResultsEmail] token in Body ? auto-generates HTML email from parsed .trx results
     /// </summary>
     private ActionResult ExecuteSendMail(ActionConfig resolved, PipelineExecutionContext ctx)
     {
@@ -221,13 +221,13 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                     }
                     else
                     {
-                        Log("SendMail", $"? [ResultsEmail] token found but results path not found or empty: '{resultsPath}'");
+                        Log("SendMail", $"\u26A0 [ResultsEmail] token found but results path not found or empty: '{resultsPath}'");
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "SendMail: Failed to generate results email");
-                    Log("SendMail", $"? Failed to generate results email: {ex.Message} — falling back to plain body");
+                    Log("SendMail", $"\u26A0 Failed to generate results email: {ex.Message} \u2014 falling back to plain body");
                 }
             }
 
@@ -241,7 +241,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                     if (!File.Exists(att))
                     {
                         _logger.LogWarning("SendMail: Attachment file not found: {Path}", att);
-                        Log("SendMail", $"? Attachment file not found: {att}");
+                        Log("SendMail", $"\u26A0 Attachment file not found: {att}");
                         body += Environment.NewLine + $"Attachment file not found: {att}";
                         continue;
                     }
@@ -258,12 +258,12 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                         catch (Exception ex)
                         {
                             _logger.LogWarning(ex, "SendMail: Failed to copy attachment to share");
-                            body += Environment.NewLine + $"Failed to copy attachment: {att} — {ex.Message}";
+                            body += Environment.NewLine + $"Failed to copy attachment: {att} ï¿½ {ex.Message}";
                         }
                     }
                     else
                     {
-                        // No LargeFilesShare configured — attach directly
+                        // No LargeFilesShare configured ï¿½ attach directly
                         message.Attachments.Add(new Attachment(att));
                         Log("SendMail", $"Attached: {att}");
                     }
@@ -301,7 +301,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                         catch (Exception ex)
                         {
                             _logger.LogWarning(ex, "SendMail: Failed to copy embed to share");
-                            embeddedBody += Environment.NewLine + $"Failed to copy embed: {em} — {ex.Message}";
+                            embeddedBody += Environment.NewLine + $"Failed to copy embed: {em} ï¿½ {ex.Message}";
                         }
                         continue;
                     }
@@ -324,7 +324,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                     }
                     else
                     {
-                        // Plain embedded content — wrap everything in HTML
+                        // Plain embedded content ï¿½ wrap everything in HTML
                         body = $"<html><body>{embeddedBody}<br /><div style='white-space:pre-wrap'>{body}</div></body></html>";
                     }
 

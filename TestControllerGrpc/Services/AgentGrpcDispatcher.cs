@@ -25,6 +25,7 @@ namespace TestControllerGrpc.Services;
 public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 {
     private readonly ILogger<AgentGrpcDispatcher> _logger;
+    private readonly IEventAggregator _events;
     private readonly ConcurrentDictionary<string, AgentEndpoint> _agents = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
 
@@ -34,9 +35,10 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     /// <summary>Raised when execution state changes.</summary>
     public event Action<string, string>? StatusChanged;  // agentName, status
 
-    public AgentGrpcDispatcher(ILogger<AgentGrpcDispatcher> logger)
+    public AgentGrpcDispatcher(ILogger<AgentGrpcDispatcher> logger, IEventAggregator events)
     {
         _logger = logger;
+        _events = events;
     }
 
     /// <summary>
@@ -52,7 +54,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             old.Dispose();
         _agents[agentName] = new AgentEndpoint(agentName, grpcAddress);
         _healthStates[agentName] = new AgentHealthState { AgentName = agentName };
-        _logger.LogInformation("Registered agent {Name} → {Address}", agentName, grpcAddress);
+        _logger.LogInformation("Registered agent {Name} \u2192 {Address}", agentName, grpcAddress);
+        _events.Publish(new AgentRegisteredEvent(agentName, grpcAddress));
     }
 
     /// <summary>
@@ -65,6 +68,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         {
             ep.Dispose();
             _logger.LogInformation("Unregistered agent: {Name}", agentName);
+            _events.Publish(new AgentUnregisteredEvent(agentName));
             return true;
         }
         return false;
@@ -89,11 +93,13 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             var snapshot = await client.GetAgentSnapshotAsync(
                 new Empty(), cancellationToken: cts.Token);
 
-            StatusChanged?.Invoke(agentName, $"Online — {snapshot.State}");
+            RecordSuccess(agentName);
+            StatusChanged?.Invoke(agentName, $"Online \u2014 {snapshot.State}");
             return (snapshot, null);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
         {
+            RecordFailure(agentName);
             StatusChanged?.Invoke(agentName, "Unreachable");
             return (null, $"Agent '{agentName}' unreachable at {endpoint.Address}");
         }
@@ -106,20 +112,24 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 cts2.CancelAfter(TimeSpan.FromSeconds(5));
                 var client = endpoint.GetClient();
                 var state = await client.GetStateAsync(new Empty(), cancellationToken: cts2.Token);
-                StatusChanged?.Invoke(agentName, $"Online — {state.State} (legacy)");
+                RecordSuccess(agentName);
+                StatusChanged?.Invoke(agentName, $"Online \u2014 {state.State} (legacy)");
                 return (new AgentSnapshot { AgentName = agentName, State = state.State }, null);
             }
             catch (Exception ex2)
             {
+                RecordFailure(agentName);
                 return (null, $"Fallback GetState also failed: {ex2.Message}");
             }
         }
         catch (OperationCanceledException)
         {
+            RecordFailure(agentName);
             return (null, $"Connection to '{agentName}' timed out (5s)");
         }
         catch (Exception ex)
         {
+            RecordFailure(agentName);
             return (null, $"Connection error: {ex.Message}");
         }
     }
@@ -713,22 +723,30 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         {
             Name = name;
             Address = address;
+            var handler = new SocketsHttpHandler
+            {
+                EnableMultipleHttp2Connections = true,
+                ConnectTimeout               = TimeSpan.FromSeconds(30),
+                // Keep gRPC streams alive during long test runs (2-4+ hours).
+                // Pings every 60s prevent proxies/firewalls from killing
+                // idle-looking HTTP/2 streams when no stdout is flowing.
+                KeepAlivePingDelay            = TimeSpan.FromSeconds(60),
+                KeepAlivePingTimeout          = TimeSpan.FromSeconds(30),
+                KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
+                PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
+                // Do NOT recycle connections with a short lifetime.
+                PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
+            };
+            // Force HTTP/2 for plaintext (h2c) to fix HTTP_1_1_REQUIRED errors
+            // on agents running Kestrel without TLS ALPN negotiation.
+            var httpClient = new HttpClient(handler, disposeHandler: true)
+            {
+                DefaultRequestVersion = new Version(2, 0),
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher,
+            };
             _channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
             {
-                HttpHandler = new SocketsHttpHandler
-                {
-                    EnableMultipleHttp2Connections = true,
-                    ConnectTimeout               = TimeSpan.FromSeconds(30),
-                    // Keep gRPC streams alive during long test runs (2-4+ hours).
-                    // Pings every 60s prevent proxies/firewalls from killing
-                    // idle-looking HTTP/2 streams when no stdout is flowing.
-                    KeepAlivePingDelay            = TimeSpan.FromSeconds(60),
-                    KeepAlivePingTimeout          = TimeSpan.FromSeconds(30),
-                    KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
-                    PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
-                    // Do NOT recycle connections with a short lifetime.
-                    PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
-                },
+                HttpClient = httpClient,
                 DisposeHttpClient = true,
             });
             _client = new TestAgentService.TestAgentServiceClient(_channel);
