@@ -3,6 +3,7 @@ import { useWatchListStore } from '../../stores/watchlistStore';
 import { apiFetch } from '../../lib/api';
 import { logCatch } from '../../lib/logger';
 import type { TreeNode, NodeKind } from '../../types/api';
+import type { AgentLockInfo } from '../../types/agentWorkspace';
 import { ChevronDown, ChevronRight, Eye, Zap, FolderTree, Play, Settings, Link2, FileText, List } from 'lucide-react';
 
 const kindIcon: Record<NodeKind, React.ReactNode> = {
@@ -28,11 +29,11 @@ export default function WatchListTree() {
   const treeRoots = useWatchListStore(s => s.treeRoots);
   const loading = useWatchListStore(s => s.loading);
   const error = useWatchListStore(s => s.error);
-  const [locks, setLocks] = useState<any[]>([]);
+  const [locks, setLocks] = useState<AgentLockInfo[]>([]);
 
   // Load initial lock state
   useEffect(() => {
-    apiFetch<{ locks: any[] }>('/api/execution/locks')
+    apiFetch<{ locks: AgentLockInfo[] }>('/api/execution/locks')
       .then(data => setLocks(data.locks || []))
       .catch(logCatch('WatchListTree', 'fetchLocks'));
   }, []);

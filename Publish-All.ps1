@@ -668,16 +668,39 @@ else {
 # ══════════════════════════════════════════════════════
 StepHeader "Generating deployment manifest"
 
+# Gather git information for traceability
+$gitSha = ""
+$gitBranch = ""
+try {
+    $gitSha = (& git rev-parse HEAD 2>$null)
+    $gitBranch = (& git rev-parse --abbrev-ref HEAD 2>$null)
+} catch {}
+if (-not $gitSha) { $gitSha = "unknown"; Log "Git SHA unavailable" "WARN" }
+if (-not $gitBranch) { $gitBranch = "unknown" }
+
+# Compute proto file hash for version compatibility tracking
+$protoHash = ""
+$protoFile = Join-Path $SolutionRoot "TestAgentGrpc\Protos\test_agent.proto"
+if (Test-Path $protoFile) {
+    $protoHash = (Get-FileHash $protoFile -Algorithm SHA256).Hash.Substring(0, 16)
+}
+
 # Write manifest JSON for downstream tools
 $manifest = @{
-    generatedAt   = (Get-Date).ToString("o")
-    solution      = $slnFile.Name
-    configuration = $Configuration
-    runtime       = $Runtime
-    selfContained = $SelfContained
-    singleFile    = $SingleFile
-    webApiUrl     = $WebApiUrl
-    projects      = @()
+    generatedAt       = (Get-Date).ToString("o")
+    solution          = $slnFile.Name
+    configuration     = $Configuration
+    runtime           = $Runtime
+    selfContained     = $SelfContained
+    singleFile        = $SingleFile
+    webApiUrl         = $WebApiUrl
+    gitSha            = $gitSha
+    gitBranch         = $gitBranch
+    protoHash         = $protoHash
+    agentCapVersion   = "2.0"
+    buildMachine      = $env:COMPUTERNAME
+    projects          = @()
+    checksums         = @{}
 }
 
 foreach ($item in $publishSummary) {
@@ -687,6 +710,13 @@ foreach ($item in $publishSummary) {
         files      = $item.Files
         sizeMB     = $item.SizeMB
         executable = $item.Executable
+    }
+
+    # Compute checksum of the primary executable for integrity validation
+    $exePath = Join-Path $item.Path $item.Executable
+    if (Test-Path $exePath) {
+        $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash
+        $manifest.checksums[$item.Project] = $hash
     }
 }
 

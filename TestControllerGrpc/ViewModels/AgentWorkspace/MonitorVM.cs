@@ -31,6 +31,9 @@ public partial class MonitorVM : ObservableObject
     private IDisposable? _locksChangedSub;
     private IDisposable? _nodeProgressSub;
 
+    /// <summary>Cached last-known metrics so gauges stay populated during execution.</summary>
+    private ResourceMetrics? _lastMetrics;
+
     /// <summary>Timestamp of the last real-time NodeProgress update. Used to prevent
     /// timer-based refreshes from overwriting live action data.</summary>
     private DateTime _lastNodeProgressUtc;
@@ -111,6 +114,9 @@ public partial class MonitorVM : ObservableObject
     [ObservableProperty] private double _netHealthPercent;
     [ObservableProperty] private string _netSub = "";
     [ObservableProperty] private string _netLevel = "Empty";
+
+    // ── Execution guard notice ──
+    [ObservableProperty] private string? _metricsFrozenNotice;
 
     // ── Tabs ──
     [ObservableProperty] private string _activeTab = "LiveLog";
@@ -254,18 +260,22 @@ public partial class MonitorVM : ObservableObject
     {
         if (string.IsNullOrEmpty(AgentName) || _pollingCts == null) return;
 
-        // During active execution, the dispatcher returns a synthetic snapshot
-        // (no real gRPC call). We only need to update the session/lock status
-        // from local state — skip the full telemetry apply to avoid flickering
-        // metrics panels with empty data and to avoid any gRPC channel interference.
+        // During active execution, don't make gRPC calls — use cached metrics
+        // to keep gauges populated while safeguarding the streaming command.
         if (_dispatcher.IsAgentExecuting(AgentName))
         {
             RefreshSessionInfo();
             StatusKind = "Busy";
             StatusText = $"BUSY · {SessionPipeline}";
+            MetricsFrozenNotice = "Live metrics paused during execution to protect command stream";
             IsOnline = true;
+            // Show last-known metrics instead of blanking them
+            if (_lastMetrics != null)
+                ApplyMetrics(_lastMetrics);
             return;
         }
+
+        MetricsFrozenNotice = null;
 
         try
         {
@@ -309,37 +319,13 @@ public partial class MonitorVM : ObservableObject
         var m = snapshot.Metrics;
         if (m != null)
         {
-            // CPU
-            CpuPercent = Math.Round(m.CpuUsagePct, 0);
-            CpuDisplay = $"{CpuPercent:F0}%";
-            CpuSub = $"{m.ActiveProcessCount} processes";
-            CpuLevel = CpuPercent >= 85 ? "Warn" : CpuPercent >= 50 ? "Busy" : "Ok";
-
-            // Memory
-            var memUsedGB = m.MemoryUsedMb / 1024.0;
-            var memTotalGB = m.MemoryTotalMb / 1024.0;
-            MemPercent = memTotalGB > 0 ? Math.Round(memUsedGB / memTotalGB * 100, 0) : 0;
-            MemDisplay = $"{m.MemoryUsedMb:F0} / {m.MemoryTotalMb:F0} MB";
-            MemSub = memTotalGB > 0 ? $"{100 - MemPercent:F0}% free" : "";
-            MemLevel = MemPercent >= 85 ? "Warn" : MemPercent >= 60 ? "Busy" : "Ok";
-            SystemRamTotal = m.MemoryTotalMb > 0 ? $"{memTotalGB:F1} GB" : Empty;
-
-            // Disk
-            SystemDiskFree = m.DiskFreeGb > 0 ? $"{m.DiskFreeGb:F1} GB free" : Empty;
-            DiskDisplay = m.DiskFreeGb > 0 ? $"{m.DiskFreeGb:F1} GB free" : Empty;
-            // We don't have disk total, so show free space
-            DiskPercent = 0; // Unknown total — treat as ok
-            DiskSub = "available space";
-            DiskLevel = m.DiskFreeGb < 5 ? "Warn" : m.DiskFreeGb < 20 ? "Busy" : "Ok";
-
-            // Processes as "network" card proxy
-            NetDisplay = $"{m.ActiveProcessCount} procs";
-            NetHealthPercent = 100;
-            NetSub = "active processes";
-            NetLevel = m.ActiveProcessCount > 200 ? "Warn" : "Ok";
-
-            SystemOs = !string.IsNullOrEmpty(m.OsDescription) ? m.OsDescription : Empty;
-            SystemCores = Empty; // Not available from metrics
+            _lastMetrics = m; // Cache for use during execution
+            ApplyMetrics(m);
+        }
+        else if (_lastMetrics != null)
+        {
+            // Snapshot had no metrics (e.g., legacy agent) — use cached
+            ApplyMetrics(_lastMetrics);
         }
         else
         {
@@ -375,6 +361,42 @@ public partial class MonitorVM : ObservableObject
         MemDisplay = Empty; MemPercent = 0; MemSub = "no data"; MemLevel = "Empty";
         DiskDisplay = Empty; DiskPercent = 0; DiskSub = "no data"; DiskLevel = "Empty";
         NetDisplay = Empty; NetHealthPercent = 0; NetSub = "no data"; NetLevel = "Empty";
+    }
+
+    private void ApplyMetrics(ResourceMetrics m)
+    {
+        // CPU
+        var cpu = AgentTelemetryFormatter.FormatCpu(m);
+        CpuPercent = cpu.Percent;
+        CpuDisplay = cpu.Display;
+        CpuSub = cpu.Sub;
+        CpuLevel = cpu.Level;
+
+        // Memory
+        var mem = AgentTelemetryFormatter.FormatMemory(m);
+        MemPercent = mem.Percent;
+        MemDisplay = mem.Display;
+        MemSub = mem.Sub;
+        MemLevel = mem.Level;
+        SystemRamTotal = !string.IsNullOrEmpty(mem.RamTotal) ? mem.RamTotal : Empty;
+
+        // Disk
+        var disk = AgentTelemetryFormatter.FormatDisk(m);
+        SystemDiskFree = !string.IsNullOrEmpty(disk.FreeText) ? disk.FreeText : Empty;
+        DiskDisplay = disk.Display;
+        DiskPercent = disk.Percent;
+        DiskSub = disk.Sub;
+        DiskLevel = disk.Level;
+
+        // Processes as "network" card proxy
+        var proc = AgentTelemetryFormatter.FormatProcesses(m);
+        NetDisplay = proc.Display;
+        NetHealthPercent = proc.HealthPercent;
+        NetSub = proc.Sub;
+        NetLevel = proc.Level;
+
+        SystemOs = !string.IsNullOrEmpty(m.OsDescription) ? m.OsDescription : Empty;
+        SystemCores = Empty; // Not available from metrics
     }
 
     private void ResetAllFields()
@@ -530,6 +552,18 @@ public partial class MonitorVM : ObservableObject
     {
         ActiveTab = "Diagnostics";
         Diagnostics.Clear();
+
+        if (_dispatcher.IsAgentExecuting(AgentName))
+        {
+            Diagnostics.Add(new DiagnosticVM
+            {
+                Name = "Execution Guard",
+                Status = "warn",
+                Result = "Diagnostics unavailable — agent is currently executing. " +
+                         "gRPC calls are suppressed to protect the active command stream.",
+            });
+            return;
+        }
 
         var steps = await _dispatcher.DiagnoseAgentAsync(AgentName);
         foreach (var step in steps)

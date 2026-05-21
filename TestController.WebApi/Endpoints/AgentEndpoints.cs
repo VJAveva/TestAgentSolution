@@ -23,6 +23,7 @@ public static class AgentEndpoints
         group.MapGet("/fleet", GetFleet);
         group.MapGet("/{name}/details", GetDetails);
         group.MapGet("/{name}/telemetry", GetTelemetry);
+        group.MapGet("/{name}/capabilities", GetAgentCapabilities);
         group.MapPut("/{name}", UpdateAgent);
         return group;
     }
@@ -500,15 +501,74 @@ public static class AgentEndpoints
 
     /// <summary>GET /api/agents/{name}/telemetry — lightweight metrics-only snapshot for polling.</summary>
     private static async Task<IResult> GetTelemetry(
-        string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
+        string name, HttpContext httpContext, AgentRegistry registry,
+        AgentGrpcClientManager grpcManager, AgentTelemetryCache telemetryCache,
+        AgentLockManager lockManager)
     {
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
+
+        // If the agent is locked by an active session, return cached telemetry
+        // to avoid disturbing the running gRPC stream with additional calls.
+        var locks = lockManager.GetAllLocks();
+        var agentLock = locks.FirstOrDefault(l =>
+            string.Equals(l.AgentName, name, StringComparison.OrdinalIgnoreCase));
+
+        if (agentLock != null)
+        {
+            var cached = telemetryCache.Get(name);
+            if (cached != null)
+            {
+                httpContext.Response.Headers["X-Telemetry-Source"] = "cache";
+                return Results.Ok(new
+                {
+                    cached.Response.AgentName,
+                    cached.Response.State,
+                    cached.Response.CurrentActivity,
+                    cached.Response.CurrentCommand,
+                    cached.Response.ExecutionsCompleted,
+                    cached.Response.ExecutionsFailed,
+                    cached.Response.CpuUsagePct,
+                    cached.Response.MemoryUsedMb,
+                    cached.Response.MemoryTotalMb,
+                    cached.Response.DiskFreeGb,
+                    cached.Response.ActiveProcessCount,
+                    Timestamp = cached.CachedAtUtc,
+                    IsOffline = false,
+                    Error = (string?)null,
+                    LastSeenUtc = cached.CachedAtUtc,
+                    IsCached = true,
+                    LockedBy = agentLock.SessionId
+                });
+            }
+        }
 
         try
         {
             var client = grpcManager.GetClient(entry.Address);
             var s = await client.GetAgentSnapshotAsync(new Empty());
+
+            // Update registry with live state
+            registry.UpdateStatus(name, s.State.ToString());
+
+            // Cache the result for future locked-agent queries
+            telemetryCache.Update(name, new AgentTelemetryResponse
+            {
+                AgentName = s.AgentName,
+                State = s.State.ToString(),
+                CurrentActivity = s.CurrentActivity,
+                CurrentCommand = s.CurrentCommand,
+                ExecutionsCompleted = s.ExecutionsCompleted,
+                ExecutionsFailed = s.ExecutionsFailed,
+                CpuUsagePct = s.Metrics?.CpuUsagePct ?? 0,
+                MemoryUsedMb = s.Metrics?.MemoryUsedMb ?? 0,
+                MemoryTotalMb = s.Metrics?.MemoryTotalMb ?? 0,
+                DiskFreeGb = s.Metrics?.DiskFreeGb ?? 0,
+                ActiveProcessCount = s.Metrics?.ActiveProcessCount ?? 0,
+                Timestamp = DateTime.UtcNow,
+                LastSeenUtc = DateTime.UtcNow
+            });
+
             return Results.Ok(new
             {
                 s.AgentName,
@@ -522,17 +582,25 @@ public static class AgentEndpoints
                 MemoryTotalMb = s.Metrics?.MemoryTotalMb ?? 0,
                 DiskFreeGb = s.Metrics?.DiskFreeGb ?? 0,
                 ActiveProcessCount = s.Metrics?.ActiveProcessCount ?? 0,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                IsOffline = false,
+                Error = (string?)null,
+                LastSeenUtc = DateTime.UtcNow
             });
         }
         catch (RpcException ex)
         {
-            // Return degraded offline state so the Monitor view doesn't break
+            // Return degraded offline state so the Monitor view doesn't break.
+            // Include explicit offline metadata so automation can detect failures.
+            registry.UpdateStatus(name, "Offline", ex.Status.Detail);
+
+            httpContext.Response.Headers["X-Agent-Warning"] = "agent-offline";
+
             return Results.Ok(new
             {
                 AgentName = name,
                 State = "Offline",
-                CurrentActivity = $"Unreachable: {ex.Status.Detail}",
+                CurrentActivity = "Unreachable",
                 CurrentCommand = "",
                 ExecutionsCompleted = 0,
                 ExecutionsFailed = 0,
@@ -542,7 +610,9 @@ public static class AgentEndpoints
                 DiskFreeGb = 0.0,
                 ActiveProcessCount = 0,
                 Timestamp = DateTime.UtcNow,
-                IsOffline = true
+                IsOffline = true,
+                Error = ex.Status.Detail,
+                LastSeenUtc = entry.LastCheckedUtc
             });
         }
     }
@@ -564,6 +634,36 @@ public static class AgentEndpoints
             timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
         });
         return Results.Ok(new { updated = true, name = body.Name ?? name, body.Address });
+    }
+
+    /// <summary>GET /api/agents/{name}/capabilities — query agent version and supported RPCs.</summary>
+    private static async Task<IResult> GetAgentCapabilities(
+        string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
+    {
+        if (!registry.TryGet(name, out var entry))
+            return Results.NotFound($"Agent '{name}' not found.");
+
+        try
+        {
+            var client = grpcManager.GetClient(entry.Address);
+            var snapshot = await client.GetAgentSnapshotAsync(new Empty());
+
+            return Results.Ok(new
+            {
+                agentName = snapshot.AgentName,
+                agentVersion = snapshot.AgentVersion,
+                capabilities = snapshot.Capabilities.ToList(),
+                supportsForceReady = snapshot.Capabilities.Contains("ForceReady"),
+                supportsStreaming = snapshot.Capabilities.Contains("RunCommandStreamed"),
+                supportsSnapshot = snapshot.Capabilities.Contains("GetAgentSnapshot"),
+                state = snapshot.State.ToString(),
+                agentStarted = snapshot.AgentStarted?.ToDateTimeOffset()
+            });
+        }
+        catch (RpcException ex)
+        {
+            return Results.Problem($"Agent unreachable: {ex.Status.Detail}", statusCode: 502);
+        }
     }
 }
 

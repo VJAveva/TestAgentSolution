@@ -14,6 +14,7 @@ public static class ExecutionEndpoints
         group.MapPost("/trigger-all", TriggerAll);
         group.MapPost("/trigger-event/{tag}/{eventIndex:int}", TriggerEvent);
         group.MapPost("/retry/{sessionId}", RetrySession);
+        group.MapPost("/preflight/{tag}", PreflightCheck);
 
         // Proxy-aware overrides: when a WPF controller is running alongside this
         // WebApi, its embedded API (ControllerProxyUrl) has the real session data.
@@ -208,7 +209,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/retry/{sessionId} � retry failed actions from a session.</summary>
+    /// <summary>POST /api/execution/retry/{sessionId} — retry failed actions from a session.</summary>
     private static IResult RetrySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
@@ -219,7 +220,7 @@ public static class ExecutionEndpoints
             return Results.NotFound($"No retryable actions found for session '{sessionId}'.");
 
         notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
-            $"Retry requested for session '{sessionId}' � {retryable.Count} action(s)"));
+            $"Retry requested for session '{sessionId}' — {retryable.Count} action(s)"));
 
         return Results.Ok(new
         {
@@ -227,6 +228,114 @@ public static class ExecutionEndpoints
             sessionId,
             retryableCount = retryable.Count
         });
+    }
+
+    /// <summary>
+    /// POST /api/execution/preflight/{tag} — verify all required agents are online
+    /// and not locked before triggering execution. Returns 409 Conflict if blocked.
+    /// </summary>
+    private static async Task<IResult> PreflightCheck(
+        string tag,
+        WatchListFileService fileService,
+        AgentRegistry registry,
+        AgentGrpcClientManager grpcManager,
+        AgentLockManager lockManager,
+        IAppLogger logger)
+    {
+        WatchListConfig config;
+        try
+        {
+            config = fileService.Load();
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Failed to load WatchList: {ex.Message}", statusCode: 500);
+        }
+
+        var wi = config.WatchItems
+            .FirstOrDefault(w => string.Equals(w.Tag, tag, StringComparison.OrdinalIgnoreCase));
+
+        if (wi is null)
+            return Results.NotFound($"WatchItem '{tag}' not found.");
+
+        // Collect all unique agent names from the pipeline's action tree
+        var requiredAgents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectAgentNames(wi.Events.SelectMany(e => e.Children).ToList(), requiredAgents);
+
+        // Remove "Controller" (local) — only remote agents need checking
+        requiredAgents.Remove("Controller");
+        requiredAgents.Remove("");
+
+        var issues = new List<object>();
+        var locks = lockManager.GetAllLocks();
+
+        foreach (var agentName in requiredAgents)
+        {
+            // Check if registered
+            if (!registry.TryGet(agentName, out var entry))
+            {
+                issues.Add(new { agent = agentName, reason = "NotRegistered" });
+                continue;
+            }
+
+            // Check if locked
+            var agentLock = locks.FirstOrDefault(l =>
+                string.Equals(l.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+            if (agentLock != null)
+            {
+                issues.Add(new { agent = agentName, reason = "Locked", lockedBy = agentLock.SessionId });
+                continue;
+            }
+
+            // Check if reachable (quick gRPC ping)
+            try
+            {
+                var client = grpcManager.GetClient(entry.Address);
+                await client.GetStateAsync(new Google.Protobuf.WellKnownTypes.Empty(),
+                    deadline: DateTime.UtcNow.AddSeconds(5));
+            }
+            catch
+            {
+                issues.Add(new { agent = agentName, reason = "Offline" });
+            }
+        }
+
+        if (issues.Count > 0)
+        {
+            logger.Warn("Execution", $"Preflight failed for '{tag}': {issues.Count} agent(s) unavailable");
+            return Results.Conflict(new
+            {
+                tag,
+                ready = false,
+                issues,
+                message = $"Cannot trigger '{tag}': {issues.Count} required agent(s) not available."
+            });
+        }
+
+        return Results.Ok(new
+        {
+            tag,
+            ready = true,
+            requiredAgents = requiredAgents.ToList(),
+            message = $"All {requiredAgents.Count} required agent(s) are online and available."
+        });
+    }
+
+    private static void CollectAgentNames(IReadOnlyList<IActionNode> nodes, HashSet<string> agents)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    if (!string.IsNullOrEmpty(action.AgentName))
+                        agents.Add(action.AgentName);
+                    break;
+                case ActionGroupConfig group:
+                    CollectAgentNames(group.Children, agents);
+                    break;
+            }
+        }
     }
 
     /// <summary>GET /api/execution/status � current execution state overview.</summary>

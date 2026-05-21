@@ -257,4 +257,68 @@ public class ExecutionStreamSafeguardTests : IDisposable
         Assert.True(busyTime < 100,
             $"Busy agent PingAsync took {busyTime}ms — expected < 100ms (no gRPC)");
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DiagnoseAgentAsync — safeguard during execution
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task DiagnoseAgentAsync_ReturnsGuardResult_WhenAgentIsExecuting()
+    {
+        _dispatcher.RegisterAgent("Agent1", "http://192.168.255.255:5200");
+        _activeExecutions["Agent1"] = "Install-Build.bat";
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var steps = await _dispatcher.DiagnoseAgentAsync("Agent1");
+        sw.Stop();
+
+        // Should return immediately without any network calls
+        Assert.True(sw.ElapsedMilliseconds < 100,
+            $"DiagnoseAgentAsync took {sw.ElapsedMilliseconds}ms — should be instant when execution is active");
+        Assert.Equal(2, steps.Count);
+        Assert.True(steps[0].Passed);
+        Assert.Equal("Registration", steps[0].Name);
+        Assert.True(steps[1].Passed);
+        Assert.Equal("Execution Guard", steps[1].Name);
+        Assert.Contains("currently executing", steps[1].Detail);
+        Assert.False(steps[1].IsFatal);
+    }
+
+    [Fact]
+    public async Task DiagnoseAgentAsync_RunsFullSteps_WhenAgentIsIdle()
+    {
+        // Register with unreachable address — will fail at TCP step
+        _dispatcher.RegisterAgent("Agent1", "http://192.168.255.255:5200");
+
+        // No active execution — full diagnostics should be attempted
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var steps = await _dispatcher.DiagnoseAgentAsync("Agent1", cts.Token);
+
+        // Should get past Registration and Address Parse, then fail at TCP or beyond
+        Assert.True(steps.Count >= 3,
+            $"Expected at least 3 steps for idle agent, got {steps.Count}");
+        Assert.Equal("Registration", steps[0].Name);
+        Assert.True(steps[0].Passed);
+        Assert.Equal("Address Parse", steps[1].Name);
+        Assert.True(steps[1].Passed);
+    }
+
+    [Fact]
+    public async Task DiagnoseAgentAsync_NotAffected_ByOtherAgentExecution()
+    {
+        _dispatcher.RegisterAgent("Busy", "http://192.168.255.255:5200");
+        _dispatcher.RegisterAgent("Idle", "http://192.168.255.254:5200");
+        _activeExecutions["Busy"] = "install.bat";
+
+        // Busy → guard kicks in
+        var busySteps = await _dispatcher.DiagnoseAgentAsync("Busy");
+        Assert.Equal(2, busySteps.Count);
+        Assert.Equal("Execution Guard", busySteps[1].Name);
+
+        // Idle → full diagnostics attempted (different agent not affected)
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var idleSteps = await _dispatcher.DiagnoseAgentAsync("Idle", cts.Token);
+        Assert.True(idleSteps.Count >= 3);
+        Assert.True(idleSteps.All(s => s.Name != "Execution Guard"));
+    }
 }

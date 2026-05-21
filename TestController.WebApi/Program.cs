@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using TestController.Api;
 using TestController.WebApi.Endpoints;
 using TestController.WebApi.Services;
@@ -58,8 +60,10 @@ builder.Services.AddSingleton<IAppLogger>(sp =>
 // Web API specific services
 builder.Services.AddSingleton<AgentGrpcClientManager>();
 builder.Services.AddSingleton<AgentRegistry>();
+builder.Services.AddSingleton<AgentTelemetryCache>();
 builder.Services.AddSingleton<WatchListFileService>();
 builder.Services.AddSingleton<ControllerProxyService>();
+builder.Services.AddSingleton<ConfigValidator>();
 builder.Services.AddHostedService<AgentEventRelayService>();
 
 // Adapters: expose standalone services as the interfaces the shared API controllers expect
@@ -94,15 +98,79 @@ builder.Services.AddSignalR(options =>
         options.ClientTimeoutInterval = clientTimeout;
 });
 
-builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.SetIsOriginAllowed(_ => true)
-     .AllowAnyMethod()
-     .AllowAnyHeader()
-     .AllowCredentials()));
+// CORS: production environments should specify allowed origins explicitly.
+// Default policy allows all for development/single-machine scenarios.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+builder.Services.AddCors(o =>
+{
+    if (allowedOrigins is { Length: > 0 })
+    {
+        o.AddDefaultPolicy(p =>
+            p.WithOrigins(allowedOrigins)
+             .AllowAnyMethod()
+             .AllowAnyHeader()
+             .AllowCredentials());
+    }
+    else
+    {
+        o.AddDefaultPolicy(p =>
+            p.SetIsOriginAllowed(_ => true)
+             .AllowAnyMethod()
+             .AllowAnyHeader()
+             .AllowCredentials());
+    }
+});
+
+// Rate limiting: telemetry/polling endpoints get relaxed limits,
+// mutation endpoints (trigger, cancel) get stricter limits.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddFixedWindowLimiter("telemetry", o =>
+    {
+        o.PermitLimit = 60;
+        o.Window = TimeSpan.FromMinutes(1);
+        o.QueueLimit = 0;
+    });
+
+    options.AddFixedWindowLimiter("mutation", o =>
+    {
+        o.PermitLimit = 10;
+        o.Window = TimeSpan.FromMinutes(1);
+        o.QueueLimit = 2;
+        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+});
+
+// OpenAPI document for API discovery and tooling
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Fail-fast config validation — errors prevent startup in production
+var configValidator = app.Services.GetRequiredService<ConfigValidator>();
+var validationResult = configValidator.Validate();
+if (!validationResult.IsValid && !app.Environment.IsDevelopment())
+{
+    var startupLog = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    startupLog.LogCritical("Configuration validation failed. Errors: {Errors}",
+        string.Join("; ", validationResult.Errors));
+    throw new InvalidOperationException(
+        $"Configuration validation failed: {string.Join("; ", validationResult.Errors)}");
+}
+
 app.UseCors();
+app.UseRateLimiter();
+
+// Startup validation: warn if CORS allows all origins in non-Development environments
+if (allowedOrigins is null or { Length: 0 } && !app.Environment.IsDevelopment())
+{
+    var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    startupLogger.LogWarning(
+        "CORS is configured to allow ALL origins. This is acceptable for same-machine deployments " +
+        "but should be restricted via Cors:AllowedOrigins in production environments exposed to networks.");
+}
 
 // Global exception handler — logs to crash infrastructure + returns 500 JSON
 app.Use(async (context, next) =>
@@ -149,15 +217,20 @@ app.UseStaticFiles(new StaticFileOptions
 // Shared API: controllers (execution, watchlist, agents, health, results) + single SignalR hub
 app.UseControllerApi("/hubs/controller");
 
+// OpenAPI endpoint (development only)
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
+
 // Standalone-only minimal API endpoints (features not in the shared library):
 // - WatchList file I/O (import/export/xml/refresh/save)
 // - Direct agent gRPC queries (snapshot, health, history, audit, diagnose, register/unregister)
 // - Extended execution (trigger-all, trigger-event, retry)
 // - Build results export and email reports
 app.MapGroup("/api/watchlist").MapWatchListEndpoints();
-app.MapGroup("/api/agents").MapAgentEndpoints();
-app.MapGroup("/api/execution").MapExecutionEndpoints();
-app.MapGroup("/api/results").MapResultsEndpoints();
+app.MapGroup("/api/agents").MapAgentEndpoints().RequireRateLimiting("telemetry");
+app.MapGroup("/api/execution").MapExecutionEndpoints().RequireRateLimiting("mutation");
+app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry");
+app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation");
 
 // Client-side error logs ingestion (WebClient AppLogPanel → server logs)
 app.MapPost("/api/clientlogs", (HttpContext ctx, IAppLogger logger) =>

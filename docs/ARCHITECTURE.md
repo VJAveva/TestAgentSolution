@@ -222,7 +222,7 @@ Zero-dependency library containing the canonical domain model, service interface
 | **Models** | `WatchListConfig.cs` | `WatchListConfig`, `WatchItemConfig`, `EventConfig`, `ActionGroupConfig`, `ActionConfig`, `InitializeConfig`, `RefConfig`, `TemplateConfig`, `ExecutionSession`, `ActionExecutionResult`, `PipelineExecutionContext` |
 | **Models** | `TrxModels.cs`, `BuildResultsConfig.cs` | TRX XML deserialization, build results thresholds |
 | **Interfaces** | `IActionPipelineExecutor.cs` | Pipeline execution engine contract |
-| **Interfaces** | `IAgentGrpcDispatcher.cs` | gRPC command dispatch contract |
+| **Interfaces** | `IAgentGrpcDispatcher.cs` | gRPC command dispatch contract (`IsAgentExecuting`, `ResetChannelAsync`, `PingAsync`, `TestConnectionAsync`, `ExecuteRemoteCommandAsync`, etc.) |
 | **Interfaces** | `IVocabularyMonitor.cs` | WatchList file monitoring contract |
 | **Interfaces** | `IRealtimeNotifier.cs` | SignalR broadcast contract (11 event types) |
 | **Interfaces** | `IFileWatcherManager.cs` | File-trigger management contract |
@@ -268,7 +268,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | **Host** | `ControllerGrpcServerHost.cs` | gRPC server for agent registration/heartbeat (port 15100) |
 | **Host** | `ControllerHostedService.cs` | Startup orchestration (load config, start watchers) |
 | **gRPC** | `TestControllerGrpcService.cs` | `TestControllerService` implementation (Register, Heartbeat, PushExecutionEvents) |
-| **Services** | `AgentGrpcDispatcher.cs` | Full `IAgentGrpcDispatcher` with channel pooling, health tracking, Polly retry |
+| **Services** | `AgentGrpcDispatcher.cs` | Full `IAgentGrpcDispatcher` with channel pooling, health tracking, Polly retry, active execution tracking, configurable timeouts (`ControllerTimeoutOptions`), busy-recovery polling, ForceReady escalation, and auto channel reset on consecutive failures |
 | **Services** | `ActionPipelineExecutor.cs` | Full `IActionPipelineExecutor` with WPF-aware logging |
 | **Services** | `VocabularyMonitor.cs` | `FileSystemWatcher`-based vocabulary reload |
 | **Services** | `FileWatcherManager.cs` | Per-WatchItem file trigger watchers |
@@ -303,6 +303,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | `TestAgentGrpcService.cs` | `TestAgentService` gRPC implementation (RunCommand, GetSnapshot, etc.) |
 | `CommandExecutor.cs` | Process execution with streaming stdout/stderr, timeout, reboot handling |
 | `ExecutionTracker.cs` | Per-execution history with session tracking |
+| `StuckExecutionWatchdog.cs` | BackgroundService: polls every 60s, force-resets agent if stuck beyond `MaxExecutionTimeoutMinutes + WatchdogGraceMinutes` |
 | `AgentLifecycleService.cs` | Auto-registration with controller, heartbeat loop |
 | `ConnectionHealthMonitor.cs` | Connection health metrics and reconnect logic |
 | `SystemMetricsCollector.cs` | CPU, memory, disk metrics via performance counters |
@@ -784,6 +785,22 @@ Lock file writes are `ThreadPool.QueueUserWorkItem` with `lock (_persistLock)` a
 
 The SignalR `AgentLocksChanged` event is converted to a DOM `CustomEvent("agent-locks-changed")` in `useSignalR`. Multiple unrelated components (`AgentLockPanel`, `TriggerDialog`, `WatchListTree`) independently listen without prop drilling or shared state coupling.
 
+### 8. Active Execution Guard (No Concurrent gRPC on Same Channel)
+
+During `RunCommandStreamed`, the dispatcher registers the agent in an `_activeExecutions` map. Any `TestConnectionAsync` or health poll that arrives while the agent is executing returns a synthetic snapshot (state=Running) without issuing a gRPC call. This prevents HTTP/2 GOAWAY/RST_STREAM from killing the in-flight streaming call.
+
+### 9. Configurable Timeout Strategy (ControllerTimeoutOptions)
+
+All hardcoded timeouts in `AgentGrpcDispatcher` are extracted to `ControllerTimeoutOptions` (bound from `appsettings.json ? Controller:Timeouts`). This includes connection timeouts, keep-alive pings, busy-recovery intervals, circuit breaker durations, retry policies, and the outer safety-net timeout. Allows per-environment tuning without code changes.
+
+### 10. Agent Stuck-State Recovery (StuckExecutionWatchdog)
+
+If the normal CTS timeout ? kill process ? finally block flow fails, the agent could be permanently stuck in `Running`. The `StuckExecutionWatchdog` BackgroundService polls every 60s and forcibly resets the agent state after `MaxExecutionTimeoutMinutes + WatchdogGraceMinutes`. The controller also calls `ForceReady` RPC after waiting `BusyRecoveryMaxSeconds` and the agent is still busy.
+
+### 11. Auto Channel Reset on Consecutive Failures
+
+When an agent accumulates `AutoResetFailureThreshold` (default: 10) consecutive failures, the dispatcher asynchronously disposes the old gRPC channel and creates a fresh one. This recovers from corrupted HTTP/2 connection state without requiring a full service restart.
+
 ---
 
 ## 14. Test Architecture
@@ -793,6 +810,7 @@ The SignalR `AgentLocksChanged` event is converted to a DOM `CustomEvent("agent-
 | Test File | Coverage Target | Tests |
 |-----------|----------------|-------|
 | `AgentLockManagerTests.cs` | Atomic locking, session release, force-release, version counter, orphan detection, persistence, concurrency | 40 |
+| `ExecutionStreamSafeguardTests.cs` | Active execution guard, concurrent gRPC prevention, channel reset, busy-recovery, ForceReady escalation | varies |
 | `AgentResolverTests.cs` | Variable resolution, tree traversal, deduplication | 14 |
 | `ExecutionSessionManagerTests.cs` | BeginSession idempotency, RecordResult, CompleteSession, CancelSession, CancelAll, history | ~25 |
 | `ExecutionSessionExtensionsTests.cs` | Log buffer, UserId/Source/LockedAgents fields | 8 |
@@ -923,8 +941,9 @@ TestAgentSolution/
 ?   ??? AgentSettings.cs, AuditSettings.cs, NotificationSettings.cs
 ?   ??? Services/
 ?   ?   ??? TestAgentGrpcService.cs    # TestAgentService impl
-?   ?   ??? CommandExecutor.cs         # Process exec with streaming
+?   ?   ??? CommandExecutor.cs         # Process exec with streaming + ForceReady()
 ?   ?   ??? ExecutionTracker.cs        # History + session tracking
+?   ?   ??? StuckExecutionWatchdog.cs  # Watchdog: force-reset stuck agents
 ?   ?   ??? AgentLifecycleService.cs   # Registration + heartbeat loop
 ?   ?   ??? ConnectionHealthMonitor.cs
 ?   ?   ??? SystemMetricsCollector.cs

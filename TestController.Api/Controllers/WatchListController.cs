@@ -20,7 +20,7 @@ public class WatchListController : ControllerBase
         _sessionManager = sessionManager;
     }
 
-    /// <summary>GET /api/watchlist — full WatchListConfig for the React WebClient tree builder.</summary>
+    /// <summary>GET /api/watchlist ï¿½ full WatchListConfig for the React WebClient tree builder.</summary>
     [HttpGet]
     public IActionResult GetWatchList()
     {
@@ -36,7 +36,7 @@ public class WatchListController : ControllerBase
                     filePath = config?.FilePath ?? "",
                     warning = config == null
                         ? "WatchList is not loaded. Check if WatchList.xml path is configured."
-                        : "WatchList is empty — no WatchItems defined.",
+                        : "WatchList is empty ï¿½ no WatchItems defined.",
                 });
             }
 
@@ -53,7 +53,7 @@ public class WatchListController : ControllerBase
         }
     }
 
-    /// <summary>GET /api/watchlist/{tag}/status — execution status of a WatchItem.</summary>
+    /// <summary>GET /api/watchlist/{tag}/status ï¿½ execution status of a WatchItem.</summary>
     [HttpGet("{tag}/status")]
     public IActionResult GetStatus(string tag)
     {
@@ -76,7 +76,7 @@ public class WatchListController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/watchlist/{tag}/parameters — current Variables.txt values.</summary>
+    /// <summary>GET /api/watchlist/{tag}/parameters ï¿½ current Variables.txt values.</summary>
     [HttpGet("{tag}/parameters")]
     public IActionResult GetParameters(string tag)
     {
@@ -87,7 +87,7 @@ public class WatchListController : ControllerBase
                 .FirstOrDefault(w => string.Equals(w.Tag, tag, StringComparison.OrdinalIgnoreCase));
 
             if (watchItem == null)
-                return NotFound(new { error = $"WatchItem '{tag}' not found" });
+                return NotFound(ApiErrorFactory.InvalidTag(tag));
 
             var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
             if (paramFile == null || !System.IO.File.Exists(paramFile))

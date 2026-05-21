@@ -25,6 +25,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<AgentSettings>(
     builder.Configuration.GetSection("AgentSettings"));
+builder.Services.Configure<AgentKestrelOptions>(
+    builder.Configuration.GetSection("AgentKestrel"));
+builder.Services.Configure<CommandPolicySettings>(
+    builder.Configuration.GetSection("CommandPolicy"));
 builder.Services.Configure<NotificationSettings>(
     builder.Configuration.GetSection("NotificationSettings"));
 builder.Services.Configure<AuditSettings>(
@@ -33,21 +37,23 @@ builder.Services.Configure<AuditSettings>(
 builder.WebHost.ConfigureKestrel(options =>
 {
     var port = builder.Configuration.GetValue("AgentSettings:GrpcPort", 5200);
+    var kestrelOpts = builder.Configuration.GetSection("AgentKestrel").Get<AgentKestrelOptions>() ?? new();
+
     options.ListenAnyIP(port, o => o.Protocols = HttpProtocols.Http2);
-    // Allow long-running gRPC streams (test executions can take 2-4+ hours).
-    // Default KeepAliveTimeout (130s) and MinDataRate (240 bytes/sec with 5s grace)
-    // kill connections during long installs/compiles that produce no stdout for
-    // extended periods. The amount of initial output determines how long the
-    // connection survives — typically ~1 hour, which matches the reported failures.
-    options.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
-    options.Limits.MinRequestBodyDataRate = null;
-    options.Limits.MinResponseDataRate = null;
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(kestrelOpts.KeepAliveTimeoutMinutes);
+
+    if (kestrelOpts.DisableMinRequestBodyDataRate)
+        options.Limits.MinRequestBodyDataRate = null;
+    if (kestrelOpts.DisableMinResponseDataRate)
+        options.Limits.MinResponseDataRate = null;
 });
 
 // ── Core services ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<EventBroadcaster>();
 builder.Services.AddSingleton<ExecutionTracker>();
 builder.Services.AddSingleton<AuditLogger>();
+builder.Services.AddSingleton(sp =>
+    new CommandPolicyEvaluator(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CommandPolicySettings>>().Value));
 builder.Services.AddSingleton<CommandExecutor>();
 builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<TestControllerClient>();
@@ -69,6 +75,17 @@ var app = builder.Build();
 
 app.MapGrpcService<TestAgentGrpcService>();
 app.MapGet("/", () => "TestAgent gRPC service is running.");
+
+// ── Startup validation: warn if running plaintext HTTP/2 in production ─
+var kestrelConfig = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentKestrelOptions>>().Value;
+if (kestrelConfig.WarnOnPlaintextHttp2 && !app.Environment.IsDevelopment())
+{
+    var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    startupLogger.LogWarning(
+        "Agent is listening on plaintext HTTP/2 (no TLS). " +
+        "This is acceptable for isolated test networks but should not be used in untrusted environments. " +
+        "Set AgentKestrel:WarnOnPlaintextHttp2 = false to suppress this warning.");
+}
 
 // ── Run host on background thread, WinForms on dedicated STA thread ───
 // Top-level statements compile to async Main which the CLR runs on an MTA

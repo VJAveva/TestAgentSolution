@@ -28,9 +28,13 @@ public class ExecutionController : ControllerBase
     private readonly IHubContext<ControllerHub> _hub;
     private readonly AgentLockManager _lockManager;
     private readonly IRealtimeNotifier _notifier;
+    private readonly IAppLogger _appLogger;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Broadcast timeout to prevent slow SignalR clients from blocking request handlers.</summary>
+    private static readonly TimeSpan BroadcastTimeout = TimeSpan.FromSeconds(5);
 
     public ExecutionController(
         ExecutionSessionManager sessionManager,
@@ -38,7 +42,8 @@ public class ExecutionController : ControllerBase
         IVocabularyMonitor vocabMonitor,
         IHubContext<ControllerHub> hub,
         AgentLockManager lockManager,
-        IRealtimeNotifier notifier)
+        IRealtimeNotifier notifier,
+        IAppLogger appLogger)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -46,6 +51,7 @@ public class ExecutionController : ControllerBase
         _hub = hub;
         _lockManager = lockManager;
         _notifier = notifier;
+        _appLogger = appLogger;
     }
 
     /// <summary>GET /api/execution/sessions � list active sessions.</summary>
@@ -266,10 +272,10 @@ public class ExecutionController : ControllerBase
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
 
         if (watchItem == null)
-            return NotFound(new { error = $"WatchItem '{watchItemTag}' not found" });
+            return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
 
         if (watchItem.Events.Count == 0)
-            return BadRequest(new { error = $"WatchItem '{watchItemTag}' has no events" });
+            return BadRequest(ApiErrorFactory.BadRequest($"WatchItem '{watchItemTag}' has no events"));
 
         var evt = eventType is not null
             ? watchItem.Events.FirstOrDefault(e =>
@@ -277,7 +283,7 @@ public class ExecutionController : ControllerBase
             : watchItem.Events[0];
 
         if (evt == null)
-            return BadRequest(new { error = $"Event type '{eventType}' not found on WatchItem '{watchItemTag}'" });
+            return BadRequest(ApiErrorFactory.BadRequest($"Event type '{eventType}' not found on WatchItem '{watchItemTag}'"));
 
         // Build parameters (needed for agent variable resolution)
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -336,7 +342,7 @@ public class ExecutionController : ControllerBase
         lock (tagLock)
         {
             if (_sessionManager.HasActiveExecution(watchItemTag))
-                return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });
+                return Conflict(ApiErrorFactory.Conflict($"WatchItem '{watchItemTag}' is already running"));
 
             // Try to lock all agents atomically
             sessionId = Guid.NewGuid().ToString("N")[..12];
@@ -438,7 +444,7 @@ public class ExecutionController : ControllerBase
                     failed = completedSession?.FailedCount ?? 0,
                     total = completedSession?.TotalActions ?? 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
-                });
+                }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             catch (OperationCanceledException)
             {
@@ -449,7 +455,7 @@ public class ExecutionController : ControllerBase
                     state = "Cancelled",
                     passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
-                });
+                }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             catch (Exception ex)
             {
@@ -461,7 +467,7 @@ public class ExecutionController : ControllerBase
                     error = ex.Message,
                     passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
-                });
+                }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             finally
             {
@@ -481,7 +487,7 @@ public class ExecutionController : ControllerBase
             source,
             userId,
             lockedAgents = requiredAgents,
-        });
+        }, new CancellationTokenSource(BroadcastTimeout).Token);
 
         return Accepted(new
         {
@@ -498,7 +504,7 @@ public class ExecutionController : ControllerBase
             return Ok(new { builds = Array.Empty<object>() });
 
         if (!System.IO.Directory.Exists(basePath))
-            return NotFound(new { error = $"Path not found: {basePath}" });
+            return NotFound(ApiErrorFactory.NotFound($"Path not found: {basePath}"));
 
         var builds = System.IO.Directory.GetDirectories(basePath)
             .Select(d => new
@@ -543,7 +549,7 @@ public class ExecutionController : ControllerBase
         var watchItem = config?.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
         if (watchItem == null)
-            return NotFound(new { error = "WatchItem not found" });
+            return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
 
         var parameters = LoadParametersForWatchItem(watchItem);
         var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
@@ -604,13 +610,13 @@ public class ExecutionController : ControllerBase
 
         var session = _sessionManager.GetSession(sessionId);
         if (session == null)
-            return NotFound(new { error = "Session not found" });
+            return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found"));
 
         if (source != "WPF" &&
             !string.IsNullOrEmpty(userId) &&
             !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
         {
-            return StatusCode(403, new { error = "Not your session", sessionOwner = session.UserId });
+            return StatusCode(403, ApiErrorFactory.Forbidden("Cannot access another user's session"));
         }
 
         var logs = session.GetRecentLogs(count);
@@ -652,15 +658,21 @@ public class ExecutionController : ControllerBase
 
     // ?? Cancel endpoints ????????????????????????????????????????????
 
-    /// <summary>POST /api/execution/cancel � cancel all running sessions.</summary>
+    /// <summary>POST /api/execution/cancel – cancel all running sessions.</summary>
     [HttpPost("cancel")]
     public async Task<IActionResult> CancelAll()
     {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
+
         // Snapshot active sessions (ID + tag) before cancellation moves them to history
         var activeSessions = _sessionManager.GetActiveSessions()
             .Select(s => new { s.SessionId, s.WatchItemTag }).ToList();
 
         var cancelledTags = _sessionManager.CancelAll();
+
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"CancelAll: actor={userId}, source={source}, cancelled={cancelledTags.Count} session(s): [{string.Join(", ", activeSessions.Select(s => s.SessionId))}]");
 
         // Release locks for the actual cancelled sessions
         foreach (var s in activeSessions)
@@ -675,7 +687,7 @@ public class ExecutionController : ControllerBase
                 watchItemTag = s.WatchItemTag,
                 state = "Cancelled",
                 timestamp = DateTime.UtcNow.ToString("o"),
-            });
+            }, new CancellationTokenSource(BroadcastTimeout).Token);
         }
 
         if (cancelledTags.Count > 0)
@@ -697,23 +709,21 @@ public class ExecutionController : ControllerBase
 
         var session = _sessionManager.GetSession(sessionId);
         if (session == null || session.State != SessionState.Running)
-            return NotFound(new { error = "Session not found or not running" });
+            return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found or not running"));
 
         // Ownership check: WebClient users can only cancel their own sessions
         if (source != "WPF" &&
             !string.IsNullOrEmpty(userId) &&
             !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
         {
-            return StatusCode(403, new
-            {
-                error = "Cannot cancel another user's session",
-                sessionOwner = session.UserId,
-                yourId = userId,
-            });
+            return StatusCode(403, ApiErrorFactory.Forbidden("Cannot cancel another user's session"));
         }
 
         var cancelled = _sessionManager.CancelSession(sessionId);
-        if (!cancelled) return NotFound(new { error = "Session not found or not running" });
+        if (!cancelled) return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found or not running"));
+
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"CancelSession: actor={userId}, source={source}, sessionId={sessionId}, pipeline={session.WatchItemTag}");
 
         _lockManager.ReleaseSession(sessionId);
         BroadcastLockChange($"Session {sessionId} cancelled");
@@ -722,26 +732,32 @@ public class ExecutionController : ControllerBase
         {
             sessionId,
             timestamp = DateTime.UtcNow.ToString("o"),
-        });
+        }, new CancellationTokenSource(BroadcastTimeout).Token);
 
         return Ok(new { message = "Cancellation requested", cancelledBy = userId });
     }
 
     // ?? Force-release endpoints (admin only) ?????????????????????????
 
-    /// <summary>POST /api/execution/force-release/{agentName} � admin force-release a single agent.</summary>
+    /// <summary>POST /api/execution/force-release/{agentName} – admin force-release a single agent.</summary>
     [HttpPost("force-release/{agentName}")]
     public IActionResult ForceReleaseAgent(string agentName)
     {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
         if (source is not ("WPF" or "WebClient"))
-            return StatusCode(403, new { error = "Only admin clients can force-release agents" });
+            return StatusCode(403, ApiErrorFactory.Forbidden("Only admin clients can force-release agents"));
 
         var currentLock = _lockManager.GetLock(agentName);
         if (currentLock == null)
-            return NotFound(new { error = $"Agent '{agentName}' is not locked" });
+            return NotFound(ApiErrorFactory.NotFound($"Agent '{agentName}' is not locked"));
 
         _lockManager.ForceRelease(agentName);
+
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"ForceReleaseAgent: actor={userId}, source={source}, agent={agentName}, " +
+            $"previousSession={currentLock.SessionId}, previousPipeline={currentLock.WatchItemTag}, previousUser={currentLock.UserId}");
+
         BroadcastLockChange($"Force-released: {agentName}");
 
         return Ok(new
@@ -751,15 +767,20 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/force-release-all � admin emergency release all locks.</summary>
+    /// <summary>POST /api/execution/force-release-all – admin emergency release all locks.</summary>
     [HttpPost("force-release-all")]
     public IActionResult ForceReleaseAll()
     {
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
         if (source is not ("WPF" or "WebClient"))
-            return StatusCode(403, new { error = "Admin only" });
+            return StatusCode(403, ApiErrorFactory.Forbidden("Only admin clients can force-release all locks"));
 
         var count = _lockManager.ForceReleaseAll();
+
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"ForceReleaseAll: actor={userId}, source={source}, releasedCount={count}");
+
         BroadcastLockChange("All locks force-released");
 
         return Ok(new { message = $"Released {count} agent locks" });

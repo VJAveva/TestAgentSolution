@@ -118,7 +118,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
         // Link the external cancellation token with the session's own CTS so
         // both _sessionManager.CancelSession() and external cancellation work.
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
 
         try
         {
@@ -147,7 +147,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:Group:{group.Tag}");
 
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
 
         try
         {
@@ -177,7 +177,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:Action:{action.ResolvedTag}");
 
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
 
         try
         {
@@ -465,15 +465,17 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected void Log(string category, string message)
     {
-        _logger.LogInformation("[{Category}] {Message}", category, message);
-        OnLogEntry(new PipelineLogEntry(DateTime.Now, category, message));
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        _logger.LogInformation("[{Category}] {Message}", category, redactedMessage);
+        OnLogEntry(new PipelineLogEntry(DateTime.Now, category, redactedMessage));
     }
 
     protected void Log(string category, string message, PipelineExecutionContext ctx)
     {
-        _logger.LogInformation("[{Category}] {Message}", category, message);
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        _logger.LogInformation("[{Category}] {Message}", category, redactedMessage);
         OnLogEntry(new PipelineLogEntry(
-            DateTime.Now, category, message,
+            DateTime.Now, category, redactedMessage,
             AgentName: null,
             SessionId: ctx.SessionId));
     }

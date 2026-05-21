@@ -8,7 +8,7 @@ namespace TestControllerGrpc.Services;
 /// Structured application logger that writes to:
 ///   1. An in-memory ring buffer (for UI display and recent query)
 ///   2. Component-specific daily rolling file (e.g. controller_2026-04-25.log)
-///   3. Shared daily rolling file (app_2026-04-25.log) — all components in one place
+///   3. Shared daily rolling file (app_2026-04-25.log) ï¿½ all components in one place
 ///   4. Errors-only daily rolling file (errors_2026-04-25.log)
 ///
 /// All files land in the same directory so a single folder contains
@@ -56,14 +56,16 @@ public sealed class AppLogger : IAppLogger, IDisposable
     public void Log(LogLevel level, string category, string message, string? correlationId, long elapsedMs = 0, Exception? ex = null)
     {
         var seq = Interlocked.Increment(ref _globalSequence);
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        var redactedException = SecurityRedactor.Redact(ex?.ToString());
         var entry = new AppLogEntry
         {
             Sequence = seq,
             Timestamp = DateTime.Now,
             Level = level,
             Category = category,
-            Message = message,
-            Exception = ex?.ToString(),
+            Message = redactedMessage,
+            Exception = redactedException,
             CorrelationId = correlationId,
             ElapsedMs = elapsedMs,
         };
@@ -113,7 +115,7 @@ public sealed class AppLogger : IAppLogger, IDisposable
                 // 1. Component-specific file (e.g. controller_2026-04-25.log)
                 _componentWriter?.WriteLine(line);
 
-                // 2. Shared file (app_2026-04-25.log) — all components
+                // 2. Shared file (app_2026-04-25.log) ï¿½ all components
                 _sharedWriter?.WriteLine(line);
 
                 // 3. Errors-only file

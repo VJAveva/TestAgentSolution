@@ -40,99 +40,157 @@
             </DockPanel>
         </Border>
 
-        <!-- Agent card grid (WrapPanel in ScrollViewer for 50+ agents) -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6">
-            <ItemsControl ItemsSource="{Binding Cards}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:FleetCardVM}">
-                        <Border Width="130" Height="50" Margin="3" CornerRadius="5"
-                                Padding="7,5" Cursor="Hand"
-                                MouseLeftButtonUp="Card_Click">
-                            <Border.Style>
-                                <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
-                                    <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
-                                    <Setter Property="BorderThickness" Value="1"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
-                                            <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
-                                            <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                            <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
-                                            <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                            <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
-                                            <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
-                                            <Setter Property="Opacity" Value="0.7"/>
-                                        </DataTrigger>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="BorderBrush" Value="{DynamicResource AccPeach}"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <DockPanel Grid.Row="0">
-                                    <!-- Latency indicator (top-right) -->
-                                    <TextBlock DockPanel.Dock="Right" FontSize="8"
-                                               VerticalAlignment="Center" Margin="4,0,0,0"
-                                               Text="{Binding LatencyMs, StringFormat={}{0}ms}"
-                                               TextTrimming="CharacterEllipsis">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource AccGreen}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding LatencyMs}" Value="-1">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Ellipse Width="7" Height="7" Margin="0,0,5,0" VerticalAlignment="Center">
+        <!-- Grouped agent panel -->
+        <Grid>
+            <!-- Empty state -->
+            <TextBlock Text="No agents registered"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontSize="12" Foreground="{DynamicResource TextS}"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"/>
+
+            <!-- Grouped list -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6"
+                          Visibility="{Binding IsEmpty, Converter={StaticResource InvBoolVis}}">
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:FleetGroupVM}">
+                            <StackPanel Margin="0,0,0,4">
+
+                                <!-- GROUP HEADER -->
+                                <Border Background="{DynamicResource BgPanel}"
+                                        BorderBrush="{DynamicResource Bdr}"
+                                        BorderThickness="0,0,0,0.5"
+                                        Padding="12,7">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Group status dot -->
+                                        <Ellipse Grid.Column="0" Width="8" Height="8"
+                                                 Margin="0,0,8,0" VerticalAlignment="Center">
                                             <Ellipse.Style>
                                                 <Style TargetType="Ellipse">
-                                                    <Setter Property="Fill" Value="{DynamicResource AccGreen}"/>
+                                                    <Setter Property="Fill" Value="{DynamicResource Accent}"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
-                                                            <Setter Property="Fill" Value="{DynamicResource Accent}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                            <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                                            <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                        <DataTrigger Binding="{Binding AccentKind}" Value="Idle">
+                                                            <Setter Property="Fill" Value="{DynamicResource AccGreen}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </Ellipse.Style>
                                         </Ellipse>
-                                        <TextBlock Text="{Binding AgentName}" FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource TextP}" TextTrimming="CharacterEllipsis"
-                                                   MaxWidth="80"/>
-                                    </StackPanel>
-                                </DockPanel>
-                                <TextBlock Grid.Row="1" Text="{Binding StatusDetail}" FontSize="9"
-                                           Foreground="{DynamicResource TextS}" VerticalAlignment="Bottom"
-                                           TextTrimming="CharacterEllipsis"/>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+
+                                        <!-- Title + Owner -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}" FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextP}"/>
+                                            <TextBlock Text="{Binding OwnerDisplay}" FontSize="10"
+                                                       Margin="6,0,0,0"
+                                                       Foreground="{DynamicResource TextS}"/>
+                                        </StackPanel>
+
+                                        <!-- Agent count -->
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding Count}" FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextS}"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- CARD GRID (2-column UniformGrid) -->
+                                <ItemsControl ItemsSource="{Binding Agents}" Margin="6,4,6,6"
+                                              Visibility="{Binding HasAgents, Converter={StaticResource BoolVis}}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="2"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:FleetCardVM}">
+                                            <Border Width="Auto" Height="50" Margin="3" CornerRadius="5"
+                                                    Padding="7,5" Cursor="Hand"
+                                                    MouseLeftButtonUp="Card_Click">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                                <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                                <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                                <Setter Property="Opacity" Value="0.7"/>
+                                                            </DataTrigger>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource AccPeach}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                    </Grid.RowDefinitions>
+                                                    <!-- Row 1: dot + agent name -->
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                                        <Ellipse Width="7" Height="7" Margin="0,0,5,0"
+                                                                 VerticalAlignment="Center">
+                                                            <Ellipse.Style>
+                                                                <Style TargetType="Ellipse">
+                                                                    <Setter Property="Fill" Value="{DynamicResource AccGreen}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                                            <Setter Property="Fill" Value="{DynamicResource Accent}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                            <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                                            <Setter Property="Fill" Value="{DynamicResource AccRed}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Ellipse.Style>
+                                                        </Ellipse>
+                                                        <TextBlock Text="{Binding AgentName}" FontSize="11"
+                                                                   FontWeight="SemiBold" FontFamily="Consolas"
+                                                                   Foreground="{DynamicResource TextP}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="120"/>
+                                                    </StackPanel>
+                                                    <!-- Row 2: status detail -->
+                                                    <TextBlock Grid.Row="1" Text="{Binding StatusDetail}"
+                                                               FontSize="9" FontFamily="Consolas"
+                                                               Foreground="{DynamicResource TextS}"
+                                                               VerticalAlignment="Bottom"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="12,2,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
     </DockPanel>
 </UserControl>

@@ -238,7 +238,10 @@ public sealed class AgentLockManager
     /// <summary>The file path used for lock persistence, if configured.</summary>
     public string? PersistPath => _persistPath;
 
-    // ?? Persistence ?????????????????????????????????????????????????
+    // ── Persistence ───────────────────────────────────────────────────
+
+    /// <summary>Current schema version for lock persistence format.</summary>
+    private const int PersistSchemaVersion = 1;
 
     private void PersistToDisk()
     {
@@ -254,17 +257,21 @@ public sealed class AgentLockManager
                     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                         Directory.CreateDirectory(dir);
 
-                    var snapshot = _locks.Values.Select(l => new PersistedLock
+                    var envelope = new PersistedLockEnvelope
                     {
-                        AgentName = l.AgentName,
-                        SessionId = l.SessionId,
-                        WatchItemTag = l.WatchItemTag,
-                        UserId = l.UserId,
-                        Source = l.Source,
-                        LockedAtUtc = l.LockedAtUtc.ToString("o"),
-                    }).ToArray();
+                        SchemaVersion = PersistSchemaVersion,
+                        Locks = _locks.Values.Select(l => new PersistedLock
+                        {
+                            AgentName = l.AgentName,
+                            SessionId = l.SessionId,
+                            WatchItemTag = l.WatchItemTag,
+                            UserId = l.UserId,
+                            Source = l.Source,
+                            LockedAtUtc = l.LockedAtUtc.ToString("o"),
+                        }).ToArray(),
+                    };
 
-                    var json = JsonSerializer.Serialize(snapshot,
+                    var json = JsonSerializer.Serialize(envelope,
                         new JsonSerializerOptions { WriteIndented = true });
 
                     var tempPath = _persistPath + ".tmp";
@@ -287,7 +294,22 @@ public sealed class AgentLockManager
         try
         {
             var json = File.ReadAllText(_persistPath);
-            var entries = JsonSerializer.Deserialize<PersistedLock[]>(json);
+
+            // Try new envelope format first
+            PersistedLock[]? entries = null;
+            try
+            {
+                var envelope = JsonSerializer.Deserialize<PersistedLockEnvelope>(json);
+                if (envelope?.SchemaVersion >= 1)
+                    entries = envelope.Locks;
+            }
+            catch (JsonException)
+            {
+                // Fall through to legacy format
+            }
+
+            // Fallback: legacy format (bare array of PersistedLock)
+            entries ??= JsonSerializer.Deserialize<PersistedLock[]>(json);
             if (entries == null) return;
 
             foreach (var entry in entries)
@@ -321,5 +343,11 @@ public sealed class AgentLockManager
         public string UserId { get; init; } = "";
         public string Source { get; init; } = "";
         public string LockedAtUtc { get; init; } = "";
+    }
+
+    private record PersistedLockEnvelope
+    {
+        public int SchemaVersion { get; init; }
+        public PersistedLock[] Locks { get; init; } = [];
     }
 }

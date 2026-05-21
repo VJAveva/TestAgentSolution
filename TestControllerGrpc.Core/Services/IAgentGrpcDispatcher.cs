@@ -58,4 +58,11 @@ public interface IAgentGrpcDispatcher : IDisposable
 
     /// <summary>Returns true if the given agent currently has a streaming command in progress.</summary>
     bool IsAgentExecuting(string agentName);
+
+    /// <summary>
+    /// Resets the gRPC channel for a given agent by disposing the old connection and
+    /// creating a new one. Returns true if the new channel is reachable (ping succeeds).
+    /// Blocked during active execution to prevent stream interference.
+    /// </summary>
+    Task<bool> ResetChannelAsync(string agentName);
 }

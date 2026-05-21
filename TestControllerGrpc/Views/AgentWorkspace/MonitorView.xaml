@@ -269,6 +269,15 @@
             <!-- ─── RIGHT MAIN PANEL ─── -->
             <DockPanel Grid.Column="1" Margin="14">
 
+                <!-- Metrics frozen notice (visible only during active execution) -->
+                <Border DockPanel.Dock="Top" Margin="0,0,0,8" Padding="8,5" CornerRadius="4"
+                        Background="#332D1A00"
+                        Visibility="{Binding MetricsFrozenNotice, Converter={StaticResource NullToCollapsed}}">
+                    <TextBlock Text="{Binding MetricsFrozenNotice}"
+                               FontSize="10" FontStyle="Italic"
+                               Foreground="#F59E0B"/>
+                </Border>
+
                 <!-- Telemetry cards (2x2 grid) -->
                 <UniformGrid DockPanel.Dock="Top" Rows="2" Columns="2" Margin="0,0,0,12">
 

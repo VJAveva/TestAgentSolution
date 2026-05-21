@@ -122,6 +122,14 @@ public sealed partial class MainViewModel
     {
         if (SelectedAgent is null) return;
         var agent = SelectedAgent;
+
+        // Guard: don't run diagnostics (gRPC calls) during active execution
+        if (_dispatcher.IsAgentExecuting(agent.Name))
+        {
+            AddLog($"{LogIcons.Diagnose} Diagnostics skipped for {agent.Name} â€” agent is currently executing", LogSeverity.Warning);
+            return;
+        }
+
         agent.IsDiagnosing = true;
         agent.ConnectionStatus = "Testing";
         agent.UpdateDetailLine();
@@ -282,7 +290,7 @@ public sealed partial class MainViewModel
     // Replaced DispatcherTimer (UI-thread sequential) with a background
     // Task that pings all agents in parallel via Task.WhenAll, then
     // marshals only the UI property updates to the Dispatcher.
-    // With 100 agents × 5s timeout, worst case = 5s (parallel) vs 500s (sequential).
+    // With 100 agents ï¿½ 5s timeout, worst case = 5s (parallel) vs 500s (sequential).
 
     private CancellationTokenSource? _healthCheckCts;
 
@@ -430,7 +438,7 @@ public sealed partial class MainViewModel
 
             if (existing is null)
             {
-                // Agent is heartbeating but not in the UI list — add it if registered in dispatcher
+                // Agent is heartbeating but not in the UI list ï¿½ add it if registered in dispatcher
                 var address = _dispatcher.GetAgentAddress(name);
                 if (address is null) return;
 

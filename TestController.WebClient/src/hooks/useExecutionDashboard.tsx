@@ -332,7 +332,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
 
   // Fetch sessions from the proxy endpoint (returns WPF controller data)
   const fetchProxySessions = useCallback(() => {
-    return apiFetch<{ active: any[]; history: any[] }>('/api/execution/proxy/dashboard-sessions')
+    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/proxy/dashboard-sessions')
       .then(data => {
         const all = [
           ...(data.active || []),
@@ -375,7 +375,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
 
     const fetchLogs = () => {
       for (const sid of activeSessionIdsRef.current) {
-        apiFetch<{ logs: any[]; sessionId: string }>(
+        apiFetch<{ logs: DashboardLogEntry[]; sessionId: string }>(
           `/api/execution/proxy/logs/${encodeURIComponent(sid)}`
         )
           .then(data => {

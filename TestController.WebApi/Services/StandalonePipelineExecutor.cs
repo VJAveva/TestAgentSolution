@@ -60,7 +60,7 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
             {
                 case ActionType.RunRemoteCommand:
                     if (attempt == 1)
-                        Log("Action", $"RunRemoteCommand \u2192 {resolved.AgentName}: {resolved.Command} {resolved.Parameters}");
+                        Log("Action", $"RunRemoteCommand \u2192 {resolved.AgentName}: {SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters)}");
                     else
                         Log("Retry", $"RunRemoteCommand \u2192 {resolved.AgentName} (attempt {attempt})");
                     result = await _dispatcher.ExecuteRemoteCommandAsync(action, ctx, ct);
@@ -68,7 +68,7 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
 
                 case ActionType.RunCommand:
                     if (attempt == 1)
-                        Log("Action", $"RunCommand (local): {resolved.Command} {resolved.Parameters}");
+                        Log("Action", $"RunCommand (local): {SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters)}");
                     else
                         Log("Retry", $"RunCommand (local) (attempt {attempt})");
                     result = await _dispatcher.ExecuteLocalCommandAsync(action, ctx, ct);
@@ -106,7 +106,7 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
         // All attempts exhausted
         {
             var agentInfo = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
-            var cmdInfo = $"{resolved.Command} {resolved.Parameters}".Trim();
+            var cmdInfo = SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters).Trim();
             if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "\u2026";
 
             if (maxAttempts > 1)
@@ -115,10 +115,10 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
                 Log("Action", $"\u2717 FAILED on {agentInfo}: {cmdInfo}");
 
             Log("Action", $"  Exit code: {result.ExitCode}");
-            Log("Action", $"  Error: {result.ErrorMessage}");
+            Log("Action", $"  Error: {SecurityRedactor.Redact(result.ErrorMessage)}");
         }
 
-        OnNodeFailed(action, result.ExitCode, result.ErrorMessage);
+        OnNodeFailed(action, result.ExitCode, SecurityRedactor.Redact(result.ErrorMessage) ?? string.Empty);
         return action.FailAndContinue;
     }
 

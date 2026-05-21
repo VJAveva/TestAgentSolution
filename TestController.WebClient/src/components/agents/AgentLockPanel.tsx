@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../lib/api';
 import { logCatch } from '../../lib/logger';
+import ConfirmReleaseModal from './ConfirmReleaseModal';
 
 interface AgentLockInfo {
   agentName: string;
@@ -15,10 +16,14 @@ interface AgentLockInfo {
 /**
  * Displays real-time agent lock status. Listens to AgentLocksChanged
  * events via a custom DOM event dispatched by useSignalR.
+ * Force release actions now require a confirmation modal with a reason
+ * (CLIENT-003 hardening).
  */
 export default function AgentLockPanel() {
   const [locks, setLocks] = useState<AgentLockInfo[]>([]);
   const [releasing, setReleasing] = useState<string | null>(null);
+  // Confirmation modal state
+  const [confirmTarget, setConfirmTarget] = useState<string | 'all' | null>(null);
 
   const fetchLocks = useCallback(() => {
     apiFetch<{ locks: AgentLockInfo[] }>('/api/execution/locks')
@@ -39,20 +44,48 @@ export default function AgentLockPanel() {
     return () => window.removeEventListener('agent-locks-changed', handler);
   }, []);
 
-  const handleForceRelease = async (agentName: string) => {
-    if (!confirm(`Force release lock on '${agentName}'?\n\nThis removes the lock but does NOT cancel the running pipeline.`))
-      return;
+  const handleForceRelease = async (agentName: string, reason: string) => {
     setReleasing(agentName);
     try {
-      await apiFetch(`/api/execution/force-release/${encodeURIComponent(agentName)}`, { method: 'POST' });
+      await apiFetch(`/api/execution/force-release/${encodeURIComponent(agentName)}`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
       fetchLocks();
     } catch (err) {
       logCatch('AgentLockPanel', 'forceRelease')(err);
-      alert(`Force release failed: ${(err as any)?.error || 'unknown error'}`);
     } finally {
       setReleasing(null);
     }
   };
+
+  const handleForceReleaseAll = async (reason: string) => {
+    try {
+      await apiFetch('/api/execution/force-release-all', {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+      fetchLocks();
+    } catch (err) {
+      logCatch('AgentLockPanel', 'forceReleaseAll')(err);
+    }
+  };
+
+  const handleConfirm = (reason: string) => {
+    if (confirmTarget === 'all') {
+      handleForceReleaseAll(reason);
+    } else if (confirmTarget) {
+      handleForceRelease(confirmTarget, reason);
+    }
+    setConfirmTarget(null);
+  };
+
+  const modalTitle = confirmTarget === 'all'
+    ? `Force Release All (${locks.length} agents)`
+    : `Force Release — ${confirmTarget}`;
+  const modalMessage = confirmTarget === 'all'
+    ? `This will release ALL ${locks.length} agent locks. Running pipelines will NOT be cancelled. Please provide a reason for audit.`
+    : `This removes the lock on '${confirmTarget}' but does NOT cancel the running pipeline. Please provide a reason for audit.`;
 
   if (locks.length === 0) {
     return (
@@ -62,19 +95,17 @@ export default function AgentLockPanel() {
     );
   }
 
-  const handleForceReleaseAll = async () => {
-    if (!confirm(`Force release ALL ${locks.length} agent locks?\n\nThis does NOT cancel running pipelines.`))
-      return;
-    try {
-      await apiFetch('/api/execution/force-release-all', { method: 'POST' });
-      fetchLocks();
-    } catch (err) {
-      logCatch('AgentLockPanel', 'forceReleaseAll')(err);
-    }
-  };
-
   return (
     <div className="space-y-2 p-3">
+      <ConfirmReleaseModal
+        open={confirmTarget !== null}
+        title={modalTitle}
+        message={modalMessage}
+        requireReason={true}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirmTarget(null)}
+      />
+
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
           Agent Locks
@@ -86,7 +117,7 @@ export default function AgentLockPanel() {
           {locks.length > 1 && (
             <button
               className="px-2 py-0.5 bg-red-900/30 hover:bg-red-800/50 text-red-300 text-[10px] rounded-full"
-              onClick={handleForceReleaseAll}
+              onClick={() => setConfirmTarget('all')}
             >
               Release All
             </button>
@@ -106,7 +137,7 @@ export default function AgentLockPanel() {
             <div className="flex items-center gap-2">
               <button
                 className="px-2 py-0.5 bg-red-900/40 hover:bg-red-800/60 text-red-300 text-[10px] font-bold rounded-full uppercase disabled:opacity-40"
-                onClick={() => handleForceRelease(lock.agentName)}
+                onClick={() => setConfirmTarget(lock.agentName)}
                 disabled={releasing === lock.agentName}
               >
                 {releasing === lock.agentName ? 'Releasing…' : 'Force Release'}

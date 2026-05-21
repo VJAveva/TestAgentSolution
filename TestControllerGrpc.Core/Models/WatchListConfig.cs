@@ -285,14 +285,36 @@ public sealed class ExecutionSession
     public string[] LockedAgents { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// Cancellation token source for this session. Call <see cref="RequestCancellation"/>
-    /// to signal the running pipeline to stop. The token is passed through to the executor.
+    /// Cancellation token source for this session. Prefer using <see cref="CancellationToken"/>,
+    /// <see cref="RequestCancellation"/>, and <see cref="DisposeCancellation"/> instead
+    /// of accessing the CTS directly.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public CancellationTokenSource Cts { get; } = new();
+    [Obsolete("Use CancellationToken, IsCancellationRequested, RequestCancellation(), DisposeCancellation() instead.")]
+    public CancellationTokenSource Cts => _cts;
+
+    private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>Token that pipelines should observe for cancellation requests.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public CancellationToken CancellationToken => _cts.Token;
+
+    /// <summary>Whether cancellation has been requested for this session.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsCancellationRequested => _cts.IsCancellationRequested;
 
     /// <summary>Signals cancellation to the running pipeline.</summary>
-    public void RequestCancellation() => Cts.Cancel();
+    public void RequestCancellation() => _cts.Cancel();
+
+    /// <summary>
+    /// Disposes the internal CancellationTokenSource. Call only after the session
+    /// is fully complete and no code references the token. Safe to call multiple times.
+    /// </summary>
+    public void DisposeCancellation()
+    {
+        try { _cts.Dispose(); }
+        catch (ObjectDisposedException) { }
+    }
 
     // GAP 10 fix: Thread-safe collection for parallel action groups.
     // Parallel ExecuteChildrenAsync calls RecordResult from multiple threads

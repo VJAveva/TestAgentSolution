@@ -13,6 +13,10 @@ public partial class FleetVM : ObservableObject
     private readonly ExecutionSessionManager _sessionManager;
     private readonly Dispatcher _uiDispatcher;
 
+    /// <summary>Grouped agent collection for the fleet panel.</summary>
+    public ObservableCollection<FleetGroupVM> Groups { get; } = new();
+
+    /// <summary>Flat list retained for backward compat (e.g. tests, selection).</summary>
     public ObservableCollection<FleetCardVM> Cards { get; } = new();
 
     [ObservableProperty] private int _totalCount;
@@ -21,6 +25,7 @@ public partial class FleetVM : ObservableObject
     [ObservableProperty] private int _offlineCount;
     [ObservableProperty] private int _failedCount;
     [ObservableProperty] private string _filterText = "";
+    [ObservableProperty] private bool _isEmpty = true;
 
     public event Action<string>? AgentSelected;
     public event Action? RegisterAgentClicked;
@@ -108,8 +113,11 @@ public partial class FleetVM : ObservableObject
         var allLocks = _lockManager.GetAllLocks();
 
         Cards.Clear();
+        Groups.Clear();
         int busy = 0, free = 0, offline = 0, failed = 0;
 
+        // Build all cards first
+        var allCards = new List<FleetCardVM>();
         foreach (var agentName in agents)
         {
             // Apply filter
@@ -129,6 +137,9 @@ public partial class FleetVM : ObservableObject
             {
                 // Lock check takes priority — agent is executing work
                 card.SessionId = agentLock.SessionId;
+                card.GroupKey = agentLock.SessionId;
+                card.Owner = agentLock.UserId;
+                card.WatchItemTag = agentLock.WatchItemTag;
                 var session = _sessionManager.GetSession(agentLock.SessionId);
                 var agentSummary = session?.GetAgentSummaries()
                     .FirstOrDefault(s => string.Equals(s.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
@@ -137,6 +148,7 @@ public partial class FleetVM : ObservableObject
                 {
                     card.Status = "Failed";
                     card.StatusDetail = $"{agentSummary.CompletedCount}/{agentSummary.TotalCount} — has failures";
+                    card.IsError = true;
                     failed++;
                 }
                 else
@@ -154,6 +166,7 @@ public partial class FleetVM : ObservableObject
                 card.StatusDetail = health.ConsecutiveFailures > 0
                     ? $"{health.ConsecutiveFailures} failures"
                     : "Unreachable";
+                card.IsError = true;
                 offline++;
             }
             else
@@ -163,14 +176,45 @@ public partial class FleetVM : ObservableObject
                 free++;
             }
 
+            allCards.Add(card);
             Cards.Add(card);
         }
 
-        TotalCount = Cards.Count;
+        // Build groups: assigned groups (by session) + Available pool
+        var assigned = allCards
+            .Where(c => !string.IsNullOrEmpty(c.GroupKey))
+            .GroupBy(c => c.GroupKey)
+            .Select(g => new FleetGroupVM(
+                groupKey: g.Key,
+                title: g.First().WatchItemTag ?? g.Key,
+                owner: g.First().Owner,
+                isAvailablePool: false,
+                agents: g.OrderBy(c => c.AgentName).ToList()))
+            .OrderBy(g => g.Title)
+            .ToList();
+
+        var availableCards = allCards
+            .Where(c => string.IsNullOrEmpty(c.GroupKey))
+            .OrderBy(c => c.AgentName)
+            .ToList();
+
+        var availableGroup = new FleetGroupVM(
+            groupKey: "Available",
+            title: "Available",
+            owner: null,
+            isAvailablePool: true,
+            agents: availableCards);
+
+        foreach (var g in assigned)
+            Groups.Add(g);
+        Groups.Add(availableGroup);
+
+        TotalCount = allCards.Count;
         BusyCount = busy;
         FreeCount = free;
         OfflineCount = offline;
         FailedCount = failed;
+        IsEmpty = allCards.Count == 0;
     }
 
     [RelayCommand]
@@ -184,6 +228,34 @@ public partial class FleetVM : ObservableObject
     private void RequestRegisterAgent() => RegisterAgentClicked?.Invoke();
 }
 
+/// <summary>
+/// Represents a group of agents sharing the same session assignment
+/// (or the "Available" idle pool).
+/// </summary>
+public partial class FleetGroupVM : ObservableObject
+{
+    public FleetGroupVM(string groupKey, string title, string? owner,
+        bool isAvailablePool, IReadOnlyList<FleetCardVM> agents)
+    {
+        GroupKey = groupKey;
+        Title = title;
+        Owner = owner;
+        IsAvailablePool = isAvailablePool;
+        Agents = new ObservableCollection<FleetCardVM>(agents);
+    }
+
+    public string GroupKey { get; }
+    public string Title { get; }
+    public string? Owner { get; }
+    public bool IsAvailablePool { get; }
+    public ObservableCollection<FleetCardVM> Agents { get; }
+
+    public int Count => Agents.Count;
+    public string OwnerDisplay => string.IsNullOrEmpty(Owner) ? "" : $"({Owner})";
+    public bool HasAgents => Agents.Count > 0;
+    public string AccentKind => IsAvailablePool ? "Idle" : "Running";
+}
+
 public partial class FleetCardVM : ObservableObject
 {
     [ObservableProperty] private string _agentName = "";
@@ -191,5 +263,9 @@ public partial class FleetCardVM : ObservableObject
     [ObservableProperty] private string _status = "Free";
     [ObservableProperty] private string _statusDetail = "Idle";
     [ObservableProperty] private string _sessionId = "";
+    [ObservableProperty] private string _groupKey = "";
+    [ObservableProperty] private string _owner = "";
+    [ObservableProperty] private string _watchItemTag = "";
+    [ObservableProperty] private bool _isError;
     [ObservableProperty] private int _latencyMs = -1;  // -1 = not measured
 }

@@ -68,8 +68,35 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
 
     public Task StartAsync(CancellationToken ct)
     {
+        // Fail fast if required WPF-bridge services are not wired
+        ValidateBridgedDependencies();
         _serverTask = Task.Run(() => RunServerAsync(ct), ct);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Validates that all required WPF-bridged services are non-null before starting the server.
+    /// Fail-fast prevents silent runtime failures from missing DI registrations.
+    /// </summary>
+    private void ValidateBridgedDependencies()
+    {
+        var problems = new List<string>();
+
+        if (_dispatcher is null) problems.Add(nameof(IAgentGrpcDispatcher));
+        if (_sessionManager is null) problems.Add(nameof(ExecutionSessionManager));
+        if (_executor is null) problems.Add(nameof(IActionPipelineExecutor));
+        if (_lockManager is null) problems.Add(nameof(AgentLockManager));
+        if (_events is null) problems.Add(nameof(IEventAggregator));
+        if (_appLogger is null) problems.Add(nameof(IAppLogger));
+
+        if (problems.Count > 0)
+        {
+            var msg = $"Embedded WebApi host cannot start — missing bridged services: {string.Join(", ", problems)}";
+            _logger.LogCritical(msg);
+            throw new InvalidOperationException(msg);
+        }
+
+        _logger.LogDebug("Embedded WebApi host dependency validation passed");
     }
 
     private async Task RunServerAsync(CancellationToken ct)

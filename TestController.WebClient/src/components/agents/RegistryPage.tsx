@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Pencil, Server, Wifi } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
 import { useAgents } from '../../hooks/useAgents';
+import { isAgentOnline } from '../../lib/agentStatus';
 
 export default function RegistryPage() {
   const agents = useAgentStore(s => s.agents);
@@ -144,9 +145,7 @@ export default function RegistryPage() {
             </thead>
             <tbody>
               {agents.map(a => {
-                const isOnline = ['Connected', 'Online', 'Healthy', 'AgentStateReady'].some(
-                  s => a.status.toLowerCase().includes(s.toLowerCase())
-                );
+                const isOnline = isAgentOnline(a.status);
                 return (
                   <tr key={a.name} className="border-b border-bdr/30 hover:bg-white/[0.02]">
                     <td className="px-4 py-2">

@@ -81,24 +81,25 @@ public static class RemoteCommandStreamRunner
             switch (evt.EventType)
             {
                 case ExecutionEventType.EventStdoutLine:
-                    outputReceived?.Invoke(agentName, evt.OutputLine, "stdout");
+                    outputReceived?.Invoke(agentName, SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty, "stdout");
                     break;
                 case ExecutionEventType.EventStderrLine:
-                    outputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
-                    stderrLines.Add(evt.OutputLine);
+                    var stderrLine = SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty;
+                    outputReceived?.Invoke(agentName, stderrLine, "stderr");
+                    stderrLines.Add(stderrLine);
                     if (stderrLines.Count > StderrTailCapacity)
                         stderrLines.RemoveAt(0);
                     break;
                 case ExecutionEventType.EventProgress:
                     outputReceived?.Invoke(agentName,
-                        $"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}", "info");
+                        SecurityRedactor.Redact($"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}") ?? string.Empty, "info");
                     break;
                 case ExecutionEventType.EventCompleted:
                     exitCode = evt.ExitCode;
                     receivedCompleted = true;
                     break;
                 case ExecutionEventType.EventFailed:
-                    errorMessage = evt.ErrorMessage;
+                    errorMessage = SecurityRedactor.Redact(evt.ErrorMessage) ?? string.Empty;
                     exitCode = -1;
                     break;
             }

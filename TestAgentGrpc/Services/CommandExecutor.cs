@@ -27,6 +27,7 @@ public sealed class CommandExecutor : IDisposable
     private readonly ExecutionTracker _tracker;
     private readonly AuditLogger _audit;
     private readonly AgentSettings _settings;
+    private readonly CommandPolicyEvaluator _commandPolicy;
     private readonly ILogger<CommandExecutor> _logger;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
 
@@ -38,6 +39,7 @@ public sealed class CommandExecutor : IDisposable
     private string? _currentExecutionId;
     private string? _currentCommand;
     private DateTime? _executionStartedUtc;
+    private volatile ExecutionLifecycleState? _lifecycle;
 
     public event EventHandler<AgentState>? StateChanged;
     public event EventHandler<string>? ActivityChanged;
@@ -47,12 +49,14 @@ public sealed class CommandExecutor : IDisposable
         ExecutionTracker tracker,
         AuditLogger audit,
         IOptions<AgentSettings> settings,
+        CommandPolicyEvaluator commandPolicy,
         ILogger<CommandExecutor> logger)
     {
         _broadcaster = broadcaster;
         _tracker     = tracker;
         _audit       = audit;
         _settings    = settings.Value;
+        _commandPolicy = commandPolicy;
         _logger      = logger;
     }
 
@@ -65,6 +69,7 @@ public sealed class CommandExecutor : IDisposable
     public string?    CurrentExecutionId => _currentExecutionId;
     public string?    CurrentCommand     => _currentCommand;
     public DateTime?  ExecutionStartedUtc => _executionStartedUtc;
+    public ExecutionLifecycleState? CurrentLifecycle => _lifecycle;
 
     // ── Fire-and-forget RunCommand (legacy compatible) ─────────────────
 
@@ -77,6 +82,9 @@ public sealed class CommandExecutor : IDisposable
             _logger.LogWarning("Agent is busy — rejecting: {Cmd}", command);
             return (false, string.Empty);
         }
+
+        if (!EvaluateCommandPolicy(command, arguments, executionId, out _))
+            return (false, string.Empty);
 
         var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
         _ = Task.Run(() => ExecuteAsync(execId, command, arguments, isReboot,
@@ -94,6 +102,9 @@ public sealed class CommandExecutor : IDisposable
         CancellationToken externalCt = default)
     {
         if (_state == AgentState.Running)
+            return (false, string.Empty, null);
+
+        if (!EvaluateCommandPolicy(command, arguments, executionId, out _))
             return (false, string.Empty, null);
 
         var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
@@ -138,6 +149,38 @@ public sealed class CommandExecutor : IDisposable
         return (true, execId, ch.Reader);
     }
 
+    private bool EvaluateCommandPolicy(
+        string command, string arguments, string? executionId, out string reason)
+    {
+        var result = _commandPolicy.Evaluate(command, arguments);
+        reason = result.Reason;
+
+        if (result.IsAllowed)
+            return true;
+
+        var redactedCommandLine = SecurityRedactor.RedactCommandLine(command, arguments);
+        _audit.Log("CommandPolicyViolation",
+            severity: _commandPolicy.IsEnforced ? "Error" : "Warning",
+            executionId: executionId,
+            command: command,
+            arguments: arguments,
+            detail: $"{result.Reason}. CommandLine={redactedCommandLine}");
+
+        _logger.LogWarning(
+            "Command policy {Mode}: {Reason}. Command={CommandLine}",
+            _commandPolicy.IsEnforced ? "ENFORCED" : "AUDIT",
+            result.Reason,
+            redactedCommandLine);
+
+        if (_commandPolicy.IsEnforced)
+        {
+            _lastError = $"Command rejected by agent policy: {result.Reason}";
+            return false;
+        }
+
+        return true;
+    }
+
     // ── Core execution pipeline ────────────────────────────────────────
 
     private async Task ExecuteAsync(
@@ -155,20 +198,24 @@ public sealed class CommandExecutor : IDisposable
     {
         // Acquire the execution lock — if cancelled here, we must NOT release in finally
         bool lockAcquired = false;
+        var lifecycle = new ExecutionLifecycleState(executionId, command, arguments);
+        _lifecycle = lifecycle;
         try
         {
             await _executionLock.WaitAsync(ct);
             lockAcquired = true;
+            lifecycle.MarkLockAcquired();
         }
         catch (OperationCanceledException)
         {
+            _lifecycle = null;
             perCallChannel?.TryComplete();
             throw;
         }
 
         _currentExecutionId = executionId;
-        _currentCommand     = $"{command} {arguments}";
-        _executionStartedUtc = DateTime.UtcNow;
+        _currentCommand     = lifecycle.RedactedCommand;
+        _executionStartedUtc = lifecycle.StartedUtc;
 
         var record = _tracker.BeginTracked(executionId, command, arguments);
 
@@ -215,7 +262,7 @@ public sealed class CommandExecutor : IDisposable
                 detail: $"PID {_currentProcess.Id} launched",
                 perCallChannel: perCallChannel);
 
-            SetActivity($"Executing: {command} {arguments}");
+            SetActivity($"Executing: {SecurityRedactor.RedactCommandLine(command, arguments)}");
             _lastError = string.Empty;
 
             // ── STREAM STDOUT + STDERR concurrently ────────────────
@@ -393,12 +440,13 @@ public sealed class CommandExecutor : IDisposable
             _currentExecutionId = null;
             _currentCommand = null;
             _executionStartedUtc = null;
+            _lifecycle = null;
 
             try
             {
                 SetActivity(isReboot
-                    ? $"Reboot pending: {command} {arguments}"
-                    : $"Finished: {command} {arguments}");
+                    ? $"Reboot pending: {SecurityRedactor.RedactCommandLine(command, arguments)}"
+                    : $"Finished: {SecurityRedactor.RedactCommandLine(command, arguments)}");
             }
             catch (Exception ex)
             {
@@ -508,6 +556,7 @@ public sealed class CommandExecutor : IDisposable
     {
         try
         {
+            _lifecycle?.RequestTermination("Controller request");
             KillCurrentProcess();
             if (_currentExecutionId is not null)
             {
@@ -548,12 +597,14 @@ public sealed class CommandExecutor : IDisposable
     public void ForceReady()
     {
         _logger.LogWarning("ForceReady invoked — forcibly resetting agent state");
+        _lifecycle?.MarkReset("ForceReady invoked");
         try { KillCurrentProcess(); } catch { /* best effort */ }
         try { _currentProcess?.Dispose(); } catch { /* best effort */ }
         _currentProcess = null;
         _currentExecutionId = null;
         _currentCommand = null;
         _executionStartedUtc = null;
+        _lifecycle = null;
 
         _state = AgentState.Ready;
         try { StateChanged?.Invoke(this, AgentState.Ready); } catch { /* swallow */ }
@@ -697,9 +748,10 @@ public sealed class CommandExecutor : IDisposable
 
     private void SetActivity(string activity)
     {
-        _activity = activity;
-        _logger.LogInformation("Activity: {Activity}", activity);
-        ActivityChanged?.Invoke(this, activity);
+        var redactedActivity = SecurityRedactor.Redact(activity) ?? string.Empty;
+        _activity = redactedActivity;
+        _logger.LogInformation("Activity: {Activity}", redactedActivity);
+        ActivityChanged?.Invoke(this, redactedActivity);
     }
 
     // ── Event construction ─────────────────────────────────────────────
@@ -734,14 +786,14 @@ public sealed class CommandExecutor : IDisposable
             Timestamp   = Timestamp.FromDateTime(DateTime.UtcNow),
             EventType   = type,
         };
-        if (outputLine   is not null) evt.OutputLine   = outputLine;
+        if (outputLine   is not null) evt.OutputLine   = SecurityRedactor.Redact(outputLine) ?? string.Empty;
         if (outputKind   is not null) evt.OutputKind    = outputKind.Value;
         if (exitCode     is not null) evt.ExitCode      = exitCode.Value;
-        if (errorMessage is not null) evt.ErrorMessage  = errorMessage;
+        if (errorMessage is not null) evt.ErrorMessage  = SecurityRedactor.Redact(errorMessage) ?? string.Empty;
         if (agentState   is not null) evt.AgentState    = agentState.Value;
-        if (command      is not null) evt.Command       = command;
-        if (arguments    is not null) evt.Arguments     = arguments;
-        if (detail       is not null) evt.Detail        = detail;
+        if (command      is not null) evt.Command       = SecurityRedactor.Redact(command) ?? string.Empty;
+        if (arguments    is not null) evt.Arguments     = SecurityRedactor.Redact(arguments) ?? string.Empty;
+        if (detail       is not null) evt.Detail        = SecurityRedactor.Redact(detail) ?? string.Empty;
         if (progressPct  is not null) evt.ProgressPct   = progressPct.Value;
         return evt;
     }

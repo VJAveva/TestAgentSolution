@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestController.Api.Hubs;
 
@@ -11,10 +13,20 @@ namespace TestController.Api.Hubs;
 public sealed class ControllerHub : Hub
 {
     private readonly ILogger<ControllerHub> _logger;
+    private readonly IAgentGrpcDispatcher _dispatcher;
+    private readonly AgentLockManager _lockManager;
+    private readonly ExecutionSessionManager _sessionManager;
 
-    public ControllerHub(ILogger<ControllerHub> logger)
+    public ControllerHub(
+        ILogger<ControllerHub> logger,
+        IAgentGrpcDispatcher dispatcher,
+        AgentLockManager lockManager,
+        ExecutionSessionManager sessionManager)
     {
         _logger = logger;
+        _dispatcher = dispatcher;
+        _lockManager = lockManager;
+        _sessionManager = sessionManager;
     }
 
     /// <summary>Subscribe to events for a specific session.</summary>
@@ -63,5 +75,122 @@ public sealed class ControllerHub : Hub
         _logger.LogInformation("[SignalR] Client disconnected: {ConnectionId}. Reason: {Reason}",
             Context.ConnectionId, exception?.Message ?? "clean");
         await base.OnDisconnectedAsync(exception);
+    }
+
+    /// <summary>
+    /// Client calls this on connect or reconnect to get the current
+    /// fleet snapshot before applying incremental updates.
+    /// </summary>
+    public IReadOnlyList<AgentFleetGroupDto> RequestFleetSnapshot()
+    {
+        return BuildFleetSnapshot();
+    }
+
+    private IReadOnlyList<AgentFleetGroupDto> BuildFleetSnapshot()
+    {
+        var agents = _dispatcher.RegisteredAgents.ToList();
+        var allHealth = _dispatcher.GetAllAgentHealth();
+        var allLocks = _lockManager.GetAllLocks();
+
+        var dtos = new List<AgentFleetDto>();
+        foreach (var agentName in agents)
+        {
+            var dto = BuildAgentFleetDto(agentName, allHealth, allLocks);
+            dtos.Add(dto);
+        }
+
+        var assigned = dtos
+            .Where(a => a.GroupKey != null)
+            .GroupBy(a => a.GroupKey!)
+            .Select(g => new AgentFleetGroupDto(
+                GroupKey: g.Key,
+                Title: g.First().CurrentTestSet ?? g.Key.Replace("_", " "),
+                Owner: g.First().Owner,
+                IsAvailablePool: false,
+                Agents: g.OrderBy(a => a.AgentId).ToList()))
+            .OrderBy(g => g.Title)
+            .ToList();
+
+        var available = new AgentFleetGroupDto(
+            GroupKey: "Available",
+            Title: "Available",
+            Owner: null,
+            IsAvailablePool: true,
+            Agents: dtos.Where(a => a.GroupKey == null).OrderBy(a => a.AgentId).ToList());
+
+        return assigned.Concat(new[] { available }).ToList();
+    }
+
+    private AgentFleetDto BuildAgentFleetDto(
+        string agentName,
+        IReadOnlyDictionary<string, AgentHealthState> allHealth,
+        IReadOnlyList<AgentLockManager.AgentLock> allLocks)
+    {
+        allHealth.TryGetValue(agentName, out var health);
+        var agentLock = allLocks.FirstOrDefault(l =>
+            string.Equals(l.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+
+        // Offline
+        if (health != null && !health.IsHealthy && agentLock == null)
+        {
+            return new AgentFleetDto(
+                AgentId: agentName, DisplayName: agentName,
+                Status: AgentFleetStatus.Offline,
+                CurrentTestSet: null, ProgressPercent: null,
+                CompletedCount: null, TotalCount: null,
+                StatusMessage: "Offline", GroupKey: null, Owner: null);
+        }
+
+        // Idle (no lock)
+        if (agentLock == null)
+        {
+            return new AgentFleetDto(
+                AgentId: agentName, DisplayName: agentName,
+                Status: AgentFleetStatus.Idle,
+                CurrentTestSet: null, ProgressPercent: null,
+                CompletedCount: null, TotalCount: null,
+                StatusMessage: null, GroupKey: null, Owner: null);
+        }
+
+        // Locked — derive state from session
+        var session = _sessionManager.GetSession(agentLock.SessionId);
+        var summary = session?.GetAgentSummaries()
+            .FirstOrDefault(s => string.Equals(s.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+
+        var status = AgentFleetStatus.Waiting;
+        string? statusMessage = null;
+        string? currentTestSet = agentLock.WatchItemTag;
+        int? progressPercent = null;
+        int? completed = null;
+        int? total = null;
+
+        if (summary != null)
+        {
+            var hasFailed = summary.Actions.Any(a => a.Outcome == ActionOutcome.Failed);
+            var running = summary.Actions.FirstOrDefault(a => a.Outcome == ActionOutcome.Unknown);
+
+            if (hasFailed)
+            {
+                status = AgentFleetStatus.InstallFail;
+                statusMessage = "Install fail";
+            }
+            else if (running != null)
+            {
+                status = AgentFleetStatus.Running;
+                completed = summary.CompletedCount;
+                total = summary.TotalCount;
+                statusMessage = $"{completed}/{total} actions";
+            }
+        }
+
+        return new AgentFleetDto(
+            AgentId: agentName, DisplayName: agentName,
+            Status: status,
+            CurrentTestSet: currentTestSet,
+            ProgressPercent: progressPercent,
+            CompletedCount: completed, TotalCount: total,
+            StatusMessage: statusMessage,
+            GroupKey: agentLock.SessionId,
+            Owner: agentLock.UserId);
     }
 }

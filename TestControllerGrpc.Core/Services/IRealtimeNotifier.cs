@@ -1,3 +1,5 @@
+using TestControllerGrpc.Models;
+
 namespace TestControllerGrpc.Services;
 
 /// <summary>
@@ -44,4 +46,13 @@ public interface IRealtimeNotifier
 
     /// <summary>Broadcast agent lock state changed. Event: "AgentLocksChanged"</summary>
     Task NotifyAgentLocksChanged(AgentLocksChangedEvent e);
+
+    /// <summary>Broadcast single agent fleet card update. Event: "FleetAgentUpdated"</summary>
+    Task NotifyFleetAgentUpdated(AgentFleetDto agent);
+
+    /// <summary>Broadcast agent removal from fleet panel. Event: "FleetAgentRemoved"</summary>
+    Task NotifyFleetAgentRemoved(string agentId);
+
+    /// <summary>Broadcast full fleet snapshot. Event: "FleetSnapshot"</summary>
+    Task NotifyFleetSnapshot(IReadOnlyList<AgentFleetGroupDto> groups);
 }

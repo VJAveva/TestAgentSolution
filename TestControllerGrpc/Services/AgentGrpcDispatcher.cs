@@ -27,6 +27,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     private readonly ILogger<AgentGrpcDispatcher> _logger;
     private readonly IAppLogger _appLogger;
     private readonly IEventAggregator _events;
+    private readonly IAgentTelemetryCache? _telemetryCache;
+    private readonly ControllerTimeoutOptions _timeouts;
     private readonly ConcurrentDictionary<string, AgentEndpoint> _agents = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _activeExecutions = new(StringComparer.OrdinalIgnoreCase);
@@ -37,11 +39,14 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     /// <summary>Raised when execution state changes.</summary>
     public event Action<string, string>? StatusChanged;  // agentName, status
 
-    public AgentGrpcDispatcher(ILogger<AgentGrpcDispatcher> logger, IAppLogger appLogger, IEventAggregator events)
+    public AgentGrpcDispatcher(ILogger<AgentGrpcDispatcher> logger, IAppLogger appLogger, IEventAggregator events,
+        IAgentTelemetryCache? telemetryCache = null, ControllerTimeoutOptions? timeouts = null)
     {
         _logger = logger;
         _appLogger = appLogger;
         _events = events;
+        _telemetryCache = telemetryCache;
+        _timeouts = timeouts ?? new ControllerTimeoutOptions();
     }
 
     /// <summary>
@@ -55,7 +60,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         // Dispose old endpoint if re-registering same name
         if (_agents.TryRemove(agentName, out var old))
             old.Dispose();
-        _agents[agentName] = new AgentEndpoint(agentName, grpcAddress);
+        _agents[agentName] = new AgentEndpoint(agentName, grpcAddress, _timeouts);
         _healthStates[agentName] = new AgentHealthState { AgentName = agentName };
         _logger.LogInformation("Registered agent {Name} \u2192 {Address}", agentName, grpcAddress);
         _events.Publish(new AgentRegisteredEvent(agentName, grpcAddress));
@@ -67,6 +72,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     public bool UnregisterAgent(string agentName)
     {
         _healthStates.TryRemove(agentName, out _);
+        _telemetryCache?.Remove(agentName);
         if (_agents.TryRemove(agentName, out var ep))
         {
             ep.Dispose();
@@ -108,13 +114,14 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.TestConnectionTimeoutSeconds));
 
             var client = endpoint.GetClient();
             var snapshot = await client.GetAgentSnapshotAsync(
                 new Empty(), cancellationToken: cts.Token);
 
             RecordSuccess(agentName);
+            _telemetryCache?.Update(agentName, snapshot, snapshot.Metrics);
             StatusChanged?.Invoke(agentName, $"Online \u2014 {snapshot.State}");
             return (snapshot, null);
         }
@@ -130,12 +137,14 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             try
             {
                 using var cts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts2.CancelAfter(TimeSpan.FromSeconds(5));
+                cts2.CancelAfter(TimeSpan.FromSeconds(_timeouts.TestConnectionTimeoutSeconds));
                 var client = endpoint.GetClient();
                 var state = await client.GetStateAsync(new Empty(), cancellationToken: cts2.Token);
                 RecordSuccess(agentName);
                 StatusChanged?.Invoke(agentName, $"Online \u2014 {state.State} (legacy)");
-                return (new AgentSnapshot { AgentName = agentName, State = state.State }, null);
+                var legacySnapshot = new AgentSnapshot { AgentName = agentName, State = state.State };
+                _telemetryCache?.Update(agentName, legacySnapshot, null);
+                return (legacySnapshot, null);
             }
             catch (Exception ex2)
             {
@@ -146,7 +155,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         catch (OperationCanceledException)
         {
             RecordFailure(agentName);
-            return (null, $"Connection to '{agentName}' timed out (5s)");
+            return (null, $"Connection to '{agentName}' timed out ({_timeouts.TestConnectionTimeoutSeconds}s)");
         }
         catch (Exception ex)
         {
@@ -163,6 +172,19 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         string agentName, CancellationToken ct = default)
     {
         var steps = new List<DiagnosticStep>();
+
+        // ── SAFEGUARD: Do not make gRPC/network calls during active execution ──
+        // Diagnostics steps 3-6 (TCP, HTTP, gRPC×2) would risk HTTP/2 RST_STREAM
+        // on the same channel that is streaming command output.
+        if (IsAgentExecuting(agentName))
+        {
+            steps.Add(new("Registration", true, $"Agent '{agentName}' is registered"));
+            steps.Add(new("Execution Guard", true,
+                "Diagnostics skipped — agent is currently executing. " +
+                "Network/gRPC calls suppressed to protect active command stream.",
+                IsFatal: false));
+            return steps;
+        }
 
         // Step 0: Check registered
         if (!_agents.TryGetValue(agentName, out var endpoint))
@@ -208,13 +230,13 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         {
             using var tcp = new System.Net.Sockets.TcpClient();
             using var tcpCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            tcpCts.CancelAfter(TimeSpan.FromSeconds(3));
+            tcpCts.CancelAfter(TimeSpan.FromSeconds(_timeouts.DiagnosticsTcpTimeoutSeconds));
             await tcp.ConnectAsync(uri.Host, uri.Port, tcpCts.Token);
             steps.Add(new("TCP Connect", true, $"Port {uri.Port} is open"));
         }
         catch (OperationCanceledException)
         {
-            steps.Add(new("TCP Connect", false, $"Port {uri.Port} connection timed out (3s) — firewall?"));
+            steps.Add(new("TCP Connect", false, $"Port {uri.Port} connection timed out ({_timeouts.DiagnosticsTcpTimeoutSeconds}s) — firewall?"));
             return steps;
         }
         catch (Exception ex)
@@ -226,7 +248,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         // Step 4: HTTP/2 check via plain HTTP endpoint
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(_timeouts.DiagnosticsHttpTimeoutSeconds) };
             var response = await http.GetAsync($"{uri.Scheme}://{uri.Host}:{uri.Port}/", ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             var preview = body.Length > 80 ? body[..80] + "…" : body;
@@ -243,7 +265,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.DiagnosticsGrpcTimeoutSeconds));
             var client = endpoint.GetClient();
             var state = await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);
             steps.Add(new("gRPC GetState", true, $"Agent state: {state.State}"));
@@ -264,7 +286,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.DiagnosticsGrpcTimeoutSeconds));
             var client = endpoint.GetClient();
             var snapshot = await client.GetAgentSnapshotAsync(new Empty(), cancellationToken: cts.Token);
             var metricsStr = snapshot.Metrics is not null
@@ -300,7 +322,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3));
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.PingTimeoutSeconds));
             var client = endpoint.GetClient();
             await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);
             return true;
@@ -324,7 +346,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         var resolved = ParameterResolver.ResolveAction(action, ctx);
         var agentName = resolved.AgentName.Trim();
         var correlationId = ctx.SessionId ?? Guid.NewGuid().ToString("N")[..8];
-        var cmdShort = $"{resolved.Command} {resolved.Parameters}".Trim();
+        var cmdShort = SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters).Trim();
         if (cmdShort.Length > 80) cmdShort = cmdShort[..80] + "…";
 
         if (!_agents.TryGetValue(agentName, out var endpoint))
@@ -338,7 +360,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         _appLogger.Log(LogLevel.Information, "Dispatch",
             $"[{agentName}] → {cmdShort} (timeout={resolved.Timeout}s, isReboot={resolved.IsReboot})",
             correlationId);
-        StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
+        StatusChanged?.Invoke(agentName, $"Executing: {SecurityRedactor.Redact(resolved.Command)}");
         var startTimestamp = Stopwatch.GetTimestamp();
 
         // Wait for agent to become free if it's still cleaning up from a previous command.
@@ -375,13 +397,13 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     {
                         _logger.LogInformation(
                             "Long-running action on {Agent}: {Command} running for {Elapsed}",
-                            a, cmd, elapsed.ToString(@"hh\:mm\:ss"));
+                            a, SecurityRedactor.Redact(cmd), elapsed.ToString(@"hh\:mm\:ss"));
                         StatusChanged?.Invoke(a,
-                            $"Running: {cmd} ({elapsed:hh\\:mm\\:ss})");
+                            $"Running: {SecurityRedactor.Redact(cmd)} ({elapsed:hh\\:mm\\:ss})");
                     });
 
                 // If agent rejected the command because it's still busy (e.g. draining
-                // stdout from a long install), wait and retry up to 2 minutes.
+                // stdout from a long install), wait and retry up to configured recovery time.
                 if (streamResult.ExitCode == -1 &&
                     streamResult.ErrorMessage.Contains("busy", StringComparison.OrdinalIgnoreCase))
                 {
@@ -389,42 +411,43 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                         "Agent {Agent} rejected command (busy). Waiting for agent to become free before retrying...",
                         agentName);
                     _appLogger.Warn("Dispatch",
-                        $"[{agentName}] BUSY — agent rejected '{cmdShort}'. Starting 2-min recovery wait...");
+                        $"[{agentName}] BUSY — agent rejected '{cmdShort}'. Starting {_timeouts.BusyRecoveryMaxSeconds}s recovery wait...");
                     StatusChanged?.Invoke(agentName, "Agent busy \u2014 waiting to retry...");
 
-                    // Wait up to 2 minutes in 10s intervals for the agent to become Ready
+                    // Wait up to configured time in configured intervals for the agent to become Ready
+                    var maxAttempts = _timeouts.BusyRecoveryMaxSeconds / _timeouts.BusyRecoveryIntervalSeconds;
                     bool becameFree = false;
-                    for (int retryWait = 0; retryWait < 12; retryWait++)
+                    for (int retryWait = 0; retryWait < maxAttempts; retryWait++)
                     {
-                        await Task.Delay(10_000, resilienceCt);
+                        await Task.Delay(_timeouts.BusyRecoveryIntervalSeconds * 1000, resilienceCt);
                         try
                         {
                             var state = await client.GetStateAsync(new Empty(),
-                                deadline: DateTime.UtcNow.AddSeconds(5),
+                                deadline: DateTime.UtcNow.AddSeconds(_timeouts.TestConnectionTimeoutSeconds),
                                 cancellationToken: resilienceCt);
                             if (state.State != AgentState.Running)
                             {
                                 _appLogger.Info("Dispatch",
-                                    $"[{agentName}] Agent became free after {(retryWait + 1) * 10}s — retrying command");
+                                    $"[{agentName}] Agent became free after {(retryWait + 1) * _timeouts.BusyRecoveryIntervalSeconds}s — retrying command");
                                 StatusChanged?.Invoke(agentName, "Agent free \u2014 retrying command");
                                 becameFree = true;
                                 break;
                             }
                             StatusChanged?.Invoke(agentName,
-                                $"Agent still busy \u2014 waiting ({retryWait + 1}/12)");
+                                $"Agent still busy \u2014 waiting ({retryWait + 1}/{maxAttempts})");
                         }
                         catch (RpcException) { becameFree = true; break; } // agent unreachable, proceed to retry
                     }
 
-                    // If the agent is still busy after 2 minutes, it's likely permanently
+                    // If the agent is still busy after recovery time, it's likely permanently
                     // stuck. Force-reset it before retrying.
                     if (!becameFree)
                     {
                         _logger.LogWarning(
-                            "Agent {Agent} still busy after 2 min wait — calling ForceReady to recover stuck state",
-                            agentName);
+                            "Agent {Agent} still busy after {Secs}s wait — calling ForceReady to recover stuck state",
+                            agentName, _timeouts.BusyRecoveryMaxSeconds);
                         _appLogger.Warn("Dispatch",
-                            $"[{agentName}] STUCK — still busy after 2 min. Calling ForceReady to recover...");
+                            $"[{agentName}] STUCK — still busy after {_timeouts.BusyRecoveryMaxSeconds}s. Calling ForceReady to recover...");
                         try
                         {
                             await client.ForceReadyAsync(new Empty(),
@@ -475,9 +498,9 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                         {
                             _logger.LogInformation(
                                 "Long-running action on {Agent}: {Command} running for {Elapsed}",
-                                a, cmd, elapsed.ToString(@"hh\:mm\:ss"));
+                                a, SecurityRedactor.Redact(cmd), elapsed.ToString(@"hh\:mm\:ss"));
                             StatusChanged?.Invoke(a,
-                                $"Running: {cmd} ({elapsed:hh\\:mm\\:ss})");
+                                $"Running: {SecurityRedactor.Redact(cmd)} ({elapsed:hh\\:mm\\:ss})");
                         });
                 }
 
@@ -527,7 +550,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             {
                 _logger.LogWarning(
                     "Action cancelled by user on {Agent} after {Elapsed}: {Command}",
-                    agentName, elapsed.ToString(@"hh\:mm\:ss"), resolved.Command);
+                    agentName, elapsed.ToString(@"hh\:mm\:ss"), SecurityRedactor.Redact(resolved.Command));
                 _appLogger.Warn("Dispatch",
                     $"[{agentName}] Cancelled by user after {elapsed:hh\\:mm\\:ss}: {cmdShort}");
                 return new ActionResult(false, -1,
@@ -578,7 +601,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
             _logger.LogError(
                 "Agent {Agent} hit Polly outer timeout for: {Command}",
-                agentName, resolved.Command);
+                agentName, SecurityRedactor.Redact(resolved.Command));
             _appLogger.Error("Dispatch",
                 $"[{agentName}] HARD TIMEOUT (24h safety net) for '{cmdShort}' after {elapsed:hh\\:mm\\:ss}");
             return new ActionResult(false, -1,
@@ -589,7 +612,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
             _logger.LogWarning(
                 "Action cancelled by user on {Agent} after {Elapsed}: {Command}",
-                agentName, elapsed.ToString(@"hh\:mm\:ss"), resolved.Command);
+                agentName, elapsed.ToString(@"hh\:mm\:ss"), SecurityRedactor.Redact(resolved.Command));
             _appLogger.Warn("Dispatch",
                 $"[{agentName}] Cancelled by user after {elapsed:hh\\:mm\\:ss}: {cmdShort}");
             return new ActionResult(false, -1,
@@ -603,7 +626,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 "Action TIMED OUT on {Agent} after {Elapsed}: {Command}. " +
                 "Configured timeout: {Timeout}s. Exception: {Error}",
                 agentName, elapsed.ToString(@"hh\:mm\:ss"),
-                resolved.Command, resolved.Timeout, ex.Message);
+                SecurityRedactor.Redact(resolved.Command), resolved.Timeout, SecurityRedactor.Redact(ex.Message));
 
             var detail = resolved.Timeout > 0
                 ? $"Timed out after {elapsed:hh\\:mm\\:ss} (limit: {resolved.Timeout}s). "
@@ -678,18 +701,18 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             if (process is null)
                 return new ActionResult(false, -1, "Failed to start process");
 
-            OutputReceived?.Invoke("Controller", $"PID {process.Id}: {fileName} {arguments}", "info");
+            OutputReceived?.Invoke("Controller", $"PID {process.Id}: {SecurityRedactor.RedactCommandLine(fileName, arguments)}", "info");
 
             var stdoutTask = Task.Run(async () =>
             {
                 while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
-                    OutputReceived?.Invoke("Controller", line, "stdout");
+                    OutputReceived?.Invoke("Controller", SecurityRedactor.Redact(line) ?? string.Empty, "stdout");
             }, ct);
 
             var stderrTask = Task.Run(async () =>
             {
                 while (await process.StandardError.ReadLineAsync(ct) is { } line)
-                    OutputReceived?.Invoke("Controller", line, "stderr");
+                    OutputReceived?.Invoke("Controller", SecurityRedactor.Redact(line) ?? string.Empty, "stderr");
             }, ct);
 
             await process.WaitForExitAsync(ct);
@@ -721,7 +744,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     var output = await checkProcess.StandardOutput.ReadToEndAsync(ct);
                     await checkProcess.WaitForExitAsync(ct);
 
-                    OutputReceived?.Invoke("Controller", $"Completion check: {output.Trim()}", "info");
+                    OutputReceived?.Invoke("Controller", $"Completion check: {SecurityRedactor.Redact(output.Trim())}", "info");
 
                     if (checkProcess.ExitCode != 0 || output.Contains("DONE", StringComparison.OrdinalIgnoreCase))
                     {
@@ -735,7 +758,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             if (process.ExitCode != 0)
             {
                 var errDetail = ClassifyExitCode(process.ExitCode, resolved.Command, "");
-                var errMsg = $"Local command failed: {fileName} {arguments}. {errDetail}".TrimEnd();
+                var errMsg = $"Local command failed: {SecurityRedactor.RedactCommandLine(fileName, arguments)}. {errDetail}".TrimEnd();
                 OutputReceived?.Invoke("Controller", $"[FAIL] Exit code {process.ExitCode}: {errDetail}", "stderr");
                 return new ActionResult(false, process.ExitCode, errMsg);
             }
@@ -810,30 +833,32 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         TestAgentService.TestAgentServiceClient client,
         string agentName, CancellationToken ct)
     {
+        var intervalMs = (_timeouts.WaitForAgentFreeMaxSeconds * 1000) / 6;
         for (int attempt = 0; attempt < 6; attempt++)
         {
             try
             {
                 var reply = await client.GetStateAsync(new Empty(),
-                    deadline: DateTime.UtcNow.AddSeconds(5),
+                    deadline: DateTime.UtcNow.AddSeconds(_timeouts.TestConnectionTimeoutSeconds),
                     cancellationToken: ct);
 
                 if (reply.State != AgentState.Running)
                     return;
 
                 _logger.LogWarning(
-                    "Agent {Agent} still busy (attempt {N}/6). Waiting 5s for previous command to finish...",
+                    "Agent {Agent} still busy (attempt {N}/6). Waiting for previous command to finish...",
                     agentName, attempt + 1);
                 StatusChanged?.Invoke(agentName, $"Waiting for previous command to finish ({attempt + 1}/6)");
-                await Task.Delay(5000, ct);
+                await Task.Delay(intervalMs, ct);
             }
             catch (RpcException) { return; } // agent unreachable — proceed, will fail on the actual call
             catch (OperationCanceledException) { throw; }
         }
 
-        _logger.LogWarning("Agent {Agent} still busy after 30s — proceeding anyway", agentName);
+        _logger.LogWarning("Agent {Agent} still busy after {Secs}s — proceeding anyway",
+            agentName, _timeouts.WaitForAgentFreeMaxSeconds);
         _appLogger.Warn("Dispatch",
-            $"[{agentName}] Pre-check: still busy after 30s polling — proceeding with dispatch");
+            $"[{agentName}] Pre-check: still busy after {_timeouts.WaitForAgentFreeMaxSeconds}s polling — proceeding with dispatch");
     }
 
     private async Task WaitForAgentReady(
@@ -896,6 +921,51 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         _healthStates.Clear();
     }
 
+    /// <summary>
+    /// Resets the gRPC channel for a given agent by disposing the old connection and
+    /// creating a new one. Blocked during active execution.
+    /// Returns true if the new channel is reachable (ping succeeds after reset).
+    /// </summary>
+    public async Task<bool> ResetChannelAsync(string agentName)
+    {
+        // Never reset during active execution — would kill the command stream
+        if (IsAgentExecuting(agentName))
+        {
+            _logger.LogWarning("Channel reset blocked for {Agent} — execution in progress", agentName);
+            return false;
+        }
+
+        if (!_agents.TryGetValue(agentName, out var oldEndpoint))
+        {
+            _logger.LogWarning("Channel reset failed — agent {Agent} not registered", agentName);
+            return false;
+        }
+
+        var address = oldEndpoint.Address;
+
+        // Dispose old channel
+        oldEndpoint.Dispose();
+
+        // Create fresh endpoint with same address
+        var newEndpoint = new AgentEndpoint(agentName, address, _timeouts);
+        _agents[agentName] = newEndpoint;
+
+        // Reset health state
+        if (_healthStates.TryGetValue(agentName, out var health))
+        {
+            health.ConsecutiveFailures = 0;
+            health.IsHealthy = true;
+            health.CircuitOpenedUtc = null;
+            health.LastSuccessUtc = null;
+        }
+
+        _logger.LogInformation("Channel reset for agent {Agent} at {Address}", agentName, address);
+        _appLogger.Log(LogLevel.Information, "Channel", $"Channel reset for {agentName}");
+
+        // Verify the new channel works
+        return await PingAsync(agentName);
+    }
+
     // ── Health tracking helpers ────────────────────────────────────────
 
     private void RecordSuccess(string agentName)
@@ -922,6 +992,21 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     "Agent {Agent} marked unhealthy after {Failures} consecutive failures",
                     agentName, state.ConsecutiveFailures);
             }
+
+            // Auto-reset channel after sustained failures (likely dead TCP connection)
+            if (state.ConsecutiveFailures == _timeouts.AutoResetFailureThreshold && !IsAgentExecuting(agentName))
+            {
+                _logger.LogWarning("Auto-resetting channel for {Agent} after {Failures} failures",
+                    agentName, state.ConsecutiveFailures);
+                _ = Task.Run(async () =>
+                {
+                    try { await ResetChannelAsync(agentName); }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Auto-reset failed for {Agent}", agentName);
+                    }
+                });
+            }
         }
     }
 
@@ -934,21 +1019,22 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         private readonly GrpcChannel _channel;
         private readonly TestAgentService.TestAgentServiceClient _client;
 
-        public AgentEndpoint(string name, string address)
+        public AgentEndpoint(string name, string address, ControllerTimeoutOptions? timeouts = null)
         {
+            var t = timeouts ?? new ControllerTimeoutOptions();
             Name = name;
             Address = address;
             var handler = new SocketsHttpHandler
             {
                 EnableMultipleHttp2Connections = true,
-                ConnectTimeout               = TimeSpan.FromSeconds(30),
+                ConnectTimeout               = TimeSpan.FromSeconds(t.ChannelConnectTimeoutSeconds),
                 // Keep gRPC streams alive during long test runs (2-4+ hours).
                 // Pings every 60s prevent proxies/firewalls from killing
                 // idle-looking HTTP/2 streams when no stdout is flowing.
-                KeepAlivePingDelay            = TimeSpan.FromSeconds(60),
-                KeepAlivePingTimeout          = TimeSpan.FromSeconds(30),
+                KeepAlivePingDelay            = TimeSpan.FromSeconds(t.KeepAlivePingDelaySeconds),
+                KeepAlivePingTimeout          = TimeSpan.FromSeconds(t.KeepAlivePingTimeoutSeconds),
                 KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
-                PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
+                PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(t.PooledConnectionIdleMinutes),
                 // Do NOT recycle connections with a short lifetime.
                 PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
             };
@@ -968,8 +1054,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             Resilience = new ResiliencePipelineBuilder()
                 .AddRetry(new RetryStrategyOptions
                 {
-                    MaxRetryAttempts = 3,
-                    Delay = TimeSpan.FromSeconds(1),
+                    MaxRetryAttempts = t.RetryMaxAttempts,
+                    Delay = TimeSpan.FromSeconds(t.RetryDelaySeconds),
                     BackoffType = DelayBackoffType.Exponential,
                     ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
                         ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
@@ -979,12 +1065,11 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     FailureRatio = 0.5,
                     SamplingDuration = TimeSpan.FromSeconds(30),
                     MinimumThroughput = 5,
-                    BreakDuration = TimeSpan.FromSeconds(15),
+                    BreakDuration = TimeSpan.FromSeconds(t.CircuitBreakerBreakSeconds),
                 })
-                // Outer safety net: 24 hours. Individual action Timeout (in seconds)
-                // is enforced separately via CancellationTokenSource in ExecuteRemoteCommandAsync.
-                // The previous 60-minute limit killed long installs (e.g., SP upgrades that take 2–3 hours).
-                .AddTimeout(TimeSpan.FromHours(24))
+                // Outer safety net: configurable (default 24 hours).
+                // Individual action Timeout is enforced separately via CancellationTokenSource.
+                .AddTimeout(TimeSpan.FromHours(t.OuterSafetyNetTimeoutHours))
                 .Build();
         }
 

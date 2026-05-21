@@ -67,6 +67,17 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
 
     public bool IsAgentExecuting(string agentName) => false; // WebApi doesn't run long-lived streams
 
+    public async Task<bool> ResetChannelAsync(string agentName)
+    {
+        if (!_registry.TryGet(agentName, out var entry))
+            return false;
+
+        _clientManager.RemoveChannel(entry.Address);
+        // Re-creating on next call is automatic in AgentGrpcClientManager
+        _logger.LogInformation("Channel reset for agent {Agent}", agentName);
+        return await PingAsync(agentName);
+    }
+
     // ?? Connectivity ???????????????????????????????????????????????????
 
     public async Task<(AgentSnapshot? Snapshot, string? Error)> TestConnectionAsync(
@@ -176,7 +187,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             return new ActionResult(false, -1, msg);
         }
 
-        StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
+        StatusChanged?.Invoke(agentName, $"Executing: {SecurityRedactor.Redact(resolved.Command)}");
         var startTimestamp = Stopwatch.GetTimestamp();
 
         // Wait for agent to become free if it's still cleaning up from a previous command.
@@ -276,7 +287,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 "Action TIMED OUT on {Agent} after {Elapsed}: {Command}. " +
                 "Configured timeout: {Timeout}s. Exception: {Error}",
                 agentName, elapsed.ToString(@"hh\:mm\:ss"),
-                resolved.Command, resolved.Timeout, ex.Message);
+                SecurityRedactor.Redact(resolved.Command), resolved.Timeout, SecurityRedactor.Redact(ex.Message));
 
             var detail = resolved.Timeout > 0
                 ? $"Timed out after {elapsed:hh\\:mm\\:ss} (limit: {resolved.Timeout}s). "
@@ -320,18 +331,18 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             if (process is null)
                 return new ActionResult(false, -1, "Failed to start process");
 
-            OutputReceived?.Invoke("Controller", $"PID {process.Id}: {fileName} {arguments}", "info");
+            OutputReceived?.Invoke("Controller", $"PID {process.Id}: {SecurityRedactor.RedactCommandLine(fileName, arguments)}", "info");
 
             var stdoutTask = Task.Run(async () =>
             {
                 while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
-                    OutputReceived?.Invoke("Controller", line, "stdout");
+                    OutputReceived?.Invoke("Controller", SecurityRedactor.Redact(line) ?? string.Empty, "stdout");
             }, ct);
 
             var stderrTask = Task.Run(async () =>
             {
                 while (await process.StandardError.ReadLineAsync(ct) is { } line)
-                    OutputReceived?.Invoke("Controller", line, "stderr");
+                    OutputReceived?.Invoke("Controller", SecurityRedactor.Redact(line) ?? string.Empty, "stderr");
             }, ct);
 
             await process.WaitForExitAsync(ct);
@@ -363,7 +374,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                     var output = await checkProcess.StandardOutput.ReadToEndAsync(ct);
                     await checkProcess.WaitForExitAsync(ct);
 
-                    OutputReceived?.Invoke("Controller", $"Completion check: {output.Trim()}", "info");
+                    OutputReceived?.Invoke("Controller", $"Completion check: {SecurityRedactor.Redact(output.Trim())}", "info");
 
                     if (checkProcess.ExitCode != 0 || output.Contains("DONE", StringComparison.OrdinalIgnoreCase))
                     {
@@ -377,7 +388,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             if (process.ExitCode != 0)
             {
                 var detail = ExitCodeReference.Describe(process.ExitCode);
-                var errMsg = $"Local command failed: {fileName} {arguments}. [{detail}]".TrimEnd();
+                var errMsg = $"Local command failed: {SecurityRedactor.RedactCommandLine(fileName, arguments)}. [{detail}]".TrimEnd();
                 OutputReceived?.Invoke("Controller", $"[FAIL] Exit code {process.ExitCode}: {detail}", "stderr");
                 return new ActionResult(false, process.ExitCode, errMsg);
             }

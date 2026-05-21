@@ -30,10 +30,10 @@ public sealed record AuditEntry
 /// Persistent audit logging service.
 ///
 /// Writes JSON Lines (.jsonl) to a configurable directory with:
-///   • One file per day (audit_yyyy-MM-dd.jsonl)
-///   • Thread-safe non-blocking writes via <see cref="Channel{T}"/>
-///   • Automatic directory creation and old-file retention cleanup
-///   • Max file size rollover with numbered suffixes
+///   ï¿½ One file per day (audit_yyyy-MM-dd.jsonl)
+///   ï¿½ Thread-safe non-blocking writes via <see cref="Channel{T}"/>
+///   ï¿½ Automatic directory creation and old-file retention cleanup
+///   ï¿½ Max file size rollover with numbered suffixes
 /// </summary>
 public sealed class AuditLogger : IHostedService, IDisposable
 {
@@ -92,11 +92,12 @@ public sealed class AuditLogger : IHostedService, IDisposable
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _channel.Writer.TryComplete();
-        _cts?.Cancel();
 
         if (_flushTask is not null)
         {
-            try { await _flushTask.WaitAsync(cancellationToken); } catch { }
+            try { await _flushTask.WaitAsync(cancellationToken); }
+            catch (OperationCanceledException) { _cts?.Cancel(); }
+            catch { }
         }
     }
 
@@ -125,15 +126,15 @@ public sealed class AuditLogger : IHostedService, IDisposable
             Event       = eventName,
             Severity    = severity,
             ExecutionId = executionId,
-            Source      = source,
-            Controller  = controller,
-            Command     = command,
-            Arguments   = arguments,
-            Credentials = credentials,
+            Source      = SecurityRedactor.Redact(source),
+            Controller  = SecurityRedactor.Redact(controller),
+            Command     = SecurityRedactor.Redact(command),
+            Arguments   = SecurityRedactor.Redact(arguments),
+            Credentials = string.IsNullOrWhiteSpace(credentials) ? credentials : SecurityRedactor.Redacted,
             Pid         = pid,
             ExitCode    = exitCode,
             DurationMs  = durationMs,
-            Detail      = detail,
+            Detail      = SecurityRedactor.Redact(detail),
         };
 
         _channel.Writer.TryWrite(entry);
@@ -258,7 +259,7 @@ public sealed class AuditLogger : IHostedService, IDisposable
                 return rolloverPath;
         }
 
-        // Exhausted rollover slots — overwrite last
+        // Exhausted rollover slots ï¿½ overwrite last
         return Path.Combine(_settings.LogDirectory, $"{baseName}_999.jsonl");
     }
 

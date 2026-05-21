@@ -37,7 +37,7 @@ public sealed partial class MainViewModel
             }
             catch
             {
-                // Invalid regex — fall back to plain text
+                // Invalid regex ï¿½ fall back to plain text
                 _searchRegex = null;
             }
         }
@@ -79,7 +79,7 @@ public sealed partial class MainViewModel
             SearchMatchCount = 0;
     }
 
-    /// <summary>Pure filter predicate — no field access, fully parameterized for thread safety.</summary>
+    /// <summary>Pure filter predicate ï¿½ no field access, fully parameterized for thread safety.</summary>
     private static bool PassesFilter(LogEntryViewModel entry,
         bool hasTagFilter, bool hasAgentFilter, bool hasSessionFilter,
         bool hasSearchFilter, bool hasSeverityFilter,
@@ -303,6 +303,8 @@ public sealed partial class MainViewModel
     private void AddLog(string msg, LogSeverity severity = LogSeverity.Info,
         string sessionId = "", string agentName = "", string watchItemTag = "")
     {
+        msg = TestControllerGrpc.Services.SecurityRedactor.Redact(msg) ?? string.Empty;
+
         // Auto-detect severity from message content when using default
         if (severity == LogSeverity.Info)
         {
@@ -372,7 +374,7 @@ public sealed partial class MainViewModel
 
             if (lastError is not null)
             {
-                // Signal the view to scroll — uses the existing auto-scroll mechanism
+                // Signal the view to scroll ï¿½ uses the existing auto-scroll mechanism
                 // by temporarily ensuring the item is the last visible entry
                 ScrollToLogEntry?.Invoke(lastError);
             }

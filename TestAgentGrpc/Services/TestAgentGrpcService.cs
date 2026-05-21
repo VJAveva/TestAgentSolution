@@ -57,7 +57,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
     public override Task<RunCommandReply> RunCommand(RunCommandRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("RunCommand: {Cmd} {Args}", request.Command, request.Arguments);
+        _logger.LogInformation("RunCommand: {CmdLine}",
+            SecurityRedactor.RedactCommandLine(request.Command, request.Arguments));
 
         var (accepted, execId) = _executor.RunCommand(
             request.Command, request.Arguments, request.IsReboot, request.ExecutionId,
@@ -127,7 +128,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         IServerStreamWriter<ExecutionEvent> responseStream,
         ServerCallContext context)
     {
-        _logger.LogInformation("RunCommandStreamed: {Cmd} {Args}", request.Command, request.Arguments);
+        _logger.LogInformation("RunCommandStreamed: {CmdLine}",
+            SecurityRedactor.RedactCommandLine(request.Command, request.Arguments));
 
         // Convert timeout from seconds to milliseconds (0 = no timeout)
         var timeoutMs = request.TimeoutSeconds > 0 ? request.TimeoutSeconds * 1000 : 0;
@@ -257,13 +259,26 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             ExecutionsFailed    = _tracker.FailedCount,
             AgentStarted       = Timestamp.FromDateTime(_agentStartedUtc),
             Metrics            = _metrics.Collect(),
+            AgentVersion       = typeof(TestAgentGrpcService).Assembly.GetName().Version?.ToString() ?? "0.0.0",
         };
+        snapshot.Capabilities.AddRange(AgentCapabilities);
 
         if (_executor.ExecutionStartedUtc is { } started)
             snapshot.ExecutionStarted = Timestamp.FromDateTime(DateTime.SpecifyKind(started, DateTimeKind.Utc));
 
         return Task.FromResult(snapshot);
     }
+
+    private static readonly string[] AgentCapabilities =
+    [
+        "ForceReady",
+        "TerminateExecution",
+        "StreamedOutput",
+        "ExecutionHistory",
+        "AuditLog",
+        "ConnectionHealth",
+        "CommandPolicy",
+    ];
 
     /// <summary>
     /// Returns audit log entries matching the requested date range and filters.

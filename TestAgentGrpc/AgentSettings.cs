@@ -36,6 +36,13 @@ public sealed class AgentSettings
     /// </summary>
     public int MaxExecutionTimeoutMinutes { get; set; } = 120;
 
+    /// <summary>
+    /// Grace period (in minutes) the watchdog waits beyond <see cref="MaxExecutionTimeoutMinutes"/>
+    /// before forcibly resetting the agent. The normal CTS timeout should fire first;
+    /// this is the nuclear fallback. Default: 5 minutes.
+    /// </summary>
+    public int WatchdogGraceMinutes { get; set; } = 5;
+
     public string GetResolvedEndpoint() =>
         AgentEndpoint ?? $"http://{Environment.MachineName}:{GrpcPort}";
 }

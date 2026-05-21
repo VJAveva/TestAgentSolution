@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TestControllerGrpc.Services;
 
 namespace TestController.Api.Services;
@@ -27,38 +28,51 @@ public sealed class LockRecoveryService : BackgroundService
     private readonly ExecutionSessionManager _sessionManager;
     private readonly IEventAggregator _eventAggregator;
     private readonly ILogger<LockRecoveryService> _logger;
-
-    private static readonly TimeSpan OrphanCheckInterval = TimeSpan.FromMinutes(5);
+    private readonly LockRecoveryOptions _options;
 
     public LockRecoveryService(
         AgentLockManager lockManager,
         IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager,
         IEventAggregator eventAggregator,
-        ILogger<LockRecoveryService> logger)
+        ILogger<LockRecoveryService> logger,
+        IOptions<LockRecoveryOptions> options)
     {
         _lockManager = lockManager;
         _dispatcher = dispatcher;
         _sessionManager = sessionManager;
         _eventAggregator = eventAggregator;
         _logger = logger;
+        _options = options.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         // Wait for services to initialize
-        try { await Task.Delay(TimeSpan.FromSeconds(10), ct); }
+        try { await Task.Delay(_options.StartupDelay, ct); }
         catch (OperationCanceledException) { return; }
 
         await RecoverLocksFromAgentState(ct);
 
-        // Periodic orphan detection
+        // Periodic orphan detection with backoff
+        var currentInterval = _options.OrphanCheckInterval;
         while (!ct.IsCancellationRequested)
         {
-            try { await Task.Delay(OrphanCheckInterval, ct); }
+            try { await Task.Delay(currentInterval, ct); }
             catch (OperationCanceledException) { break; }
 
-            await DetectAndCleanOrphans(ct);
+            var cleaned = await DetectAndCleanOrphans(ct);
+            if (cleaned > 0)
+            {
+                // Reset to base interval when orphans were found
+                currentInterval = _options.OrphanCheckInterval;
+            }
+            else
+            {
+                // Back off when no orphans found
+                var next = TimeSpan.FromTicks((long)(currentInterval.Ticks * _options.BackoffMultiplier));
+                currentInterval = next < _options.MaxBackoffInterval ? next : _options.MaxBackoffInterval;
+            }
         }
     }
 
@@ -92,14 +106,14 @@ public sealed class LockRecoveryService : BackgroundService
                 if (isBusy)
                 {
                     _logger.LogInformation(
-                        "[LockRecovery] {Agent}: BUSY — lock validated (session: {Session}, pipeline: {Pipeline})",
+                        "[LockRecovery] {Agent}: BUSY ï¿½ lock validated (session: {Session}, pipeline: {Pipeline})",
                         agentLock.AgentName, agentLock.SessionId, agentLock.WatchItemTag);
                     validated++;
                 }
                 else
                 {
                     _logger.LogWarning(
-                        "[LockRecovery] {Agent}: FREE but lock exists — removing stale lock (was: {Pipeline} by {User})",
+                        "[LockRecovery] {Agent}: FREE but lock exists ï¿½ removing stale lock (was: {Pipeline} by {User})",
                         agentLock.AgentName, agentLock.WatchItemTag, agentLock.UserId);
                     _lockManager.ForceRelease(agentLock.AgentName);
                     staleRemoved++;
@@ -107,9 +121,9 @@ public sealed class LockRecoveryService : BackgroundService
             }
             catch (Exception ex)
             {
-                // Agent unreachable — keep lock (conservative: assume still busy)
+                // Agent unreachable ï¿½ keep lock (conservative: assume still busy)
                 _logger.LogWarning(
-                    "[LockRecovery] {Agent}: UNREACHABLE ({Error}) — keeping lock",
+                    "[LockRecovery] {Agent}: UNREACHABLE ({Error}) ï¿½ keeping lock",
                     agentLock.AgentName, ex.Message);
                 validated++;
             }
@@ -125,14 +139,14 @@ public sealed class LockRecoveryService : BackgroundService
 
     /// <summary>
     /// Periodic: finds locks with no matching active session and removes
-    /// them after confirming the agent is free.
+    /// them after confirming the agent is free. Returns the number of orphans cleaned.
     /// </summary>
-    private async Task DetectAndCleanOrphans(CancellationToken ct)
+    private async Task<int> DetectAndCleanOrphans(CancellationToken ct)
     {
         var orphans = _lockManager.FindOrphanedLocks(
             sessionId => _sessionManager.GetSession(sessionId) != null);
 
-        if (orphans.Count == 0) return;
+        if (orphans.Count == 0) return 0;
 
         _logger.LogWarning("[LockRecovery] Orphan detection: {Count} orphaned lock(s)", orphans.Count);
         int cleaned = 0;
@@ -146,18 +160,18 @@ public sealed class LockRecoveryService : BackgroundService
                 if (await IsAgentBusy(orphan.AgentName, ct))
                 {
                     _logger.LogWarning(
-                        "[LockRecovery] Orphan {Agent}: still BUSY — keeping lock",
+                        "[LockRecovery] Orphan {Agent}: still BUSY ï¿½ keeping lock",
                         orphan.AgentName);
                     continue;
                 }
             }
             catch
             {
-                continue; // Unreachable — keep lock
+                continue; // Unreachable ï¿½ keep lock
             }
 
             _logger.LogWarning(
-                "[LockRecovery] Orphan {Agent}: FREE and session {Session} gone — removing",
+                "[LockRecovery] Orphan {Agent}: FREE and session {Session} gone ï¿½ removing",
                 orphan.AgentName, orphan.SessionId);
             _lockManager.ForceRelease(orphan.AgentName);
             cleaned++;
@@ -165,6 +179,8 @@ public sealed class LockRecoveryService : BackgroundService
 
         if (cleaned > 0)
             BroadcastLockState("Orphan cleanup");
+
+        return cleaned;
     }
 
     private async Task<bool> IsAgentBusy(string agentName, CancellationToken ct)

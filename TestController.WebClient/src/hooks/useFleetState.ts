@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import type { FleetResponse, FleetAgent } from '../types/agentWorkspace';
 import { useSignalR } from './useSignalR';
+import { errorThrottle } from '../lib/errorThrottle';
 
 /**
  * Hook to load fleet state (all agents + lock status) and auto-refresh
@@ -22,10 +23,13 @@ export function useFleetState() {
         setFleet(data.agents);
         setLockVersion(data.lockVersion);
         setError(null);
+        errorThrottle.reset('fleet');
       }
     } catch (err: any) {
       if (mountedRef.current) {
-        setError(err?.message ?? 'Failed to fetch fleet');
+        if (errorThrottle.shouldReport('fleet')) {
+          setError(err?.message ?? 'Failed to fetch fleet');
+        }
       }
     } finally {
       if (mountedRef.current) setLoading(false);

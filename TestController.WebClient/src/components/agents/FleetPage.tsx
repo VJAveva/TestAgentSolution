@@ -1,5 +1,6 @@
 import { Server, Lock, Unlock, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useFleetState } from '../../hooks/useFleetState';
+import { isAgentOnline } from '../../lib/agentStatus';
 import type { FleetAgent } from '../../types/agentWorkspace';
 
 interface FleetPageProps {
@@ -48,9 +49,7 @@ export default function FleetPage({ onSelectAgent }: FleetPageProps) {
 }
 
 function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void }) {
-  const isOnline = ['Connected', 'Online', 'Healthy', 'AgentStateReady'].some(
-    s => agent.status.toLowerCase().includes(s.toLowerCase())
-  );
+  const isOnline = isAgentOnline(agent.status);
   const isBusy = agent.isLocked;
 
   const borderColor = isBusy

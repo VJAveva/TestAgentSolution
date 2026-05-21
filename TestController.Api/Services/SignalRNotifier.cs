@@ -151,7 +151,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             severity,
             category = entry.Category,
             agentName,
-            message = entry.Message,
+            message = SecurityRedactor.Redact(entry.Message),
         });
     }
 
@@ -165,8 +165,8 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
                 actionTag = action.ResolvedTag,
                 actionType = action.Type.ToString(),
                 agentName,
-                command = action.Command,
-                status,
+                command = SecurityRedactor.Redact(action.Command),
+                status = SecurityRedactor.Redact(status),
                 timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
             });
         }
@@ -198,10 +198,10 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             agentName       = e.AgentName,
             actionTag       = e.NodeTag,
             actionType      = e.ActionType,
-            command         = e.Command,
-            status          = e.Status,
+            command         = SecurityRedactor.Redact(e.Command),
+            status          = SecurityRedactor.Redact(e.Status),
             exitCode        = e.ExitCode,
-            errorMessage    = e.ErrorMessage,
+            errorMessage    = SecurityRedactor.Redact(e.ErrorMessage),
             duration        = e.Duration,
             progressPercent = e.ProgressPercent,
             timestamp       = DateTime.Now.ToString("HH:mm:ss.fff"),
@@ -220,12 +220,12 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         {
             sessionId = e.SessionId,
             agentName = e.AgentName,
-            line      = e.Line,
+            line      = SecurityRedactor.Redact(e.Line),
             kind      = e.Kind,
             timestamp = e.Timestamp.ToString("HH:mm:ss.fff"),
             severity,
             category  = "Output",
-            message   = $"[{e.AgentName}:{e.Kind}] {e.Line}",
+            message   = $"[{e.AgentName}:{e.Kind}] {SecurityRedactor.Redact(e.Line)}",
         });
     }
 
@@ -235,13 +235,13 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         SendSafe("AgentOutput", new
         {
             agentName,
-            line,
+            line = SecurityRedactor.Redact(line),
             kind,
             timestamp = ts,
             sessionId = "",
             severity = kind == "stderr" ? "Error" : "Info",
             category = "Output",
-            message = $"[{agentName}:{kind}] {line}",
+            message = $"[{agentName}:{kind}] {SecurityRedactor.Redact(line)}",
         });
     }
 
@@ -250,7 +250,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         SendSafe("AgentStatusChanged", new
         {
             agentName,
-            status,
+            status = SecurityRedactor.Redact(status),
             timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
         });
     }
@@ -354,7 +354,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
                         tag = action.ResolvedTag,
                         actionType = action.Type.ToString(),
                         agentName = agent,
-                        command = action.Command,
+                        command = SecurityRedactor.Redact(action.Command),
                         status = "Pending",
                     });
                     break;
@@ -417,7 +417,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     public Task NotifyAgentLocksChanged(AgentLocksChangedEvent e)
     {
         // Lock changes go to all connected clients (everyone needs to update UI)
-        return _hub.Clients.Group("global").SendAsync("AgentLocksChanged", new
+        return SendSafeAsync("AgentLocksChanged", new
         {
             locks = e.Locks,
             reason = e.Reason,
@@ -425,7 +425,21 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         });
     }
 
-    // ?? Transport ??????????????????????????????????????????????????????
+    // ── Fleet panel notifications ──────────────────────────────────────────────
+
+    public Task NotifyFleetAgentUpdated(AgentFleetDto agent)
+        => SendSafeAsync("FleetAgentUpdated", agent);
+
+    public Task NotifyFleetAgentRemoved(string agentId)
+        => SendSafeAsync("FleetAgentRemoved", agentId);
+
+    public Task NotifyFleetSnapshot(IReadOnlyList<AgentFleetGroupDto> groups)
+        => SendSafeAsync("FleetSnapshot", groups);
+
+    // ── Transport ──────────────────────────────────────────────────────────────
+
+    /// <summary>Broadcast timeout to prevent slow clients from blocking sends.</summary>
+    private static readonly TimeSpan BroadcastTimeout = TimeSpan.FromSeconds(5);
 
     private void SendSafe(string method, object? arg)
     {
@@ -436,10 +450,16 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     {
         try
         {
+            using var cts = new CancellationTokenSource(BroadcastTimeout);
             if (arg is not null)
-                await _hub.Clients.Group("global").SendAsync(method, arg);
+                await _hub.Clients.Group("global").SendAsync(method, arg, cts.Token);
             else
-                await _hub.Clients.Group("global").SendAsync(method);
+                await _hub.Clients.Group("global").SendAsync(method, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("SignalR broadcast timed out for {Method} after {Timeout}s",
+                method, BroadcastTimeout.TotalSeconds);
         }
         catch (Exception ex)
         {

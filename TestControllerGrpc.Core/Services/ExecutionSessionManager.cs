@@ -87,7 +87,7 @@ public sealed class ExecutionSessionManager
             AgentName: result.AgentName ?? "Controller",
             NodeTag: result.ActionTag,
             ActionType: result.ActionType,
-            Command: result.Command,
+            Command: SecurityRedactor.Redact(result.Command) ?? string.Empty,
             Status: "Running"));
     }
 
@@ -102,10 +102,10 @@ public sealed class ExecutionSessionManager
             AgentName: result.AgentName ?? "Controller",
             NodeTag: result.ActionTag,
             ActionType: result.ActionType,
-            Command: result.Command,
+            Command: SecurityRedactor.Redact(result.Command) ?? string.Empty,
             Status: MapOutcome(result.Outcome),
             ExitCode: result.ExitCode,
-            ErrorMessage: result.ErrorMessage,
+            ErrorMessage: SecurityRedactor.Redact(result.ErrorMessage),
             Duration: result.DurationText));
 
         // Throttled persist: at most once per 5 seconds during execution

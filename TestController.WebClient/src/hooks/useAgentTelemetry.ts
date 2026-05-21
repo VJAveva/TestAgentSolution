@@ -1,16 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import type { AgentTelemetry } from '../types/agentWorkspace';
+import { useConnectionStore } from '../stores/connectionStore';
+import { errorThrottle } from '../lib/errorThrottle';
+
+/** Default polling interval when no execution is active. */
+const DEFAULT_INTERVAL_MS = 2000;
+/** Backed-off interval when SignalR indicates active execution. */
+const BACKOFF_INTERVAL_MS = 15000;
 
 /**
  * Hook to poll agent telemetry at a configurable interval (default 2s).
- * Returned data maps to the /api/agents/{name}/telemetry endpoint.
+ * Automatically backs off to 15s when the SignalR connection is active
+ * and streaming execution events (active sessions detected).
+ *
+ * This prevents hammering the telemetry endpoint during installs/executions
+ * when real-time state is already pushed via SignalR.
  */
-export function useAgentTelemetry(agentName: string | null, intervalMs = 2000) {
+export function useAgentTelemetry(agentName: string | null, intervalMs = DEFAULT_INTERVAL_MS) {
   const [telemetry, setTelemetry] = useState<AgentTelemetry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const consecutiveFailures = useRef(0);
+
+  const signalRStatus = useConnectionStore(s => s.status);
+
+  // Back off when connected and likely receiving live events
+  const effectiveInterval = signalRStatus === 'connected'
+    ? BACKOFF_INTERVAL_MS
+    : intervalMs;
 
   const fetchTelemetry = useCallback(async () => {
     if (!agentName) return;
@@ -21,10 +40,15 @@ export function useAgentTelemetry(agentName: string | null, intervalMs = 2000) {
       if (mountedRef.current) {
         setTelemetry(data);
         setError(null);
+        consecutiveFailures.current = 0;
+        errorThrottle.reset('telemetry', agentName ?? '');
       }
     } catch (err: any) {
       if (mountedRef.current) {
-        setError(err?.message ?? 'Telemetry fetch failed');
+        consecutiveFailures.current++;
+        if (errorThrottle.shouldReport('telemetry', agentName ?? '')) {
+          setError(err?.message ?? 'Telemetry fetch failed');
+        }
       }
     }
   }, [agentName]);
@@ -41,14 +65,14 @@ export function useAgentTelemetry(agentName: string | null, intervalMs = 2000) {
     // Fetch immediately on mount/agent change
     fetchTelemetry();
 
-    // Set up polling
-    timerRef.current = setInterval(fetchTelemetry, intervalMs);
+    // Set up polling with the effective interval
+    timerRef.current = setInterval(fetchTelemetry, effectiveInterval);
 
     return () => {
       mountedRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [agentName, intervalMs, fetchTelemetry]);
+  }, [agentName, effectiveInterval, fetchTelemetry]);
 
   return { telemetry, error, refresh: fetchTelemetry };
 }
