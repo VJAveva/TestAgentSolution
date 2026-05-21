@@ -733,9 +733,9 @@ public class ExecutionController : ControllerBase
     [HttpPost("force-release/{agentName}")]
     public IActionResult ForceReleaseAgent(string agentName)
     {
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
-        if (source != "WPF")
-            return StatusCode(403, new { error = "Only WPF Controller admin can force-release agents" });
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
+        if (source is not ("WPF" or "WebClient"))
+            return StatusCode(403, new { error = "Only admin clients can force-release agents" });
 
         var currentLock = _lockManager.GetLock(agentName);
         if (currentLock == null)
@@ -755,8 +755,8 @@ public class ExecutionController : ControllerBase
     [HttpPost("force-release-all")]
     public IActionResult ForceReleaseAll()
     {
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
-        if (source != "WPF")
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
+        if (source is not ("WPF" or "WebClient"))
             return StatusCode(403, new { error = "Admin only" });
 
         var count = _lockManager.ForceReleaseAll();

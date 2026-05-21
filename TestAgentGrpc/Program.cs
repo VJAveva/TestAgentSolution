@@ -64,8 +64,7 @@ builder.Services.AddGrpc(options =>
 // ── Background services ───────────────────────────────────────────────
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogger>());
 builder.Services.AddSingleton<AgentLifecycleService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentLifecycleService>());
-
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentLifecycleService>());builder.Services.AddHostedService<StuckExecutionWatchdog>();
 var app = builder.Build();
 
 app.MapGrpcService<TestAgentGrpcService>();

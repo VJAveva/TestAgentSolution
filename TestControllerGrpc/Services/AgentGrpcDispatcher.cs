@@ -29,6 +29,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     private readonly IEventAggregator _events;
     private readonly ConcurrentDictionary<string, AgentEndpoint> _agents = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _activeExecutions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Raised when execution output arrives.</summary>
     public event Action<string, string, string>? OutputReceived;  // agentName, line, kind
@@ -80,11 +81,29 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     /// Tests connectivity to an agent by calling GetAgentSnapshot.
     /// Returns the snapshot on success, or null + error message on failure.
     /// </summary>
+    /// <summary>Returns true if the given agent currently has a streaming command in progress.</summary>
+    public bool IsAgentExecuting(string agentName) => _activeExecutions.ContainsKey(agentName);
+
     public async Task<(AgentSnapshot? Snapshot, string? Error)> TestConnectionAsync(
         string agentName, CancellationToken ct = default)
     {
         if (!_agents.TryGetValue(agentName, out var endpoint))
             return (null, $"Agent '{agentName}' not registered");
+
+        // ── CRITICAL: Do NOT poll the agent via gRPC while a command is actively
+        // streaming. Concurrent HTTP/2 calls on the same channel can trigger
+        // GOAWAY/RST_STREAM on agents with unstable HTTP/2 (e.g., HTTP_1_1_REQUIRED),
+        // which kills the in-flight streaming call and cancels the execution.
+        if (_activeExecutions.TryGetValue(agentName, out var activeCmd))
+        {
+            return (new AgentSnapshot
+            {
+                AgentName = agentName,
+                State = AgentState.Running,
+                CurrentCommand = activeCmd,
+                CurrentActivity = $"Executing: {activeCmd}",
+            }, null);
+        }
 
         try
         {
@@ -273,6 +292,11 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     {
         if (!_agents.TryGetValue(agentName, out var endpoint))
             return false;
+
+        // Don't ping agents with active streaming commands
+        if (_activeExecutions.ContainsKey(agentName))
+            return true; // Known alive — it's executing
+
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -322,6 +346,9 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         // and the previous command's process tree hasn't fully exited yet.
         await WaitForAgentFree(endpoint.GetClient(), agentName, ct);
 
+        // Mark this agent as actively executing so Monitor polling is suppressed.
+        // This prevents concurrent HTTP/2 streams from interfering with the command stream.
+        _activeExecutions[agentName] = cmdShort;
         try
         {
             return await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
@@ -407,6 +434,29 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                             _appLogger.Info("Dispatch",
                                 $"[{agentName}] ForceReady succeeded — agent state reset");
                         }
+                        catch (RpcException frEx) when (frEx.StatusCode == StatusCode.Unimplemented)
+                        {
+                            // Agent is running older code without ForceReady.
+                            // Fallback: try TerminateExecution which kills the process
+                            // and lets the agent's normal cleanup restore Ready state.
+                            _appLogger.Warn("Dispatch",
+                                $"[{agentName}] ForceReady not available (old agent). Trying TerminateExecution fallback...");
+                            try
+                            {
+                                await client.TerminateExecutionAsync(new Empty(),
+                                    deadline: DateTime.UtcNow.AddSeconds(5),
+                                    cancellationToken: resilienceCt);
+                                await Task.Delay(3_000, resilienceCt); // give agent time to clean up
+                                _appLogger.Info("Dispatch",
+                                    $"[{agentName}] TerminateExecution succeeded — agent should recover");
+                            }
+                            catch (Exception termEx)
+                            {
+                                _appLogger.Error("Dispatch",
+                                    $"[{agentName}] TerminateExecution also FAILED: {termEx.Message}. " +
+                                    "Agent service may need manual restart.", termEx);
+                            }
+                        }
                         catch (Exception ex)
                         {
                             _logger.LogWarning(ex, "ForceReady call failed for {Agent}", agentName);
@@ -469,6 +519,26 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 RecordSuccess(agentName);
                 return new ActionResult(success, exitCode, errorMessage);
             }, ct);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        {
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
+            if (ct.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "Action cancelled by user on {Agent} after {Elapsed}: {Command}",
+                    agentName, elapsed.ToString(@"hh\:mm\:ss"), resolved.Command);
+                _appLogger.Warn("Dispatch",
+                    $"[{agentName}] Cancelled by user after {elapsed:hh\\:mm\\:ss}: {cmdShort}");
+                return new ActionResult(false, -1,
+                    $"Cancelled by user after {elapsed:hh\\:mm\\:ss}");
+            }
+            // Cancellation not from the user token — likely a timeout CTS
+            RecordFailure(agentName);
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] gRPC call cancelled after {elapsed:hh\\:mm\\:ss}: {cmdShort}");
+            return new ActionResult(false, -1,
+                $"gRPC call cancelled after {elapsed:hh\\:mm\\:ss}");
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
         {
@@ -552,6 +622,10 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             _appLogger.Error("Dispatch",
                 $"[{agentName}] EXCEPTION: {ex.Message}", ex);
             return new ActionResult(false, -1, ex.Message);
+        }
+        finally
+        {
+            _activeExecutions.TryRemove(agentName, out _);
         }
     }
 

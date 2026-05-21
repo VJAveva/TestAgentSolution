@@ -254,6 +254,19 @@ public partial class MonitorVM : ObservableObject
     {
         if (string.IsNullOrEmpty(AgentName) || _pollingCts == null) return;
 
+        // During active execution, the dispatcher returns a synthetic snapshot
+        // (no real gRPC call). We only need to update the session/lock status
+        // from local state — skip the full telemetry apply to avoid flickering
+        // metrics panels with empty data and to avoid any gRPC channel interference.
+        if (_dispatcher.IsAgentExecuting(AgentName))
+        {
+            RefreshSessionInfo();
+            StatusKind = "Busy";
+            StatusText = $"BUSY · {SessionPipeline}";
+            IsOnline = true;
+            return;
+        }
+
         try
         {
             var (snapshot, _) = await _dispatcher.TestConnectionAsync(AgentName, _pollingCts.Token);

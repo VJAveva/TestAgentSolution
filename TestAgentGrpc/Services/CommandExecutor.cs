@@ -219,10 +219,12 @@ public sealed class CommandExecutor : IDisposable
             _lastError = string.Empty;
 
             // ── STREAM STDOUT + STDERR concurrently ────────────────
+            // We pass `ct` so streams are cancelled when execution is cancelled/terminated.
+            // After process exit, the drain timeout (below) ensures we don't wait forever.
             var stdoutTask = StreamOutputAsync(executionId, _currentProcess.StandardOutput,
-                OutputKind.OutputStdout, record, perCallChannel);
+                OutputKind.OutputStdout, record, perCallChannel, ct);
             var stderrTask = StreamOutputAsync(executionId, _currentProcess.StandardError,
-                OutputKind.OutputStderr, record, perCallChannel);
+                OutputKind.OutputStderr, record, perCallChannel, ct);
 
             // ── HEARTBEAT for long-running silent processes ────────
             var process = _currentProcess;
@@ -477,22 +479,27 @@ public sealed class CommandExecutor : IDisposable
         StreamReader reader,
         OutputKind kind,
         ExecutionTracker.ExecutionRecordBuilder record,
-        ChannelWriter<ExecutionEvent>? perCallChannel)
+        ChannelWriter<ExecutionEvent>? perCallChannel,
+        CancellationToken ct = default)
     {
         var eventType = kind == OutputKind.OutputStdout
             ? ExecutionEventType.EventStdoutLine
             : ExecutionEventType.EventStderrLine;
 
-        while (await reader.ReadLineAsync() is { } line)
+        try
         {
-            record.AddOutputLine(kind, line);
+            while (await reader.ReadLineAsync(ct) is { } line)
+            {
+                record.AddOutputLine(kind, line);
 
-            EmitEvent(executionId, eventType,
-                outputLine: line,
-                outputKind: kind,
-                errorMessage: kind == OutputKind.OutputStderr ? line : null,
-                perCallChannel: perCallChannel);
+                EmitEvent(executionId, eventType,
+                    outputLine: line,
+                    outputKind: kind,
+                    errorMessage: kind == OutputKind.OutputStderr ? line : null,
+                    perCallChannel: perCallChannel);
+            }
         }
+        catch (OperationCanceledException) { /* drain cancelled — expected */ }
     }
 
     // ── Terminate ──────────────────────────────────────────────────────
@@ -512,6 +519,20 @@ public sealed class CommandExecutor : IDisposable
                     detail: "Terminated by controller request");
             }
             _tracker.GetCurrent()?.Terminate();
+
+            // Give the ExecuteAsync finally block a moment to run naturally.
+            // If still stuck after 5 seconds, force-reset state so agent isn't
+            // permanently stuck in Running (e.g., when stdout drain is hanging).
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(5_000);
+                if (_state == AgentState.Running)
+                {
+                    _logger.LogWarning(
+                        "Agent still Running 5s after TerminateExecution — force-resetting state");
+                    ForceReady();
+                }
+            });
         }
         catch (Exception ex)
         {

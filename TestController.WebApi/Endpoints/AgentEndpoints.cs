@@ -527,7 +527,23 @@ public static class AgentEndpoints
         }
         catch (RpcException ex)
         {
-            return Results.Problem($"gRPC error: {ex.Status.Detail}", statusCode: 502);
+            // Return degraded offline state so the Monitor view doesn't break
+            return Results.Ok(new
+            {
+                AgentName = name,
+                State = "Offline",
+                CurrentActivity = $"Unreachable: {ex.Status.Detail}",
+                CurrentCommand = "",
+                ExecutionsCompleted = 0,
+                ExecutionsFailed = 0,
+                CpuUsagePct = 0.0,
+                MemoryUsedMb = 0.0,
+                MemoryTotalMb = 0.0,
+                DiskFreeGb = 0.0,
+                ActiveProcessCount = 0,
+                Timestamp = DateTime.UtcNow,
+                IsOffline = true
+            });
         }
     }
 
