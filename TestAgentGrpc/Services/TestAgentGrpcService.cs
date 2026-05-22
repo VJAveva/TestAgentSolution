@@ -222,7 +222,10 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         ExecutionHistoryRequest request, ServerCallContext context)
     {
         var reply = new ExecutionHistoryReply();
-        reply.Records.AddRange(_tracker.GetHistory().Select(r =>
+        reply.Records.AddRange(_tracker.GetHistory(
+            max: request.MaxResults,
+            filterCommand: string.IsNullOrEmpty(request.FilterCommand) ? null : request.FilterCommand
+        ).Select(r =>
         {
             var rec = new ExecutionRecord
             {

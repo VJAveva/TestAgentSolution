@@ -138,6 +138,14 @@ public sealed class ExecutionSessionManager
                     ? SessionState.Failed
                     : SessionState.PartialFailure;
 
+            // Populate LockedAgents from action results so per-agent history
+            // filtering in the Monitor view can find sessions for each agent.
+            session.LockedAgents = session.ActionResults
+                .Select(r => r.AgentName)
+                .Where(a => !string.IsNullOrEmpty(a))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+
             lock (_historyLock)
             {
                 _history.Insert(0, session);
