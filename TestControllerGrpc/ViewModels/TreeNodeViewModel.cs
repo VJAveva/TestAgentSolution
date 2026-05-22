@@ -80,6 +80,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(ResolvedAgentName));
     }
 
+    /// <summary>Auto-sync IsEnabled toggle back to the model (e.g. WatchItemConfig.IsEnabled).</summary>
+    partial void OnIsEnabledChanged(bool value)
+    {
+        if (ModelObject is WatchItemConfig wi)
+            wi.IsEnabled = value;
+    }
+
     // ── Tree search/filter visibility ───────────────────────────────
     [ObservableProperty] private bool _isFilterVisible = true;
 

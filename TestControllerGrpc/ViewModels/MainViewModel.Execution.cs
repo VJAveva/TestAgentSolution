@@ -15,7 +15,7 @@ public sealed partial class MainViewModel
     private bool CanTriggerEvent => SelectedNode?.NodeKind == NodeKinds.Event;
 
     /// <summary>Trigger a single Event node's pipeline.</summary>
-    [RelayCommand(CanExecute = nameof(CanTriggerEvent))] 
+    [RelayCommand(CanExecute = nameof(CanTriggerEvent), AllowConcurrentExecutions = true)] 
     private async Task TriggerEvent()
     {
         if (SelectedNode?.ModelObject is not EventConfig ev) return;
@@ -105,7 +105,7 @@ public sealed partial class MainViewModel
     private bool CanTriggerWatchItem => SelectedNode?.NodeKind == NodeKinds.WatchItem;
 
     /// <summary>Trigger ALL events on the selected WatchItem.</summary>
-    [RelayCommand(CanExecute = nameof(CanTriggerWatchItem))]
+    [RelayCommand(CanExecute = nameof(CanTriggerWatchItem), AllowConcurrentExecutions = true)]
     private async Task TriggerWatchItem()
     {
         if (SelectedNode?.ModelObject is not WatchItemConfig wi) return;
@@ -249,7 +249,7 @@ public sealed partial class MainViewModel
     /// Trigger ALL WatchItems in parallel.
     /// Each WatchItem gets its own PipelineSession and runs concurrently.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems))]
+    [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems), AllowConcurrentExecutions = true)]
     private async Task TriggerAllWatchItems()
     {
         if (_config.WatchItems.Count == 0) { AddLog("No WatchItems to execute"); return; }
@@ -347,7 +347,7 @@ public sealed partial class MainViewModel
     private bool CanExecuteGroup => SelectedNode?.NodeKind == NodeKinds.ActionGroup;
 
     /// <summary>Execute a single ActionGroup and its children.</summary>
-    [RelayCommand(CanExecute = nameof(CanExecuteGroup))]
+    [RelayCommand(CanExecute = nameof(CanExecuteGroup), AllowConcurrentExecutions = true)]
     private async Task ExecuteGroup()
     {
         if (SelectedNode?.ModelObject is not ActionGroupConfig ag) return;
@@ -453,7 +453,7 @@ public sealed partial class MainViewModel
     private bool CanExecuteSingleAction => SelectedNode?.NodeKind == NodeKinds.Action;
 
     /// <summary>Execute a single Action node.</summary>
-    [RelayCommand(CanExecute = nameof(CanExecuteSingleAction))]
+    [RelayCommand(CanExecute = nameof(CanExecuteSingleAction), AllowConcurrentExecutions = true)]
     private async Task ExecuteSingleAction()
     {
         if (SelectedNode?.ModelObject is not ActionConfig action) return;

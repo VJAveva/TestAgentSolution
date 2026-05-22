@@ -415,6 +415,9 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         {
             result.Outcome = ActionOutcome.Terminated;
             result.Duration = sw.Elapsed;
+            _sessionManager.RecordResult(session.SessionId, result);
+            session.TrackAgentAction(result);
+            throw; // Re-throw so callers can update tree nodes to "Cancelled"
         }
         catch (TimeoutException)
         {
