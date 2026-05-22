@@ -87,8 +87,30 @@ public sealed class CommandExecutor : IDisposable
             return (false, string.Empty);
 
         var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
-        _ = Task.Run(() => ExecuteAsync(execId, command, arguments, isReboot,
-            perCallChannel: null, CancellationToken.None, userName: userName, password: password));
+
+        // Set state to Running IMMEDIATELY so heartbeats report the correct state
+        // and subsequent RunCommand calls are properly rejected. Without this,
+        // the fire-and-forget task may not have started yet, causing a race window
+        // where heartbeats report Ready and the display flickers.
+        _state = AgentState.Running;
+        _currentExecutionId = execId;
+        _currentCommand = SecurityRedactor.RedactCommandLine(command, arguments);
+
+        // Safety-net timeout prevents the agent from staying stuck in Running state
+        // forever when called via the non-streamed (legacy) path.
+        var cts = new CancellationTokenSource(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ExecuteAsync(execId, command, arguments, isReboot,
+                    perCallChannel: null, cts.Token, userName: userName, password: password);
+            }
+            finally
+            {
+                cts.Dispose();
+            }
+        });
         return (true, execId);
     }
 
@@ -208,7 +230,12 @@ public sealed class CommandExecutor : IDisposable
         }
         catch (OperationCanceledException)
         {
+            // Lock acquisition was cancelled (timeout). Reset state set by RunCommand
+            // so the agent doesn't stay permanently stuck in Running.
             _lifecycle = null;
+            _currentExecutionId = null;
+            _currentCommand = null;
+            _state = AgentState.Ready;
             perCallChannel?.TryComplete();
             throw;
         }
@@ -218,6 +245,7 @@ public sealed class CommandExecutor : IDisposable
         _executionStartedUtc = lifecycle.StartedUtc;
 
         var record = _tracker.BeginTracked(executionId, command, arguments);
+        Task? heartbeatTask = null;
 
         try
         {
@@ -275,29 +303,38 @@ public sealed class CommandExecutor : IDisposable
 
             // ── HEARTBEAT for long-running silent processes ────────
             var process = _currentProcess;
-            var heartbeatTask = Task.Run(async () =>
+            var cachedPid = _currentProcess.Id;
+            heartbeatTask = Task.Run(async () =>
             {
                 var startTime = DateTime.UtcNow;
                 var timeoutTotal = timeoutMs > 0
                     ? TimeSpan.FromMilliseconds(timeoutMs)
                     : TimeSpan.FromHours(2);
 
-                while (!ct.IsCancellationRequested && !process.HasExited)
+                while (!ct.IsCancellationRequested)
                 {
+                    bool exited;
+                    try { exited = process.HasExited; }
+                    catch (InvalidOperationException) { break; }
+
+                    if (exited) break;
+
                     try
                     {
                         await Task.Delay(TimeSpan.FromSeconds(30), ct);
                     }
                     catch (OperationCanceledException) { break; }
 
-                    if (process.HasExited) break;
+                    try { exited = process.HasExited; }
+                    catch (InvalidOperationException) { break; }
+                    if (exited) break;
 
                     var elapsed = DateTime.UtcNow - startTime;
                     var percent = Math.Min(99, (int)(elapsed.TotalSeconds / timeoutTotal.TotalSeconds * 100));
                     var elapsedStr = elapsed.ToString(@"mm\:ss");
                     var totalStr = timeoutTotal.ToString(@"mm\:ss");
 
-                    var detail = $"Still running... (PID {process.Id}, {elapsedStr} / {totalStr})";
+                    var detail = $"Still running... (PID {cachedPid}, {elapsedStr} / {totalStr})";
 
                     EmitEvent(executionId, ExecutionEventType.EventProgress,
                         detail: detail, progressPct: percent,
@@ -305,14 +342,18 @@ public sealed class CommandExecutor : IDisposable
                 }
 
                 // Final 100% when process exits
-                if (process.HasExited)
+                try
                 {
-                    var elapsed = DateTime.UtcNow - startTime;
-                    EmitEvent(executionId, ExecutionEventType.EventProgress,
-                        detail: $"Process exited (exit code {process.ExitCode}, {elapsed:mm\\:ss} elapsed)",
-                        progressPct: 100,
-                        perCallChannel: perCallChannel);
+                    if (process.HasExited)
+                    {
+                        var elapsed = DateTime.UtcNow - startTime;
+                        EmitEvent(executionId, ExecutionEventType.EventProgress,
+                            detail: $"Process exited (exit code {process.ExitCode}, {elapsed:mm\\:ss} elapsed)",
+                            progressPct: 100,
+                            perCallChannel: perCallChannel);
+                    }
                 }
+                catch (InvalidOperationException) { /* process disposed before we could read exit code */ }
             }, ct);
 
             // ── WAIT FOR EXIT (cancellation-aware) ─────────────────
@@ -335,7 +376,8 @@ public sealed class CommandExecutor : IDisposable
             // Heartbeat will self-terminate since HasExited is now true
             try { await heartbeatTask; } catch (OperationCanceledException) { }
 
-            _lastExitCode = _currentProcess.ExitCode;
+            try { _lastExitCode = _currentProcess.ExitCode; }
+            catch (InvalidOperationException) { _lastExitCode = -1; }
 
             // ── COMPLETION POLLING (child process monitoring) ──────
             if (!string.IsNullOrWhiteSpace(completionCheckCommand) && _lastExitCode == 0)
@@ -370,10 +412,14 @@ public sealed class CommandExecutor : IDisposable
             record.Complete(_lastExitCode);
 
             var durationMs = (long)(DateTime.UtcNow - _executionStartedUtc!.Value).TotalMilliseconds;
+            int? completedPid = null;
+            try { completedPid = _currentProcess?.Id; }
+            catch (InvalidOperationException) { /* process disposed or no longer associated */ }
+
             _audit.Log("CommandCompleted", executionId: executionId,
                 command: command, arguments: arguments,
                 exitCode: _lastExitCode, durationMs: durationMs,
-                pid: _currentProcess.Id,
+                pid: completedPid,
                 detail: $"Exit code {_lastExitCode} after {durationMs}ms");
 
             // ── COMPLETED ──────────────────────────────────────────
@@ -435,6 +481,12 @@ public sealed class CommandExecutor : IDisposable
             // CRITICAL: Guarantee the agent always returns to Ready state and releases
             // the execution lock — even if individual cleanup steps throw (e.g. Process.Dispose()
             // on an invalid handle, or an event handler throwing in SetActivity/StateChanged).
+            // Await heartbeat to prevent "No process is associated" race on disposal.
+            if (heartbeatTask is not null)
+            {
+                try { await heartbeatTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+                catch { /* heartbeat timed out or threw — safe to proceed with disposal */ }
+            }
             try { _currentProcess?.Dispose(); } catch { /* best effort */ }
             _currentProcess = null;
             _currentExecutionId = null;

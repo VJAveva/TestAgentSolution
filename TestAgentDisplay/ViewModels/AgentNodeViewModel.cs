@@ -106,7 +106,12 @@ public sealed partial class AgentNodeViewModel : ObservableObject
                     MemoryUsedMb = evt.Metrics.MemoryUsedMb;
                     DiskFreeGb = evt.Metrics.DiskFreeGb;
                 }
-                UpdateAgentState(evt.AgentState);
+                // Only apply heartbeat state when not tracking a local execution.
+                // Heartbeats during the RunCommand→ExecuteAsync race window could
+                // report Ready before the executor has transitioned to Running,
+                // causing the "Current Action" display to flicker.
+                if (string.IsNullOrEmpty(CurrentExecutionId))
+                    UpdateAgentState(evt.AgentState);
                 break;
 
             case ExecutionEventType.EventProgress:
@@ -134,10 +139,18 @@ public sealed partial class AgentNodeViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(snap.AgentName))
             DisplayName = snap.AgentName;
 
-        UpdateAgentState(snap.State);
-        Activity = snap.CurrentActivity;
-        CurrentCommand = snap.CurrentCommand;
-        CurrentExecutionId = snap.CurrentExecutionId;
+        // Only update state/activity from snapshot if we're not tracking an
+        // active execution locally. The event stream is the authoritative source
+        // during execution — snapshot polling would overwrite with stale data
+        // and cause the "Current Action" display to flicker.
+        if (string.IsNullOrEmpty(CurrentExecutionId))
+        {
+            UpdateAgentState(snap.State);
+            Activity = snap.CurrentActivity;
+            CurrentCommand = snap.CurrentCommand;
+            CurrentExecutionId = snap.CurrentExecutionId;
+        }
+
         CompletedCount = snap.ExecutionsCompleted;
         FailedCount = snap.ExecutionsFailed;
         if (snap.Metrics is not null)
@@ -154,10 +167,10 @@ public sealed partial class AgentNodeViewModel : ObservableObject
 
     /// <summary>
     /// Updates the snapshot age display. Data older than 60s is considered stale.
+    /// Called from ApplySnapshot (which sets _lastSnapshotUtc) and periodically.
     /// </summary>
     public void UpdateSnapshotFreshness()
     {
-        _lastSnapshotUtc = DateTime.UtcNow;
         var age = DateTime.UtcNow - _lastSnapshotUtc;
         IsSnapshotStale = age > TimeSpan.FromSeconds(60);
         SnapshotAge = age.TotalSeconds < 5 ? "just now"

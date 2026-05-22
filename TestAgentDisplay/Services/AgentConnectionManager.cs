@@ -79,10 +79,14 @@ public sealed class AgentConnectionManager : IDisposable
         if (!_connections.TryGetValue(address, out var conn)) return null;
         try
         {
+            // Apply a 30-second deadline to prevent the UI from hanging indefinitely
+            // if the agent is unreachable or the gRPC channel is stuck.
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
             return await conn.Client.RunCommandAsync(new RunCommandRequest
             {
                 Command = command, Arguments = arguments
-            }, cancellationToken: ct);
+            }, cancellationToken: cts.Token);
         }
         catch { return null; }
     }
