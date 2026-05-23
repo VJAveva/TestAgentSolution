@@ -6,12 +6,13 @@ using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 
-public partial class FleetVM : ObservableObject
+public partial class FleetVM : ObservableObject, IDisposable
 {
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly AgentLockManager _lockManager;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly Dispatcher _uiDispatcher;
+    private bool _disposed;
 
     /// <summary>Grouped agent collection for the fleet panel.</summary>
     public ObservableCollection<FleetGroupVM> Groups { get; } = new();
@@ -62,6 +63,13 @@ public partial class FleetVM : ObservableObject
         _healthTimer.Start();
 
         Refresh();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _healthTimer.Stop();
     }
 
     /// <summary>

@@ -8,8 +8,9 @@ using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 
-public partial class RegistryVM : ObservableObject
+public partial class RegistryVM : ObservableObject, IDisposable
 {
+    private bool _disposed;
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly AgentLockManager _lockManager;
 
@@ -69,6 +70,13 @@ public partial class RegistryVM : ObservableObject
         _healthTimer.Start();
 
         Refresh();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _healthTimer.Stop();
     }
 
     private async Task PollHealthAsync()

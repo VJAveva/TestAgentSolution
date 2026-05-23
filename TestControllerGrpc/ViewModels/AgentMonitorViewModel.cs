@@ -10,7 +10,7 @@ using System.Windows;
 namespace TestControllerGrpc.ViewModels;
 
 /// <summary>
-/// ViewModel for the Agent Monitor window — connects to a single agent's
+/// ViewModel for the Agent Monitor window ï¿½ connects to a single agent's
 /// <c>SubscribeAgentEvents</c> gRPC stream and displays live execution activity.
 /// </summary>
 public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposable
@@ -24,6 +24,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _connectionStatusText = "Connecting";
     [ObservableProperty] private string _liveActionName = "";
 
+    private const int MaxActionHistory = 200;
     public ObservableCollection<AgentActionRow> ActionHistory { get; } = new();
 
     public AgentMonitorViewModel(string agentName, string agentAddress)
@@ -75,7 +76,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
             }
             catch
             {
-                // Snapshot not available — proceed to streaming
+                // Snapshot not available ï¿½ proceed to streaming
             }
 
             // Load recent execution history so the monitor shows past activities
@@ -121,7 +122,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
             }
             catch
             {
-                // History not available — proceed with live streaming only
+                // History not available ï¿½ proceed with live streaming only
             }
 
             // Stream reconnect loop
@@ -183,6 +184,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                     StatusColor = "#9399B2",
                 };
                 ActionHistory.Insert(0, _currentAction);
+                TrimActionHistory();
                 break;
 
             case TestAgentGrpc.ExecutionEventType.EventStarted:
@@ -203,6 +205,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                         StatusColor = "#F9E2AF",
                     };
                     ActionHistory.Insert(0, _currentAction);
+                    TrimActionHistory();
                 }
                 LiveActionName = cmd;
                 MonitorAgentState = "Running";
@@ -270,6 +273,12 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                 };
                 break;
         }
+    }
+
+    private void TrimActionHistory()
+    {
+        while (ActionHistory.Count > MaxActionHistory)
+            ActionHistory.RemoveAt(ActionHistory.Count - 1);
     }
 
     [RelayCommand]

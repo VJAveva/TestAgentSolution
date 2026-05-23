@@ -161,6 +161,27 @@
                 </StackPanel>
             </StackPanel>
 
+            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
+
+            <!-- WatchItems + Templates counts -->
+            <StackPanel Margin="10,0" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource MetricLabel}" Text="ITEMS" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource MetricValue}"
+                               Foreground="{DynamicResource AccGreen}">
+                        <Run Text="{Binding DataContext.ActiveWatchers, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Text="W" FontSize="8" Foreground="{DynamicResource TextS}"
+                               VerticalAlignment="Center" Margin="2,0,6,0" />
+                    <TextBlock Style="{StaticResource MetricValue}"
+                               Foreground="{DynamicResource AccMauve}">
+                        <Run Text="{Binding DataContext.TemplateRoots.Count, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Text="T" FontSize="8" Foreground="{DynamicResource TextS}"
+                               VerticalAlignment="Center" Margin="2,0,0,0" />
+                </StackPanel>
+            </StackPanel>
+
             <!-- Alert Summary (shown only in critical state) -->
             <TextBlock Text="{Binding AlertSummary}" FontSize="10" FontWeight="SemiBold"
                        Foreground="{DynamicResource AccRed}" Margin="12,0,0,0"

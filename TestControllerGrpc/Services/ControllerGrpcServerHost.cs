@@ -20,7 +20,7 @@ namespace TestControllerGrpc.Services;
 ///
 /// Default port: 5100 (configurable via ControllerGrpcPort in appsettings).
 /// </summary>
-public sealed class ControllerGrpcServerHost : IHostedService, IDisposable
+public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsyncDisposable
 {
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IEventAggregator _events;
@@ -96,8 +96,16 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable
             catch (Exception ex) { _logger.LogWarning(ex, "gRPC server stop interrupted"); }
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        if (_app is not null)
+            await _app.DisposeAsync();
+    }
+
     public void Dispose()
     {
-        _app?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        // Prefer DisposeAsync via DI; fire-and-forget is safer than blocking.
+        if (_app is not null)
+            _ = _app.DisposeAsync();
     }
 }

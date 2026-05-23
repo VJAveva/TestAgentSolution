@@ -438,6 +438,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Stop the multi-session dashboard's refresh timer + event subscriptions.
         ExecutionDashboard?.Dispose();
         HealthMetrics?.Dispose();
+        AgentWorkspace?.Dispose();
 
         // Cancel all active sessions
         foreach (var session in ActiveSessions.ToList())

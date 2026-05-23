@@ -7,7 +7,7 @@ namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 
 public enum AgentWorkspaceMode { Fleet, Monitor, Registry }
 
-public partial class AgentWorkspaceVM : ObservableObject
+public partial class AgentWorkspaceVM : ObservableObject, IDisposable
 {
     [ObservableProperty] private AgentWorkspaceMode _currentMode = AgentWorkspaceMode.Fleet;
 
@@ -49,5 +49,11 @@ public partial class AgentWorkspaceVM : ObservableObject
     {
         CurrentMode = AgentWorkspaceMode.Registry;
         Registry.StartAddNew();
+    }
+
+    public void Dispose()
+    {
+        Fleet.Dispose();
+        Registry.Dispose();
     }
 }
