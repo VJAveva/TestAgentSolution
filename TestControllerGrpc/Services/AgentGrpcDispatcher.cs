@@ -375,7 +375,10 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         {
             return await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
             {
-                var client = endpoint.GetClient();
+                // Re-read endpoint on each Polly attempt: if a channel reset replaced
+                // the endpoint between retries, we must use the fresh (non-disposed) one.
+                var currentEndpoint = _agents.TryGetValue(agentName, out var ep) ? ep : endpoint;
+                var client = currentEndpoint.GetClient();
 
                 // Timeout is in SECONDS in the WatchList XML. 0 = no limit.
                 CancellationTokenSource? timeoutCts = resolved.Timeout > 0
@@ -469,9 +472,34 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                                 await client.TerminateExecutionAsync(new Empty(),
                                     deadline: DateTime.UtcNow.AddSeconds(5),
                                     cancellationToken: resilienceCt);
-                                await Task.Delay(3_000, resilienceCt); // give agent time to clean up
-                                _appLogger.Info("Dispatch",
-                                    $"[{agentName}] TerminateExecution succeeded — agent should recover");
+
+                                // Agent's TerminateExecution has an internal 5s delay before
+                                // force-resetting state. Wait longer than that, then verify.
+                                await Task.Delay(6_000, resilienceCt);
+
+                                // Verify the agent actually transitioned out of Running
+                                try
+                                {
+                                    var verifyState = await client.GetStateAsync(new Empty(),
+                                        deadline: DateTime.UtcNow.AddSeconds(5),
+                                        cancellationToken: resilienceCt);
+                                    if (verifyState.State == AgentState.Running)
+                                    {
+                                        _appLogger.Warn("Dispatch",
+                                            $"[{agentName}] Agent still Running after TerminateExecution + 6s — state reset may have failed");
+                                    }
+                                    else
+                                    {
+                                        _appLogger.Info("Dispatch",
+                                            $"[{agentName}] TerminateExecution succeeded — agent state: {verifyState.State}");
+                                    }
+                                }
+                                catch (RpcException)
+                                {
+                                    // Agent unreachable after terminate — may have crashed, proceed with retry anyway
+                                    _appLogger.Warn("Dispatch",
+                                        $"[{agentName}] Agent unreachable after TerminateExecution — proceeding with retry");
+                                }
                             }
                             catch (Exception termEx)
                             {
@@ -578,9 +606,85 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 RecordSuccess(agentName);
                 return new ActionResult(true, 0, "Reboot completed");
             }
+
+            // Wait for agent recovery before giving up
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] UNAVAILABLE: {ex.Status.Detail} — waiting up to {_timeouts.UnavailableRecoverySeconds}s for recovery");
+            StatusChanged?.Invoke(agentName, "Unavailable \u2014 waiting for recovery\u2026");
+
+            var recovered = await WaitForAgentRecoveryAsync(
+                agentName,
+                TimeSpan.FromSeconds(_timeouts.UnavailableRecoverySeconds),
+                ct);
+
+            if (recovered)
+            {
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] Agent recovered — retrying command: {cmdShort}");
+                StatusChanged?.Invoke(agentName, "Recovered \u2014 retrying command");
+
+                try
+                {
+                    var retryResult = await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
+                    {
+                        var retryClient = endpoint.GetClient();
+
+                        CancellationTokenSource? retryTimeoutCts = resolved.Timeout > 0
+                            ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
+                            : null;
+                        using var _retryTimeoutDisposable = retryTimeoutCts;
+                        using var retryLinked = retryTimeoutCts is not null
+                            ? CancellationTokenSource.CreateLinkedTokenSource(resilienceCt, retryTimeoutCts.Token)
+                            : CancellationTokenSource.CreateLinkedTokenSource(resilienceCt);
+
+                        return await RemoteCommandStreamRunner.StreamAsync(
+                            retryClient, agentName, resolved, retryLinked.Token,
+                            outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+                    }, ct);
+
+                    var retryExitCode = retryResult.ExitCode;
+                    var retryError = retryResult.ErrorMessage;
+                    var retrySuccess = retryExitCode == 0 && string.IsNullOrEmpty(retryError);
+
+                    RecordSuccess(agentName);
+
+                    var retryElapsed = Stopwatch.GetElapsedTime(startTimestamp);
+                    var retryStatusMsg = retrySuccess
+                        ? "Ready"
+                        : $"Failed (exit {retryExitCode}): {Truncate(retryError, 100)}";
+                    StatusChanged?.Invoke(agentName, retryStatusMsg);
+
+                    if (retrySuccess)
+                        _appLogger.Info("Dispatch",
+                            $"[{agentName}] \u2713 Recovery retry OK: {cmdShort} (total elapsed {retryElapsed:hh\\:mm\\:ss})");
+                    else
+                        _appLogger.Error("Dispatch",
+                            $"[{agentName}] \u2717 Recovery retry FAILED (exit {retryExitCode}): {Truncate(retryError, 150)}");
+
+                    return new ActionResult(retrySuccess, retryExitCode, retryError);
+                }
+                catch (BrokenCircuitException)
+                {
+                    _appLogger.Warn("Dispatch",
+                        $"[{agentName}] Circuit breaker re-opened during recovery retry");
+                    return new ActionResult(false, -1,
+                        $"Agent {agentName} circuit breaker re-opened during recovery retry");
+                }
+                catch (Exception retryEx)
+                {
+                    RecordFailure(agentName);
+                    _appLogger.Error("Dispatch",
+                        $"[{agentName}] Recovery retry FAILED: {retryEx.Message}");
+                    return new ActionResult(false, -1,
+                        $"Agent {agentName} recovery retry failed: {retryEx.Message}");
+                }
+            }
+
+            // Recovery wait expired — agent did not come back
             _appLogger.Error("Dispatch",
-                $"[{agentName}] UNAVAILABLE: {ex.Status.Detail}");
-            return new ActionResult(false, -1, $"Agent {agentName} unavailable: {ex.Status.Detail}");
+                $"[{agentName}] UNAVAILABLE: Agent did not recover within {_timeouts.UnavailableRecoverySeconds}s. {ex.Status.Detail}");
+            return new ActionResult(false, -1,
+                $"Agent {agentName} unavailable: {ex.Status.Detail} (waited {_timeouts.UnavailableRecoverySeconds}s for recovery)");
         }
         catch (BrokenCircuitException)
         {
@@ -902,6 +1006,56 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         }
     }
 
+    /// <summary>
+    /// Waits for an unavailable agent to come back online by polling GetState.
+    /// Returns true if the agent recovered within the timeout.
+    /// </summary>
+    private async Task<bool> WaitForAgentRecoveryAsync(
+        string agentName, TimeSpan timeout, CancellationToken ct)
+    {
+        if (timeout <= TimeSpan.Zero)
+            return false;
+
+        if (!_agents.TryGetValue(agentName, out var endpoint))
+            return false;
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+        var pollInterval = TimeSpan.FromSeconds(_timeouts.UnavailableRecoveryPollIntervalSeconds);
+
+        _logger.LogInformation(
+            "Waiting up to {Timeout}s for agent {Agent} to recover (polling every {Interval}s)",
+            (int)timeout.TotalSeconds, agentName, _timeouts.UnavailableRecoveryPollIntervalSeconds);
+
+        while (!cts.Token.IsCancellationRequested)
+        {
+            try { await Task.Delay(pollInterval, cts.Token); }
+            catch (OperationCanceledException) { break; }
+
+            try
+            {
+                var client = endpoint.GetClient();
+                await client.GetStateAsync(new Empty(),
+                    deadline: DateTime.UtcNow.AddSeconds(_timeouts.PingTimeoutSeconds),
+                    cancellationToken: cts.Token);
+
+                // Agent responded — it's back online
+                _logger.LogInformation("Agent {Agent} recovered after unavailability", agentName);
+                RecordSuccess(agentName);
+                StatusChanged?.Invoke(agentName, "Recovered");
+                return true;
+            }
+            catch (RpcException)
+            {
+                // Still unavailable — continue polling
+                _logger.LogDebug("Agent {Agent} still unavailable, continuing recovery wait", agentName);
+            }
+            catch (OperationCanceledException) { break; }
+        }
+
+        return false;
+    }
+
     public IEnumerable<string> RegisteredAgents => _agents.Keys;
     public int RegisteredAgentCount => _agents.Count;
 
@@ -935,20 +1089,24 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             return false;
         }
 
-        if (!_agents.TryGetValue(agentName, out var oldEndpoint))
+        // Atomically claim the old endpoint. If another thread already removed it
+        // (concurrent reset) or if it doesn't exist, bail out.
+        if (!_agents.TryRemove(agentName, out var oldEndpoint))
         {
-            _logger.LogWarning("Channel reset failed — agent {Agent} not registered", agentName);
+            _logger.LogWarning("Channel reset failed — agent {Agent} not registered or already being reset", agentName);
             return false;
         }
 
         var address = oldEndpoint.Address;
 
-        // Dispose old channel
-        oldEndpoint.Dispose();
-
-        // Create fresh endpoint with same address
+        // Create fresh endpoint BEFORE disposing old — minimizes window where
+        // no endpoint exists for this agent.
         var newEndpoint = new AgentEndpoint(agentName, address, _timeouts);
         _agents[agentName] = newEndpoint;
+
+        // Now safe to dispose old endpoint — it's no longer in the dictionary
+        // so no new operations will use it.
+        oldEndpoint.Dispose();
 
         // Reset health state
         if (_healthStates.TryGetValue(agentName, out var health))

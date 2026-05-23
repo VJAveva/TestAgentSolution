@@ -27,7 +27,7 @@ public partial class FailureAnalysisDialog : Window
         }
     }
 
-    private void OnViewLogClick(object sender, RoutedEventArgs e)
+    private async void OnViewLogClick(object sender, RoutedEventArgs e)
     {
         var build = _vm.LatestBuildName;
         if (string.IsNullOrEmpty(build))
@@ -37,7 +37,7 @@ public partial class FailureAnalysisDialog : Window
             return;
         }
 
-        var dialog = ExecutionLogViewerDialog.Create(
+        var dialog = await ExecutionLogViewerDialog.CreateAsync(
             build, _vm.TestCaseName, _vm.LatestFailedStepIndex, this);
         dialog?.ShowDialog();
     }

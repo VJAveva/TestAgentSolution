@@ -153,26 +153,32 @@ public sealed class AgentLockManager
     /// <summary>Force-releases a single agent. WPF admin only.</summary>
     public bool ForceRelease(string agentName)
     {
-        if (_locks.TryRemove(agentName, out _))
+        lock (_atomicLock)
         {
-            Interlocked.Increment(ref _version);
-            PersistToDisk();
-            return true;
+            if (_locks.TryRemove(agentName, out _))
+            {
+                Interlocked.Increment(ref _version);
+                PersistToDisk();
+                return true;
+            }
+            return false;
         }
-        return false;
     }
 
     /// <summary>Force-releases all agents. WPF admin emergency reset.</summary>
     public int ForceReleaseAll()
     {
-        int count = _locks.Count;
-        _locks.Clear();
-        if (count > 0)
+        lock (_atomicLock)
         {
-            Interlocked.Increment(ref _version);
-            PersistToDisk();
+            int count = _locks.Count;
+            _locks.Clear();
+            if (count > 0)
+            {
+                Interlocked.Increment(ref _version);
+                PersistToDisk();
+            }
+            return count;
         }
-        return count;
     }
 
     /// <summary>Returns all current locks (for dashboard/API).</summary>

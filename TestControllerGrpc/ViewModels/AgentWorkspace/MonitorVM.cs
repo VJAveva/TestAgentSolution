@@ -440,7 +440,7 @@ public partial class MonitorVM : ObservableObject
         if (!string.Equals(e.AgentName, AgentName, StringComparison.OrdinalIgnoreCase))
             return;
 
-        _uiDispatcher.Invoke(() =>
+        _uiDispatcher.InvokeAsync(() =>
         {
             LiveLog.Add(new LiveLogEntryVM
             {
@@ -462,7 +462,7 @@ public partial class MonitorVM : ObservableObject
         if (!string.Equals(e.AgentName, AgentName, StringComparison.OrdinalIgnoreCase))
             return;
 
-        _uiDispatcher.Invoke(() =>
+        _uiDispatcher.InvokeAsync(() =>
         {
             _lastNodeProgressUtc = DateTime.UtcNow;
 

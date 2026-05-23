@@ -233,10 +233,10 @@ app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetr
 app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation");
 
 // Client-side error logs ingestion (WebClient AppLogPanel → server logs)
-app.MapPost("/api/clientlogs", (HttpContext ctx, IAppLogger logger) =>
+app.MapPost("/api/clientlogs", async (HttpContext ctx, IAppLogger logger) =>
 {
     using var reader = new StreamReader(ctx.Request.Body);
-    var body = reader.ReadToEndAsync().GetAwaiter().GetResult();
+    var body = await reader.ReadToEndAsync();
     logger.Warn("ClientLog", body);
     return Results.Ok();
 });

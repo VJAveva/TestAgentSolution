@@ -77,41 +77,58 @@ public sealed class CommandExecutor : IDisposable
         string command, string arguments, bool isReboot,
         string? executionId = null, string? userName = null, string? password = null)
     {
-        if (_state == AgentState.Running)
+        // Acquire the semaphore non-blocking to eliminate TOCTOU race.
+        // If another command is already running, this fails immediately.
+        if (!_executionLock.Wait(0))
         {
-            _logger.LogWarning("Agent is busy — rejecting: {Cmd}", command);
+            _logger.LogWarning("Agent is busy (semaphore contention) — rejecting: {Cmd}", command);
             return (false, string.Empty);
         }
 
-        if (!EvaluateCommandPolicy(command, arguments, executionId, out _))
-            return (false, string.Empty);
-
-        var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
-
-        // Set state to Running IMMEDIATELY so heartbeats report the correct state
-        // and subsequent RunCommand calls are properly rejected. Without this,
-        // the fire-and-forget task may not have started yet, causing a race window
-        // where heartbeats report Ready and the display flickers.
-        _state = AgentState.Running;
-        _currentExecutionId = execId;
-        _currentCommand = SecurityRedactor.RedactCommandLine(command, arguments);
-
-        // Safety-net timeout prevents the agent from staying stuck in Running state
-        // forever when called via the non-streamed (legacy) path.
-        var cts = new CancellationTokenSource(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            // Double-check state inside the lock — handles edge case where
+            // state hasn't flipped back to Ready after prior execution completes.
+            if (_state == AgentState.Running)
             {
-                await ExecuteAsync(execId, command, arguments, isReboot,
-                    perCallChannel: null, cts.Token, userName: userName, password: password);
+                _logger.LogWarning("Agent is busy — rejecting: {Cmd}", command);
+                return (false, string.Empty);
             }
-            finally
+
+            if (!EvaluateCommandPolicy(command, arguments, executionId, out _))
+                return (false, string.Empty);
+
+            var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
+
+            // Set state to Running IMMEDIATELY so heartbeats report the correct state
+            // and subsequent RunCommand calls are properly rejected.
+            _state = AgentState.Running;
+            _currentExecutionId = execId;
+            _currentCommand = SecurityRedactor.RedactCommandLine(command, arguments);
+
+            // Safety-net timeout prevents the agent from staying stuck in Running state
+            // forever when called via the non-streamed (legacy) path.
+            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
+            _ = Task.Run(async () =>
             {
-                cts.Dispose();
-            }
-        });
-        return (true, execId);
+                try
+                {
+                    await ExecuteAsync(execId, command, arguments, isReboot,
+                        perCallChannel: null, cts.Token, userName: userName, password: password);
+                }
+                finally
+                {
+                    _executionLock.Release();
+                    cts.Dispose();
+                }
+            });
+            return (true, execId);
+        }
+        catch
+        {
+            _executionLock.Release();
+            throw;
+        }
     }
 
     // ── Streamed RunCommand (new: returns a channel the caller reads) ──
@@ -123,52 +140,68 @@ public sealed class CommandExecutor : IDisposable
         string? completionCheckCommand = null, int completionPollIntervalSeconds = 30,
         CancellationToken externalCt = default)
     {
-        if (_state == AgentState.Running)
+        // Acquire the semaphore non-blocking to eliminate TOCTOU race.
+        if (!_executionLock.Wait(0))
+        {
+            _logger.LogWarning("Agent is busy (semaphore contention) — rejecting streamed: {Cmd}", command);
             return (false, string.Empty, null);
-
-        if (!EvaluateCommandPolicy(command, arguments, executionId, out _))
-            return (false, string.Empty, null);
-
-        var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
-        var ch = Channel.CreateUnbounded<ExecutionEvent>();
-
-        // Build a CancellationToken that respects both the caller's token and the timeout
-        CancellationTokenSource? cts;
-        if (timeoutMs > 0)
-        {
-            cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
-            cts.CancelAfter(timeoutMs);
-        }
-        else if (externalCt.CanBeCanceled)
-        {
-            cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
-            // Safety-net: even with no explicit timeout, prevent a hung process
-            // from leaving the agent permanently stuck in "busy" state.
-            cts.CancelAfter(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
-        }
-        else
-        {
-            cts = new CancellationTokenSource(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
         }
 
-        var ct = cts.Token;
-
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            if (_state == AgentState.Running)
+                return (false, string.Empty, null);
+
+            if (!EvaluateCommandPolicy(command, arguments, executionId, out _))
+                return (false, string.Empty, null);
+
+            var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
+            var ch = Channel.CreateUnbounded<ExecutionEvent>();
+
+            // Build a CancellationToken that respects both the caller's token and the timeout
+            CancellationTokenSource? cts;
+            if (timeoutMs > 0)
             {
-                await ExecuteAsync(execId, command, arguments, isReboot, ch.Writer, ct,
-                    userName: userName, password: password,
-                    completionCheckCommand: completionCheckCommand,
-                    completionPollIntervalSeconds: completionPollIntervalSeconds,
-                    timeoutMs: timeoutMs);
+                cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+                cts.CancelAfter(timeoutMs);
             }
-            finally
+            else if (externalCt.CanBeCanceled)
             {
-                cts.Dispose();
+                cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+                // Safety-net: even with no explicit timeout, prevent a hung process
+                // from leaving the agent permanently stuck in "busy" state.
+                cts.CancelAfter(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
             }
-        });
-        return (true, execId, ch.Reader);
+            else
+            {
+                cts = new CancellationTokenSource(TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes));
+            }
+
+            var ct = cts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ExecuteAsync(execId, command, arguments, isReboot, ch.Writer, ct,
+                        userName: userName, password: password,
+                        completionCheckCommand: completionCheckCommand,
+                        completionPollIntervalSeconds: completionPollIntervalSeconds,
+                        timeoutMs: timeoutMs);
+                }
+                finally
+                {
+                    _executionLock.Release();
+                    cts.Dispose();
+                }
+            });
+            return (true, execId, ch.Reader);
+        }
+        catch
+        {
+            _executionLock.Release();
+            throw;
+        }
     }
 
     private bool EvaluateCommandPolicy(

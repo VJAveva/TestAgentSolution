@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +24,7 @@ public partial class ExecutionLogViewerDialog : Window
     /// Loads the merged execution log via the local API and shows the dialog.
     /// Returns null if the API call fails (a message box is displayed).
     /// </summary>
-    public static ExecutionLogViewerDialog? Create(
+    public static async Task<ExecutionLogViewerDialog?> CreateAsync(
         string buildName, string testCaseName, int? failedStepIndex, Window? owner)
     {
         try
@@ -34,8 +35,7 @@ public partial class ExecutionLogViewerDialog : Window
                       $"/test/{Uri.EscapeDataString(testCaseName)}/log" +
                       (failedStepIndex.HasValue ? $"?stepIndex={failedStepIndex}" : "");
 
-            var report = http.GetFromJsonAsync<ExecutionLogViewerVM.LogPayload>(url)
-                .GetAwaiter().GetResult();
+            var report = await http.GetFromJsonAsync<ExecutionLogViewerVM.LogPayload>(url);
 
             if (report == null)
             {

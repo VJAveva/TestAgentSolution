@@ -74,6 +74,12 @@ public sealed class ControllerTimeoutOptions
     /// <summary>Polly retry base delay (seconds). Default: 1.</summary>
     public int RetryDelaySeconds { get; set; } = 1;
 
+    /// <summary>Wait time (seconds) for agent recovery on UNAVAILABLE before failing. Default: 60. Set to 0 to disable.</summary>
+    public int UnavailableRecoverySeconds { get; set; } = 60;
+
+    /// <summary>Poll interval (seconds) during unavailable recovery wait. Default: 10.</summary>
+    public int UnavailableRecoveryPollIntervalSeconds { get; set; } = 10;
+
     // ── Execution ──
 
     /// <summary>Default action execution timeout when none specified in XML (seconds). Default: 7200 (2 hours).</summary>

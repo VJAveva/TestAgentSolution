@@ -57,7 +57,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} � locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start '{tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
-                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
         }
@@ -134,7 +134,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} � locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start '{wi.Tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
-                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
         }
@@ -328,7 +328,7 @@ public sealed partial class MainViewModel
             }
             finally
             {
-                Application.Current?.Dispatcher.Invoke(() => CompleteSession(session));
+                await Application.Current!.Dispatcher.InvokeAsync(() => CompleteSession(session));
             }
 
             return wiSuccess;
