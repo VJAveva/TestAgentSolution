@@ -5,11 +5,19 @@ namespace TestAgentGrpc;
 /// </summary>
 public sealed class AgentSettings
 {
+    private string _agentName = "";
+
     /// <summary>
     /// Friendly name used to identify this agent in the Controller's
     /// WatchList XML (e.g. "AppSerCI1").  Defaults to the machine name.
+    /// NOTE: .NET config binding sets this to "" when appsettings has an empty string,
+    /// so the getter always falls back to Environment.MachineName if blank.
     /// </summary>
-    public string AgentName { get; set; } = Environment.MachineName;
+    public string AgentName
+    {
+        get => string.IsNullOrWhiteSpace(_agentName) ? Environment.MachineName : _agentName;
+        set => _agentName = value ?? "";
+    }
 
     public int GrpcPort { get; set; } = 5200;
     public string ControllerAddress { get; set; } = "http://localhost:5100";
