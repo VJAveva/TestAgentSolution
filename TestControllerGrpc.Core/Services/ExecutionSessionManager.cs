@@ -153,7 +153,7 @@ public sealed class ExecutionSessionManager
                     _history.RemoveAt(_history.Count - 1);
             }
 
-            PersistToDisk();
+            PersistToDiskSync();
         }
     }
 
@@ -225,7 +225,7 @@ public sealed class ExecutionSessionManager
                 _history.RemoveAt(_history.Count - 1);
         }
 
-        PersistToDisk();
+        PersistToDiskSync();
         return true;
     }
 
@@ -253,7 +253,7 @@ public sealed class ExecutionSessionManager
         }
 
         if (cancelledTags.Count > 0)
-            PersistToDisk();
+            PersistToDiskSync();
         return cancelledTags;
     }
 
@@ -310,6 +310,45 @@ public sealed class ExecutionSessionManager
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// Synchronous persist for session-terminal events (complete, cancel).
+    /// Guarantees data is on disk before the method returns.
+    /// </summary>
+    private void PersistToDiskSync()
+    {
+        if (string.IsNullOrEmpty(_persistPath)) return;
+
+        lock (_persistLock)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(_persistPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                List<PersistedSession> snapshot;
+                lock (_historyLock)
+                {
+                    snapshot = _history.Select(ToPersistedSession).ToList();
+                }
+
+                foreach (var active in _active.Values)
+                    snapshot.Add(ToPersistedSession(active));
+
+                var json = JsonSerializer.Serialize(snapshot,
+                    new JsonSerializerOptions { WriteIndented = true });
+
+                var tempPath = _persistPath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _persistPath, overwrite: true);
+            }
+            catch
+            {
+                // Persistence failure is non-fatal
+            }
+        }
     }
 
     private void RestoreFromDisk()

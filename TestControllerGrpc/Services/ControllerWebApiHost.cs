@@ -144,6 +144,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                 o.EnableDetailedErrors = true;
                 o.MaximumReceiveMessageSize = 128 * 1024;
             });
+            builder.Services.AddScoped<Microsoft.AspNetCore.SignalR.IHubFilter, TestController.Api.Hubs.HubExceptionFilter>();
 
             builder.Services.AddCors(options =>
             {

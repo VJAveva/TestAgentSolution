@@ -2,6 +2,10 @@ using System.Diagnostics;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.Retry;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 using TestAgentGrpc;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -19,6 +23,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
     private readonly AgentGrpcClientManager _clientManager;
     private readonly AgentRegistry _registry;
     private readonly ILogger<StandaloneAgentDispatcher> _logger;
+    private readonly ResiliencePipeline _resilience;
 
     public event Action<string, string, string>? OutputReceived;
     public event Action<string, string>? StatusChanged;
@@ -31,6 +36,31 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         _clientManager = clientManager;
         _registry = registry;
         _logger = logger;
+        _resilience = new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = 3,
+                Delay = TimeSpan.FromSeconds(1),
+                BackoffType = DelayBackoffType.Exponential,
+                ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
+                    ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
+                OnRetry = args =>
+                {
+                    _logger.LogWarning(
+                        "Retry #{Attempt} for gRPC call after {Delay}: {Exception}",
+                        args.AttemptNumber, args.RetryDelay, args.Outcome.Exception?.Message);
+                    return default;
+                }
+            })
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+            {
+                FailureRatio = 0.5,
+                SamplingDuration = TimeSpan.FromSeconds(30),
+                MinimumThroughput = 5,
+                BreakDuration = TimeSpan.FromSeconds(30),
+            })
+            .AddTimeout(TimeSpan.FromHours(24))
+            .Build();
     }
 
     // ?? Registry operations ????????????????????????????????????????????
@@ -205,12 +235,15 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
                 : CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-            // Phase 2.15 spike: shared with the WPF dispatcher. WebApi has no
-            // Polly resilience or health tracking, so we call the helper
-            // directly and only keep the policy-specific bits below.
-            var streamResult = await RemoteCommandStreamRunner.StreamAsync(
-                client, agentName, resolved, linked.Token,
-                outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+            // Phase 2.15 spike: shared with the WPF dispatcher. Wrapped in Polly
+            // resilience pipeline for automatic retry on transient gRPC failures.
+            var streamResult = await _resilience.ExecuteAsync(async resilienceCt =>
+            {
+                var currentClient = _clientManager.GetClient(entry.Address);
+                return await RemoteCommandStreamRunner.StreamAsync(
+                    currentClient, agentName, resolved, resilienceCt,
+                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+            }, linked.Token);
 
             // If agent rejected the command because it's still busy (e.g. draining
             // stdout from a long install), wait and retry up to 2 minutes.
@@ -241,9 +274,13 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                     catch (RpcException) { break; }
                 }
 
-                streamResult = await RemoteCommandStreamRunner.StreamAsync(
-                    client, agentName, resolved, linked.Token,
-                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+                streamResult = await _resilience.ExecuteAsync(async resilienceCt =>
+                {
+                    var currentClient = _clientManager.GetClient(entry.Address);
+                    return await RemoteCommandStreamRunner.StreamAsync(
+                        currentClient, agentName, resolved, resilienceCt,
+                        outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+                }, linked.Token);
             }
 
             // Reboot handling: only wait if the command was actually accepted

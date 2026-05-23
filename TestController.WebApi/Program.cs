@@ -97,6 +97,7 @@ builder.Services.AddSignalR(options =>
     if (TimeSpan.TryParse(signalRSection["ClientTimeoutInterval"], out var clientTimeout))
         options.ClientTimeoutInterval = clientTimeout;
 });
+builder.Services.AddScoped<Microsoft.AspNetCore.SignalR.IHubFilter, TestController.Api.Hubs.HubExceptionFilter>();
 
 // CORS: production environments should specify allowed origins explicitly.
 // Default policy allows all for development/single-machine scenarios.

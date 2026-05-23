@@ -402,7 +402,9 @@ public class ExecutionController : ControllerBase
                 var lines = parameters
                     .Where(kvp => kvp.Key.StartsWith('_'))
                     .Select(kvp => $"{kvp.Key},{kvp.Value}");
-                await System.IO.File.WriteAllLinesAsync(paramFile, lines);
+                var tempFile = paramFile + ".tmp";
+                await System.IO.File.WriteAllLinesAsync(tempFile, lines);
+                System.IO.File.Move(tempFile, paramFile, overwrite: true);
             }
             catch { /* best effort */ }
         }

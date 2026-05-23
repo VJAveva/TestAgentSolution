@@ -100,7 +100,9 @@ public static partial class ParameterResolver
     public static void SaveParameterFile(string filePath, IEnumerable<(string Key, string Value)> entries)
     {
         var lines = entries.Select(e => $"{e.Key},{e.Value}").ToList();
-        File.WriteAllLines(filePath, lines);
+        var tempPath = filePath + ".tmp";
+        File.WriteAllLines(tempPath, lines);
+        File.Move(tempPath, filePath, overwrite: true);
     }
 
     /// <summary>
