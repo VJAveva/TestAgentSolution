@@ -721,6 +721,10 @@
         <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBg}"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
             <DockPanel>
+                <!-- Health Metrics Strip (always visible, right-docked) -->
+                <views:HealthMetricsStrip DockPanel.Dock="Right" DataContext="{Binding HealthMetrics}"
+                                          Margin="0,2,8,2" />
+
                 <!-- Simplified Layout toggle + status -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
                             HorizontalAlignment="Right" Margin="12,0">

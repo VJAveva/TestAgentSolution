@@ -85,6 +85,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Multi-session execution dashboard ViewModel.</summary>
     public ExecutionDashboardVM ExecutionDashboard { get; private set; } = null!;
 
+    /// <summary>Controller health metrics strip ViewModel.</summary>
+    public HealthMetricsVM HealthMetrics { get; private set; } = null!;
+
     partial void OnIsExecutingChanged(bool value)
     {
         NotifyExecutionCanExecuteChanged();
@@ -336,6 +339,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Application.Current?.Dispatcher
                 ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
+        // ── Controller health metrics strip ─────────────────────────
+        HealthMetrics = new HealthMetricsVM(dispatcher, sessionManager);
+
         // Cancel requests raised from the dashboard cancel the matching
         // PipelineSession's CTS via the existing ActiveSessions tracking.
         _subscriptions.Add(events.Subscribe<CancelSessionRequestEvent>(req =>
@@ -431,6 +437,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Stop the multi-session dashboard's refresh timer + event subscriptions.
         ExecutionDashboard?.Dispose();
+        HealthMetrics?.Dispose();
 
         // Cancel all active sessions
         foreach (var session in ActiveSessions.ToList())
