@@ -125,7 +125,8 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         _executor.StateChanged -= OnStateChanged;
         _executor.SetState(AgentState.Inactive);
 
-        _cts?.Cancel();
+        try { _cts?.Cancel(); }
+        catch (ObjectDisposedException) { }
 
         // Wait for background tasks to finish gracefully
         try { if (_heartbeatTask is not null) await _heartbeatTask.WaitAsync(ct); } catch { }

@@ -460,7 +460,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     //    invocable from derived classes) ?????????????????????????????????
 
     protected void OnLogEntry(PipelineLogEntry entry) => LogEntry?.Invoke(entry);
-    protected void OnNodeProgress(IActionNode node, string status) => NodeProgress?.Invoke(node, status);
+    protected void  OnNodeProgress(IActionNode node, string status) => NodeProgress?.Invoke(node, status);
     protected void OnNodeFailed(IActionNode node, int exitCode, string error)
         => NodeFailed?.Invoke(node, exitCode, error);
 

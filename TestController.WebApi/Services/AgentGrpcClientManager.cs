@@ -35,6 +35,9 @@ public sealed class AgentGrpcClientManager : IDisposable
             {
                 DefaultRequestVersion = new Version(2, 0),
                 DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher,
+                // gRPC streaming calls must not be killed by HttpClient's default 100s timeout.
+                // Cancellation is managed via gRPC deadlines / CancellationTokens instead.
+                Timeout = Timeout.InfiniteTimeSpan,
             };
             return GrpcChannel.ForAddress(addr, new GrpcChannelOptions
             {

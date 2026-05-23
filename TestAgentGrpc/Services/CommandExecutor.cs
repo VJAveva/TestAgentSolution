@@ -251,27 +251,10 @@ public sealed class CommandExecutor : IDisposable
         int completionPollIntervalSeconds = 30,
         int timeoutMs = 0)
     {
-        // Acquire the execution lock — if cancelled here, we must NOT release in finally
-        bool lockAcquired = false;
+        // NOTE: The caller (RunCommand or RunCommandStreamed) already holds _executionLock.
+        // The lock is released in the caller's Task.Run finally block.
         var lifecycle = new ExecutionLifecycleState(executionId, command, arguments);
         _lifecycle = lifecycle;
-        try
-        {
-            await _executionLock.WaitAsync(ct);
-            lockAcquired = true;
-            lifecycle.MarkLockAcquired();
-        }
-        catch (OperationCanceledException)
-        {
-            // Lock acquisition was cancelled (timeout). Reset state set by RunCommand
-            // so the agent doesn't stay permanently stuck in Running.
-            _lifecycle = null;
-            _currentExecutionId = null;
-            _currentCommand = null;
-            _state = AgentState.Ready;
-            perCallChannel?.TryComplete();
-            throw;
-        }
 
         _currentExecutionId = executionId;
         _currentCommand     = lifecycle.RedactedCommand;
@@ -553,9 +536,6 @@ public sealed class CommandExecutor : IDisposable
             catch { /* swallow */ }
 
             perCallChannel?.TryComplete();
-
-            if (lockAcquired)
-                _executionLock.Release();
         }
     }
 

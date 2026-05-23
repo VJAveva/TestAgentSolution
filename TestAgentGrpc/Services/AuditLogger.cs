@@ -97,7 +97,11 @@ public sealed class AuditLogger : IHostedService, IDisposable
         if (_flushTask is not null)
         {
             try { await _flushTask.WaitAsync(cancellationToken); }
-            catch (OperationCanceledException) { _cts?.Cancel(); }
+            catch (OperationCanceledException)
+            {
+                try { _cts?.Cancel(); }
+                catch (ObjectDisposedException) { }
+            }
             catch { }
         }
     }
