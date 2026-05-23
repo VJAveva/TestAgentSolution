@@ -1,6 +1,7 @@
 using Grpc.Core;
 using TestAgentGrpc.Clients;
 using TestAgentGrpc.Services;
+using TestControllerGrpc.Services;
 using Microsoft.Extensions.Options;
 
 namespace TestAgentGrpc;
@@ -104,6 +105,9 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
             _audit.Log("RegistrationFailed", severity: "Warning",
                 detail: $"Initial registration failed: {regError}",
                 controller: _settings.ControllerAddress);
+            CrashDumpHelper.AppendCrashLog(
+                $"[Lifecycle] Initial registration FAILED — will retry. " +
+                $"Machine={Environment.MachineName}, Agent={_settings.AgentName}, Error={regError}");
         }
 
         // Start heartbeat loop (will silently fail if controller unreachable)
@@ -231,12 +235,27 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                 _audit.Log("HeartbeatFailed", severity: "Warning",
                     detail: errorDetail, controller: _settings.ControllerAddress);
 
+                // Write to crash log so gRPC failures are always visible in agent_crash.log
+                CrashDumpHelper.AppendCrashLog(
+                    $"[Heartbeat] FAIL #{consecutiveFailures}: {errorDetail}");
+
                 if (consecutiveFailures >= 3 && !controllerLost)
                 {
                     controllerLost = true;
                     _audit.Log("ControllerLost", severity: "Error",
                         controller: _settings.ControllerAddress,
                         detail: $"Lost connection after {consecutiveFailures} consecutive heartbeat failures. Last error: {errorDetail}");
+                    CrashDumpHelper.AppendCrashLog(
+                        $"[ControllerLost] Connection lost after {consecutiveFailures} failures. " +
+                        $"Controller={_settings.ControllerAddress}, Error={errorDetail}");
+                }
+
+                // Reset gRPC channel after 5 consecutive failures to force DNS re-resolution
+                if (consecutiveFailures == 5)
+                {
+                    _controller.ResetChannel();
+                    CrashDumpHelper.AppendCrashLog(
+                        "[gRPC] Channel reset triggered after 5 consecutive heartbeat failures");
                 }
 
                 _logger.LogWarning(ex, "Heartbeat iteration failed (consecutive: {Count})", consecutiveFailures);

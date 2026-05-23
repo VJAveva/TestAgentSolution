@@ -2,6 +2,7 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Options;
+using TestControllerGrpc.Services;
 
 namespace TestAgentGrpc.Clients;
 
@@ -19,14 +20,20 @@ public sealed class TestControllerClient : IDisposable
 {
     private readonly AgentSettings _settings;
     private readonly ILogger<TestControllerClient> _logger;
-    private readonly Lazy<GrpcChannel> _channel;
+    private GrpcChannel? _channel;
+    private readonly object _channelLock = new();
 
     public TestControllerClient(IOptions<AgentSettings> settings, ILogger<TestControllerClient> logger)
     {
         _settings = settings.Value;
         _logger   = logger;
-        _channel  = new Lazy<GrpcChannel>(() =>
-            GrpcChannel.ForAddress(_settings.ControllerAddress, new GrpcChannelOptions
+    }
+
+    private GrpcChannel GetOrCreateChannel()
+    {
+        lock (_channelLock)
+        {
+            _channel ??= GrpcChannel.ForAddress(_settings.ControllerAddress, new GrpcChannelOptions
             {
                 HttpHandler = new SocketsHttpHandler
                 {
@@ -35,18 +42,38 @@ public sealed class TestControllerClient : IDisposable
                     KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
                     KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
                     PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
-                    PooledConnectionLifetime      = TimeSpan.FromMinutes(5),
+                    // Increased from 5min to avoid premature recycling on unstable DNS
+                    PooledConnectionLifetime      = TimeSpan.FromMinutes(30),
                 }
-            }));
+            });
+
+            return _channel;
+        }
     }
 
-    private TestControllerService.TestControllerServiceClient Client => new(_channel.Value);
+    private TestControllerService.TestControllerServiceClient Client => new(GetOrCreateChannel());
+
+    /// <summary>
+    /// Forces recreation of the gRPC channel (e.g., after detecting persistent failures).
+    /// </summary>
+    public void ResetChannel()
+    {
+        lock (_channelLock)
+        {
+            _logger.LogInformation("Forcing gRPC channel reset");
+            CrashDumpHelper.AppendCrashLog(
+                $"[gRPC] Channel RESET forced — target: {_settings.ControllerAddress}");
+            try { _channel?.Dispose(); } catch { }
+            _channel = null;
+        }
+    }
 
     // ── Registration (with retry) ──────────────────────────────────────
 
     /// <summary>
     /// Registers with the controller, retrying on failure.
     /// Returns (success, lastErrorMessage).
+    /// Includes checkpoint logging for diagnosing partial registration failures.
     /// </summary>
     public async Task<(bool Success, string? Error)> RegisterAsync(CancellationToken ct = default)
     {
@@ -56,45 +83,140 @@ public sealed class TestControllerClient : IDisposable
         var delay     = TimeSpan.FromSeconds(_settings.RegistrationRetryIntervalSeconds);
         string? lastError = null;
 
+        // ── Checkpoint 1: Validate all registration parameters ─────────
+        var validationErrors = ValidateRegistrationParams(agentName, endpoint);
+        if (validationErrors is not null)
+        {
+            var msg = $"Registration parameter validation FAILED: {validationErrors}";
+            _logger.LogError(msg);
+            CrashDumpHelper.AppendCrashLog($"[Registration] CHECKPOINT_FAIL: {msg}");
+            return (false, msg);
+        }
+        _logger.LogInformation(
+            "[Checkpoint 1/4 PASS] Parameters validated: Name={Name}, Endpoint={Ep}, Controller={Ctrl}",
+            agentName, endpoint, _settings.ControllerAddress);
+
+        // ── Checkpoint 2: Verify DNS/connectivity to controller ────────
+        if (!await VerifyControllerReachable(ct))
+        {
+            var msg = $"Controller at '{_settings.ControllerAddress}' is not reachable (DNS/TCP failed)";
+            _logger.LogError("[Checkpoint 2/4 FAIL] {Msg}", msg);
+            CrashDumpHelper.AppendCrashLog($"[Registration] CHECKPOINT_FAIL: {msg}");
+            // Don't return — still attempt gRPC (it may work via cached DNS)
+        }
+        else
+        {
+            _logger.LogInformation("[Checkpoint 2/4 PASS] Controller reachable at {Addr}", _settings.ControllerAddress);
+        }
+
+        // ── Checkpoint 3: Execute gRPC registration with retries ───────
         for (int attempt = 0; attempt <= retries; attempt++)
         {
             try
             {
                 _logger.LogInformation(
-                    "Registering (attempt {N}/{Max}): Name={Name}, Endpoint={Ep}, Controller={Ctrl}",
-                    attempt + 1, retries + 1, agentName, endpoint, _settings.ControllerAddress);
+                    "[Checkpoint 3/4] Registration attempt {N}/{Max}: Name={Name}, Endpoint={Ep}, State={State}",
+                    attempt + 1, retries + 1, agentName, endpoint, AgentState.Ready);
+
                 await Client.RegisterAsync(new TestAgentRef
                 {
                     Name     = agentName,
                     State    = AgentState.Ready,
                     Endpoint = endpoint,
                 }, cancellationToken: ct);
-                _logger.LogInformation("Registration successful");
+
+                // ── Checkpoint 4: Registration confirmed ───────────────
+                _logger.LogInformation(
+                    "[Checkpoint 4/4 PASS] Registration CONFIRMED by controller. " +
+                    "Agent='{Name}', Endpoint='{Ep}', Machine='{Machine}'",
+                    agentName, endpoint, Environment.MachineName);
+                CrashDumpHelper.AppendCrashLog(
+                    $"[Registration] SUCCESS: Name={agentName}, Endpoint={endpoint}, " +
+                    $"Machine={Environment.MachineName}, Controller={_settings.ControllerAddress}");
                 return (true, null);
             }
             catch (RpcException ex)
             {
                 lastError = $"gRPC {ex.StatusCode}: {ex.Status.Detail} ({ex.Message})";
-                _logger.LogWarning("Registration attempt {N} failed: {Error}", attempt + 1, lastError);
+                _logger.LogWarning(
+                    "[Checkpoint 3/4 FAIL] Attempt {N}: {Error}", attempt + 1, lastError);
+                CrashDumpHelper.AppendCrashLog(
+                    $"[Registration] ATTEMPT_{attempt + 1}_FAILED: {lastError}");
                 if (attempt < retries) await Task.Delay(delay, ct);
             }
             catch (HttpRequestException ex)
             {
                 lastError = $"HTTP error: {ex.Message} (InnerException: {ex.InnerException?.Message})";
-                _logger.LogWarning("Registration attempt {N} failed: {Error}", attempt + 1, lastError);
+                _logger.LogWarning(
+                    "[Checkpoint 3/4 FAIL] Attempt {N}: {Error}", attempt + 1, lastError);
+                CrashDumpHelper.AppendCrashLog(
+                    $"[Registration] ATTEMPT_{attempt + 1}_FAILED (HTTP): {lastError}");
                 if (attempt < retries) await Task.Delay(delay, ct);
             }
             catch (Exception ex)
             {
                 lastError = $"{ex.GetType().Name}: {ex.Message}";
-                _logger.LogWarning(ex, "Registration attempt {N} failed", attempt + 1);
+                _logger.LogWarning(ex,
+                    "[Checkpoint 3/4 FAIL] Attempt {N}: {Error}", attempt + 1, lastError);
+                CrashDumpHelper.AppendCrashLog(
+                    $"[Registration] ATTEMPT_{attempt + 1}_FAILED (Unexpected): {lastError}");
                 if (attempt < retries) await Task.Delay(delay, ct);
             }
         }
 
-        _logger.LogError("Registration failed after {N} attempts. Last error: {Error}",
+        _logger.LogError(
+            "[Checkpoint 3/4 EXHAUSTED] Registration failed after {N} attempts. Last error: {Error}",
             retries + 1, lastError);
+        CrashDumpHelper.AppendCrashLog(
+            $"[Registration] ALL_ATTEMPTS_EXHAUSTED: {retries + 1} attempts failed. " +
+            $"Name={agentName}, Endpoint={endpoint}, Controller={_settings.ControllerAddress}, " +
+            $"LastError={lastError}");
         return (false, lastError);
+    }
+
+    /// <summary>
+    /// Validates that all registration parameters are non-empty and well-formed.
+    /// Returns null on success, or an error description on failure.
+    /// </summary>
+    private static string? ValidateRegistrationParams(string agentName, string endpoint)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(agentName))
+            errors.Add("AgentName is empty (Environment.MachineName returned blank?)");
+        if (string.IsNullOrWhiteSpace(endpoint))
+            errors.Add("Endpoint is empty");
+        else if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            errors.Add($"Endpoint '{endpoint}' is not a valid URI");
+        else if (string.IsNullOrWhiteSpace(uri.Host) || uri.Host == "localhost")
+            errors.Add($"Endpoint host '{uri.Host}' is not a routable hostname — controller cannot call back");
+
+        if (agentName?.Length > 0 && agentName.Contains(' '))
+            errors.Add($"AgentName '{agentName}' contains spaces — may cause routing issues");
+
+        return errors.Count > 0 ? string.Join("; ", errors) : null;
+    }
+
+    /// <summary>
+    /// Quick TCP probe to verify the controller address is reachable before attempting gRPC.
+    /// </summary>
+    private async Task<bool> VerifyControllerReachable(CancellationToken ct)
+    {
+        try
+        {
+            if (!Uri.TryCreate(_settings.ControllerAddress, UriKind.Absolute, out var uri))
+                return false;
+
+            using var tcp = new System.Net.Sockets.TcpClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+            await tcp.ConnectAsync(uri.Host, uri.Port, linked.Token);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public async Task UnRegisterAsync(CancellationToken ct = default)
@@ -187,6 +309,10 @@ public sealed class TestControllerClient : IDisposable
 
     public void Dispose()
     {
-        if (_channel.IsValueCreated) _channel.Value.Dispose();
+        lock (_channelLock)
+        {
+            _channel?.Dispose();
+            _channel = null;
+        }
     }
 }
