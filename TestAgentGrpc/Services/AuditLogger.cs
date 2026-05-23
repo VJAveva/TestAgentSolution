@@ -24,6 +24,7 @@ public sealed record AuditEntry
     public int? ExitCode { get; init; }
     public long? DurationMs { get; init; }
     public string? Detail { get; init; }
+    public string? CorrelationId { get; init; }
 }
 
 /// <summary>
@@ -116,7 +117,8 @@ public sealed class AuditLogger : IHostedService, IDisposable
         string? controller = null, string? command = null,
         string? arguments = null, string? credentials = null,
         int? pid = null, int? exitCode = null,
-        long? durationMs = null, string? detail = null)
+        long? durationMs = null, string? detail = null,
+        string? correlationId = null)
     {
         if (!_settings.Enabled) return;
 
@@ -135,6 +137,7 @@ public sealed class AuditLogger : IHostedService, IDisposable
             ExitCode    = exitCode,
             DurationMs  = durationMs,
             Detail      = SecurityRedactor.Redact(detail),
+            CorrelationId = correlationId,
         };
 
         _channel.Writer.TryWrite(entry);

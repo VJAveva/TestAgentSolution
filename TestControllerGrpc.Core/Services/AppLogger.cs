@@ -24,10 +24,14 @@ public sealed class AppLogger : IAppLogger, IDisposable
     private readonly List<AppLogEntry> _ringBuffer = new();
     private readonly object _lock = new();
     private readonly int _maxBuffer;
+    private readonly long _maxFileSizeBytes;
     private StreamWriter? _componentWriter;
     private StreamWriter? _sharedWriter;
     private StreamWriter? _errorsWriter;
     private string _currentDate = "";
+    private int _componentRollover;
+    private int _sharedRollover;
+    private int _errorsRollover;
     private static long _globalSequence;
 
     /// <summary>
@@ -42,11 +46,12 @@ public sealed class AppLogger : IAppLogger, IDisposable
 
     public event Action<AppLogEntry>? EntryAdded;
 
-    public AppLogger(string appName, string logDirectory, int maxBuffer = 5000)
+    public AppLogger(string appName, string logDirectory, int maxBuffer = 5000, long maxFileSizeBytes = 50 * 1024 * 1024)
     {
         _appName = appName;
         _logDirectory = logDirectory;
         _maxBuffer = maxBuffer;
+        _maxFileSizeBytes = maxFileSizeBytes;
         Directory.CreateDirectory(logDirectory);
     }
 
@@ -114,18 +119,41 @@ public sealed class AppLogger : IAppLogger, IDisposable
 
                 // 1. Component-specific file (e.g. controller_2026-04-25.log)
                 _componentWriter?.WriteLine(line);
+                CheckSizeRollover(ref _componentWriter, $"{_appName}_{_currentDate}", ref _componentRollover);
 
-                // 2. Shared file (app_2026-04-25.log) � all components
+                // 2. Shared file (app_2026-04-25.log) — all components
                 _sharedWriter?.WriteLine(line);
+                CheckSizeRollover(ref _sharedWriter, $"app_{_currentDate}", ref _sharedRollover);
 
                 // 3. Errors-only file
                 if (entry.Level >= LogLevel.Error)
+                {
                     _errorsWriter?.WriteLine(line);
+                    CheckSizeRollover(ref _errorsWriter, $"errors_{_currentDate}", ref _errorsRollover);
+                }
             }
         }
         catch
         {
             // Don't crash on log failure
+        }
+    }
+
+    private void CheckSizeRollover(ref StreamWriter? writer, string baseName, ref int rolloverCount)
+    {
+        if (writer is null) return;
+        try
+        {
+            if (writer.BaseStream.Length >= _maxFileSizeBytes)
+            {
+                writer.Dispose();
+                rolloverCount++;
+                writer = OpenSharedWriter($"{baseName}.{rolloverCount}.log");
+            }
+        }
+        catch
+        {
+            // Ignore size check failures — will retry next write
         }
     }
 
@@ -135,6 +163,9 @@ public sealed class AppLogger : IAppLogger, IDisposable
         _sharedWriter?.Dispose();
         _errorsWriter?.Dispose();
         _currentDate = date;
+        _componentRollover = 0;
+        _sharedRollover = 0;
+        _errorsRollover = 0;
 
         _componentWriter = OpenSharedWriter($"{_appName}_{date}.log");
         _sharedWriter = OpenSharedWriter($"app_{date}.log");

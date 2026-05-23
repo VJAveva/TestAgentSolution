@@ -128,7 +128,11 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         IServerStreamWriter<ExecutionEvent> responseStream,
         ServerCallContext context)
     {
-        _logger.LogInformation("RunCommandStreamed: {CmdLine}",
+        var correlationId = context.RequestHeaders
+            .FirstOrDefault(h => h.Key == "x-correlation-id")?.Value ?? "";
+
+        _logger.LogInformation("[{CorrelationId}] RunCommandStreamed: {CmdLine}",
+            correlationId,
             SecurityRedactor.RedactCommandLine(request.Command, request.Arguments));
 
         // Convert timeout from seconds to milliseconds (0 = no timeout)
@@ -165,7 +169,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
         _audit.Log("CommandReceived", source: context.Peer,
             executionId: execId, command: request.Command, arguments: request.Arguments,
-            credentials: string.IsNullOrEmpty(request.UserName) ? null : request.UserName);
+            credentials: string.IsNullOrEmpty(request.UserName) ? null : request.UserName,
+            correlationId: correlationId);
 
         // Stream events until execution completes or client disconnects
         try

@@ -403,7 +403,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                             a, SecurityRedactor.Redact(cmd), elapsed.ToString(@"hh\:mm\:ss"));
                         StatusChanged?.Invoke(a,
                             $"Running: {SecurityRedactor.Redact(cmd)} ({elapsed:hh\\:mm\\:ss})");
-                    });
+                    },
+                    correlationId: correlationId);
 
                 // If agent rejected the command because it's still busy (e.g. draining
                 // stdout from a long install), wait and retry up to configured recovery time.
@@ -639,7 +640,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
                         return await RemoteCommandStreamRunner.StreamAsync(
                             retryClient, agentName, resolved, retryLinked.Token,
-                            outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+                            outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                            correlationId: correlationId);
                     }, ct);
 
                     var retryExitCode = retryResult.ExitCode;

@@ -54,6 +54,7 @@ public static class RemoteCommandStreamRunner
     /// Receives (agentName, command, elapsed).
     /// </param>
     /// <param name="progressInterval">How often to fire <paramref name="onProgressTick"/>. Defaults to 5 minutes.</param>
+    /// <param name="correlationId">Optional correlation ID propagated to the agent via gRPC metadata for end-to-end tracing.</param>
     public static async Task<RemoteCommandStreamResult> StreamAsync(
         TestAgentService.TestAgentServiceClient client,
         string agentName,
@@ -61,11 +62,16 @@ public static class RemoteCommandStreamRunner
         CancellationToken ct,
         Action<string, string, string>? outputReceived = null,
         Action<string, string, TimeSpan>? onProgressTick = null,
-        TimeSpan? progressInterval = null)
+        TimeSpan? progressInterval = null,
+        string? correlationId = null)
     {
         var request = BuildRequest(resolved);
 
-        using var call = client.RunCommandStreamed(request, cancellationToken: ct);
+        var headers = new Grpc.Core.Metadata();
+        if (!string.IsNullOrEmpty(correlationId))
+            headers.Add("x-correlation-id", correlationId);
+
+        using var call = client.RunCommandStreamed(request, headers: headers, cancellationToken: ct);
 
         int exitCode = 0;
         string errorMessage = "";

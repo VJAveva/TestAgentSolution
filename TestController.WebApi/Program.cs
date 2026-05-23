@@ -1,7 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using OpenTelemetry.Metrics;
 using TestController.Api;
 using TestController.WebApi.Endpoints;
 using TestController.WebApi.Services;
@@ -147,6 +150,20 @@ builder.Services.AddRateLimiter(options =>
 // OpenAPI document for API discovery and tooling
 builder.Services.AddOpenApi();
 
+// Health checks: liveness (always OK) + readiness (verifies agent connectivity)
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
+    .AddCheck<AgentConnectivityHealthCheck>("agents", tags: ["ready"]);
+
+// OpenTelemetry metrics: custom app meters + Prometheus exporter on /metrics
+builder.Services.AddSingleton<AppMetrics>();
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(AppMetrics.MeterName);
+        metrics.AddPrometheusExporter();
+    });
+
 var app = builder.Build();
 
 // Fail-fast config validation — errors prevent startup in production
@@ -217,6 +234,19 @@ app.UseStaticFiles(new StaticFileOptions
 
 // Shared API: controllers (execution, watchlist, agents, health, results) + single SignalR hub
 app.UseControllerApi("/hubs/controller");
+
+// Health endpoints: /healthz/live (liveness) + /healthz/ready (readiness including agent connectivity)
+app.MapHealthChecks("/healthz/live", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("live"),
+});
+app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+});
+
+// Prometheus metrics endpoint
+app.MapPrometheusScrapingEndpoint("/metrics");
 
 // OpenAPI endpoint (development only)
 if (app.Environment.IsDevelopment())

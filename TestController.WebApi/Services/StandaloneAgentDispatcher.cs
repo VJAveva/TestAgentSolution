@@ -242,7 +242,8 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 var currentClient = _clientManager.GetClient(entry.Address);
                 return await RemoteCommandStreamRunner.StreamAsync(
                     currentClient, agentName, resolved, resilienceCt,
-                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                    correlationId: ctx.SessionId);
             }, linked.Token);
 
             // If agent rejected the command because it's still busy (e.g. draining
@@ -279,7 +280,8 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                     var currentClient = _clientManager.GetClient(entry.Address);
                     return await RemoteCommandStreamRunner.StreamAsync(
                         currentClient, agentName, resolved, resilienceCt,
-                        outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
+                        outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                        correlationId: ctx.SessionId);
                 }, linked.Token);
             }
 
