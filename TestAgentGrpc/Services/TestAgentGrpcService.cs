@@ -52,6 +52,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
     public override Task<StateReply> GetState(Empty request, ServerCallContext context)
     {
+        // Include hostname in response headers for auto-discovery
+        context.ResponseTrailers.Add("x-agent-hostname", Environment.MachineName);
         return Task.FromResult(new StateReply { State = _executor.CurrentState });
     }
 

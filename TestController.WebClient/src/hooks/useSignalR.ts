@@ -60,6 +60,10 @@ export function useSignalR(): HubConnection | null {
       }
       conn.invoke('JoinAsUser', getUserId()).catch(err =>
         console.warn('[SignalR] JoinAsUser failed:', err?.message ?? err));
+      // Request browser notification permission for background session completion alerts
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
     }).catch(err => {
       console.error(
         `[SignalR] start() failed: ${err?.message ?? err} ? retry in 30s`, err);
@@ -181,6 +185,15 @@ export function useSignalR(): HubConnection | null {
         timestamp: new Date().toISOString(),
         severity: data.state === 'Success' ? 'success' : data.state === 'Failed' ? 'error' : 'warning',
       });
+
+      // Browser notification when tab is hidden so QA doesn't miss completion
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        const icon = data.state === 'Success' ? '✅' : data.state === 'Failed' ? '❌' : '⚠️';
+        new Notification(`${icon} Pipeline ${data.state}`, {
+          body: data.watchItemTag ?? data.sessionId ?? 'Unknown session',
+          tag: `execution-${data.sessionId}`,
+        });
+      }
     });
 
     // Single-session cancel broadcasts ExecutionCancelled (not ExecutionCompleted)

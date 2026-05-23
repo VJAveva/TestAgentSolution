@@ -28,13 +28,14 @@ public static class AgentEndpoints
         return group;
     }
 
-    /// <summary>GET /api/agents � list all registered agents with status.</summary>
+    /// <summary>GET /api/agents — list all registered agents with status.</summary>
     private static IResult ListAgents(AgentRegistry registry)
     {
         var agents = registry.GetAll().Select(a => new
         {
             a.Name,
             a.Address,
+            a.Hostname,
             a.Status,
             a.LastStatusDetail,
             a.LastCheckedUtc
@@ -49,19 +50,27 @@ public static class AgentEndpoints
         AgentGrpcClientManager grpcManager,
         IRealtimeNotifier notifier)
     {
-        if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.Address))
-            return Results.BadRequest("Name and Address are required.");
+        if (string.IsNullOrWhiteSpace(req.Address))
+            return Results.BadRequest("Address is required.");
 
-        registry.Register(req.Name, req.Address);
-
-        // Attempt connectivity check — agent stays registered regardless of outcome
+        // Attempt connectivity check and auto-resolve hostname/name from agent
         string status;
         string? detail = null;
+        string? resolvedHostname = null;
+        string agentName = req.Name ?? "";
+
         try
         {
             var client = grpcManager.GetClient(req.Address);
-            var state = await client.GetStateAsync(new Empty());
-            status = state.State.ToString();
+            var snapshot = await client.GetAgentSnapshotAsync(new Empty());
+            status = snapshot.State.ToString();
+            resolvedHostname = snapshot.AgentName;
+
+            // Auto-resolve name from machine hostname if not explicitly provided
+            if (string.IsNullOrWhiteSpace(agentName) && !string.IsNullOrWhiteSpace(resolvedHostname))
+            {
+                agentName = resolvedHostname;
+            }
         }
         catch (RpcException ex)
         {
@@ -74,24 +83,37 @@ public static class AgentEndpoints
             detail = $"Registration succeeded but connectivity check failed: {ex.Message}";
         }
 
-        registry.UpdateStatus(req.Name, status, detail);
+        if (string.IsNullOrWhiteSpace(agentName))
+            return Results.BadRequest("Name is required (could not auto-resolve from agent).");
+
+        registry.Register(agentName, req.Address);
+
+        // Store the resolved hostname on the entry
+        if (registry.TryGet(agentName, out var entry))
+        {
+            entry.Hostname = resolvedHostname;
+        }
+
+        registry.UpdateStatus(agentName, status, detail);
         await notifier.NotifyAgentStatusChanged(new
         {
-            agentName = req.Name,
+            agentName,
             status,
+            hostname = resolvedHostname,
             timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
         });
 
         var healthy = status != "Unhealthy";
         return Results.Ok(new
         {
-            name = req.Name,
+            name = agentName,
             address = req.Address,
+            hostname = resolvedHostname,
             status,
             healthy,
             message = healthy
-                ? $"Agent '{req.Name}' registered and online ({status})."
-                : $"Agent '{req.Name}' registered but unhealthy.",
+                ? $"Agent '{agentName}' registered and online ({status}). Hostname: {resolvedHostname}"
+                : $"Agent '{agentName}' registered but unhealthy.",
             detail
         });
     }
@@ -667,5 +689,5 @@ public static class AgentEndpoints
     }
 }
 
-public record AgentRegisterRequest(string Name, string Address);
+public record AgentRegisterRequest(string? Name, string Address);
 public record DiagnosticStep(string Step, bool Passed, string Detail);
