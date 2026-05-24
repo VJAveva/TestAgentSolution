@@ -40,6 +40,7 @@ public sealed class CommandExecutor : IDisposable
     private string? _currentCommand;
     private DateTime? _executionStartedUtc;
     private volatile ExecutionLifecycleState? _lifecycle;
+    private volatile int _currentTimeoutMinutes;
 
     public event EventHandler<AgentState>? StateChanged;
     public event EventHandler<string>? ActivityChanged;
@@ -70,6 +71,13 @@ public sealed class CommandExecutor : IDisposable
     public string?    CurrentCommand     => _currentCommand;
     public DateTime?  ExecutionStartedUtc => _executionStartedUtc;
     public ExecutionLifecycleState? CurrentLifecycle => _lifecycle;
+
+    /// <summary>
+    /// The effective timeout (in minutes) for the currently running execution.
+    /// Used by the watchdog to avoid killing legitimate long-running commands.
+    /// Returns <see cref="AgentSettings.MaxExecutionTimeoutMinutes"/> when no explicit timeout was set.
+    /// </summary>
+    public int CurrentTimeoutMinutes => _currentTimeoutMinutes > 0 ? _currentTimeoutMinutes : _settings.MaxExecutionTimeoutMinutes;
 
     // ── Fire-and-forget RunCommand (legacy compatible) ─────────────────
 
@@ -105,6 +113,7 @@ public sealed class CommandExecutor : IDisposable
             _state = AgentState.Running;
             _currentExecutionId = execId;
             _currentCommand = SecurityRedactor.RedactCommandLine(command, arguments);
+            _currentTimeoutMinutes = _settings.MaxExecutionTimeoutMinutes;
 
             // Safety-net timeout prevents the agent from staying stuck in Running state
             // forever when called via the non-streamed (legacy) path.
@@ -157,6 +166,11 @@ public sealed class CommandExecutor : IDisposable
 
             var execId = executionId ?? Guid.NewGuid().ToString("N")[..12];
             var ch = Channel.CreateUnbounded<ExecutionEvent>();
+
+            // Track the effective timeout so the watchdog respects it
+            _currentTimeoutMinutes = timeoutMs > 0
+                ? (int)Math.Ceiling(timeoutMs / 60_000.0)
+                : _settings.MaxExecutionTimeoutMinutes;
 
             // Build a CancellationToken that respects both the caller's token and the timeout
             CancellationTokenSource? cts;
@@ -508,6 +522,7 @@ public sealed class CommandExecutor : IDisposable
             _currentExecutionId = null;
             _currentCommand = null;
             _executionStartedUtc = null;
+            _currentTimeoutMinutes = 0;
             _lifecycle = null;
 
             try
@@ -669,6 +684,7 @@ public sealed class CommandExecutor : IDisposable
         _currentExecutionId = null;
         _currentCommand = null;
         _executionStartedUtc = null;
+        _currentTimeoutMinutes = 0;
         _lifecycle = null;
 
         _state = AgentState.Ready;

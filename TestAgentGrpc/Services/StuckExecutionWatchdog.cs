@@ -40,9 +40,12 @@ public sealed class StuckExecutionWatchdog : BackgroundService
                 continue;
 
             var elapsed = DateTime.UtcNow - startedUtc.Value;
-            // Allow MaxExecutionTimeoutMinutes + configurable grace before watchdog fires.
-            // The normal CTS timeout should fire first; this is the nuclear option.
-            var maxAllowed = TimeSpan.FromMinutes(_settings.MaxExecutionTimeoutMinutes + _settings.WatchdogGraceMinutes);
+            // Use the executor's actual timeout for this execution (which may be much
+            // longer than MaxExecutionTimeoutMinutes if the controller specified a large
+            // Timeout in the action XML — e.g. 8-hour installs). The watchdog adds a
+            // grace period beyond the effective timeout as a nuclear fallback.
+            var effectiveTimeoutMinutes = _executor.CurrentTimeoutMinutes;
+            var maxAllowed = TimeSpan.FromMinutes(effectiveTimeoutMinutes + _settings.WatchdogGraceMinutes);
 
             if (elapsed > maxAllowed)
             {

@@ -8,9 +8,11 @@ public sealed class AgentKestrelOptions
 {
     /// <summary>
     /// How long Kestrel keeps an idle HTTP/2 connection alive.
-    /// Default: 4 hours (long test executions may stream no data for extended periods).
+    /// Default: 12 hours (long test executions can run 8+ hours; the in-stream
+    /// heartbeat emits progress events every 30s keeping the stream active,
+    /// but this must exceed the longest expected execution time as a safety margin).
     /// </summary>
-    public int KeepAliveTimeoutMinutes { get; set; } = 240;
+    public int KeepAliveTimeoutMinutes { get; set; } = 720;
 
     /// <summary>
     /// Whether to disable minimum request body data rate enforcement.
