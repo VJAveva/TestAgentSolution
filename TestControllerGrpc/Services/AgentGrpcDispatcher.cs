@@ -373,6 +373,15 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         _activeExecutions[agentName] = cmdShort;
         try
         {
+            // Reboot/recovery commands bypass the circuit breaker. The entire purpose
+            // of a reboot is to recover from the failed state that opened the breaker.
+            // Without this bypass, the dispatcher blocks its own recovery path.
+            if (resolved.IsReboot)
+            {
+                return await ExecuteRebootBypassingCircuitBreakerAsync(
+                    endpoint, agentName, resolved, cmdShort, correlationId, startTimestamp, ct);
+            }
+
             return await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
             {
                 // Re-read endpoint on each Polly attempt: if a channel reset replaced
@@ -755,6 +764,105 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         finally
         {
             _activeExecutions.TryRemove(agentName, out _);
+        }
+    }
+
+    /// <summary>
+    /// Dispatches a reboot command directly, bypassing the Polly resilience pipeline
+    /// (retry + circuit breaker). Recovery commands must not be blocked by the circuit
+    /// breaker — the whole point of a reboot is to recover from the failure state that
+    /// opened the breaker.
+    /// </summary>
+    private async Task<ActionResult> ExecuteRebootBypassingCircuitBreakerAsync(
+        AgentEndpoint endpoint,
+        string agentName,
+        ActionConfig resolved,
+        string cmdShort,
+        string correlationId,
+        long startTimestamp,
+        CancellationToken ct)
+    {
+        _appLogger.Info("Dispatch",
+            $"[{agentName}] REBOOT command — bypassing circuit breaker");
+
+        try
+        {
+            var client = endpoint.GetClient();
+
+            CancellationTokenSource? timeoutCts = resolved.Timeout > 0
+                ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
+                : null;
+            using var _timeoutCtsDisposable = timeoutCts;
+            using var linked = timeoutCts is not null
+                ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
+                : CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+            var streamResult = await RemoteCommandStreamRunner.StreamAsync(
+                client, agentName, resolved, linked.Token,
+                outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                correlationId: correlationId);
+
+            // Reboot accepted — wait for agent to come back online
+            if (streamResult.ExitCode != -1)
+            {
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] REBOOT initiated — waiting up to 5 min for agent to come back online");
+                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
+                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] REBOOT complete — agent back online");
+            }
+
+            var exitCode = streamResult.ExitCode;
+            var errorMessage = streamResult.ErrorMessage;
+            var success = exitCode == 0 && string.IsNullOrEmpty(errorMessage);
+
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
+            StatusChanged?.Invoke(agentName, success ? "Ready" : $"Failed (exit {exitCode}): {Truncate(errorMessage, 100)}");
+
+            if (success)
+                _appLogger.Log(LogLevel.Information, "Dispatch",
+                    $"[{agentName}] \u2713 REBOOT OK: {cmdShort}", correlationId, (long)elapsed.TotalMilliseconds);
+            else
+                _appLogger.Log(LogLevel.Error, "Dispatch",
+                    $"[{agentName}] \u2717 REBOOT FAILED (exit {exitCode}): {Truncate(errorMessage, 150)}", correlationId, (long)elapsed.TotalMilliseconds);
+
+            RecordSuccess(agentName);
+            return new ActionResult(success, exitCode, errorMessage);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
+        {
+            // Agent became unavailable — expected during a reboot. Wait for recovery.
+            _appLogger.Info("Dispatch",
+                $"[{agentName}] Agent went unavailable during reboot — waiting for recovery");
+            StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
+            var client = endpoint.GetClient();
+            await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+            _appLogger.Info("Dispatch",
+                $"[{agentName}] REBOOT complete — agent back online (recovered from Unavailable)");
+            RecordSuccess(agentName);
+            return new ActionResult(true, 0, "Reboot completed");
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled && ct.IsCancellationRequested)
+        {
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] Reboot cancelled by user after {elapsed:hh\\:mm\\:ss}");
+            return new ActionResult(false, -1, $"Cancelled by user after {elapsed:hh\\:mm\\:ss}");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] Reboot cancelled by user after {elapsed:hh\\:mm\\:ss}");
+            return new ActionResult(false, -1, $"Cancelled by user after {elapsed:hh\\:mm\\:ss}");
+        }
+        catch (Exception ex)
+        {
+            RecordFailure(agentName);
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] REBOOT EXCEPTION: {ex.Message}", ex);
+            return new ActionResult(false, -1, $"Reboot failed: {ex.Message}");
         }
     }
 
