@@ -1,5 +1,7 @@
 using System.IO;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TestController.Api.Security;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -7,6 +9,7 @@ namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api/watchlist")]
+[Authorize(Policy = SecurityPolicies.User)]
 public class WatchListController : ControllerBase
 {
     private readonly IVocabularyMonitor _vocabMonitor;

@@ -3,7 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -1306,6 +1308,14 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 // Do NOT recycle connections with a short lifetime.
                 PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
             };
+            // Enable TLS when address uses HTTPS
+            if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                handler.SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                };
+            }
             // Force HTTP/2 for plaintext (h2c) to fix HTTP_1_1_REQUIRED errors
             // on agents running Kestrel without TLS ALPN negotiation.
             var httpClient = new HttpClient(handler, disposeHandler: true)

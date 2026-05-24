@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
 using TestController.Api.Hubs;
+using TestController.Api.Security;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -20,6 +22,7 @@ public record TriggerRequest
 
 [ApiController]
 [Route("api/execution")]
+[Authorize(Policy = SecurityPolicies.User)]
 public class ExecutionController : ControllerBase
 {
     private readonly ExecutionSessionManager _sessionManager;
@@ -29,6 +32,8 @@ public class ExecutionController : ControllerBase
     private readonly AgentLockManager _lockManager;
     private readonly IRealtimeNotifier _notifier;
     private readonly IAppLogger _appLogger;
+    private readonly ISessionOwnershipChecker _ownershipChecker;
+    private readonly ISecurityAuditLogger _auditLogger;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
@@ -43,7 +48,9 @@ public class ExecutionController : ControllerBase
         IHubContext<ControllerHub> hub,
         AgentLockManager lockManager,
         IRealtimeNotifier notifier,
-        IAppLogger appLogger)
+        IAppLogger appLogger,
+        ISessionOwnershipChecker ownershipChecker,
+        ISecurityAuditLogger auditLogger)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -52,6 +59,8 @@ public class ExecutionController : ControllerBase
         _lockManager = lockManager;
         _notifier = notifier;
         _appLogger = appLogger;
+        _ownershipChecker = ownershipChecker;
+        _auditLogger = auditLogger;
     }
 
     /// <summary>GET /api/execution/sessions � list active sessions.</summary>
@@ -391,6 +400,7 @@ public class ExecutionController : ControllerBase
                 evt.Children.ToList(),
                 sessionId);
             session.UserId = userId;
+            session.OwnerSid = _ownershipChecker.GetUserSid(HttpContext.User);
             session.Source = source;
             session.LockedAgents = requiredAgents.ToArray();
         }
@@ -607,16 +617,11 @@ public class ExecutionController : ControllerBase
     [HttpGet("{sessionId}/recent-logs")]
     public IActionResult GetRecentLogs(string sessionId, [FromQuery] int count = 200)
     {
-        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
-
         var session = _sessionManager.GetSession(sessionId);
         if (session == null)
             return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found"));
 
-        if (source != "WPF" &&
-            !string.IsNullOrEmpty(userId) &&
-            !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
+        if (!_ownershipChecker.CanAccessSession(HttpContext.User, session))
         {
             return StatusCode(403, ApiErrorFactory.Forbidden("Cannot access another user's session"));
         }
@@ -702,22 +707,21 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/{sessionId}/cancel � cancel a specific session (ownership enforced).</summary>
+    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a specific session (ownership enforced).</summary>
     [HttpPost("{sessionId}/cancel")]
     public async Task<IActionResult> CancelSession(string sessionId)
     {
-        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
+        var userId = _ownershipChecker.GetUserSid(HttpContext.User);
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
 
         var session = _sessionManager.GetSession(sessionId);
         if (session == null || session.State != SessionState.Running)
             return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found or not running"));
 
-        // Ownership check: WebClient users can only cancel their own sessions
-        if (source != "WPF" &&
-            !string.IsNullOrEmpty(userId) &&
-            !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
+        // Ownership check: only session owner or admin can cancel
+        if (!_ownershipChecker.CanAccessSession(HttpContext.User, session))
         {
+            _auditLogger.LogAuthorization(userId, "CancelSession", sessionId, "Denied");
             return StatusCode(403, ApiErrorFactory.Forbidden("Cannot cancel another user's session"));
         }
 
@@ -741,14 +745,13 @@ public class ExecutionController : ControllerBase
 
     // ?? Force-release endpoints (admin only) ?????????????????????????
 
-    /// <summary>POST /api/execution/force-release/{agentName} – admin force-release a single agent.</summary>
+    /// <summary>POST /api/execution/force-release/{agentName} — admin force-release a single agent.</summary>
     [HttpPost("force-release/{agentName}")]
+    [Authorize(Policy = SecurityPolicies.Admin)]
     public IActionResult ForceReleaseAgent(string agentName)
     {
-        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
+        var userId = _ownershipChecker.GetUserSid(HttpContext.User);
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
-        if (source is not ("WPF" or "WebClient"))
-            return StatusCode(403, ApiErrorFactory.Forbidden("Only admin clients can force-release agents"));
 
         var currentLock = _lockManager.GetLock(agentName);
         if (currentLock == null)
@@ -756,6 +759,8 @@ public class ExecutionController : ControllerBase
 
         _lockManager.ForceRelease(agentName);
 
+        _auditLogger.LogAdminAction(userId, "ForceReleaseAgent", agentName,
+            $"previousSession={currentLock.SessionId}, previousUser={currentLock.UserId}");
         _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
             $"ForceReleaseAgent: actor={userId}, source={source}, agent={agentName}, " +
             $"previousSession={currentLock.SessionId}, previousPipeline={currentLock.WatchItemTag}, previousUser={currentLock.UserId}");
@@ -769,17 +774,17 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/force-release-all – admin emergency release all locks.</summary>
+    /// <summary>POST /api/execution/force-release-all — admin emergency release all locks.</summary>
     [HttpPost("force-release-all")]
+    [Authorize(Policy = SecurityPolicies.Admin)]
     public IActionResult ForceReleaseAll()
     {
-        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
+        var userId = _ownershipChecker.GetUserSid(HttpContext.User);
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
-        if (source is not ("WPF" or "WebClient"))
-            return StatusCode(403, ApiErrorFactory.Forbidden("Only admin clients can force-release all locks"));
 
         var count = _lockManager.ForceReleaseAll();
 
+        _auditLogger.LogAdminAction(userId, "ForceReleaseAll", "all-agents", $"releasedCount={count}");
         _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
             $"ForceReleaseAll: actor={userId}, source={source}, releasedCount={count}");
 

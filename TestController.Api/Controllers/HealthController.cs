@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
@@ -9,6 +10,7 @@ namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api")]
+[AllowAnonymous]
 public class HealthController : ControllerBase
 {
     private readonly IVocabularyMonitor _vocabMonitor;

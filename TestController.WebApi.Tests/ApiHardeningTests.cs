@@ -10,9 +10,11 @@ namespace TestController.WebApi.Tests;
 public class ApiHardeningTests : IClassFixture<TestWebAppFactory>
 {
     private readonly HttpClient _client;
+    private readonly TestWebAppFactory _factory;
 
     public ApiHardeningTests(TestWebAppFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -83,10 +85,10 @@ public class ApiHardeningTests : IClassFixture<TestWebAppFactory>
     [Fact]
     public async Task ForceRelease_403_ReturnsProblemJson_WhenNotAdmin()
     {
+        using var nonAdminClient = _factory.CreateNonAdminClient();
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/execution/force-release/SomeAgent");
-        request.Headers.Add("X-Source", "Curl");
 
-        var response = await _client.SendAsync(request);
+        var response = await nonAdminClient.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();

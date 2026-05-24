@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using TestAgentGrpc;
 using TestAgentGrpc.Clients;
@@ -40,7 +42,31 @@ builder.WebHost.ConfigureKestrel(options =>
     var port = builder.Configuration.GetValue("AgentSettings:GrpcPort", 5200);
     var kestrelOpts = builder.Configuration.GetSection("AgentKestrel").Get<AgentKestrelOptions>() ?? new();
 
-    options.ListenAnyIP(port, o => o.Protocols = HttpProtocols.Http2);
+    // Plaintext HTTP/2 listener (always active unless TLS-only)
+    if (!kestrelOpts.EnableTls || kestrelOpts.TlsPort != port)
+    {
+        options.ListenAnyIP(port, o => o.Protocols = HttpProtocols.Http2);
+    }
+
+    // TLS HTTP/2 listener (when enabled)
+    if (kestrelOpts.EnableTls)
+    {
+        var cert = LoadServerCertificate(kestrelOpts);
+        options.ListenAnyIP(kestrelOpts.TlsPort, listenOpts =>
+        {
+            listenOpts.Protocols = HttpProtocols.Http2;
+            listenOpts.UseHttps(httpsOpts =>
+            {
+                httpsOpts.ServerCertificate = cert;
+                httpsOpts.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
+                if (kestrelOpts.RequireClientCertificate)
+                {
+                    httpsOpts.ClientCertificateMode = Microsoft.AspNetCore.Server.Kestrel.Https.ClientCertificateMode.RequireCertificate;
+                }
+            });
+        });
+    }
+
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(kestrelOpts.KeepAliveTimeoutMinutes);
 
     if (kestrelOpts.DisableMinRequestBodyDataRate)
@@ -55,6 +81,10 @@ builder.Services.AddSingleton<ExecutionTracker>();
 builder.Services.AddSingleton<AuditLogger>();
 builder.Services.AddSingleton(sp =>
     new CommandPolicyEvaluator(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CommandPolicySettings>>().Value));
+builder.Services.AddSingleton(sp =>
+    new EnhancedCommandPolicyEvaluator(
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CommandPolicySettings>>().Value,
+        sp.GetRequiredService<ILogger<EnhancedCommandPolicyEvaluator>>()));
 builder.Services.AddSingleton<CommandExecutor>();
 builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<TestControllerClient>();
@@ -174,4 +204,34 @@ catch (Exception ex)
 {
     CrashDumpHelper.RecordCrash("TopLevel", ex, isTerminating: true);
     throw;
+}
+
+// ── Helper: Load server certificate for TLS ────────────────────────────
+static X509Certificate2 LoadServerCertificate(AgentKestrelOptions opts)
+{
+    // Prefer PFX file if specified
+    if (!string.IsNullOrWhiteSpace(opts.CertFilePath))
+    {
+        if (!File.Exists(opts.CertFilePath))
+            throw new FileNotFoundException($"TLS certificate file not found: {opts.CertFilePath}");
+
+        return string.IsNullOrEmpty(opts.CertPassword)
+            ? X509CertificateLoader.LoadPkcs12FromFile(opts.CertFilePath, null)
+            : X509CertificateLoader.LoadPkcs12FromFile(opts.CertFilePath, opts.CertPassword);
+    }
+
+    // Fall back to cert store by thumbprint
+    if (string.IsNullOrWhiteSpace(opts.CertThumbprint))
+        throw new InvalidOperationException(
+            "TLS is enabled but neither CertFilePath nor CertThumbprint is configured in AgentKestrel settings.");
+
+    using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+    store.Open(OpenFlags.ReadOnly);
+    var certs = store.Certificates.Find(X509FindType.FindByThumbprint, opts.CertThumbprint, validOnly: false);
+
+    if (certs.Count == 0)
+        throw new InvalidOperationException(
+            $"Certificate with thumbprint '{opts.CertThumbprint}' not found in LocalMachine\\My store.");
+
+    return certs[0];
 }

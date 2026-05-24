@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OpenTelemetry.Metrics;
 using TestController.Api;
+using TestController.Api.Security;
 using TestController.WebApi.Endpoints;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Models;
@@ -61,7 +62,8 @@ builder.Services.AddSingleton<IAppLogger>(sp =>
 });
 
 // Web API specific services
-builder.Services.AddSingleton<AgentGrpcClientManager>();
+builder.Services.AddSingleton<AgentGrpcClientManager>(sp =>
+    new AgentGrpcClientManager(sp.GetRequiredService<GrpcTlsChannelFactory>()));
 builder.Services.AddSingleton<AgentRegistry>();
 builder.Services.AddSingleton<AgentTelemetryCache>();
 builder.Services.AddSingleton<WatchListFileService>();
@@ -80,6 +82,9 @@ builder.Services.AddSingleton<IActionPipelineExecutor>(sp => new StandalonePipel
     sp.GetRequiredService<ExecutionSessionManager>(),
     sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>()));
 builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
+
+// Multi-identity security framework: authentication + authorization + audit
+builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 
 // Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
 builder.Services.AddControllerApi()
@@ -125,35 +130,85 @@ builder.Services.AddCors(o =>
     }
 });
 
-// Rate limiting: telemetry/polling endpoints get relaxed limits,
-// mutation endpoints (trigger, cancel) get stricter limits.
+// Rate limiting: per-user partitioned limiter with config-driven limits.
+// Admin users get higher rate (AdminRequestsPerMinute), standard users get RequestsPerMinute.
+// Health/status endpoints are exempt (no RequireRateLimiting attribute applied).
+var rateLimitOptions = new TestController.Api.Security.RateLimitSecurityOptions();
+builder.Configuration.GetSection("Security:RateLimit").Bind(rateLimitOptions);
+
+if (rateLimitOptions.Enabled)
+{
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddFixedWindowLimiter("telemetry", o =>
+    // Return Retry-After header on 429 responses with RFC 7807 problem+json body
+    options.OnRejected = async (context, cancellationToken) =>
     {
-        o.PermitLimit = 60;
-        o.Window = TimeSpan.FromMinutes(1);
-        o.QueueLimit = 0;
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryWindow)
+            ? retryWindow
+            : TimeSpan.FromSeconds(60);
+
+        context.HttpContext.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+        context.HttpContext.Response.ContentType = "application/problem+json";
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc6585#section-4",
+            title = "Too Many Requests",
+            status = 429,
+            detail = $"Rate limit exceeded. Try again after {(int)retryAfter.TotalSeconds} seconds.",
+            retryAfterSeconds = (int)retryAfter.TotalSeconds,
+        }, cancellationToken);
+    };
+
+    options.AddPolicy("telemetry", context =>
+    {
+        var user = context.User?.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+        var modeProvider = context.RequestServices.GetService<TestController.Api.Security.IAuthenticationModeProvider>();
+        var principal = context.User ?? new System.Security.Claims.ClaimsPrincipal();
+        var isAdmin = modeProvider?.ResolveRole(principal) == TestController.Api.Security.UserRole.Admin;
+        var limit = isAdmin ? rateLimitOptions.AdminRequestsPerMinute : rateLimitOptions.RequestsPerMinute;
+
+        return RateLimitPartition.GetFixedWindowLimiter(user, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = limit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
     });
 
-    options.AddFixedWindowLimiter("mutation", o =>
+    options.AddPolicy("mutation", context =>
     {
-        o.PermitLimit = 10;
-        o.Window = TimeSpan.FromMinutes(1);
-        o.QueueLimit = 2;
-        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        var user = context.User?.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+        var modeProvider = context.RequestServices.GetService<TestController.Api.Security.IAuthenticationModeProvider>();
+        var principal = context.User ?? new System.Security.Claims.ClaimsPrincipal();
+        var isAdmin = modeProvider?.ResolveRole(principal) == TestController.Api.Security.UserRole.Admin;
+        // Mutation: 1/6 of the read rate (min 10)
+        var limit = isAdmin
+            ? Math.Max(10, rateLimitOptions.AdminRequestsPerMinute / 6)
+            : Math.Max(5, rateLimitOptions.RequestsPerMinute / 6);
+
+        return RateLimitPartition.GetFixedWindowLimiter(user, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = limit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 2,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        });
     });
 });
+} // end if (rateLimitOptions.Enabled)
 
 // OpenAPI document for API discovery and tooling
 builder.Services.AddOpenApi();
 
-// Health checks: liveness (always OK) + readiness (verifies agent connectivity)
+// Health checks: liveness (always OK) + readiness (verifies agent connectivity) + cert expiry
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
-    .AddCheck<AgentConnectivityHealthCheck>("agents", tags: ["ready"]);
+    .AddCheck<AgentConnectivityHealthCheck>("agents", tags: ["ready"])
+    .AddCheck<CertificateExpiryHealthCheck>("tls-cert", tags: ["ready"]);
 
 // OpenTelemetry metrics: custom app meters + Prometheus exporter on /metrics
 builder.Services.AddSingleton<AppMetrics>();
@@ -179,7 +234,26 @@ if (!validationResult.IsValid && !app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseRateLimiter();
+app.UseMultiIdentitySecurity();
+if (rateLimitOptions.Enabled)
+{
+    app.UseRateLimiter();
+}
+
+// Security headers: defense-in-depth against common web attacks
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["X-XSS-Protection"] = "0";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    if (context.Request.IsHttps)
+    {
+        context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    }
+    await next();
+});
 
 // Startup validation: warn if CORS allows all origins in non-Development environments
 if (allowedOrigins is null or { Length: 0 } && !app.Environment.IsDevelopment())
@@ -239,14 +313,14 @@ app.UseControllerApi("/hubs/controller");
 app.MapHealthChecks("/healthz/live", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("live"),
-});
+}).AllowAnonymous();
 app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready"),
-});
+}).AllowAnonymous();
 
 // Prometheus metrics endpoint
-app.MapPrometheusScrapingEndpoint("/metrics");
+app.MapPrometheusScrapingEndpoint("/metrics").AllowAnonymous();
 
 // OpenAPI endpoint (development only)
 if (app.Environment.IsDevelopment())
@@ -257,11 +331,12 @@ if (app.Environment.IsDevelopment())
 // - Direct agent gRPC queries (snapshot, health, history, audit, diagnose, register/unregister)
 // - Extended execution (trigger-all, trigger-event, retry)
 // - Build results export and email reports
-app.MapGroup("/api/watchlist").MapWatchListEndpoints();
-app.MapGroup("/api/agents").MapAgentEndpoints().RequireRateLimiting("telemetry");
-app.MapGroup("/api/execution").MapExecutionEndpoints().RequireRateLimiting("mutation");
-app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry");
-app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation");
+app.MapGroup("/api/watchlist").MapWatchListEndpoints().RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/agents").MapAgentEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/execution").MapExecutionEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
+app.MapGroup("/api/tokens").MapTokenManagementEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 
 // Client-side error logs ingestion (WebClient AppLogPanel → server logs)
 app.MapPost("/api/clientlogs", async (HttpContext ctx, IAppLogger logger) =>
@@ -270,10 +345,10 @@ app.MapPost("/api/clientlogs", async (HttpContext ctx, IAppLogger logger) =>
     var body = await reader.ReadToEndAsync();
     logger.Warn("ClientLog", body);
     return Results.Ok();
-});
+}).AllowAnonymous();
 
 // SPA fallback
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();
 }

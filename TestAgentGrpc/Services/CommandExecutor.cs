@@ -28,6 +28,7 @@ public sealed class CommandExecutor : IDisposable
     private readonly AuditLogger _audit;
     private readonly AgentSettings _settings;
     private readonly CommandPolicyEvaluator _commandPolicy;
+    private readonly EnhancedCommandPolicyEvaluator _enhancedPolicy;
     private readonly ILogger<CommandExecutor> _logger;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
 
@@ -51,6 +52,7 @@ public sealed class CommandExecutor : IDisposable
         AuditLogger audit,
         IOptions<AgentSettings> settings,
         CommandPolicyEvaluator commandPolicy,
+        EnhancedCommandPolicyEvaluator enhancedPolicy,
         ILogger<CommandExecutor> logger)
     {
         _broadcaster = broadcaster;
@@ -58,6 +60,7 @@ public sealed class CommandExecutor : IDisposable
         _audit       = audit;
         _settings    = settings.Value;
         _commandPolicy = commandPolicy;
+        _enhancedPolicy = enhancedPolicy;
         _logger      = logger;
     }
 
@@ -219,9 +222,10 @@ public sealed class CommandExecutor : IDisposable
     }
 
     private bool EvaluateCommandPolicy(
-        string command, string arguments, string? executionId, out string reason)
+        string command, string arguments, string? executionId, out string reason, bool callerIsAdmin = false)
     {
-        var result = _commandPolicy.Evaluate(command, arguments);
+        // Use enhanced evaluator (with allowlist file support) first
+        var result = _enhancedPolicy.Evaluate(command, arguments, callerIsAdmin);
         reason = result.Reason;
 
         if (result.IsAllowed)
@@ -229,7 +233,7 @@ public sealed class CommandExecutor : IDisposable
 
         var redactedCommandLine = SecurityRedactor.RedactCommandLine(command, arguments);
         _audit.Log("CommandPolicyViolation",
-            severity: _commandPolicy.IsEnforced ? "Error" : "Warning",
+            severity: _enhancedPolicy.IsEnforced ? "Error" : "Warning",
             executionId: executionId,
             command: command,
             arguments: arguments,
@@ -237,11 +241,11 @@ public sealed class CommandExecutor : IDisposable
 
         _logger.LogWarning(
             "Command policy {Mode}: {Reason}. Command={CommandLine}",
-            _commandPolicy.IsEnforced ? "ENFORCED" : "AUDIT",
+            _enhancedPolicy.IsEnforced ? "ENFORCED" : "AUDIT",
             result.Reason,
             redactedCommandLine);
 
-        if (_commandPolicy.IsEnforced)
+        if (_enhancedPolicy.IsEnforced)
         {
             _lastError = $"Command rejected by agent policy: {result.Reason}";
             return false;

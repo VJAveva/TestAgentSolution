@@ -22,6 +22,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     private readonly SystemMetricsCollector _metrics;
     private readonly AuditLogger _audit;
     private readonly ConnectionHealthMonitor _healthMonitor;
+    private readonly EnhancedCommandPolicyEvaluator _policyEvaluator;
     private readonly AgentSettings _settings;
     private readonly ILogger<TestAgentGrpcService> _logger;
     private readonly DateTime _agentStartedUtc = DateTime.UtcNow;
@@ -33,17 +34,19 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         SystemMetricsCollector metrics,
         AuditLogger audit,
         ConnectionHealthMonitor healthMonitor,
+        EnhancedCommandPolicyEvaluator policyEvaluator,
         Microsoft.Extensions.Options.IOptions<AgentSettings> settings,
         ILogger<TestAgentGrpcService> logger)
     {
-        _executor      = executor;
-        _broadcaster   = broadcaster;
-        _tracker       = tracker;
-        _metrics       = metrics;
-        _audit         = audit;
-        _healthMonitor = healthMonitor;
-        _settings      = settings.Value;
-        _logger        = logger;
+        _executor        = executor;
+        _broadcaster     = broadcaster;
+        _tracker         = tracker;
+        _metrics         = metrics;
+        _audit           = audit;
+        _healthMonitor   = healthMonitor;
+        _policyEvaluator = policyEvaluator;
+        _settings        = settings.Value;
+        _logger          = logger;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -348,6 +351,24 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         if (_healthMonitor.DowntimeDuration is { } downtime)
             reply.LastDowntimeDuration = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(downtime);
 
+        return Task.FromResult(reply);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Command Policy Management
+    // ═══════════════════════════════════════════════════════════════════
+
+    public override Task<CommandPolicyReply> ReloadCommandPolicy(Empty request, ServerCallContext context)
+    {
+        _logger.LogInformation("ReloadCommandPolicy RPC invoked");
+        _policyEvaluator.Reload();
+
+        var reply = new CommandPolicyReply
+        {
+            Success = true,
+            Mode = _policyEvaluator.IsEnforced ? "Enforce" : _policyEvaluator.IsAuditOnly ? "AuditOnly" : "Disabled",
+            Message = "Command policy reloaded successfully"
+        };
         return Task.FromResult(reply);
     }
 }

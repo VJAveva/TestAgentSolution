@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -170,6 +172,15 @@ public sealed class AgentConnectionManager : IDisposable
                 KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
                 ConnectTimeout = TimeSpan.FromSeconds(15),
             };
+
+            // Enable TLS when address uses HTTPS
+            if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                handler.SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                };
+            }
 
             _channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
             {

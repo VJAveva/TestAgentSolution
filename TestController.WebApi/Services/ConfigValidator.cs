@@ -97,6 +97,9 @@ public sealed class ConfigValidator
             warnings.Add("SignalR section not configured. Defaults will be used.");
         }
 
+        // Security configuration validation
+        ValidateSecurityConfig(errors, warnings);
+
         // Log results
         foreach (var w in warnings)
             _logger.LogWarning("[ConfigValidator] {Warning}", w);
@@ -106,9 +109,84 @@ public sealed class ConfigValidator
 
         return new ConfigValidationResult(errors, warnings);
     }
+
+    private void ValidateSecurityConfig(List<string> errors, List<string> warnings)
+    {
+        var secSection = _config.GetSection("Security");
+        if (!secSection.Exists())
+        {
+            warnings.Add("Security section not configured. AuthMode=None (no authentication) will be used.");
+            return;
+        }
+
+        var authMode = secSection["AuthMode"];
+        if (string.IsNullOrWhiteSpace(authMode))
+        {
+            warnings.Add("Security:AuthMode not set. Defaulting to None (no authentication).");
+        }
+
+        // Domain mode validation
+        if (string.Equals(authMode, "Domain", StringComparison.OrdinalIgnoreCase))
+        {
+            var domain = secSection["Domain:RequireDomain"];
+            if (string.IsNullOrWhiteSpace(domain))
+                errors.Add("Security:Domain:RequireDomain must be specified when AuthMode=Domain.");
+
+            var adminGroup = secSection["Domain:AdminGroup"];
+            if (string.IsNullOrWhiteSpace(adminGroup))
+                warnings.Add("Security:Domain:AdminGroup not set. No users will have Admin role in Domain mode.");
+        }
+
+        // Token mode validation
+        if (string.Equals(authMode, "Token", StringComparison.OrdinalIgnoreCase))
+        {
+            var tokenStore = secSection["Token:TokenStore"];
+            if (string.IsNullOrWhiteSpace(tokenStore))
+                warnings.Add("Security:Token:TokenStore not set. Default 'secrets.json' will be used.");
+        }
+
+        // Transport security validation
+        var grpcMode = secSection["Transport:GrpcMode"];
+        if (string.Equals(grpcMode, "TlsOnly", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(grpcMode, "PlaintextAndTls", StringComparison.OrdinalIgnoreCase))
+        {
+            var thumbprint = secSection["Transport:CertThumbprint"];
+            var certFile = secSection["Transport:CertFilePath"];
+            if (string.IsNullOrWhiteSpace(thumbprint) && string.IsNullOrWhiteSpace(certFile))
+                errors.Add("Security:Transport requires CertThumbprint or CertFilePath when GrpcMode involves TLS.");
+        }
+
+        // Rate limit validation
+        var rateEnabled = secSection["RateLimit:Enabled"];
+        if (string.Equals(rateEnabled, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(secSection["RateLimit:RequestsPerMinute"], out var rpm) && rpm < 10)
+                warnings.Add($"Security:RateLimit:RequestsPerMinute={rpm} is very low and may cause throttling in normal use.");
+        }
+    }
 }
 
 public sealed record ConfigValidationResult(List<string> Errors, List<string> Warnings)
 {
     public bool IsValid => Errors.Count == 0;
+}
+
+/// <summary>
+/// Detailed security readiness report returned by the /api/security/readiness endpoint.
+/// </summary>
+public sealed class SecurityReadinessReport
+{
+    public bool Ready { get; set; }
+    public string AuthMode { get; set; } = "";
+    public bool AuthProviderHealthy { get; set; }
+    public string AuthDiagnostic { get; set; } = "";
+    public bool RateLimitEnabled { get; set; }
+    public int RateLimitPerMinute { get; set; }
+    public int AdminRateLimitPerMinute { get; set; }
+    public string TransportMode { get; set; } = "";
+    public bool CertificateValid { get; set; }
+    public string? CertificateExpiry { get; set; }
+    public bool AuditEnabled { get; set; }
+    public List<string> Issues { get; set; } = [];
+    public string Timestamp { get; set; } = DateTime.UtcNow.ToString("o");
 }

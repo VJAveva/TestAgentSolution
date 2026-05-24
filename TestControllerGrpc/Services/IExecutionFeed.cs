@@ -126,7 +126,12 @@ public sealed class SignalRExecutionFeed : IExecutionFeed
         SetState(FeedConnectionState.Connecting);
 
         _conn = new HubConnectionBuilder()
-            .WithUrl(_hubUri)
+            .WithUrl(_hubUri, options =>
+            {
+                // Pass Windows credentials for Negotiate (Domain/Local) auth modes.
+                // In None mode this is harmless; in Token mode the hub uses bearer tokens instead.
+                options.UseDefaultCredentials = true;
+            })
             .WithAutomaticReconnect(new[]
             {
                 TimeSpan.Zero,

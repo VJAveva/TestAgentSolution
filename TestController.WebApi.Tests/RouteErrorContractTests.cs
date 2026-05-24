@@ -15,9 +15,11 @@ namespace TestController.WebApi.Tests;
 public class RouteErrorContractTests : IClassFixture<TestWebAppFactory>
 {
     private readonly HttpClient _client;
+    private readonly TestWebAppFactory _factory;
 
     public RouteErrorContractTests(TestWebAppFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -73,8 +75,9 @@ public class RouteErrorContractTests : IClassFixture<TestWebAppFactory>
     [Fact]
     public async Task ForceRelease_Forbidden_ReturnsProblemJson()
     {
-        // Without WPF source header → 403
-        var response = await _client.PostAsync(
+        // Non-admin user → 403
+        using var nonAdminClient = _factory.CreateNonAdminClient();
+        var response = await nonAdminClient.PostAsync(
             "/api/execution/force-release/Agent1",
             new StringContent("{\"reason\":\"test\"}", System.Text.Encoding.UTF8, "application/json"));
 
@@ -88,7 +91,8 @@ public class RouteErrorContractTests : IClassFixture<TestWebAppFactory>
     [Fact]
     public async Task ForceReleaseAll_Forbidden_ReturnsProblemJson()
     {
-        var response = await _client.PostAsync(
+        using var nonAdminClient = _factory.CreateNonAdminClient();
+        var response = await nonAdminClient.PostAsync(
             "/api/execution/force-release-all",
             new StringContent("{\"reason\":\"test\"}", System.Text.Encoding.UTF8, "application/json"));
 

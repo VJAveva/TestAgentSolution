@@ -1,3 +1,5 @@
+using System.Net.Security;
+using System.Security.Authentication;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -33,19 +35,32 @@ public sealed class TestControllerClient : IDisposable
     {
         lock (_channelLock)
         {
-            _channel ??= GrpcChannel.ForAddress(_settings.ControllerAddress, new GrpcChannelOptions
+            if (_channel == null)
             {
-                HttpHandler = new SocketsHttpHandler
+                var handler = new SocketsHttpHandler
                 {
                     EnableMultipleHttp2Connections = true,
                     ConnectTimeout               = TimeSpan.FromSeconds(10),
                     KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
                     KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
                     PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
-                    // Increased from 5min to avoid premature recycling on unstable DNS
                     PooledConnectionLifetime      = TimeSpan.FromMinutes(30),
+                };
+
+                // Enable TLS when the controller address uses HTTPS
+                if (_settings.ControllerAddress.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    handler.SslOptions = new SslClientAuthenticationOptions
+                    {
+                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    };
                 }
-            });
+
+                _channel = GrpcChannel.ForAddress(_settings.ControllerAddress, new GrpcChannelOptions
+                {
+                    HttpHandler = handler,
+                });
+            }
 
             return _channel;
         }

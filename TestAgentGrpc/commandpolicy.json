@@ -1,0 +1,23 @@
+{
+  "Allowlist": [
+    { "Command": "powershell.exe", "ArgPattern": "^-NoProfile -File [\"']?[A-Za-z]:\\\\.+\\.ps1[\"']?( .*)?$" },
+    { "Command": "cmd.exe", "ArgPattern": "^/c [\"']?[A-Za-z]:\\\\.+\\.bat[\"']?( .*)?$" },
+    { "Command": "msiexec.exe", "ArgPattern": "^/[ixp] [\"']?[A-Za-z]:\\\\.+\\.msi[\"']?( .*)?$" },
+    { "Command": "robocopy.exe", "ArgPattern": "^[\"']?[A-Za-z]:\\\\[^\"']+[\"']? [\"']?[A-Za-z]:\\\\[^\"']+[\"']?( .*)?$" },
+    { "Command": "xcopy.exe", "ArgPattern": "^[\"']?[A-Za-z]:\\\\" },
+    { "Command": "net.exe", "ArgPattern": "^(start|stop) " },
+    { "Command": "sc.exe", "ArgPattern": "^(query|start|stop) " }
+  ],
+  "Blocklist": [
+    { "Pattern": "(format\\s+[a-z]:)|(\\brm\\b.*-rf)" },
+    { "Pattern": "[;&|]\\s*(rm|del|format|shutdown|restart)" },
+    { "Pattern": "(Invoke-Expression|iex|Start-Process.*-Verb\\s+RunAs)" },
+    { "Pattern": "(certutil\\s+-urlcache)|(bitsadmin\\s+/transfer)" }
+  ],
+  "AllowedPathRoots": [
+    "C:\\TestArtifacts",
+    "C:\\Builds",
+    "C:\\TestScripts"
+  ],
+  "BlockOnUnknown": true
+}

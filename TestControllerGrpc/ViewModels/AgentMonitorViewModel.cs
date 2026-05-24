@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Grpc.Core;
@@ -40,16 +42,27 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
         _cts = new CancellationTokenSource();
         try
         {
+            var handler = new SocketsHttpHandler
+            {
+                EnableMultipleHttp2Connections = true,
+                ConnectTimeout = TimeSpan.FromSeconds(5),
+                KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+                KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
+            };
+
+            // Enable TLS when address uses HTTPS
+            if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                handler.SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                };
+            }
+
             _channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
             {
-                HttpHandler = new SocketsHttpHandler
-                {
-                    EnableMultipleHttp2Connections = true,
-                    ConnectTimeout = TimeSpan.FromSeconds(5),
-                    KeepAlivePingDelay = TimeSpan.FromSeconds(30),
-                    KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
-                    KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
-                },
+                HttpHandler = handler,
                 DisposeHttpClient = true,
             });
 

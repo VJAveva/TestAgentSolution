@@ -32,4 +32,38 @@ public sealed class AgentKestrelOptions
     /// (i.e., no TLS configured). Should be true in production environments.
     /// </summary>
     public bool WarnOnPlaintextHttp2 { get; set; } = true;
+
+    // ── TLS / mTLS settings ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Whether TLS is enabled on the agent listener.
+    /// When true, a secondary HTTPS/2 endpoint is configured (or only HTTPS if TlsOnly).
+    /// </summary>
+    public bool EnableTls { get; set; }
+
+    /// <summary>
+    /// Port for the TLS listener. Only used when <see cref="EnableTls"/> is true.
+    /// </summary>
+    public int TlsPort { get; set; } = 5443;
+
+    /// <summary>
+    /// Certificate thumbprint (from LocalMachine\My store) for the TLS listener.
+    /// Either this or <see cref="CertFilePath"/> must be set when TLS is enabled.
+    /// </summary>
+    public string CertThumbprint { get; set; } = "";
+
+    /// <summary>
+    /// Path to a PFX file for the TLS listener (alternative to cert store).
+    /// </summary>
+    public string CertFilePath { get; set; } = "";
+
+    /// <summary>
+    /// Password for the PFX file (if applicable).
+    /// </summary>
+    public string CertPassword { get; set; } = "";
+
+    /// <summary>
+    /// Whether mutual TLS is required (client must present a certificate).
+    /// </summary>
+    public bool RequireClientCertificate { get; set; }
 }

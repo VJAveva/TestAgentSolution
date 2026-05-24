@@ -1,4 +1,4 @@
-extern alias AgentAlias;
+﻿extern alias AgentAlias;
 using AgentAlias::TestAgentGrpc;
 using AgentAlias::TestAgentGrpc.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,7 +10,7 @@ using TestControllerGrpc.Services;
 namespace TestControllerGrpc.Tests.Services;
 
 /// <summary>
-/// End-to-end unit tests for the Controller → Agent command execution workflow.
+/// End-to-end unit tests for the Controller â†’ Agent command execution workflow.
 /// Tests cover:
 ///   - CommandExecutor.RunCommandStreamed (acceptance, rejection, timeout, streaming)
 ///   - RemoteCommandStreamRunner.BuildRequest (DTO mapping)
@@ -35,9 +35,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // Helper: create a CommandExecutor with test-friendly settings
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     private CommandExecutor CreateExecutor(int maxTimeoutMinutes = 2, int maxHistory = 10)
     {
@@ -53,15 +53,16 @@ public sealed class CommandExecutionE2ETests : IDisposable
         var auditSettings = Options.Create(new AuditSettings { Enabled = false });
         var audit = new AuditLogger(auditSettings, NullLogger<AuditLogger>.Instance);
         var policy = new CommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" });
+        var enhancedPolicy = new EnhancedCommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" }, NullLogger<EnhancedCommandPolicyEvaluator>.Instance);
 
         return new CommandExecutor(
-            broadcaster, tracker, audit, settings, policy,
+            broadcaster, tracker, audit, settings, policy, enhancedPolicy,
             NullLogger<CommandExecutor>.Instance);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: Acceptance
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void RunCommandStreamed_AcceptsExecution_WhenAgentIsReady()
@@ -162,9 +163,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
             e.OutputLine.Contains("ErrorLine"));
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: Rejection (agent busy)
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_RejectsSecondExecution_WhenBusy()
@@ -209,9 +210,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         await foreach (var _ in stream2!.ReadAllAsync()) { }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: Cancellation / Timeout
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_CancelsExecution_WhenExternalTokenCancelled()
@@ -276,9 +277,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Equal(AgentState.Ready, executor.CurrentState);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: Channel lifecycle
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_ChannelCompletes_AfterExecutionFinishes()
@@ -306,7 +307,7 @@ public sealed class CommandExecutionE2ETests : IDisposable
     {
         var executor = CreateExecutor();
 
-        // Pass a command that doesn't exist — should still complete the channel
+        // Pass a command that doesn't exist â€” should still complete the channel
         var (accepted, _, stream) = executor.RunCommandStreamed(
             "nonexistent_binary_xyz_99999", "", isReboot: false, timeoutMs: 10000);
 
@@ -324,9 +325,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: State transitions
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_TransitionsToRunning_DuringExecution()
@@ -365,9 +366,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Null(executor.CurrentCommand);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: Execution ID
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void RunCommandStreamed_UsesProvidedExecutionId_WhenGiven()
@@ -395,9 +396,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.True(execId.Length > 0 && execId.Length <= 12);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RunCommandStreamed: Multiple output lines
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_StreamsMultipleLines_InOrder()
@@ -421,9 +422,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Contains(stdoutLines, l => l.Contains("Line3"));
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RemoteCommandStreamRunner.BuildRequest: DTO mapping
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void BuildRequest_MapsAllFields_FromActionConfig()
@@ -483,9 +484,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Equal(0, request.TimeoutSeconds);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RemoteCommandStreamResult: Error synthesis
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void RemoteCommandStreamResult_IndicatesSuccess_WhenCompletedWithZeroExitCode()
@@ -529,9 +530,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Contains("did not report completion", result.ErrorMessage);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Progress events (heartbeat)
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_EmitsProgressEvents_ForLongRunning()
@@ -549,16 +550,16 @@ public sealed class CommandExecutionE2ETests : IDisposable
             events.Add(evt);
         }
 
-        // The command runs ~3s, below the 30s heartbeat interval — so no progress expected.
+        // The command runs ~3s, below the 30s heartbeat interval â€” so no progress expected.
         // But the final "Process exited" progress event from the heartbeat should appear.
         var progressEvents = events.Where(e => e.EventType == ExecutionEventType.EventProgress).ToList();
         // At minimum, we should get a final-exit progress event
         Assert.True(progressEvents.Count >= 1 || events.Any(e => e.EventType == ExecutionEventType.EventCompleted));
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Execution history tracking
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_RecordsInExecutionHistory_AfterCompletion()
@@ -575,8 +576,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         var auditSettings = Options.Create(new AuditSettings { Enabled = false });
         var audit = new AuditLogger(auditSettings, NullLogger<AuditLogger>.Instance);
         var policy = new CommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" });
+        var enhancedPolicy = new EnhancedCommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" }, NullLogger<EnhancedCommandPolicyEvaluator>.Instance);
         var executor = new CommandExecutor(
-            broadcaster, tracker, audit, settings, policy,
+            broadcaster, tracker, audit, settings, policy, enhancedPolicy,
             NullLogger<CommandExecutor>.Instance);
 
         var (_, execId, stream) = executor.RunCommandStreamed(
@@ -588,9 +590,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Contains(history, h => h.ExecutionId == execId);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Safety-net timeout
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_AppliesSafetyNetTimeout_WhenNoExplicitTimeout()
@@ -599,7 +601,7 @@ public sealed class CommandExecutionE2ETests : IDisposable
         var broadcaster = new EventBroadcaster(NullLogger<EventBroadcaster>.Instance);
         var settings = Options.Create(new AgentSettings
         {
-            // 0.05 minutes = 3 seconds safety net — will cancel the ping command
+            // 0.05 minutes = 3 seconds safety net â€” will cancel the ping command
             MaxExecutionTimeoutMinutes = 0,
             MaxExecutionHistoryCount = 10,
             MaxOutputLinesPerExecution = 100,
@@ -609,8 +611,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         var auditSettings = Options.Create(new AuditSettings { Enabled = false });
         var audit = new AuditLogger(auditSettings, NullLogger<AuditLogger>.Instance);
         var policy = new CommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" });
+        var enhancedPolicy = new EnhancedCommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" }, NullLogger<EnhancedCommandPolicyEvaluator>.Instance);
         var executor = new CommandExecutor(
-            broadcaster, tracker, audit, settings, policy,
+            broadcaster, tracker, audit, settings, policy, enhancedPolicy,
             NullLogger<CommandExecutor>.Instance);
 
         // With MaxExecutionTimeoutMinutes=0, TimeSpan.FromMinutes(0) = immediate cancel
@@ -631,9 +634,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Concurrent stress test
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_OnlyOneExecutionSucceeds_WhenMultipleConcurrentAttempts()
@@ -670,9 +673,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
             await foreach (var _ in s.ReadAllAsync()) { }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Event ordering guarantees
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_EventsFollowExpectedOrder_ForSuccessfulCommand()
@@ -688,7 +691,7 @@ public sealed class CommandExecutionE2ETests : IDisposable
             eventTypes.Add(evt.EventType);
         }
 
-        // Order: Queued → Started → (stdout/stderr/progress)* → Completed
+        // Order: Queued â†’ Started â†’ (stdout/stderr/progress)* â†’ Completed
         var queuedIdx = eventTypes.IndexOf(ExecutionEventType.EventQueued);
         var startedIdx = eventTypes.IndexOf(ExecutionEventType.EventStarted);
         var completedIdx = eventTypes.IndexOf(ExecutionEventType.EventCompleted);
@@ -727,9 +730,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.True(queuedIdx < failedIdx, "Queued should come before Failed");
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Large output handling
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_HandlesLargeOutput_WithoutHanging()
@@ -753,9 +756,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.True(lineCount >= 50, $"Expected at least 50 lines, got {lineCount}");
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: ResolveInterpreter (cmd, powershell, exe)
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task RunCommandStreamed_HandlesDirectExeCommand()
@@ -775,9 +778,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Contains(events, e => e.EventType == ExecutionEventType.EventCompleted);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RemoteCommandStreamRunner: StderrTailCapacity constant
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void StderrTailCapacity_IsTwenty()
@@ -785,9 +788,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Equal(20, RemoteCommandStreamRunner.StderrTailCapacity);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // ActionResult: Classification
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void ActionResult_IsSuccess_WhenExitCodeZero()
@@ -815,9 +818,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Contains("cancelled", result.ErrorMessage);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: ForceReady after stuck execution
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task ForceReady_ReleasesLock_AllowingNewExecution()
@@ -850,9 +853,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
             await foreach (var _ in stream2.ReadAllAsync()) { }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // ControllerTimeoutOptions: Defaults
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void ControllerTimeoutOptions_HasReasonableDefaults()
@@ -880,9 +883,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Equal(24, options.OuterSafetyNetTimeoutHours);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: TerminateExecution kills active process
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public async Task TerminateExecution_KillsActiveProcess_AndResetsState()
@@ -903,9 +906,9 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.Equal(AgentState.Ready, executor.CurrentState);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // CommandExecutor: Command policy enforcement
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [Fact]
     public void RunCommandStreamed_Rejected_WhenCommandPolicyDenies()
@@ -928,9 +931,10 @@ public sealed class CommandExecutionE2ETests : IDisposable
             AllowedCommandPrefixes = new List<string> { "cmd", "xcopy", "powershell" }
         };
         var policy = new CommandPolicyEvaluator(policySettings);
+        var enhancedPolicy = new EnhancedCommandPolicyEvaluator(policySettings, NullLogger<EnhancedCommandPolicyEvaluator>.Instance);
 
         var executor = new CommandExecutor(
-            broadcaster, tracker, audit, settings, policy,
+            broadcaster, tracker, audit, settings, policy, enhancedPolicy,
             NullLogger<CommandExecutor>.Instance);
 
         var (accepted, _, stream) = executor.RunCommandStreamed(

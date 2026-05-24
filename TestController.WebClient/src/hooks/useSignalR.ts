@@ -90,7 +90,11 @@ export function useSignalR(): HubConnection | null {
     console.log(`[SignalR] Connecting to ${hubUrl}`);
 
     const conn = new HubConnectionBuilder()
-      .withUrl(hubUrl)
+      .withUrl(hubUrl, {
+        // Pass browser credentials (cookies/NTLM) for Domain/Local auth modes.
+        // Harmless in None mode; Token mode would need a bearer token accessTokenFactory.
+        withCredentials: true,
+      })
       // Indefinite reconnect (see policy above) instead of the previous
       // 5-attempt array which gave up after ~47s and left the WebClient
       // permanently offline on any longer outage (sleep, server restart,

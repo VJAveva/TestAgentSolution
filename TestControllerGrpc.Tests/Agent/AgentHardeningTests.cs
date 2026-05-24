@@ -277,8 +277,9 @@ public sealed class AgentHardeningTests : IDisposable
         var auditSettings = Options.Create(new AuditSettings { Enabled = false });
         var audit = new AuditLogger(auditSettings, NullLogger<AuditLogger>.Instance);
         var policy = new CommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" });
+        var enhancedPolicy = new EnhancedCommandPolicyEvaluator(new CommandPolicySettings { Mode = "Disabled" }, NullLogger<EnhancedCommandPolicyEvaluator>.Instance);
         var executor = new CommandExecutor(
-            broadcaster, tracker, audit, settings, policy,
+            broadcaster, tracker, audit, settings, policy, enhancedPolicy,
             NullLogger<CommandExecutor>.Instance);
 
         // Initially no lifecycle state

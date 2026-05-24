@@ -278,6 +278,9 @@ public sealed class ExecutionSession
     /// <summary>Who triggered this session.</summary>
     public string UserId { get; set; } = "";
 
+    /// <summary>Security identifier of the session owner (SID for Windows, token ID for token mode).</summary>
+    public string OwnerSid { get; set; } = "";
+
     /// <summary>"WebClient" or "WPF".</summary>
     public string Source { get; set; } = "";
 

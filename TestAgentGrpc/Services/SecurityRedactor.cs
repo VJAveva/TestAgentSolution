@@ -75,6 +75,19 @@ public sealed class CommandPolicySettings
     /// Example: ["C:\\TestScripts", "C:\\Program Files\\MyApp"]
     /// </summary>
     public List<string> AllowedExecutablePaths { get; set; } = [];
+
+    /// <summary>
+    /// Path to the external command policy JSON file (commandpolicy.json).
+    /// Supports allowlist, blocklist, and path-root validation.
+    /// Hot-reloaded on file change.
+    /// </summary>
+    public string? AllowlistPath { get; set; }
+
+    /// <summary>
+    /// When true, commands not matching the allowlist are blocked for non-admin callers.
+    /// When false, the allowlist is advisory only (audit).
+    /// </summary>
+    public bool BlockOnUnknown { get; set; }
 }
 
 public readonly record struct CommandPolicyResult(bool IsAllowed, string Reason)

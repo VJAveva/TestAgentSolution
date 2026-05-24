@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using TestController.Api.Security;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -10,6 +12,7 @@ namespace TestController.Api.Hubs;
 /// Used by both the WPF-hosted Kestrel server and the standalone WebApi.
 /// Server pushes events; clients can join/leave session groups.
 /// </summary>
+[Authorize(Policy = SecurityPolicies.User)]
 public sealed class ControllerHub : Hub
 {
     private readonly ILogger<ControllerHub> _logger;

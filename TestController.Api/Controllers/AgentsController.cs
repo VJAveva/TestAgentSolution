@@ -1,10 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TestController.Api.Security;
 using TestControllerGrpc.Services;
 
 namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api/agents")]
+[Authorize(Policy = SecurityPolicies.User)]
 public class AgentsController : ControllerBase
 {
     private readonly IAgentGrpcDispatcher _dispatcher;

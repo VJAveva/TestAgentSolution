@@ -35,6 +35,7 @@ service TestAgentService {
   rpc GetAgentSnapshot (google.protobuf.Empty) returns (AgentSnapshot);
   rpc GetAuditLog (AuditLogRequest) returns (AuditLogReply);
   rpc GetConnectionHealth (ConnectionHealthRequest) returns (ConnectionHealthReply);
+  rpc ReloadCommandPolicy (google.protobuf.Empty) returns (CommandPolicyReply);
 }
 
 // =============================================================================
@@ -68,6 +69,7 @@ message RunCommandRequest {
   string completion_check_command = 8;
   int32  completion_poll_interval_seconds = 9;
   reserved 10, 11, 12; // formerly enable_install_log / install_log_poll_seconds / install_log_root
+  string caller_role    = 13; // "Admin" or "User" — used for command policy bypass
 }
 
 message RunCommandReply {
@@ -229,4 +231,16 @@ message ConnectionHealthReply {
   bool   event_stream_active                     = 12;
   string last_disconnect_reason                  = 13;
   google.protobuf.Duration last_downtime_duration = 14;
+}
+
+// =============================================================================
+// Command Policy
+// =============================================================================
+
+message CommandPolicyReply {
+  bool   success           = 1;
+  string mode              = 2;  // Current mode: Disabled, AuditOnly, Enforce
+  int32  allowlist_count   = 3;
+  int32  blocklist_count   = 4;
+  string message           = 5;
 }

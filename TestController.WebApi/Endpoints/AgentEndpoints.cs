@@ -1,6 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using TestAgentGrpc;
+using TestController.Api.Security;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Services;
 
@@ -132,11 +133,15 @@ public static class AgentEndpoints
     /// <summary>POST /api/agents/{name}/test � test connectivity via GetState.</summary>
     private static async Task<IResult> TestAgent(
         string name,
+        HttpContext ctx,
         AgentRegistry registry,
         AgentGrpcClientManager grpcManager,
         IRealtimeNotifier notifier,
         IAppLogger logger)
     {
+        if (!AgentScopeAuthorization.IsAuthorizedForAgent(ctx.User, name))
+            return Results.Forbid();
+
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
@@ -179,10 +184,14 @@ public static class AgentEndpoints
     /// <summary>POST /api/agents/{name}/diagnose � run 6-step diagnostic.</summary>
     private static async Task<IResult> DiagnoseAgent(
         string name,
+        HttpContext ctx,
         AgentRegistry registry,
         AgentGrpcClientManager grpcManager,
         IAppLogger logger)
     {
+        if (!AgentScopeAuthorization.IsAuthorizedForAgent(ctx.User, name))
+            return Results.Forbid();
+
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
@@ -276,8 +285,11 @@ public static class AgentEndpoints
 
     /// <summary>GET /api/agents/{name}/snapshot � get agent snapshot via gRPC.</summary>
     private static async Task<IResult> GetAgentSnapshot(
-        string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
+        string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
+        if (!AgentScopeAuthorization.IsAuthorizedForAgent(context.User, name))
+            return Results.Forbid();
+
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
@@ -312,8 +324,11 @@ public static class AgentEndpoints
 
     /// <summary>GET /api/agents/{name}/health � get connection health via gRPC.</summary>
     private static async Task<IResult> GetAgentHealth(
-        string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
+        string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
+        if (!AgentScopeAuthorization.IsAuthorizedForAgent(context.User, name))
+            return Results.Forbid();
+
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
@@ -344,7 +359,8 @@ public static class AgentEndpoints
     /// <summary>GET /api/agents/{name}/history?max=20&filter= � get execution history via gRPC.</summary>
     private static async Task<IResult> GetAgentHistory(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
-    {
+    {        if (!AgentScopeAuthorization.IsAuthorizedForAgent(context.User, name))
+            return Results.Forbid();
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
@@ -383,7 +399,8 @@ public static class AgentEndpoints
     /// <summary>GET /api/agents/{name}/audit?from=&to=&filter=&max= � get audit log via gRPC.</summary>
     private static async Task<IResult> GetAgentAudit(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
-    {
+    {        if (!AgentScopeAuthorization.IsAuthorizedForAgent(context.User, name))
+            return Results.Forbid();
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
@@ -527,6 +544,9 @@ public static class AgentEndpoints
         AgentGrpcClientManager grpcManager, AgentTelemetryCache telemetryCache,
         AgentLockManager lockManager)
     {
+        if (!AgentScopeAuthorization.IsAuthorizedForAgent(httpContext.User, name))
+            return Results.Forbid();
+
         if (!registry.TryGet(name, out var entry))
             return Results.NotFound($"Agent '{name}' not found.");
 
