@@ -205,11 +205,11 @@ Various improvements to timer disposal, pagination, gRPC TLS, metrics, tests, an
 
 ### Gaps
 
-| Gap | Impact | Fix Location | Priority |
-|-----|--------|-------------|----------|
-| **`LiveLogger` has no virtualization** — renders all DOM nodes | 10000+ log entries -> browser lag/freeze for QA engineers | `TestController.WebClient/src/components/execution/LiveLogger.tsx` — add `@tanstack/react-virtual` (LogViewer already uses it) | **P1** |
-| **No toast/notification for background session completion** | QA engineer misses finished pipeline if on another browser tab | `TestController.WebClient/src/hooks/useSignalR.ts` — add browser `Notification` API push | **P2** |
-| **No confirmation dialog on force-release** | Accidental force-release kills another QA's running pipeline | `TestController.WebClient` — add confirm modal on force-release button | **P2** |
+| Gap | Impact | Fix Location | Priority | Status |
+|-----|--------|-------------|----------|--------|
+| ~~**`LiveLogger` has no virtualization**~~ | 10000+ log entries -> browser lag/freeze | `LiveLogger.tsx` — uses `@tanstack/react-virtual` with `useVirtualizer` | **P1** | ✅ Done |
+| ~~**No toast/notification for background session completion**~~ | QA misses pipeline if on another tab | `useSignalR.ts` — browser `Notification` API already implemented (lines 63-65, 193-196) | **P2** | ✅ Done |
+| ~~**No confirmation dialog on force-release**~~ | Accidental force-release | `ConfirmReleaseModal.tsx` exists, imported by `AgentLockPanel.tsx` | **P2** | ✅ Done |
 
 ---
 
@@ -221,15 +221,17 @@ Various improvements to timer disposal, pagination, gRPC TLS, metrics, tests, an
 - `LogViewer` with `@tanstack/react-virtual` (virtual scrolling)
 - `LogBufferService` with `BoundedChannel(5000)` + batch UI updates at 100ms intervals
 - WebClient log trim at 50,000 entries
+- API pagination on `/api/results/builds` with `?page=&pageSize=` params
+- Channel reset rate-limited to max 1 per 30s per agent
 
 ### Gaps
 
-| Gap | Impact | Fix Location | Priority |
-|-----|--------|-------------|----------|
-| **No pagination on API responses** — `/api/results/builds` returns ALL builds at once | Slow responses + high memory with hundreds of builds | `TestController.Api/Controllers/` — add `?page=1&pageSize=20` query params | **P2** |
-| **TRX parsing loads entire file into memory** (`XDocument.Load`) | Large TRX files (100MB+) spike memory usage | `TestControllerGrpc.Core/Services/TrxResultsParser.cs:137` — consider `XmlReader` streaming for giant files | **P2** |
-| **No rate limit on auto channel resets** | Channel reset storm during fleet-wide outage (seen in logs) | `AgentGrpcDispatcher.cs` — rate-limit to max 1 reset per 30s per agent | **P2** |
-| **50+ agent scaling untested** | Fleet growth could hit SignalR broadcast limits or hub memory | Load test needed; consider group-based SignalR broadcast | **P2** |
+| Gap | Impact | Fix Location | Priority | Status |
+|-----|--------|-------------|----------|--------|
+| ~~**No pagination on API responses**~~ | Slow responses with hundreds of builds | `ResultsController.cs` — added `page`/`pageSize` params with paginated response envelope | **P2** | ✅ Done |
+| **TRX parsing loads entire file into memory** (`XDocument.Load`) | Large TRX files (100MB+) spike memory usage | `TestControllerGrpc.Core/Services/TrxResultsParser.cs:137` — consider `XmlReader` streaming for giant files | **P2** | Deferred |
+| ~~**No rate limit on auto channel resets**~~ | Channel reset storm during fleet-wide outage | `AgentGrpcDispatcher.cs` — 30s cooldown per agent via `LastAutoResetUtc` field on `AgentHealthState` | **P2** | ✅ Done |
+| **50+ agent scaling untested** | Fleet growth could hit SignalR broadcast limits or hub memory | Load test needed; consider group-based SignalR broadcast | **P2** | Deferred (needs load test) |
 
 ---
 
@@ -237,20 +239,22 @@ Various improvements to timer disposal, pagination, gRPC TLS, metrics, tests, an
 
 ### What Exists Today
 
+- `README.md` — top-level entry point with architecture overview, prereqs, build/run/test steps
 - `deploy/README.md` — comprehensive deployment guide with script reference
 - `docs/ARCHITECTURE.md`, `ARCHITECTURE_DESIGN_DOCUMENT.md`, `ARCHITECTURE-DIAGRAMS.md`
+- `docs/RUNBOOK.md` — unified ops runbook with troubleshooting, escalation, common failures
 - `docs/hardening-plan/` — 10 hardening documents (per-component)
-- OpenAPI available in Development mode
+- OpenAPI available in all environments
 - Inline XML docs on all public services
 
 ### Gaps
 
-| Gap | Impact | Fix Location | Priority |
-|-----|--------|-------------|----------|
-| **No top-level README.md** | New team members have no entry point; discoverability is poor | Solution root — add README with architecture overview, prereqs, build steps | **P1** |
-| **No unified ops runbook** | Incident response is ad-hoc; tribal knowledge problem | `docs/RUNBOOK.md` — troubleshooting steps, escalation, common failures | **P1** |
-| **OpenAPI disabled in Production** | API consumers can't discover endpoints in prod | `TestController.WebApi/Program.cs:221` — enable `MapOpenApi()` unconditionally | **P2** |
-| **No formal ADRs** | Architectural decisions undocumented, rationale lost when engineers leave | `docs/adrs/` — document: no-auth decision, plaintext gRPC, custom logger vs Serilog | **P2** |
+| Gap | Impact | Fix Location | Priority | Status |
+|-----|--------|-------------|----------|--------|
+| ~~**No top-level README.md**~~ | New team members have no entry point | `README.md` created at solution root | **P1** | ✅ Done |
+| ~~**No unified ops runbook**~~ | Incident response is ad-hoc | `docs/RUNBOOK.md` — troubleshooting, escalation, recovery | **P1** | ✅ Done |
+| ~~**OpenAPI disabled in Production**~~ | API consumers can't discover endpoints | `Program.cs` — `MapOpenApi()` now unconditional | **P2** | ✅ Done |
+| **No formal ADRs** | Architectural decisions undocumented, rationale lost when engineers leave | `docs/adrs/` — document: no-auth decision, plaintext gRPC, custom logger vs Serilog | **P2** | Deferred |
 
 ---
 

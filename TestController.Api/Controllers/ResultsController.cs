@@ -46,7 +46,8 @@ public class ResultsController : ControllerBase
     /// GET /api/results/builds � list available builds.
     /// </summary>
     [HttpGet("builds")]
-    public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health)
+    public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var corr = Corr;
         try
@@ -57,10 +58,20 @@ public class ResultsController : ControllerBase
             if (!string.IsNullOrEmpty(health))
                 filtered = filtered.Where(b =>
                     string.Equals(b.Health.ToString(), health, StringComparison.OrdinalIgnoreCase));
+
+            // Legacy limit param takes precedence when specified
             if (limit is > 0)
                 filtered = filtered.Take(limit.Value);
 
-            var result = filtered.Select(node => new
+            var allItems = filtered.ToList();
+            var totalCount = allItems.Count;
+
+            // Apply pagination
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 200);
+            var paged = allItems.Skip((page - 1) * pageSize).Take(pageSize);
+
+            var result = paged.Select(node => new
             {
                 buildNumber = node.BuildNumber,
                 modified = node.LatestRun ?? node.EarliestRun,
@@ -73,8 +84,8 @@ public class ResultsController : ControllerBase
             }).ToList();
 
             _appLogger.Log(LogLevel.Information, "ResultsController",
-                $"GetBuilds returned {result.Count} builds", corr);
-            return Ok(result);
+                $"GetBuilds returned {result.Count}/{totalCount} builds (page {page})", corr);
+            return Ok(new { items = result, totalCount, page, pageSize });
         }
         catch (Exception ex)
         {

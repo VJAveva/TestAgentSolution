@@ -322,9 +322,8 @@ app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
 // Prometheus metrics endpoint
 app.MapPrometheusScrapingEndpoint("/metrics").AllowAnonymous();
 
-// OpenAPI endpoint (development only)
-if (app.Environment.IsDevelopment())
-    app.MapOpenApi();
+// OpenAPI endpoint
+app.MapOpenApi();
 
 // Standalone-only minimal API endpoints (features not in the shared library):
 // - WatchList file I/O (import/export/xml/refresh/save)

@@ -38,4 +38,7 @@ public sealed record AgentHealthState
 
     /// <summary>UTC timestamp at which the circuit breaker was last opened, if currently open.</summary>
     public DateTime? CircuitOpenedUtc { get; set; }
+
+    /// <summary>UTC timestamp of the last auto channel reset, used to enforce a cooldown period.</summary>
+    public DateTime? LastAutoResetUtc { get; set; }
 }

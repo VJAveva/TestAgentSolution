@@ -1264,18 +1264,29 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             }
 
             // Auto-reset channel after sustained failures (likely dead TCP connection)
+            // Rate-limited to max 1 reset per 30s per agent to prevent reset storms during fleet outages.
             if (state.ConsecutiveFailures == _timeouts.AutoResetFailureThreshold && !IsAgentExecuting(agentName))
             {
-                _logger.LogWarning("Auto-resetting channel for {Agent} after {Failures} failures",
-                    agentName, state.ConsecutiveFailures);
-                _ = Task.Run(async () =>
+                var now = DateTime.UtcNow;
+                if (state.LastAutoResetUtc is null || (now - state.LastAutoResetUtc.Value).TotalSeconds >= 30)
                 {
-                    try { await ResetChannelAsync(agentName); }
-                    catch (Exception ex)
+                    state.LastAutoResetUtc = now;
+                    _logger.LogWarning("Auto-resetting channel for {Agent} after {Failures} failures",
+                        agentName, state.ConsecutiveFailures);
+                    _ = Task.Run(async () =>
                     {
-                        _logger.LogError(ex, "Auto-reset failed for {Agent}", agentName);
-                    }
-                });
+                        try { await ResetChannelAsync(agentName); }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Auto-reset failed for {Agent}", agentName);
+                        }
+                    });
+                }
+                else
+                {
+                    _logger.LogDebug("Auto-reset skipped for {Agent} — cooldown active (last reset {LastReset})",
+                        agentName, state.LastAutoResetUtc);
+                }
             }
         }
     }

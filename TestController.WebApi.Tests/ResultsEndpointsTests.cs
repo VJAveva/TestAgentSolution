@@ -49,11 +49,15 @@ public class ResultsEndpointsTests : IDisposable
         var response = await _client.GetAsync("/api/results/builds");
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-        Assert.Equal(JsonValueKind.Array, json.ValueKind);
+        Assert.Equal(JsonValueKind.Object, json.ValueKind);
+        var items = json.GetProperty("items");
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        Assert.True(json.GetProperty("totalCount").GetInt32() > 0);
+        Assert.Equal(1, json.GetProperty("page").GetInt32());
 
         // Find Build100
         var found = false;
-        foreach (var item in json.EnumerateArray())
+        foreach (var item in items.EnumerateArray())
         {
             if (item.GetProperty("buildNumber").GetString() == "Build100")
             {
@@ -73,7 +77,7 @@ public class ResultsEndpointsTests : IDisposable
         var response = await _client.GetAsync("/api/results/builds");
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-        foreach (var item in json.EnumerateArray())
+        foreach (var item in json.GetProperty("items").EnumerateArray())
         {
             Assert.True(item.TryGetProperty("health", out var health));
             var healthStr = health.GetString();
