@@ -694,7 +694,16 @@ public sealed class CommandExecutor : IDisposable
         {
             if (_currentProcess is { HasExited: false } proc)
             {
-                _logger.LogWarning("Killing PID {Pid}", proc.Id);
+                // Safety: never kill our own process tree
+                if (proc.Id == Environment.ProcessId)
+                {
+                    _logger.LogCritical(
+                        "KillCurrentProcess: child PID {Pid} matches agent PID — aborting kill to prevent self-termination",
+                        proc.Id);
+                    return;
+                }
+
+                _logger.LogWarning("Killing PID {Pid} (entire process tree)", proc.Id);
                 proc.Kill(entireProcessTree: true);
             }
         }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using TestAgentGrpc;
 using TestAgentGrpc.Clients;
@@ -71,10 +72,18 @@ builder.Services.AddGrpc(options =>
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogger>());
 builder.Services.AddSingleton<AgentLifecycleService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentLifecycleService>());builder.Services.AddHostedService<StuckExecutionWatchdog>();
+builder.Services.AddHostedService<GrpcListenerWatchdog>();
 var app = builder.Build();
 
 app.MapGrpcService<TestAgentGrpcService>();
 app.MapGet("/", () => "TestAgent gRPC service is running.");
+app.MapGet("/health", (CommandExecutor executor) => Results.Ok(new
+{
+    status = "healthy",
+    agent = executor.CurrentState.ToString(),
+    pid = Environment.ProcessId,
+    uptime = (DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).ToString(@"d\.hh\:mm\:ss"),
+}));
 
 // ── Startup validation: warn if running plaintext HTTP/2 in production ─
 var kestrelConfig = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentKestrelOptions>>().Value;
@@ -122,11 +131,44 @@ uiThread.SetApartmentState(ApartmentState.STA);
 uiThread.IsBackground = true;
 uiThread.Name = "WinFormsUI";
 uiThread.Start();
-uiThread.Join();
 
-// Graceful shutdown
-await app.StopAsync();
-await hostTask;
+// Wait for EITHER the UI thread to exit OR the host to signal shutdown.
+// Previously, uiThread.Join() meant closing the tray icon would unconditionally
+// kill the gRPC host. Now, the host stays alive (serving gRPC) even if the
+// tray app exits — the process only terminates when IHostApplicationLifetime
+// requests shutdown (e.g., from GrpcListenerWatchdog or an explicit stop).
+await Task.WhenAny(
+    hostTask,
+    Task.Run(() => uiThread.Join()));
+
+// If the host task hasn't completed yet (UI exited first), check if agent is busy.
+// Only stop the host if NOT actively executing — this prevents pipeline interruption
+// from a simple tray-icon close.
+if (!hostTask.IsCompleted)
+{
+    if (cmdExec.CurrentState == AgentState.Running)
+    {
+        var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Shutdown");
+        startupLogger.LogWarning(
+            "Tray application exited while agent is executing a command. " +
+            "Host will remain alive until execution completes or host shutdown is requested.");
+        CrashDumpHelper.AppendCrashLog(
+            "[Lifecycle] Tray app exited during active execution — host kept alive");
+
+        // Wait for the host to stop naturally (via IHostApplicationLifetime)
+        await hostTask;
+    }
+    else
+    {
+        await app.StopAsync();
+        await hostTask;
+    }
+}
+else
+{
+    // Host stopped first (explicit shutdown or listener watchdog)
+    await hostTask;
+}
 }
 catch (Exception ex)
 {
