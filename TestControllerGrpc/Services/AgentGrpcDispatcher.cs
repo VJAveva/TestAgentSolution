@@ -608,15 +608,28 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             RecordFailure(agentName);
             if (resolved.IsReboot)
             {
-                _appLogger.Info("Dispatch",
-                    $"[{agentName}] Agent went unavailable during reboot — waiting for recovery");
-                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
-                var client = endpoint.GetClient();
-                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
-                _appLogger.Info("Dispatch",
-                    $"[{agentName}] REBOOT complete — agent back online (recovered from Unavailable)");
-                RecordSuccess(agentName);
-                return new ActionResult(true, 0, "Reboot completed");
+                // Agent gRPC service was already down — use out-of-band reboot
+                _appLogger.Warn("Dispatch",
+                    $"[{agentName}] Agent gRPC service unreachable during reboot — attempting out-of-band remote shutdown");
+                StatusChanged?.Invoke(agentName, "gRPC down \u2014 attempting remote reboot\u2026");
+
+                var oobSuccess = await TryOutOfBandRebootAsync(agentName, resolved, ct);
+                if (oobSuccess)
+                {
+                    _appLogger.Info("Dispatch",
+                        $"[{agentName}] Out-of-band remote shutdown issued — waiting for agent to come back online");
+                    StatusChanged?.Invoke(agentName, "Rebooting (out-of-band)\u2026 waiting for agent");
+                    var client = endpoint.GetClient();
+                    await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                    _appLogger.Info("Dispatch",
+                        $"[{agentName}] REBOOT complete — agent back online (out-of-band recovery)");
+                    RecordSuccess(agentName);
+                    return new ActionResult(true, 0, "Reboot completed (out-of-band)");
+                }
+
+                RecordFailure(agentName);
+                return new ActionResult(false, -1,
+                    $"Agent {agentName} unreachable: gRPC service down and out-of-band reboot failed. Manual intervention required.");
             }
 
             // Wait for agent recovery before giving up
@@ -693,7 +706,119 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 }
             }
 
-            // Recovery wait expired — agent did not come back
+            // Recovery wait expired — agent did not come back within normal timeout.
+            // If AutoRebootOnUnavailable is enabled, attempt an out-of-band reboot
+            // and retry the command. This handles cases where the agent service crashed
+            // (e.g., after Install Build replaced dependencies) and needs a full machine
+            // reboot to recover.
+            if (_timeouts.AutoRebootOnUnavailable && !resolved.IsReboot)
+            {
+                _appLogger.Warn("Dispatch",
+                    $"[{agentName}] Agent did not recover within {_timeouts.UnavailableRecoverySeconds}s. " +
+                    "Attempting out-of-band reboot to recover agent...");
+                StatusChanged?.Invoke(agentName, "Agent down \u2014 auto-rebooting machine\u2026");
+
+                var oobSuccess = await TryOutOfBandRebootAsync(agentName, resolved, ct);
+                if (oobSuccess)
+                {
+                    _appLogger.Info("Dispatch",
+                        $"[{agentName}] Out-of-band reboot issued — waiting up to {_timeouts.AutoRebootRecoverySeconds}s for agent to come back");
+                    StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent service");
+
+                    var client = endpoint.GetClient();
+                    // Wait for machine to reboot and agent service to start
+                    using var rebootCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    rebootCts.CancelAfter(TimeSpan.FromSeconds(_timeouts.AutoRebootRecoverySeconds));
+
+                    bool agentRecovered = false;
+                    while (!rebootCts.Token.IsCancellationRequested)
+                    {
+                        try { await Task.Delay(10_000, rebootCts.Token); } catch (OperationCanceledException) { break; }
+                        try
+                        {
+                            // Re-read endpoint in case channel was reset during reboot
+                            var currentEndpoint = _agents.TryGetValue(agentName, out var ep) ? ep : endpoint;
+                            var pingClient = currentEndpoint.GetClient();
+                            await pingClient.GetStateAsync(new Empty(),
+                                deadline: DateTime.UtcNow.AddSeconds(_timeouts.PingTimeoutSeconds),
+                                cancellationToken: rebootCts.Token);
+                            agentRecovered = true;
+                            break;
+                        }
+                        catch (RpcException) { /* still rebooting */ }
+                        catch (OperationCanceledException) { break; }
+                    }
+
+                    if (agentRecovered)
+                    {
+                        _appLogger.Info("Dispatch",
+                            $"[{agentName}] Agent back online after reboot — retrying command: {cmdShort}");
+                        StatusChanged?.Invoke(agentName, "Agent recovered \u2014 retrying command");
+                        RecordSuccess(agentName);
+
+                        try
+                        {
+                            var retryEndpoint = _agents.TryGetValue(agentName, out var ep2) ? ep2 : endpoint;
+                            var retryResult = await retryEndpoint.Resilience.ExecuteAsync(async resilienceCt =>
+                            {
+                                var retryClient = retryEndpoint.GetClient();
+                                CancellationTokenSource? retryTimeoutCts = resolved.Timeout > 0
+                                    ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
+                                    : null;
+                                using var _retryTimeoutDisposable = retryTimeoutCts;
+                                using var retryLinked = retryTimeoutCts is not null
+                                    ? CancellationTokenSource.CreateLinkedTokenSource(resilienceCt, retryTimeoutCts.Token)
+                                    : CancellationTokenSource.CreateLinkedTokenSource(resilienceCt);
+
+                                return await RemoteCommandStreamRunner.StreamAsync(
+                                    retryClient, agentName, resolved, retryLinked.Token,
+                                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                                    correlationId: correlationId);
+                            }, ct);
+
+                            var retryExitCode = retryResult.ExitCode;
+                            var retryError = retryResult.ErrorMessage;
+                            var retrySuccess = retryExitCode == 0 && string.IsNullOrEmpty(retryError);
+
+                            RecordSuccess(agentName);
+
+                            var retryElapsed = Stopwatch.GetElapsedTime(startTimestamp);
+                            var retryStatusMsg = retrySuccess
+                                ? "Ready"
+                                : $"Failed (exit {retryExitCode}): {Truncate(retryError, 100)}";
+                            StatusChanged?.Invoke(agentName, retryStatusMsg);
+
+                            if (retrySuccess)
+                                _appLogger.Info("Dispatch",
+                                    $"[{agentName}] \u2713 Post-reboot retry OK: {cmdShort} (total elapsed {retryElapsed:hh\\:mm\\:ss})");
+                            else
+                                _appLogger.Error("Dispatch",
+                                    $"[{agentName}] \u2717 Post-reboot retry FAILED (exit {retryExitCode}): {Truncate(retryError, 150)}");
+
+                            return new ActionResult(retrySuccess, retryExitCode, retryError);
+                        }
+                        catch (Exception retryEx)
+                        {
+                            RecordFailure(agentName);
+                            _appLogger.Error("Dispatch",
+                                $"[{agentName}] Post-reboot retry EXCEPTION: {retryEx.Message}");
+                            return new ActionResult(false, -1,
+                                $"Agent {agentName} post-reboot retry failed: {retryEx.Message}");
+                        }
+                    }
+
+                    // Reboot was issued but agent didn't come back
+                    _appLogger.Error("Dispatch",
+                        $"[{agentName}] Agent did not recover after out-of-band reboot (waited {_timeouts.AutoRebootRecoverySeconds}s). " +
+                        "Machine may have failed to reboot or agent service is permanently broken.");
+                }
+                else
+                {
+                    _appLogger.Error("Dispatch",
+                        $"[{agentName}] Out-of-band reboot also FAILED — machine may be powered off or network-isolated.");
+                }
+            }
+
             _appLogger.Error("Dispatch",
                 $"[{agentName}] UNAVAILABLE: Agent did not recover within {_timeouts.UnavailableRecoverySeconds}s. {ex.Status.Detail}");
             return new ActionResult(false, -1,
@@ -834,16 +959,35 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
         {
-            // Agent became unavailable — expected during a reboot. Wait for recovery.
-            _appLogger.Info("Dispatch",
-                $"[{agentName}] Agent went unavailable during reboot — waiting for recovery");
-            StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
-            var client = endpoint.GetClient();
-            await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
-            _appLogger.Info("Dispatch",
-                $"[{agentName}] REBOOT complete — agent back online (recovered from Unavailable)");
-            RecordSuccess(agentName);
-            return new ActionResult(true, 0, "Reboot completed");
+            // Agent is ALREADY unreachable — the reboot command was never delivered via gRPC.
+            // Use out-of-band Windows remote shutdown to actually reboot the machine.
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] Agent gRPC service unreachable — reboot command was NOT delivered. " +
+                "Attempting out-of-band remote shutdown via Windows RPC...");
+            StatusChanged?.Invoke(agentName, "gRPC down \u2014 attempting remote reboot\u2026");
+
+            var oobSuccess = await TryOutOfBandRebootAsync(agentName, resolved, ct);
+            if (oobSuccess)
+            {
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] Out-of-band remote shutdown issued — waiting for agent to come back online");
+                StatusChanged?.Invoke(agentName, "Rebooting (out-of-band)\u2026 waiting for agent");
+                var client = endpoint.GetClient();
+                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] REBOOT complete — agent back online (out-of-band recovery)");
+                RecordSuccess(agentName);
+                return new ActionResult(true, 0, "Reboot completed (out-of-band)");
+            }
+
+            // Out-of-band reboot also failed — agent machine may be completely unreachable
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] Out-of-band reboot FAILED — agent machine appears completely unreachable. " +
+                "Manual intervention required.");
+            RecordFailure(agentName);
+            return new ActionResult(false, -1,
+                $"Agent {agentName} unreachable: gRPC service down and out-of-band reboot failed. " +
+                "The machine may be powered off or network-isolated. Manual intervention required.");
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled && ct.IsCancellationRequested)
         {
@@ -1075,6 +1219,95 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             agentName, _timeouts.WaitForAgentFreeMaxSeconds);
         _appLogger.Warn("Dispatch",
             $"[{agentName}] Pre-check: still busy after {_timeouts.WaitForAgentFreeMaxSeconds}s polling — proceeding with dispatch");
+    }
+
+    /// <summary>
+    /// Attempts an out-of-band remote shutdown using Windows native RPC
+    /// (shutdown.exe /m \\hostname). This works even when the agent's gRPC
+    /// service (port 5200) is crashed, as long as the machine itself is reachable.
+    /// Used as a fallback when a gRPC-based reboot command cannot be delivered.
+    /// </summary>
+    private async Task<bool> TryOutOfBandRebootAsync(
+        string agentName, ActionConfig resolved, CancellationToken ct)
+    {
+        // Extract hostname from the agent's registered address (e.g., "http://jvhist:5200" → "jvhist")
+        var address = GetAgentAddress(agentName);
+        if (string.IsNullOrEmpty(address))
+        {
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] Cannot perform out-of-band reboot — no address registered");
+            return false;
+        }
+
+        string hostname;
+        if (Uri.TryCreate(address, UriKind.Absolute, out var uri))
+            hostname = uri.Host;
+        else
+            hostname = address.Split(':')[0].Replace("http://", "").Replace("https://", "");
+
+        // Extract delay from the original command if possible (e.g., "shutdown /r /f /t 90" → 90)
+        var delay = 0;
+        var cmdLower = resolved.Command?.ToLowerInvariant() ?? "";
+        var tIdx = cmdLower.IndexOf("/t ");
+        if (tIdx >= 0)
+        {
+            var afterT = cmdLower[(tIdx + 3)..].TrimStart();
+            var numEnd = 0;
+            while (numEnd < afterT.Length && char.IsDigit(afterT[numEnd])) numEnd++;
+            if (numEnd > 0) int.TryParse(afterT[..numEnd], out delay);
+        }
+
+        _appLogger.Info("Dispatch",
+            $"[{agentName}] Executing out-of-band reboot: shutdown /r /f /t {delay} /m \\\\{hostname}");
+
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = "shutdown.exe",
+                Arguments = $"/r /f /t {delay} /m \\\\{hostname}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            process.Start();
+
+            // Wait up to 30s for the shutdown command to complete
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+            await process.WaitForExitAsync(timeoutCts.Token);
+
+            var stdout = await process.StandardOutput.ReadToEndAsync(ct);
+            var stderr = await process.StandardError.ReadToEndAsync(ct);
+
+            if (process.ExitCode == 0)
+            {
+                _appLogger.Info("Dispatch",
+                    $"[{agentName}] Out-of-band reboot command accepted (exit 0). Machine \\\\{hostname} will restart in {delay}s.");
+                return true;
+            }
+
+            // Exit code non-zero — shutdown rejected (access denied, machine unreachable, etc.)
+            var detail = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] Out-of-band reboot FAILED (exit {process.ExitCode}): {detail}");
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            _appLogger.Warn("Dispatch",
+                $"[{agentName}] Out-of-band reboot command timed out or was cancelled");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Error("Dispatch",
+                $"[{agentName}] Out-of-band reboot EXCEPTION: {ex.Message}", ex);
+            return false;
+        }
     }
 
     private async Task WaitForAgentReady(

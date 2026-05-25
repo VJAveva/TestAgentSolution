@@ -80,6 +80,21 @@ public sealed class ControllerTimeoutOptions
     /// <summary>Poll interval (seconds) during unavailable recovery wait. Default: 10.</summary>
     public int UnavailableRecoveryPollIntervalSeconds { get; set; } = 10;
 
+    /// <summary>
+    /// When true and an agent doesn't recover within <see cref="UnavailableRecoverySeconds"/>,
+    /// the dispatcher will attempt an out-of-band remote reboot (shutdown.exe /m \\hostname)
+    /// and retry the failed command after the agent comes back online.
+    /// This handles cases where the agent gRPC service crashed (e.g., after Install Build)
+    /// and needs a full machine reboot to recover. Default: true.
+    /// </summary>
+    public bool AutoRebootOnUnavailable { get; set; } = true;
+
+    /// <summary>
+    /// Maximum wait time (seconds) for the agent to come back after an auto out-of-band reboot.
+    /// Default: 300 (5 minutes).
+    /// </summary>
+    public int AutoRebootRecoverySeconds { get; set; } = 300;
+
     // ── Execution ──
 
     /// <summary>Default action execution timeout when none specified in XML (seconds). Default: 7200 (2 hours).</summary>

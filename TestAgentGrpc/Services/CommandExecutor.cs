@@ -130,7 +130,10 @@ public sealed class CommandExecutor : IDisposable
                 }
                 finally
                 {
-                    _executionLock.Release();
+                    // Guard against double-release: ForceReady() may have already
+                    // released the semaphore if TerminateExecution was called.
+                    try { _executionLock.Release(); }
+                    catch (SemaphoreFullException) { /* already released by ForceReady */ }
                     cts.Dispose();
                 }
             });
@@ -208,7 +211,10 @@ public sealed class CommandExecutor : IDisposable
                 }
                 finally
                 {
-                    _executionLock.Release();
+                    // Guard against double-release: ForceReady() may have already
+                    // released the semaphore if TerminateExecution was called.
+                    try { _executionLock.Release(); }
+                    catch (SemaphoreFullException) { /* already released by ForceReady */ }
                     cts.Dispose();
                 }
             });
