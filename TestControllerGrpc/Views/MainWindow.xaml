@@ -720,14 +720,20 @@
         <!-- ═══════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBg}"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <!-- Health Metrics Strip (always visible, right-docked) -->
-                <views:HealthMetricsStrip DockPanel.Dock="Right" DataContext="{Binding HealthMetrics}"
-                                          Margin="0,2,8,2" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                <!-- Status + Active Sessions -->
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
-                            HorizontalAlignment="Right" Margin="12,0">
+                <!-- Health Metrics Strip (always visible, right column) -->
+                <views:HealthMetricsStrip Grid.Column="2" DataContext="{Binding HealthMetrics}"
+                                          Margin="0,2,6,2" />
+
+                <!-- Status + Active Sessions (middle column) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                            HorizontalAlignment="Right" Margin="8,0">
                     <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource AccGreen}"
                                FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
 
@@ -765,10 +771,11 @@
                 </StackPanel>
 
                 <!-- ══ COMPACT TOOLBAR (simplified mode only) ══ -->
-                <Border DockPanel.Dock="Top" Padding="4,3" Background="{DynamicResource RibbonTabBg}"
+                <Border Grid.Column="0" Padding="4,3" Background="{DynamicResource RibbonTabBg}"
                         BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1"
+                        ClipToBounds="True"
                         Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource BoolVis}}">
-                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- File -->
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding LoadVocabularyCommand}"
                                 ToolTip="Open (Ctrl+O)" Height="28" MinWidth="28" Padding="4,2">
@@ -922,10 +929,10 @@
                             </StackPanel>
                         </Border>
 
-                    </WrapPanel>
+                    </StackPanel>
                 </Border>
 
-                <TabControl Background="Transparent" BorderThickness="0" Padding="0"
+                <TabControl Grid.Column="0" Background="Transparent" BorderThickness="0" Padding="0"
                             Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource InvBoolVis}}">
                     <TabControl.Resources>
                         <Style TargetType="TabItem">
@@ -961,8 +968,8 @@
 
                     <!-- ─── HOME TAB ─── -->
                     <TabItem Header="HOME">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <!-- File Operations -->
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
@@ -1195,14 +1202,14 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                            </StackPanel>
                         </Border>
                     </TabItem>
 
                     <!-- ─── EXECUTION TAB ─── -->
                     <TabItem Header="EXECUTION">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
@@ -1328,44 +1335,70 @@
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <CheckBox IsChecked="{Binding IsLogPanePinned}" VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource TextP}" />
-                                            <TextBlock Text=" Execution Log" FontSize="11" Foreground="{DynamicResource TextP}"
-                                                       VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <ToggleButton IsChecked="{Binding IsLogPanePinned}" Cursor="Hand"
+                                                          ToolTip="Show/Hide Execution Log">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border x:Name="Track" Width="32" Height="16" CornerRadius="8"
+                                                                Background="{DynamicResource Accent}" BorderThickness="1"
+                                                                BorderBrush="{DynamicResource Accent}">
+                                                            <Ellipse x:Name="Thumb" Width="12" Height="12" Fill="White"
+                                                                     HorizontalAlignment="Right" Margin="0,0,1,0" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="False">
+                                                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource BgSurface}" />
+                                                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Bdr}" />
+                                                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource TextS}" />
+                                                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Left" />
+                                                                <Setter TargetName="Thumb" Property="Margin" Value="1,0,0,0" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                            </ToggleButton>
+                                            <TextBlock Text="Execution Log" FontSize="11" Foreground="{DynamicResource TextP}"
+                                                       VerticalAlignment="Center" Margin="6,0,0,0" />
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                            <CheckBox IsChecked="{Binding IsAgentPanePinned}" VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource TextP}" />
-                                            <TextBlock Text=" Agent Panel" FontSize="11" Foreground="{DynamicResource TextP}"
-                                                       VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <ToggleButton IsChecked="{Binding IsAgentPanePinned}" Cursor="Hand"
+                                                          ToolTip="Show/Hide Agent Panel">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border x:Name="Track" Width="32" Height="16" CornerRadius="8"
+                                                                Background="{DynamicResource Accent}" BorderThickness="1"
+                                                                BorderBrush="{DynamicResource Accent}">
+                                                            <Ellipse x:Name="Thumb" Width="12" Height="12" Fill="White"
+                                                                     HorizontalAlignment="Right" Margin="0,0,1,0" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="False">
+                                                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource BgSurface}" />
+                                                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Bdr}" />
+                                                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource TextS}" />
+                                                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Left" />
+                                                                <Setter TargetName="Thumb" Property="Margin" Value="1,0,0,0" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                            </ToggleButton>
+                                            <TextBlock Text="Agent Panel" FontSize="11" Foreground="{DynamicResource TextP}"
+                                                       VerticalAlignment="Center" Margin="6,0,0,0" />
                                         </StackPanel>
                                         <TextBlock Text="Panels" FontSize="9" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                            </StackPanel>
                         </Border>
                     </TabItem>
                     <!-- ─── TOOLS TAB ─── -->
                     <TabItem Header="TOOLS">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="Theme:" FontSize="11" Foreground="{DynamicResource TextS}"
-                                                       VerticalAlignment="Center" Margin="4,0,8,0" />
-                                            <ComboBox ItemsSource="{Binding AvailableThemes}"
-                                                      SelectedItem="{Binding SelectedTheme}"
-                                                      Style="{StaticResource Cmb}" Width="140" Margin="0" />
-                                        </StackPanel>
-                                        <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
@@ -1397,11 +1430,11 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                            </StackPanel>
                         </Border>
                     </TabItem>
                 </TabControl>
-            </DockPanel>
+            </Grid>
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════ -->
