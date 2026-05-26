@@ -47,6 +47,7 @@ public static class WatchListXmlParser
                 Tag = Attr(wiEl, "Tag"),
                 Path = Attr(wiEl, "Path"),
                 Filter = Attr(wiEl, "Filter", "*.*"),
+                IsEnabled = !string.Equals(Attr(wiEl, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase),
                 BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
                 DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
                 BuildBasePath = Attr(wiEl, "BuildBasePath"),
@@ -146,6 +147,8 @@ public static class WatchListXmlParser
                 new XAttribute("Filter", wi.Filter));
             if (!string.IsNullOrEmpty(wi.Tag))
                 wiEl.Add(new XAttribute("Tag", wi.Tag));
+            if (!wi.IsEnabled)
+                wiEl.Add(new XAttribute("IsEnabled", "false"));
             AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
             AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
             AddIfNotEmpty(wiEl, "BuildBasePath", wi.BuildBasePath);
@@ -249,6 +252,8 @@ public static class WatchListXmlParser
             attrs.Add(new XAttribute("Tag", wi.Tag));
         attrs.Add(new XAttribute("Path", wi.Path));
         attrs.Add(new XAttribute("Filter", wi.Filter));
+        if (!wi.IsEnabled)
+            attrs.Add(new XAttribute("IsEnabled", "false"));
 
         var wiEl = new XElement("WatchItem", attrs.ToArray());
         AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
@@ -276,6 +281,7 @@ public static class WatchListXmlParser
             Tag = Attr(wiEl, "Tag"),
             Path = Attr(wiEl, "Path"),
             Filter = Attr(wiEl, "Filter", "*.*"),
+            IsEnabled = !string.Equals(Attr(wiEl, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase),
             BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
             DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
             BuildBasePath = Attr(wiEl, "BuildBasePath"),

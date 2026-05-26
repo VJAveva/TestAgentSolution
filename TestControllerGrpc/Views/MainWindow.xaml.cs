@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     // ── Dockable pane saved sizes ──────────────────────────────────────────
     private GridLength _savedAgentColWidth = new(3, GridUnitType.Star);
     private GridLength _savedTreeColWidth = new(2.5, GridUnitType.Star);
+    private GridLength _savedPropertiesColWidth = new(5, GridUnitType.Star);
     private GridLength _savedLogRowHeight = new(2, GridUnitType.Star);
 
     // ── Panel sizing tokens (loaded from DesignTokens.xaml) ────────────────
@@ -322,12 +323,14 @@ public partial class MainWindow : Window
             ColAgentPanel.Width = _savedAgentColWidth;
             ColAgentPanel.MinWidth = _agentPanelMinPinned;
             ColAgentSplitter.Width = GridLength.Auto;
-            ColNodeProperties.Width = new GridLength(3, GridUnitType.Star);
+            ColNodeProperties.Width = _savedPropertiesColWidth;
         }
         else
         {
             if (ColAgentPanel.Width.IsStar)
                 _savedAgentColWidth = ColAgentPanel.Width;
+            if (ColNodeProperties.Width.IsStar)
+                _savedPropertiesColWidth = ColNodeProperties.Width;
 
             ColAgentPanel.Width = GridLength.Auto;
             ColAgentPanel.MinWidth = _agentPaneCollapsedWidth;
@@ -415,31 +418,21 @@ public partial class MainWindow : Window
         if (sender is not Grid grid || grid.ActualWidth < 1 || grid.ActualHeight < 1)
             return;
 
-        // Tree panel: cap at configured percentage of grid width
+        // Enforce max proportions using MaxWidth on grid columns.
+        // This avoids converting star→pixel which breaks proportional layout.
         double maxTreeWidth = grid.ActualWidth * _treePanelMaxWidthPercent;
-        if (ColTreePanel.ActualWidth > maxTreeWidth && maxTreeWidth > _treePanelMinWidth)
-        {
-            ColTreePanel.Width = new GridLength(maxTreeWidth, GridUnitType.Pixel);
-        }
+        ColTreePanel.MaxWidth = _vm.IsTreePanePinned ? maxTreeWidth : double.PositiveInfinity;
 
-        // Agent panel: cap at configured percentage (only when pinned)
-        if (_vm.IsAgentPanePinned)
-        {
-            double maxAgentWidth = grid.ActualWidth * _agentPanelMaxWidthPercent;
-            if (ColAgentPanel.ActualWidth > maxAgentWidth && maxAgentWidth > _agentPanelMinPinned)
-            {
-                ColAgentPanel.Width = new GridLength(maxAgentWidth, GridUnitType.Pixel);
-            }
-        }
+        double maxAgentWidth = grid.ActualWidth * _agentPanelMaxWidthPercent;
+        ColAgentPanel.MaxWidth = _vm.IsAgentPanePinned ? maxAgentWidth : double.PositiveInfinity;
 
-        // Log pane: cap at configured percentage (only when pinned)
+        // Log pane: clamp by ensuring main content row doesn't shrink below 250
         if (_vm.IsLogPanePinned)
         {
             double maxLogHeight = grid.ActualHeight * _logPaneMaxHeightPercent;
-            if (RowLogPane.ActualHeight > maxLogHeight && maxLogHeight > _logPaneMinHeight)
-            {
-                RowLogPane.Height = new GridLength(maxLogHeight, GridUnitType.Pixel);
-            }
+            double mainRowMinHeight = grid.ActualHeight - maxLogHeight - 4;
+            if (mainRowMinHeight > 250)
+                MainContentGrid.RowDefinitions[0].MinHeight = mainRowMinHeight;
         }
     }
 

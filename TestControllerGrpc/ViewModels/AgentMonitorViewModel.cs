@@ -26,6 +26,16 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _connectionStatusText = "Connecting";
     [ObservableProperty] private string _liveActionName = "";
 
+    // ── Health metrics from heartbeat ─────────────────────────────────
+    [ObservableProperty] private double _cpuUsagePct;
+    [ObservableProperty] private double _memoryUsedMb;
+    [ObservableProperty] private double _memoryTotalMb;
+    [ObservableProperty] private double _diskFreeGb;
+    [ObservableProperty] private int _activeProcessCount;
+    [ObservableProperty] private string _osDescription = "";
+    [ObservableProperty] private string _lastHeartbeatTime = "";
+    [ObservableProperty] private bool _hasMetrics;
+
     private const int MaxActionHistory = 200;
     public ObservableCollection<AgentActionRow> ActionHistory { get; } = new();
 
@@ -85,6 +95,17 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                     ConnectionStatusText = "Connected";
                     if (!string.IsNullOrWhiteSpace(snapshot.CurrentCommand))
                         LiveActionName = snapshot.CurrentCommand;
+                    if (snapshot.Metrics is not null)
+                    {
+                        CpuUsagePct = snapshot.Metrics.CpuUsagePct;
+                        MemoryUsedMb = snapshot.Metrics.MemoryUsedMb;
+                        MemoryTotalMb = snapshot.Metrics.MemoryTotalMb;
+                        DiskFreeGb = snapshot.Metrics.DiskFreeGb;
+                        ActiveProcessCount = snapshot.Metrics.ActiveProcessCount;
+                        OsDescription = snapshot.Metrics.OsDescription ?? "";
+                        HasMetrics = true;
+                        LastHeartbeatTime = DateTime.Now.ToString("HH:mm:ss");
+                    }
                 });
             }
             catch
@@ -284,6 +305,17 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                     TestAgentGrpc.AgentState.Running => "Running",
                     _ => "Inactive"
                 };
+                if (evt.Metrics is not null)
+                {
+                    CpuUsagePct = evt.Metrics.CpuUsagePct;
+                    MemoryUsedMb = evt.Metrics.MemoryUsedMb;
+                    MemoryTotalMb = evt.Metrics.MemoryTotalMb;
+                    DiskFreeGb = evt.Metrics.DiskFreeGb;
+                    ActiveProcessCount = evt.Metrics.ActiveProcessCount;
+                    OsDescription = evt.Metrics.OsDescription ?? "";
+                    HasMetrics = true;
+                }
+                LastHeartbeatTime = DateTime.Now.ToString("HH:mm:ss");
                 break;
         }
     }

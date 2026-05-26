@@ -18,10 +18,20 @@ public sealed partial class MainViewModel
         var dlg = new OpenFolderDialog
         {
             Title = "Select Build Folder",
-            InitialDirectory = string.IsNullOrEmpty(basePath) ? "" : basePath,
+            InitialDirectory = string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath) ? "" : basePath,
         };
 
-        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            if (dlg.ShowDialog() != true) return;
+        }
+        catch (Exception ex) when (ex is System.IO.FileNotFoundException || ex is System.IO.DirectoryNotFoundException)
+        {
+            // Network path unreachable — retry without InitialDirectory
+            AddLog($"Initial directory unreachable ({basePath}), opening default location. Error: {ex.Message}", LogSeverity.Warning);
+            dlg = new OpenFolderDialog { Title = "Select Build Folder" };
+            if (dlg.ShowDialog() != true) return;
+        }
 
         var selectedPath = dlg.FolderName;
         var folderName = Path.GetFileName(selectedPath.TrimEnd('\\', '/'));

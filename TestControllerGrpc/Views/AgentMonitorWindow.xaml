@@ -66,6 +66,55 @@
             </DockPanel>
         </Border>
 
+        <!-- Health metrics strip -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6"
+                BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasMetrics}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Foreground="{DynamicResource TextS}" FontSize="10" VerticalAlignment="Center"
+                           Margin="0,0,12,0" Text="HEALTH" FontWeight="SemiBold" />
+                <!-- CPU -->
+                <TextBlock FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"
+                           Foreground="{DynamicResource TextS}" Text="CPU" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}"
+                           Text="{Binding CpuUsagePct, StringFormat='{}{0:F1}%'}" />
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
+                           FontSize="11" VerticalAlignment="Center" Text="MEM" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0:F0} / {1:F0} MB">
+                            <Binding Path="MemoryUsedMb" />
+                            <Binding Path="MemoryTotalMb" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
+                           FontSize="11" VerticalAlignment="Center" Text="DISK FREE" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}"
+                           Text="{Binding DiskFreeGb, StringFormat='{}{0:F1} GB'}" />
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
+                           FontSize="11" VerticalAlignment="Center" Text="PROCS" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}"
+                           Text="{Binding ActiveProcessCount}" />
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="16,0,0,0"
+                           FontSize="10" VerticalAlignment="Center" FontStyle="Italic"
+                           Text="{Binding LastHeartbeatTime, StringFormat='Last: {0}'}" />
+            </StackPanel>
+        </Border>
+
         <!-- Action history grid -->
         <DataGrid ItemsSource="{Binding ActionHistory}" AutoGenerateColumns="False"
                   IsReadOnly="True" Background="Transparent"

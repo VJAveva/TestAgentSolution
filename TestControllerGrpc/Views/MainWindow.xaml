@@ -780,7 +780,7 @@
                         BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1"
                         ClipToBounds="True"
                         Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource BoolVis}}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- File -->
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding LoadVocabularyCommand}"
                                 ToolTip="Open (Ctrl+O)" Height="28" MinWidth="28" Padding="4,2">
@@ -892,6 +892,12 @@
                         <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
 
                         <!-- Panel toggles (compact) -->
+                        <ToggleButton IsChecked="{Binding IsTreePanePinned}" ToolTip="Toggle Tree Panel (Ctrl+1)"
+                                      AutomationProperties.Name="Toggle Tree Panel"
+                                      Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
+                                      Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B7;" FontSize="14" Foreground="{DynamicResource Accent}" />
+                        </ToggleButton>
                         <ToggleButton IsChecked="{Binding IsAgentPanePinned}" ToolTip="Toggle Agent Panel (Ctrl+2)"
                                       AutomationProperties.Name="Toggle Agent Panel"
                                       Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
@@ -936,7 +942,7 @@
                             </StackPanel>
                         </Border>
 
-                    </StackPanel>
+                    </WrapPanel>
                 </Border>
 
                 <TabControl Grid.Column="0" Background="Transparent" BorderThickness="0" Padding="0"
@@ -976,7 +982,7 @@
                     <!-- ─── HOME TAB ─── -->
                     <TabItem Header="HOME">
                         <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <!-- File Operations -->
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
@@ -1209,7 +1215,7 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </StackPanel>
+                            </WrapPanel>
                         </Border>
                     </TabItem>
 
@@ -1503,6 +1509,28 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- LEFT PANEL (Col 0, Row 0): TabControl                 -->
             <!-- ═══════════════════════════════════════════════════════ -->
+
+            <!-- Collapsed tree pane: vertical restore tab -->
+            <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgCard}"
+                    Width="28" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,1,0"
+                    Visibility="{Binding IsTreePanePinned, Converter={StaticResource InvBoolVis}}">
+                <Button Command="{Binding ShowTreePaneCommand}" Cursor="Hand"
+                        ToolTip="Show WatchList tree (Ctrl+1)"
+                        Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                               Foreground="{DynamicResource Accent}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.LayoutTransform>
+                            <RotateTransform Angle="-90" />
+                        </TextBlock.LayoutTransform>
+                    </TextBlock>
+                </Button>
+            </Border>
+
+            <!-- Full tree panel (visible when pinned) -->
             <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgPanel}"
                     Visibility="{Binding IsTreePanePinned, Converter={StaticResource BoolVis}}">
                 <TabControl Background="Transparent" BorderThickness="0" Padding="0">
