@@ -103,8 +103,10 @@
     <SolidColorBrush x:Key="FocusRing"      Color="#4489B4FA" />
 
     <!-- Scrollbar track -->
-    <SolidColorBrush x:Key="ScrollbarTrack" Color="#11FFFFFF" />
-    <SolidColorBrush x:Key="ScrollbarThumb" Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarTrack"      Color="#11FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumb"      Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumbHover" Color="#55FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumbDrag"  Color="#77FFFFFF" />
 
     <!-- Badge pill backgrounds -->
     <SolidColorBrush x:Key="CancelledBadgeBg" Color="#339399B2" />

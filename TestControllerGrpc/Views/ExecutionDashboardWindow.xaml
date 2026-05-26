@@ -164,7 +164,7 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl x:Name="PipelineSessionList"
-                                      ItemsSource="{Binding Sessions}" Margin="8,4">
+                                      ItemsSource="{Binding SessionsView}" Margin="8,4">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type exec:SessionCardVM}">
                                     <Border Background="{StaticResource CardBg}"

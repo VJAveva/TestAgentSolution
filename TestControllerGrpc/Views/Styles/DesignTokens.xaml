@@ -52,9 +52,16 @@
     <sys:Double x:Key="TreePanelMinWidth">220</sys:Double>
     <sys:Double x:Key="PropertiesMinWidth">300</sys:Double>
     <sys:Double x:Key="AgentPanelMinWidth">240</sys:Double>
+    <sys:Double x:Key="AgentPanelMinPinned">280</sys:Double>
     <sys:Double x:Key="AgentPaneCollapsedWidth">28</sys:Double>
     <sys:Double x:Key="LogPaneMinHeight">120</sys:Double>
+    <sys:Double x:Key="LogPaneCollapsedHeight">28</sys:Double>
     <sys:Double x:Key="MainMinHeight">250</sys:Double>
+
+    <!-- Panel MaxWidth/MaxHeight as percentage of available space (0.0–1.0) -->
+    <sys:Double x:Key="TreePanelMaxWidthPercent">0.35</sys:Double>
+    <sys:Double x:Key="AgentPanelMaxWidthPercent">0.35</sys:Double>
+    <sys:Double x:Key="LogPaneMaxHeightPercent">0.40</sys:Double>
 
     <!-- ═══ Animation Durations ═══ -->
     <Duration x:Key="AnimFast">0:0:0.12</Duration>

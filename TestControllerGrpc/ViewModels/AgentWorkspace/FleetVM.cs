@@ -27,6 +27,7 @@ public partial class FleetVM : ObservableObject, IDisposable
     [ObservableProperty] private int _failedCount;
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private bool _isEmpty = true;
+    [ObservableProperty] private int _utilizationBarWidth;
 
     public event Action<string>? AgentSelected;
     public event Action? RegisterAgentClicked;
@@ -223,6 +224,11 @@ public partial class FleetVM : ObservableObject, IDisposable
         OfflineCount = offline;
         FailedCount = failed;
         IsEmpty = allCards.Count == 0;
+
+        // Utilization bar: proportional width (max 80px) based on busy/total
+        UtilizationBarWidth = allCards.Count > 0
+            ? (int)(80.0 * busy / allCards.Count)
+            : 0;
     }
 
     [RelayCommand]

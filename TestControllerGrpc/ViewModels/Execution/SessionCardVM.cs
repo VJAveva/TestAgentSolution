@@ -35,6 +35,23 @@ public partial class SessionCardVM : ObservableObject
         _           => Status,
     };
 
+    /// <summary>
+    /// Severity rank for triage-first sorting.
+    /// Higher rank = more urgent (sorts first in descending order).
+    /// </summary>
+    public int SeverityRank => Status switch
+    {
+        "Failed"    => 100,
+        "Running" when FailedActions > 0 => 90,  // Running but has failures
+        "Running"   => 10,
+        "Cancelled" => 5,
+        "Success"   => 0,
+        _           => 5
+    };
+
+    /// <summary>Group key for triage display: "NeedsAttention" or "Normal".</summary>
+    public string AttentionGroup => SeverityRank >= 90 ? "NeedsAttention" : "Normal";
+
     public string Summary =>
         $"{Agents.Count} agents | " +
         $"{PassedActions} passed, {FailedActions} failed | " +
@@ -72,6 +89,8 @@ public partial class SessionCardVM : ObservableObject
         // instead of per-counter setter (reduces cascading INPC storms).
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(StatusBadge));
+        OnPropertyChanged(nameof(SeverityRank));
+        OnPropertyChanged(nameof(AttentionGroup));
     }
 
     // ── Dirty-guarded cascades ──────────────────────────────────────

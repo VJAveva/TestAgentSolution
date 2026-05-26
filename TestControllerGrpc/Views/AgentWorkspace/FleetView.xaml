@@ -24,19 +24,29 @@
                          Foreground="{DynamicResource TextP}"
                          BorderBrush="{DynamicResource Bdr}"
                          FontSize="10" Padding="4,3" VerticalContentAlignment="Center"/>
-                <!-- Stats -->
-                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextS}">
-                    <Run Text="{Binding TotalCount, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"/>
-                    <Run Text=" agents ·"/>
-                    <Run Text="{Binding BusyCount, Mode=OneWay}" Foreground="{DynamicResource Accent}"/>
-                    <Run Text=" busy ·"/>
-                    <Run Text="{Binding FreeCount, Mode=OneWay}" Foreground="{DynamicResource AccGreen}"/>
-                    <Run Text=" free ·"/>
-                    <Run Text="{Binding FailedCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
-                    <Run Text=" failed ·"/>
-                    <Run Text="{Binding OfflineCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
-                    <Run Text=" offline"/>
-                </TextBlock>
+                <!-- Stats with utilization bar -->
+                <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextS}">
+                        <Run Text="{Binding TotalCount, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"/>
+                        <Run Text=" agents ·"/>
+                        <Run Text="{Binding BusyCount, Mode=OneWay}" Foreground="{DynamicResource Accent}"/>
+                        <Run Text=" busy ·"/>
+                        <Run Text="{Binding FreeCount, Mode=OneWay}" Foreground="{DynamicResource AccGreen}"/>
+                        <Run Text=" free ·"/>
+                        <Run Text="{Binding FailedCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
+                        <Run Text=" failed ·"/>
+                        <Run Text="{Binding OfflineCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
+                        <Run Text=" offline"/>
+                    </TextBlock>
+                    <!-- Fleet utilization bar -->
+                    <Border Width="80" Height="4" CornerRadius="2" Margin="10,0,0,0"
+                            Background="{DynamicResource Bdr}" VerticalAlignment="Center"
+                            ToolTip="Fleet utilization (busy/total)">
+                        <Border HorizontalAlignment="Left" Height="4" CornerRadius="2"
+                                Background="{DynamicResource Accent}"
+                                Width="{Binding UtilizationBarWidth, Mode=OneWay}"/>
+                    </Border>
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -121,14 +131,17 @@
                                                         <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
                                                         <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
                                                         <Setter Property="BorderThickness" Value="1"/>
+                                                        <Setter Property="Opacity" Value="0.65"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Status}" Value="Busy">
                                                                 <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
                                                                 <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
                                                                 <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
                                                                 <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Status}" Value="Offline">
                                                                 <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
@@ -137,6 +150,7 @@
                                                             </DataTrigger>
                                                             <Trigger Property="IsMouseOver" Value="True">
                                                                 <Setter Property="BorderBrush" Value="{DynamicResource AccPeach}"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
                                                             </Trigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -172,6 +186,24 @@
                                                                    Foreground="{DynamicResource TextP}"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    MaxWidth="120"/>
+                                                        <!-- Pipeline tag (visible when busy) -->
+                                                        <TextBlock FontSize="9" Margin="6,0,0,0"
+                                                                   Foreground="{DynamicResource Accent}"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="80"
+                                                                   Text="{Binding WatchItemTag}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                     </StackPanel>
                                                     <!-- Row 2: status detail -->
                                                     <TextBlock Grid.Row="1" Text="{Binding StatusDetail}"

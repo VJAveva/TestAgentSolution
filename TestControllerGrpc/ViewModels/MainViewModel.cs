@@ -205,11 +205,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Pre-compiled regex for search (null if plain text mode).</summary>
     private System.Text.RegularExpressions.Regex? _searchRegex;
 
-    // ── Dockable log pane state ─────────────────────────────────────
+    // ── Dockable pane state ────────────────────────────────────────
+    /// <summary>Tree pane is pinned (docked) vs auto-hidden (collapsed to vertical tab).</summary>
+    [ObservableProperty] private bool _isTreePanePinned = true;
+
     /// <summary>Log pane is pinned (docked) vs auto-hidden (collapsed to tab).</summary>
     [ObservableProperty] private bool _isLogPanePinned = true;
 
-    // ── Dockable agent pane state ───────────────────────────────────
     /// <summary>Agent pane is pinned (docked) vs auto-hidden.</summary>
     [ObservableProperty] private bool _isAgentPanePinned = true;
 

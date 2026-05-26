@@ -80,6 +80,9 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         });
         ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
 
+        // Initialize sorted view for triage-first display.
+        InitSessionsView();
+
         // Load any sessions persisted from a previous run (crash recovery).
         LoadPersistedSessions();
     }
@@ -110,6 +113,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             SelectedAgentName = null;
         });
         ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
+
+        InitSessionsView();
     }
 
     /// <summary>
@@ -124,6 +129,23 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
     public ObservableCollection<SessionCardVM> Sessions { get; } = new();
     public RangeObservableCollection<LogEntryVM> LogEntries { get; } = new();
+
+    /// <summary>
+    /// Sorted view of Sessions — severity-descending (Failed first), then progress ascending.
+    /// UI should bind to this for triage-first display.
+    /// </summary>
+    public System.ComponentModel.ICollectionView SessionsView { get; private set; } = null!;
+
+    private void InitSessionsView()
+    {
+        SessionsView = System.Windows.Data.CollectionViewSource.GetDefaultView(Sessions);
+        SessionsView.SortDescriptions.Add(
+            new System.ComponentModel.SortDescription(nameof(SessionCardVM.SeverityRank),
+                System.ComponentModel.ListSortDirection.Descending));
+        SessionsView.SortDescriptions.Add(
+            new System.ComponentModel.SortDescription(nameof(SessionCardVM.ProgressPercent),
+                System.ComponentModel.ListSortDirection.Ascending));
+    }
 
     /// <summary>Timeline VM created by the dashboard window; set externally after construction.</summary>
     private TimelineVM? _timelineVm;

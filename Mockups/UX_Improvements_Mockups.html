@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TestAgentSolution — UX Improvements Before/After Mockups</title>
+    <style>
+        :root {
+            --bg: #0F1119;
+            --surface: #171B27;
+            --card: #1E2233;
+            --panel: #141822;
+            --border: #2A2F3F;
+            --text-primary: #E2E5F0;
+            --text-secondary: #8B92A8;
+            --text-muted: #5A6077;
+            --accent: #4D9CF5;
+            --green: #22C55E;
+            --red: #EF4444;
+            --amber: #F59E0B;
+            --gray: #6B7280;
+            --mauve: #A78BFA;
+            --peach: #FB923C;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', -apple-system, sans-serif; background: #0a0c12; color: var(--text-primary); line-height: 1.6; padding: 40px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        h1 { font-size: 2.5em; color: var(--accent); margin-bottom: 8px; letter-spacing: -0.5px; }
+        h2 { font-size: 1.8em; color: var(--green); margin: 60px 0 24px; border-bottom: 2px solid var(--border); padding-bottom: 12px; }
+        h3 { font-size: 1.3em; color: var(--mauve); margin: 32px 0 16px; }
+        h4 { font-size: 1em; color: var(--peach); margin: 16px 0 8px; }
+        p { margin-bottom: 12px; color: var(--text-secondary); }
+        
+        .executive-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin: 32px 0; }
+        .executive-summary li { margin: 12px 0; padding-left: 8px; border-left: 3px solid var(--accent); padding-left: 16px; list-style: none; }
+        
+        .screen-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin: 32px 0; }
+        
+        .mockup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+        @media (max-width: 1200px) { .mockup-pair { grid-template-columns: 1fr; } }
+        
+        .mockup { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+        .mockup-label { padding: 8px 16px; font-weight: 700; font-size: 0.85em; letter-spacing: 1px; text-transform: uppercase; }
+        .mockup-label.before { background: #3a1e1e; color: var(--red); }
+        .mockup-label.after { background: #1e3a2a; color: var(--green); }
+        .mockup-content { background: var(--bg); padding: 16px; min-height: 300px; position: relative; font-size: 12px; }
+        
+        .callout { position: absolute; background: #1e3a2a; border: 1px solid var(--green); border-radius: 6px; padding: 8px 12px; font-size: 10px; color: var(--green); max-width: 200px; z-index: 10; }
+        .callout-num { display: inline-block; background: var(--green); color: var(--bg); width: 16px; height: 16px; border-radius: 50%; text-align: center; line-height: 16px; font-weight: 700; font-size: 9px; margin-right: 4px; }
+        
+        .problem-callout { position: absolute; background: #3a1e1e; border: 1px solid var(--red); border-radius: 6px; padding: 6px 10px; font-size: 10px; color: var(--red); max-width: 180px; z-index: 10; }
+        .problem-num { display: inline-block; background: var(--red); color: white; width: 16px; height: 16px; border-radius: 50%; text-align: center; line-height: 16px; font-weight: 700; font-size: 9px; margin-right: 4px; }
+        
+        /* Mockup internal elements */
+        .mock-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }
+        .mock-header { background: var(--card); padding: 6px 10px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 11px; color: var(--text-secondary); }
+        .mock-content { padding: 8px; }
+        .mock-splitter { background: var(--border); cursor: col-resize; }
+        .mock-splitter-h { background: var(--border); cursor: row-resize; height: 4px; }
+        .mock-tree-node { padding: 3px 8px; font-size: 11px; border-radius: 3px; margin: 1px 0; }
+        .mock-tree-node:hover { background: rgba(77,156,245,0.1); }
+        .mock-tree-node.selected { background: rgba(77,156,245,0.15); border-left: 2px solid var(--accent); }
+        .mock-btn { display: inline-block; padding: 4px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 4px; font-size: 10px; color: var(--text-secondary); cursor: pointer; }
+        .mock-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+        .mock-tab { display: inline-block; padding: 6px 14px; font-size: 11px; border-bottom: 2px solid transparent; color: var(--text-secondary); }
+        .mock-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+        .mock-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .mock-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 600; }
+        
+        .changes-list { margin: 24px 0; }
+        .changes-list li { margin: 8px 0; padding: 12px 16px; background: var(--card); border-radius: 6px; border-left: 3px solid var(--accent); list-style: none; }
+        .changes-list .why { color: var(--text-muted); font-size: 0.9em; margin-top: 4px; }
+        
+        .code-block { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; overflow-x: auto; }
+        .code-block pre { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11px; line-height: 1.6; color: var(--text-primary); white-space: pre; }
+        .code-label { display: inline-block; background: var(--accent); color: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 8px; }
+        
+        .effort-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 8px; }
+        .effort-s { background: #1e3a2a; color: var(--green); }
+        .effort-m { background: #3a3a1e; color: var(--amber); }
+        .effort-l { background: #3a1e1e; color: var(--red); }
+        .priority-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+        .p0 { background: #3a1e1e; color: var(--red); }
+        .p1 { background: #3a3a1e; color: var(--amber); }
+        .p2 { background: #1e2a3a; color: var(--accent); }
+        
+        .risk-box { background: #2a1a0a; border: 1px solid var(--amber); border-radius: 8px; padding: 16px; margin: 16px 0; }
+        .risk-box::before { content: "⚠️ Risk: "; font-weight: 700; color: var(--amber); }
+        
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        th, td { text-align: left; padding: 12px; border: 1px solid var(--border); font-size: 12px; }
+        th { background: var(--card); color: var(--accent); font-weight: 600; }
+        
+        .shortcut-table td:first-child { font-family: 'JetBrains Mono', Consolas, monospace; color: var(--amber); white-space: nowrap; }
+        
+        .rollout-phase { background: var(--card); border-radius: 8px; padding: 20px; margin: 16px 0; border-left: 4px solid var(--accent); }
+        .rollout-phase h4 { margin-top: 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+<h1>TestAgentSolution — UX Improvement Plan</h1>
+<p style="color: var(--text-muted); font-size: 1.1em; margin-bottom: 40px;">
+    Comprehensive Before/After mockups for the TestControllerGrpc WPF application.<br>
+    Reviewed against 10 Seamless UX Standards. All changes faithful to WPF capabilities.
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- EXECUTIVE SUMMARY                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="executive-summary">
+    <h2 style="margin-top:0; border:none; padding:0;">Executive Summary</h2>
+    <ul>
+        <li><strong>Panel width/height constraints are incomplete</strong> — No MaxWidth on left tree or agent panel allows users to squash properties below 300px. No MaxHeight on log prevents it from consuming 80% of the window. Fix: Add proportional MaxWidth caps and use design tokens.</li>
+        <li><strong>Hide/unhide transitions cause layout jumps</strong> — The agent panel snap from 280px to 28px causes center panel to jerk. Fix: Animate the column width change with DoubleAnimation from saved width to collapsed, with ClipToBounds preventing overflow.</li>
+        <li><strong>Inconsistent sizing values between XAML and code-behind</strong> — XAML sets AgentPanel MinWidth=240 but code-behind sets MinWidth=280. The Style triggers for ColNodeProperties (5*/1*) are overridden by code-behind (3*/1*). Fix: Remove dead XAML triggers, single source of truth in code-behind using DesignToken constants.</li>
+        <li><strong>Tree panel cannot collapse</strong> — Unlike Agent and Log panels, the WatchList tree panel has no auto-hide capability. On small laptops (1366×768), tree + properties + agents compete for pixels. Fix: Add IsTreePanePinned toggle with same 28px collapsed state.</li>
+        <li><strong>DesignTokens defined but not consumed</strong> — Panel sizing tokens exist in DesignTokens.xaml but MainWindow uses hardcoded literals. Fix: Reference tokens from Grid ColumnDefinition/RowDefinition via DynamicResource bindings.</li>
+    </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 1: MAIN WINDOW PANEL LAYOUT                                -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Screen 1: MainWindow — Panel Layout & Sizing</h2>
+<p>The primary pain point. Panel min/max widths not handled correctly in hide/unhide scenarios causes layout instability.</p>
+
+<h3>Before / After: Panel Proportions</h3>
+<div class="mockup-pair">
+    <!-- BEFORE -->
+    <div class="mockup">
+        <div class="mockup-label before">❌ BEFORE — Current State</div>
+        <div class="mockup-content" style="display: grid; grid-template-columns: 350px 4px 200px 4px 280px; grid-template-rows: 1fr 4px 200px; height: 450px;">
+            <!-- Tree Panel - expanded too wide -->
+            <div class="mock-panel" style="grid-row: 1; grid-column: 1; overflow: hidden;">
+                <div class="mock-header">📂 WatchList</div>
+                <div class="mock-content">
+                    <div class="mock-tree-node">▸ WASSet1</div>
+                    <div class="mock-tree-node">▸ SmokeTest</div>
+                    <div class="mock-tree-node selected">▸ RegressionFull</div>
+                    <div class="mock-tree-node">▸ NightlyBuild</div>
+                    <div class="mock-tree-node">▸ PerfTest_Large</div>
+                </div>
+            </div>
+            <!-- Splitter -->
+            <div class="mock-splitter" style="grid-row: 1; grid-column: 2;"></div>
+            <!-- Properties - SQUASHED -->
+            <div class="mock-panel" style="grid-row: 1; grid-column: 3; overflow: hidden; border-color: var(--red);">
+                <div class="mock-header" style="color: var(--red);">⚙️ Node Properties ⚠️</div>
+                <div class="mock-content" style="font-size: 10px; overflow: hidden;">
+                    <div style="margin: 4px 0;"><span style="color:var(--text-muted)">Tag:</span> <span style="color: var(--text-primary)">Regres...</span></div>
+                    <div style="margin: 4px 0;"><span style="color:var(--text-muted)">Agent:</span> <span style="color: var(--text-primary)">jv...</span></div>
+                    <div style="margin: 4px 0;"><span style="color:var(--text-muted)">Path:</span> <span style="color: var(--text-primary)">C:\Pro...</span></div>
+                    <div style="margin: 4px 0;"><span style="color:var(--text-muted)">Cmd:</span> <span style="color: var(--text-primary)">dotn...</span></div>
+                </div>
+            </div>
+            <!-- Splitter -->
+            <div class="mock-splitter" style="grid-row: 1; grid-column: 4;"></div>
+            <!-- Agent Panel -->
+            <div class="mock-panel" style="grid-row: 1; grid-column: 5;">
+                <div class="mock-header">🖥️ Agents</div>
+                <div class="mock-content">
+                    <div style="margin: 4px 0;"><span class="mock-status" style="background:var(--green)"></span>jvgr1</div>
+                    <div style="margin: 4px 0;"><span class="mock-status" style="background:var(--green)"></span>jvkpri</div>
+                    <div style="margin: 4px 0;"><span class="mock-status" style="background:var(--red)"></span>jvbld2</div>
+                </div>
+            </div>
+            <!-- H Splitter -->
+            <div class="mock-splitter-h" style="grid-row: 2; grid-column: 1 / -1;"></div>
+            <!-- Log - TOO TALL -->
+            <div class="mock-panel" style="grid-row: 3; grid-column: 1 / -1; border-color: var(--red);">
+                <div class="mock-header" style="color: var(--red);">📋 Execution Log ⚠️</div>
+                <div class="mock-content" style="font-family: Consolas; font-size: 10px; color: var(--text-muted);">
+                    <div>[12:04:01] INFO  Session started on jvgr1</div>
+                    <div>[12:04:02] INFO  Executing WASSet1...</div>
+                    <div>[12:04:15] OK    Build completed (13s)</div>
+                    <div>[12:04:16] INFO  Running tests...</div>
+                    <div style="color:var(--red)">[12:05:42] ERROR Test 'Login_Invalid' FAILED</div>
+                    <div>[12:05:43] INFO  Continuing...</div>
+                    <div>[12:06:01] INFO  Session completed</div>
+                    <div style="color: var(--text-muted); margin-top: 16px; text-align: center;">(lots of empty space wasted below)</div>
+                </div>
+            </div>
+            <!-- Problem callouts -->
+            <div class="problem-callout" style="top: 10px; left: 200px;">
+                <span class="problem-num">1</span> Tree has no MaxWidth — user dragged it to 350px, squashing Properties
+            </div>
+            <div class="problem-callout" style="top: 100px; right: 320px;">
+                <span class="problem-num">2</span> Properties at 200px — below MinWidth(300) shouldn't be possible but splitter allows it
+            </div>
+            <div class="problem-callout" style="bottom: 140px; left: 20px;">
+                <span class="problem-num">3</span> Log consuming 200px (45% height) — no MaxHeight prevents this domination
+            </div>
+        </div>
+    </div>
+    
+    <!-- AFTER -->
+    <div class="mockup">
+        <div class="mockup-label after">✅ AFTER — Fixed Proportions</div>
+        <div class="mockup-content" style="display: grid; grid-template-columns: 240px 4px 1fr 4px 280px; grid-template-rows: 1fr 4px 160px; height: 450px;">
+            <!-- Tree Panel - constrained -->
+            <div class="mock-panel" style="grid-row: 1; grid-column: 1;">
+                <div class="mock-header">📂 WatchList</div>
+                <div class="mock-content">
+                    <div class="mock-tree-node">▸ WASSet1</div>
+                    <div class="mock-tree-node">▸ SmokeTest</div>
+                    <div class="mock-tree-node selected">▸ RegressionFull</div>
+                    <div class="mock-tree-node">▸ NightlyBuild</div>
+                    <div class="mock-tree-node">▸ PerfTest_Large</div>
+                </div>
+            </div>
+            <div class="mock-splitter" style="grid-row: 1; grid-column: 2;"></div>
+            <!-- Properties - PROPER SIZE -->
+            <div class="mock-panel" style="grid-row: 1; grid-column: 3; border-color: var(--green);">
+                <div class="mock-header" style="color: var(--green);">⚙️ Node Properties ✓</div>
+                <div class="mock-content">
+                    <div style="margin: 6px 0;"><span style="color:var(--text-muted)">Tag:</span> <span style="color: var(--text-primary)">RegressionFull</span></div>
+                    <div style="margin: 6px 0;"><span style="color:var(--text-muted)">Agent:</span> <span style="color: var(--text-primary)">jvgr1</span></div>
+                    <div style="margin: 6px 0;"><span style="color:var(--text-muted)">Path:</span> <span style="color: var(--text-primary)">C:\Projects\AVEVA\Regression</span></div>
+                    <div style="margin: 6px 0;"><span style="color:var(--text-muted)">Command:</span> <span style="color: var(--text-primary)">dotnet test --filter Full</span></div>
+                    <div style="margin: 6px 0;"><span style="color:var(--text-muted)">Timeout:</span> <span style="color: var(--text-primary)">14400s</span></div>
+                    <div style="margin: 6px 0;"><span style="color:var(--text-muted)">ContinueOnErr:</span> <span style="color: var(--green)">true</span></div>
+                </div>
+            </div>
+            <div class="mock-splitter" style="grid-row: 1; grid-column: 4;"></div>
+            <!-- Agent Panel -->
+            <div class="mock-panel" style="grid-row: 1; grid-column: 5;">
+                <div class="mock-header">🖥️ Agents</div>
+                <div class="mock-content">
+                    <div style="margin: 4px 0;"><span class="mock-status" style="background:var(--green)"></span>jvgr1 <span style="color:var(--text-muted); font-size:10px">idle</span></div>
+                    <div style="margin: 4px 0;"><span class="mock-status" style="background:var(--green)"></span>jvkpri <span style="color:var(--text-muted); font-size:10px">idle</span></div>
+                    <div style="margin: 4px 0;"><span class="mock-status" style="background:var(--red)"></span>jvbld2 <span style="color:var(--text-muted); font-size:10px">offline</span></div>
+                </div>
+            </div>
+            <!-- H Splitter -->
+            <div class="mock-splitter-h" style="grid-row: 2; grid-column: 1 / -1;"></div>
+            <!-- Log - PROPER HEIGHT -->
+            <div class="mock-panel" style="grid-row: 3; grid-column: 1 / -1; border-color: var(--green);">
+                <div class="mock-header" style="color: var(--green);">📋 Execution Log ✓ (capped at 40%)</div>
+                <div class="mock-content" style="font-family: Consolas; font-size: 10px; color: var(--text-muted);">
+                    <div>[12:04:01] INFO  Session started on jvgr1</div>
+                    <div>[12:04:02] INFO  Executing WASSet1...</div>
+                    <div>[12:04:15] OK    Build completed (13s)</div>
+                    <div style="color:var(--red)">[12:05:42] ERROR Test 'Login_Invalid' FAILED</div>
+                </div>
+            </div>
+            <!-- Callouts -->
+            <div class="callout" style="top: 10px; left: 100px;">
+                <span class="callout-num">1</span> Tree capped at MaxWidth=35% of window — cannot squash Properties
+            </div>
+            <div class="callout" style="top: 60px; right: 310px;">
+                <span class="callout-num">2</span> Properties always gets ≥300px via MinWidth enforcement
+            </div>
+            <div class="callout" style="bottom: 30px; left: 20px;">
+                <span class="callout-num">3</span> Log MaxHeight capped at 40% of available — content area prioritized
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Before / After: Agent Panel Hide/Unhide</h3>
+<div class="mockup-pair">
+    <!-- BEFORE: Hide transition -->
+    <div class="mockup">
+        <div class="mockup-label before">❌ BEFORE — Jarring Snap on Toggle</div>
+        <div class="mockup-content" style="height: 250px;">
+            <div style="display: grid; grid-template-columns: 240px 4px 1fr 4px 280px; height: 100px; margin-bottom: 8px;">
+                <div class="mock-panel"><div class="mock-header">Tree</div></div>
+                <div class="mock-splitter"></div>
+                <div class="mock-panel"><div class="mock-header">Properties (Width: 3*)</div></div>
+                <div class="mock-splitter"></div>
+                <div class="mock-panel" style="border-color: var(--accent);"><div class="mock-header">Agents (280px, pinned)</div></div>
+            </div>
+            <div style="text-align: center; color: var(--text-muted); margin: 8px 0;">↓ User clicks "Unpin Agent Panel" ↓</div>
+            <div style="display: grid; grid-template-columns: 240px 4px 1fr 0px 28px; height: 100px; border: 2px dashed var(--red); border-radius: 8px; padding: 4px;">
+                <div class="mock-panel"><div class="mock-header">Tree</div></div>
+                <div class="mock-splitter"></div>
+                <div class="mock-panel" style="border-color: var(--red);"><div class="mock-header" style="color:var(--red)">Properties JUMPS to fill (jarring)</div></div>
+                <div></div>
+                <div class="mock-panel" style="writing-mode: vertical-rl; font-size: 10px; padding: 4px; text-align: center; color: var(--text-muted);">Agents</div>
+            </div>
+            <div class="problem-callout" style="bottom: 30px; right: 40px;">
+                <span class="problem-num">1</span> Instant snap — no transition. Content jumps 252px.
+            </div>
+        </div>
+    </div>
+    
+    <!-- AFTER: Smooth transition -->
+    <div class="mockup">
+        <div class="mockup-label after">✅ AFTER — Smooth Animated Transition</div>
+        <div class="mockup-content" style="height: 250px;">
+            <div style="display: grid; grid-template-columns: 240px 4px 1fr 4px 280px; height: 100px; margin-bottom: 8px;">
+                <div class="mock-panel"><div class="mock-header">Tree</div></div>
+                <div class="mock-splitter"></div>
+                <div class="mock-panel"><div class="mock-header">Properties</div></div>
+                <div class="mock-splitter"></div>
+                <div class="mock-panel" style="border-color: var(--accent);"><div class="mock-header">Agents (pinned)</div></div>
+            </div>
+            <div style="text-align: center; color: var(--text-muted); margin: 8px 0;">↓ Smooth 250ms ease-out animation ↓</div>
+            <div style="display: grid; grid-template-columns: 240px 4px 1fr 0px 28px; height: 100px; border: 2px solid var(--green); border-radius: 8px; padding: 4px;">
+                <div class="mock-panel"><div class="mock-header">Tree</div></div>
+                <div class="mock-splitter"></div>
+                <div class="mock-panel" style="border-color: var(--green);"><div class="mock-header" style="color:var(--green)">Properties smoothly expands</div></div>
+                <div></div>
+                <div class="mock-panel" style="writing-mode: vertical-rl; font-size: 10px; padding: 4px; text-align: center; color: var(--text-muted);">Agents</div>
+            </div>
+            <div class="callout" style="bottom: 30px; right: 40px;">
+                <span class="callout-num">1</span> 250ms ease-out via DoubleAnimation on column width proxy — feels intentional, not broken
+            </div>
+            <div class="callout" style="bottom: 30px; left: 280px;">
+                <span class="callout-num">2</span> Properties expand respects the freed space — no overshoot
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CHANGES LIST -->
+<h3>Diff Summary — Panel Layout Improvements</h3>
+<ul class="changes-list">
+    <li>
+        <strong>Add MaxWidth constraint to Tree panel (Col 0)</strong>: Cap at 35% of window width via code-behind update (WPF Grid doesn't support % MaxWidth directly).
+        <div class="why">WHY: Prevents users from accidentally squashing the Properties panel below usability. Criteria #9 (Information Density).</div>
+    </li>
+    <li>
+        <strong>Add MaxHeight constraint to Log panel (Row 2)</strong>: Limit to 40% of total Grid height. Implemented via SizeChanged handler.
+        <div class="why">WHY: Log is secondary content; primary editing area must dominate. Criteria #8 (Cognitive Load).</div>
+    </li>
+    <li>
+        <strong>Animate panel hide/show with 250ms ease-out</strong>: Use a proxy Border width with DoubleAnimation, then snap the ColumnDefinition after animation completes.
+        <div class="why">WHY: Jarring layout jumps feel like bugs. Smooth transitions communicate intent. Criteria #10 (Emotional Design).</div>
+    </li>
+    <li>
+        <strong>Unify MinWidth values — single source of truth in code-behind constants</strong>: Remove XAML Style.Triggers for ColNodeProperties (they're dead code overridden by ApplyAgentPaneLayout).
+        <div class="why">WHY: Inconsistent 240 vs 280 MinWidth creates maintenance confusion. Criteria #1 (Consistency).</div>
+    </li>
+    <li>
+        <strong>Consume DesignTokens from code-behind</strong>: Load token values via FindResource("TreePanelMinWidth") instead of magic numbers.
+        <div class="why">WHY: Single source of truth enables the layout to be tuned from one file. Criteria #1.</div>
+    </li>
+    <li>
+        <strong>Add IsTreePanePinned toggle</strong>: Same auto-hide pattern as Agent/Log panels — collapses to 28px vertical tab.
+        <div class="why">WHY: On 1366×768 laptops, users need all horizontal space for Properties. Criteria #9.</div>
+    </li>
+</ul>
+
+<!-- EFFORT & PRIORITY -->
+<table>
+    <tr><th>Change</th><th>Effort</th><th>Priority</th></tr>
+    <tr>
+        <td>Unify MinWidth / remove dead XAML triggers</td>
+        <td><span class="effort-badge effort-s">S (&lt;1 day)</span></td>
+        <td><span class="priority-badge p0">P0</span></td>
+    </tr>
+    <tr>
+        <td>Add MaxWidth/MaxHeight constraints via SizeChanged</td>
+        <td><span class="effort-badge effort-s">S (&lt;1 day)</span></td>
+        <td><span class="priority-badge p0">P0</span></td>
+    </tr>
+    <tr>
+        <td>Consume DesignTokens via FindResource</td>
+        <td><span class="effort-badge effort-s">S (&lt;1 day)</span></td>
+        <td><span class="priority-badge p1">P1</span></td>
+    </tr>
+    <tr>
+        <td>Animate panel transitions</td>
+        <td><span class="effort-badge effort-m">M (2 days)</span></td>
+        <td><span class="priority-badge p1">P1</span></td>
+    </tr>
+    <tr>
+        <td>Add IsTreePanePinned auto-hide toggle</td>
+        <td><span class="effort-badge effort-m">M (2 days)</span></td>
+        <td><span class="priority-badge p2">P2</span></td>
+    </tr>
+</table>
+
+<!-- XAML CODE -->
+<h3>WPF XAML / Code — AFTER State Implementation</h3>
+
+<div class="code-block">
+<span class="code-label">MainWindow.xaml — Fixed Grid ColumnDefinitions</span>
+<pre>&lt;!-- Remove dead Style.Triggers on ColNodeProperties -- they're overridden by code-behind --&gt;
+&lt;Grid.ColumnDefinitions&gt;
+    &lt;ColumnDefinition x:Name="ColTreePanel" Width="2.5*"
+                      MinWidth="{DynamicResource TreePanelMinWidth}" /&gt;
+    &lt;ColumnDefinition Width="Auto" /&gt;
+    &lt;ColumnDefinition x:Name="ColNodeProperties" Width="5*"
+                      MinWidth="{DynamicResource PropertiesMinWidth}" /&gt;
+    &lt;ColumnDefinition x:Name="ColAgentSplitter" Width="Auto" /&gt;
+    &lt;ColumnDefinition x:Name="ColAgentPanel" Width="2*"
+                      MinWidth="{DynamicResource AgentPanelMinWidth}" /&gt;
+&lt;/Grid.ColumnDefinitions&gt;
+&lt;Grid.RowDefinitions&gt;
+    &lt;RowDefinition Height="*" MinHeight="{DynamicResource MainMinHeight}" /&gt;
+    &lt;RowDefinition Height="Auto" /&gt;
+    &lt;RowDefinition x:Name="RowLogPane" Height="2*"
+                   MinHeight="{DynamicResource LogPaneMinHeight}" /&gt;
+&lt;/Grid.RowDefinitions&gt;</pre>
+</div>
+
+<div class="code-block">
+<span class="code-label">MainWindow.xaml.cs — MaxWidth/MaxHeight Enforcement + Design Tokens</span>
+<pre>// Constants from DesignTokens (loaded once)
+private double _treePanelMinWidth;
+private double _treePanelMaxWidthPercent = 0.35; // 35% of grid width
+private double _logPaneMaxHeightPercent = 0.40;  // 40% of grid height
+private double _agentPanelMinPinned;
+private double _agentPanelMinCollapsed;
+
+private void LoadDesignTokens()
+{
+    _treePanelMinWidth = (double)FindResource("TreePanelMinWidth");
+    _agentPanelMinPinned = (double)FindResource("AgentPanelMinWidth");
+    _agentPanelMinCollapsed = (double)FindResource("AgentPaneCollapsedWidth");
+}
+
+// Enforce MaxWidth on Tree panel and MaxHeight on Log
+private void MainGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+{
+    if (sender is not Grid grid) return;
+
+    // Tree panel: cap at 35% of total grid width
+    double maxTreeWidth = grid.ActualWidth * _treePanelMaxWidthPercent;
+    if (ColTreePanel.ActualWidth > maxTreeWidth && maxTreeWidth > _treePanelMinWidth)
+    {
+        ColTreePanel.Width = new GridLength(maxTreeWidth, GridUnitType.Pixel);
+        ColTreePanel.Width = new GridLength(maxTreeWidth / grid.ActualWidth, GridUnitType.Star);
+    }
+
+    // Log pane: cap at 40% of total grid height
+    if (_vm.IsLogPanePinned)
+    {
+        double maxLogHeight = grid.ActualHeight * _logPaneMaxHeightPercent;
+        if (RowLogPane.ActualHeight > maxLogHeight && maxLogHeight > 120)
+        {
+            RowLogPane.Height = new GridLength(maxLogHeight, GridUnitType.Pixel);
+        }
+    }
+}
+
+private void ApplyAgentPaneLayout(bool pinned)
+{
+    if (pinned)
+    {
+        ColAgentPanel.Width = _savedAgentColWidth;
+        ColAgentPanel.MinWidth = _agentPanelMinPinned;  // From DesignTokens
+        ColAgentSplitter.Width = GridLength.Auto;
+        ColNodeProperties.Width = new GridLength(3, GridUnitType.Star);
+    }
+    else
+    {
+        if (ColAgentPanel.Width.IsStar)
+            _savedAgentColWidth = ColAgentPanel.Width;
+
+        ColAgentPanel.Width = GridLength.Auto;
+        ColAgentPanel.MinWidth = _agentPanelMinCollapsed;  // From DesignTokens
+        ColAgentSplitter.Width = new GridLength(0);
+        ColNodeProperties.Width = new GridLength(1, GridUnitType.Star);
+    }
+}</pre>
+</div>
+
+<div class="code-block">
+<span class="code-label">MainWindow.xaml.cs — Animated Panel Transition (optional polish)</span>
+<pre>// Smooth panel collapse using a proxy element + DoubleAnimation
+// WPF ColumnDefinition.Width is not directly animatable, so we animate
+// a proxy Border's Width and sync in the Completed handler.
+
+private Border _agentAnimProxy;
+
+private void AnimateAgentPaneCollapse(double fromWidth, double toWidth, Action onComplete)
+{
+    if (_agentAnimProxy == null)
+    {
+        _agentAnimProxy = new Border { Width = fromWidth, Visibility = Visibility.Collapsed };
+        // Add to visual tree (hidden) so animation infrastructure works
+        ((Grid)Content).Children.Add(_agentAnimProxy);
+    }
+
+    _agentAnimProxy.Width = fromWidth;
+    var anim = new DoubleAnimation(fromWidth, toWidth, TimeSpan.FromMilliseconds(250))
+    {
+        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+    };
+    anim.Completed += (s, e) => { onComplete?.Invoke(); };
+
+    // During animation, update column width each frame
+    _agentAnimProxy.BeginAnimation(Border.WidthProperty, anim);
+    CompositionTarget.Rendering += UpdateColumnFromProxy;
+
+    void UpdateColumnFromProxy(object? s, EventArgs e2)
+    {
+        double current = _agentAnimProxy.Width;
+        if (Math.Abs(current - toWidth) &lt; 1)
+        {
+            CompositionTarget.Rendering -= UpdateColumnFromProxy;
+            return;
+        }
+        ColAgentPanel.Width = new GridLength(current, GridUnitType.Pixel);
+    }
+}</pre>
+</div>
+
+<div class="risk-box">
+    Animating Grid column widths is non-trivial in WPF. The proxy approach works but may cause brief layout flickering on low-end GPUs. Test on target hardware (typical QA engineer laptops: 1080p, Intel UHD). Consider making animation optional behind a "Reduce motion" setting.
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 2: EXECUTION DASHBOARD                                      -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Screen 2: ExecutionDashboardView — Multi-Session Monitoring</h2>
+<p>When 5+ pipelines run simultaneously, users cannot quickly identify which sessions need attention.</p>
+
+<h3>Before / After: Session Priority Surfacing</h3>
+<div class="mockup-pair">
+    <!-- BEFORE -->
+    <div class="mockup">
+        <div class="mockup-label before">❌ BEFORE — All Sessions Equal Weight</div>
+        <div class="mockup-content" style="height: 350px; padding: 12px;">
+            <div class="mock-header" style="border-radius: 4px 4px 0 0;">Execution Dashboard — 6 Active Sessions</div>
+            <div style="margin-top: 8px;">
+                <!-- All same visual weight -->
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0;">
+                    <span class="mock-status" style="background:var(--accent)"></span>
+                    <span style="color: var(--text-primary)">WASSet1</span>
+                    <span style="color:var(--text-muted); float: right; font-size: 10px">jvgr1 • 45% • 12:04</span>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0;">
+                    <span class="mock-status" style="background:var(--accent)"></span>
+                    <span style="color: var(--text-primary)">SmokeTest</span>
+                    <span style="color:var(--text-muted); float: right; font-size: 10px">jvkpri • 23% • 12:02</span>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0;">
+                    <span class="mock-status" style="background:var(--red)"></span>
+                    <span style="color: var(--text-primary)">RegressionFull</span>
+                    <span style="color:var(--text-muted); float: right; font-size: 10px">jvbld2 • FAILED • 11:58</span>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0;">
+                    <span class="mock-status" style="background:var(--accent)"></span>
+                    <span style="color: var(--text-primary)">NightlyBuild</span>
+                    <span style="color:var(--text-muted); float: right; font-size: 10px">jvgr3 • 67% • 11:50</span>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0;">
+                    <span class="mock-status" style="background:var(--amber)"></span>
+                    <span style="color: var(--text-primary)">PerfTest_Large</span>
+                    <span style="color:var(--text-muted); float: right; font-size: 10px">jvperf1 • STUCK 47min • 11:17</span>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0;">
+                    <span class="mock-status" style="background:var(--accent)"></span>
+                    <span style="color: var(--text-primary)">IntegrationSuite</span>
+                    <span style="color:var(--text-muted); float: right; font-size: 10px">jvgr5 • 89% • 11:45</span>
+                </div>
+            </div>
+            <div class="problem-callout" style="top: 150px; right: 16px;">
+                <span class="problem-num">1</span> Failed (row 3) and Stuck (row 5) buried in the middle — user must visually scan ALL rows
+            </div>
+            <div class="problem-callout" style="bottom: 30px; left: 16px;">
+                <span class="problem-num">2</span> All cards same size — healthy sessions get same visual weight as critical ones
+            </div>
+        </div>
+    </div>
+    
+    <!-- AFTER -->
+    <div class="mockup">
+        <div class="mockup-label after">✅ AFTER — Triage-First Layout</div>
+        <div class="mockup-content" style="height: 350px; padding: 12px;">
+            <div class="mock-header" style="border-radius: 4px 4px 0 0;">Execution Dashboard — <span style="color:var(--red)">2 need attention</span> · 4 running normally</div>
+            
+            <!-- ATTENTION SECTION -->
+            <div style="margin-top: 8px; border-left: 3px solid var(--red); padding-left: 8px;">
+                <div style="font-size: 10px; color: var(--red); font-weight: 600; margin-bottom: 4px;">⚠ NEEDS ATTENTION</div>
+                <div style="background: #1a0f0f; border: 1px solid #4a2020; border-radius: 6px; padding: 10px; margin: 4px 0;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span><span class="mock-status" style="background:var(--red)"></span><strong style="color: var(--red)">RegressionFull</strong></span>
+                        <span style="font-size: 10px;"><span class="mock-badge" style="background:#4a2020; color:var(--red)">FAILED</span></span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">jvbld2 • Failed at action 12/34 • 6 min ago</div>
+                    <div style="margin-top: 6px;"><span class="mock-btn" style="border-color:var(--red); color:var(--red);">View Error</span> <span class="mock-btn">Retry Failed</span></div>
+                </div>
+                <div style="background: #1a1500; border: 1px solid #4a3800; border-radius: 6px; padding: 10px; margin: 4px 0;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span><span class="mock-status" style="background:var(--amber)"></span><strong style="color: var(--amber)">PerfTest_Large</strong></span>
+                        <span style="font-size: 10px;"><span class="mock-badge" style="background:#4a3800; color:var(--amber)">STUCK 47m</span></span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">jvperf1 • No progress for 47 minutes</div>
+                    <div style="margin-top: 6px;"><span class="mock-btn" style="border-color:var(--amber); color:var(--amber);">Investigate</span> <span class="mock-btn">Force Cancel</span></div>
+                </div>
+            </div>
+            
+            <!-- RUNNING NORMALLY (collapsed) -->
+            <div style="margin-top: 12px; border-left: 3px solid var(--green); padding-left: 8px;">
+                <div style="font-size: 10px; color: var(--green); font-weight: 600; margin-bottom: 4px;">✓ RUNNING NORMALLY (4)</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                    <div style="background: var(--card); border-radius: 4px; padding: 6px 8px; font-size: 10px;">
+                        <span class="mock-status" style="background:var(--accent); width:6px; height:6px;"></span>WASSet1 <span style="color:var(--text-muted)">45%</span>
+                        <div style="height:3px; background:var(--border); border-radius:2px; margin-top:3px;"><div style="height:3px; width:45%; background:var(--accent); border-radius:2px;"></div></div>
+                    </div>
+                    <div style="background: var(--card); border-radius: 4px; padding: 6px 8px; font-size: 10px;">
+                        <span class="mock-status" style="background:var(--accent); width:6px; height:6px;"></span>SmokeTest <span style="color:var(--text-muted)">23%</span>
+                        <div style="height:3px; background:var(--border); border-radius:2px; margin-top:3px;"><div style="height:3px; width:23%; background:var(--accent); border-radius:2px;"></div></div>
+                    </div>
+                    <div style="background: var(--card); border-radius: 4px; padding: 6px 8px; font-size: 10px;">
+                        <span class="mock-status" style="background:var(--accent); width:6px; height:6px;"></span>NightlyBuild <span style="color:var(--text-muted)">67%</span>
+                        <div style="height:3px; background:var(--border); border-radius:2px; margin-top:3px;"><div style="height:3px; width:67%; background:var(--accent); border-radius:2px;"></div></div>
+                    </div>
+                    <div style="background: var(--card); border-radius: 4px; padding: 6px 8px; font-size: 10px;">
+                        <span class="mock-status" style="background:var(--accent); width:6px; height:6px;"></span>Integration <span style="color:var(--text-muted)">89%</span>
+                        <div style="height:3px; background:var(--border); border-radius:2px; margin-top:3px;"><div style="height:3px; width:89%; background:var(--accent); border-radius:2px;"></div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="callout" style="top: 44px; right: 10px; max-width: 150px;">
+                <span class="callout-num">1</span> Failed/Stuck auto-sort to top<br><small>WHY: Triage-first</small>
+            </div>
+            <div class="callout" style="bottom: 60px; right: 10px; max-width: 160px;">
+                <span class="callout-num">2</span> Healthy sessions compressed to 2-col mini-cards<br><small>ENABLES: Focus on problems</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Diff Summary — Execution Dashboard</h3>
+<ul class="changes-list">
+    <li><strong>Auto-sort sessions by severity</strong>: Failed → Stuck → Running (by progress ascending)<div class="why">WHY: Triage-first design. Users open the dashboard to find problems, not to admire green lights.</div></li>
+    <li><strong>Visual separation</strong>: "Needs Attention" section with red/amber border-left vs "Running Normally" section with compact cards<div class="why">WHY: Reduce cognitive load (#8). Two visual zones instead of N equal rows.</div></li>
+    <li><strong>Inline action buttons on problem cards</strong>: "View Error", "Retry Failed", "Force Cancel"<div class="why">WHY: 3-click reduction to investigate. Criteria #3 (Discoverability) and #7 (Power User Flow).</div></li>
+    <li><strong>Compact 2-column grid for healthy sessions</strong>: Mini progress bars, less padding<div class="why">WHY: Information density (#9). 4 sessions in same space as 2 before.</div></li>
+</ul>
+
+<table>
+    <tr><th>Change</th><th>Effort</th><th>Priority</th></tr>
+    <tr><td>CollectionViewSource with SortDescription by Status then Progress</td><td><span class="effort-badge effort-s">S</span></td><td><span class="priority-badge p0">P0</span></td></tr>
+    <tr><td>DataTemplateSelector for attention vs compact card</td><td><span class="effort-badge effort-m">M</span></td><td><span class="priority-badge p0">P0</span></td></tr>
+    <tr><td>Inline action buttons wired to existing commands</td><td><span class="effort-badge effort-s">S</span></td><td><span class="priority-badge p1">P1</span></td></tr>
+</table>
+
+<div class="code-block">
+<span class="code-label">ExecutionDashboardVM.cs — Auto-sorting by severity</span>
+<pre>// Add a CollectionViewSource that groups &amp; sorts sessions
+public ICollectionView SessionsView { get; }
+
+private void InitSessionsView()
+{
+    SessionsView = CollectionViewSource.GetDefaultView(ActiveSessions);
+    SessionsView.SortDescriptions.Add(
+        new SortDescription(nameof(SessionVM.SeverityRank), ListSortDirection.Descending));
+    SessionsView.SortDescriptions.Add(
+        new SortDescription(nameof(SessionVM.ProgressPercent), ListSortDirection.Ascending));
+    SessionsView.GroupDescriptions.Add(
+        new PropertyGroupDescription(nameof(SessionVM.AttentionGroup)));
+}
+
+// On each SessionVM:
+public int SeverityRank =&gt; Status switch
+{
+    SessionStatus.Failed =&gt; 100,
+    SessionStatus.Stuck =&gt; 90,
+    SessionStatus.Running =&gt; 10,
+    SessionStatus.Success =&gt; 0,
+    _ =&gt; 5
+};
+
+public string AttentionGroup =&gt; SeverityRank &gt;= 90 ? "NeedsAttention" : "Normal";</pre>
+</div>
+
+<div class="code-block">
+<span class="code-label">ExecutionDashboardView.xaml — Grouped ItemsControl with DataTemplateSelector</span>
+<pre>&lt;ItemsControl ItemsSource="{Binding SessionsView}"&gt;
+    &lt;ItemsControl.GroupStyle&gt;
+        &lt;GroupStyle&gt;
+            &lt;GroupStyle.HeaderTemplate&gt;
+                &lt;DataTemplate&gt;
+                    &lt;Border BorderThickness="0,0,0,0" Margin="0,8,0,4"
+                            Padding="0,0,0,4" BorderBrush="{DynamicResource Bdr}"&gt;
+                        &lt;TextBlock FontSize="10" FontWeight="Bold"
+                                   Foreground="{Binding Name, Converter={StaticResource GroupToColorConv}}"&gt;
+                            &lt;Run Text="{Binding Name, Converter={StaticResource GroupToLabelConv}}" /&gt;
+                            &lt;Run Text=" (" /&gt;&lt;Run Text="{Binding ItemCount}" /&gt;&lt;Run Text=")" /&gt;
+                        &lt;/TextBlock&gt;
+                    &lt;/Border&gt;
+                &lt;/DataTemplate&gt;
+            &lt;/GroupStyle.HeaderTemplate&gt;
+        &lt;/GroupStyle&gt;
+    &lt;/ItemsControl.GroupStyle&gt;
+    &lt;ItemsControl.ItemTemplateSelector&gt;
+        &lt;local:SessionCardTemplateSelector
+            AttentionTemplate="{StaticResource AttentionSessionCard}"
+            NormalTemplate="{StaticResource CompactSessionCard}" /&gt;
+    &lt;/ItemsControl.ItemTemplateSelector&gt;
+&lt;/ItemsControl&gt;</pre>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 3: AGENT FLEET VIEW                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Screen 3: AgentFleetView — Busy Agent Visibility</h2>
+<p>Status colors alone don't communicate enough. You can see "9 of 10 idle" but can't tell which is busy or when it'll be free.</p>
+
+<h3>Before / After: Agent Cards</h3>
+<div class="mockup-pair">
+    <!-- BEFORE -->
+    <div class="mockup">
+        <div class="mockup-label before">❌ BEFORE — Status Dot Only</div>
+        <div class="mockup-content" style="height: 300px; padding: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--green)"></span><strong>jvgr1</strong></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Idle</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--accent)"></span><strong>jvkpri</strong></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Running</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--green)"></span><strong>jvbld2</strong></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Idle</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--green)"></span><strong>jvgr3</strong></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Idle</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--red)"></span><strong>jvperf1</strong></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Offline</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--green)"></span><strong>jvgr5</strong></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Idle</div>
+                </div>
+            </div>
+            <div class="problem-callout" style="top: 80px; right: 10px;">
+                <span class="problem-num">1</span> jvkpri "Running" — but WHAT? How long until free? No progress.
+            </div>
+            <div class="problem-callout" style="bottom: 50px; left: 10px;">
+                <span class="problem-num">2</span> No way to see fleet utilization at a glance — must count dots manually
+            </div>
+        </div>
+    </div>
+    
+    <!-- AFTER -->
+    <div class="mockup">
+        <div class="mockup-label after">✅ AFTER — Rich Status with Progress</div>
+        <div class="mockup-content" style="height: 300px; padding: 12px;">
+            <!-- Fleet summary bar -->
+            <div style="display: flex; gap: 12px; margin-bottom: 12px; font-size: 10px; align-items: center;">
+                <span style="color: var(--text-muted);">Fleet:</span>
+                <span style="color: var(--green);">●5 idle</span>
+                <span style="color: var(--accent);">●1 busy</span>
+                <span style="color: var(--red);">●1 offline</span>
+                <div style="flex:1; height:4px; background:var(--border); border-radius:2px; margin-left: 8px;">
+                    <div style="height:4px; width:72%; background: linear-gradient(90deg, var(--green) 72%, var(--accent) 72%, var(--accent) 86%, var(--red) 86%); border-radius:2px;"></div>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                <!-- BUSY agent — prominent -->
+                <div style="background: var(--card); border: 1px solid var(--accent); border-radius: 6px; padding: 10px; grid-column: 1;">
+                    <div><span class="mock-status" style="background:var(--accent)"></span><strong style="color:var(--accent)">jvkpri</strong></div>
+                    <div style="font-size:10px; color:var(--text-primary); margin-top:4px;">WASSet1 <span style="color:var(--text-muted)">• 45%</span></div>
+                    <div style="height:3px; background:var(--border); border-radius:2px; margin-top:4px;"><div style="height:3px; width:45%; background:var(--accent); border-radius:2px;"></div></div>
+                    <div style="font-size:9px; color:var(--text-muted); margin-top:3px;">~12 min remaining</div>
+                </div>
+                <!-- OFFLINE agent — prominent -->
+                <div style="background: var(--card); border: 1px solid var(--red); border-radius: 6px; padding: 10px;">
+                    <div><span class="mock-status" style="background:var(--red)"></span><strong style="color:var(--red)">jvperf1</strong></div>
+                    <div style="font-size:10px; color:var(--red); margin-top:4px;">Offline since 11:02</div>
+                    <div style="font-size:9px; color:var(--text-muted); margin-top:3px;">Last seen: 23 min ago</div>
+                </div>
+                <!-- Idle agents — muted -->
+                <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; opacity: 0.7;">
+                    <div><span class="mock-status" style="background:var(--green)"></span>jvgr1 <span style="font-size:9px; color:var(--text-muted)">idle</span></div>
+                </div>
+                <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; opacity: 0.7;">
+                    <div><span class="mock-status" style="background:var(--green)"></span>jvbld2 <span style="font-size:9px; color:var(--text-muted)">idle</span></div>
+                </div>
+                <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; opacity: 0.7;">
+                    <div><span class="mock-status" style="background:var(--green)"></span>jvgr3 <span style="font-size:9px; color:var(--text-muted)">idle</span></div>
+                </div>
+                <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; opacity: 0.7;">
+                    <div><span class="mock-status" style="background:var(--green)"></span>jvgr5 <span style="font-size:9px; color:var(--text-muted)">idle</span></div>
+                </div>
+            </div>
+            <div class="callout" style="top: 8px; right: 10px; max-width: 180px;">
+                <span class="callout-num">1</span> Fleet utilization bar — instant glance at capacity
+            </div>
+            <div class="callout" style="top: 80px; left: 10px; max-width: 180px;">
+                <span class="callout-num">2</span> Busy agent shows WHAT (pipeline), HOW FAR (progress), WHEN FREE (ETA)
+            </div>
+            <div class="callout" style="bottom: 20px; right: 10px; max-width: 160px;">
+                <span class="callout-num">3</span> Idle agents visually recede (0.7 opacity) — problems surface
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Diff Summary — Agent Fleet</h3>
+<ul class="changes-list">
+    <li><strong>Fleet utilization summary bar</strong>: Stacked bar showing idle/busy/offline proportions<div class="why">WHY: 50-agent fleet needs one-glance health reading. Criteria #9.</div></li>
+    <li><strong>Busy agents show pipeline name + progress + ETA</strong>: Inline progress bar with estimated completion<div class="why">WHY: "Running" tells you nothing actionable. "WASSet1 45% ~12min" tells you everything. Criteria #2 (Feedback).</div></li>
+    <li><strong>Idle agents visually recede</strong>: Reduced opacity, minimal card styling<div class="why">WHY: Progressive disclosure. Most of the time most agents are idle — don't let them dominate. Criteria #8.</div></li>
+    <li><strong>Sort: Offline → Busy → Idle</strong>: Problems first, just like the dashboard<div class="why">WHY: Consistent triage-first pattern across the app. Criteria #1 (Consistency).</div></li>
+</ul>
+
+<table>
+    <tr><th>Change</th><th>Effort</th><th>Priority</th></tr>
+    <tr><td>Fleet utilization summary bar (ItemsControl header)</td><td><span class="effort-badge effort-s">S</span></td><td><span class="priority-badge p0">P0</span></td></tr>
+    <tr><td>Rich busy-agent card with progress + ETA</td><td><span class="effort-badge effort-m">M</span></td><td><span class="priority-badge p0">P0</span></td></tr>
+    <tr><td>Sort by severity + opacity DataTrigger on idle</td><td><span class="effort-badge effort-s">S</span></td><td><span class="priority-badge p1">P1</span></td></tr>
+</table>
+
+<div class="code-block">
+<span class="code-label">FleetView.xaml — Agent Card DataTemplate with Status-Aware Styling</span>
+<pre>&lt;DataTemplate x:Key="AgentCardTemplate"&gt;
+    &lt;Border x:Name="CardBorder" CornerRadius="6" Padding="10" Margin="4"
+            Background="{DynamicResource BgCard}" BorderThickness="1"
+            BorderBrush="{DynamicResource Bdr}" Cursor="Hand"&gt;
+        &lt;StackPanel&gt;
+            &lt;!-- Name + Status --&gt;
+            &lt;StackPanel Orientation="Horizontal"&gt;
+                &lt;Ellipse Width="8" Height="8" Margin="0,0,6,0"
+                         Fill="{Binding Status, Converter={StaticResource StatusToBrush}}" /&gt;
+                &lt;TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12"
+                           Foreground="{DynamicResource TextP}" /&gt;
+            &lt;/StackPanel&gt;
+            
+            &lt;!-- Progress (visible only when busy) --&gt;
+            &lt;StackPanel Visibility="{Binding IsBusy, Converter={StaticResource BoolVis}}"
+                        Margin="0,6,0,0"&gt;
+                &lt;TextBlock FontSize="10" Foreground="{DynamicResource TextP}"&gt;
+                    &lt;Run Text="{Binding CurrentPipeline}" /&gt;
+                    &lt;Run Text=" • " Foreground="{DynamicResource TextS}" /&gt;
+                    &lt;Run Text="{Binding ProgressPercent, StringFormat={}{0:F0}%}" /&gt;
+                &lt;/TextBlock&gt;
+                &lt;Grid Margin="0,4,0,0"&gt;
+                    &lt;Border Height="3" CornerRadius="1.5"
+                            Background="{DynamicResource Bdr}" /&gt;
+                    &lt;Border Height="3" CornerRadius="1.5" HorizontalAlignment="Left"
+                            Background="{DynamicResource Accent}"
+                            Width="{Binding ProgressPercent,
+                                Converter={StaticResource PercentToWidth}}" /&gt;
+                &lt;/Grid&gt;
+                &lt;TextBlock FontSize="9" Foreground="{DynamicResource TextS}" Margin="0,3,0,0"&gt;
+                    &lt;Run Text="~" /&gt;&lt;Run Text="{Binding EstimatedMinutesRemaining}" /&gt;
+                    &lt;Run Text=" min remaining" /&gt;
+                &lt;/TextBlock&gt;
+            &lt;/StackPanel&gt;
+            
+            &lt;!-- Offline info --&gt;
+            &lt;TextBlock Visibility="{Binding IsOffline, Converter={StaticResource BoolVis}}"
+                       FontSize="10" Foreground="{DynamicResource AccRed}" Margin="0,4,0,0"&gt;
+                &lt;Run Text="Offline since " /&gt;
+                &lt;Run Text="{Binding LastSeenTime, StringFormat=HH:mm}" /&gt;
+            &lt;/TextBlock&gt;
+            
+            &lt;!-- Idle label --&gt;
+            &lt;TextBlock Visibility="{Binding IsIdle, Converter={StaticResource BoolVis}}"
+                       Text="idle" FontSize="9" Foreground="{DynamicResource TextS}"
+                       Margin="0,3,0,0" /&gt;
+        &lt;/StackPanel&gt;
+    &lt;/Border&gt;
+    &lt;DataTemplate.Triggers&gt;
+        &lt;DataTrigger Binding="{Binding IsIdle}" Value="True"&gt;
+            &lt;Setter TargetName="CardBorder" Property="Opacity" Value="0.6" /&gt;
+            &lt;Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource BgPanel}" /&gt;
+        &lt;/DataTrigger&gt;
+        &lt;DataTrigger Binding="{Binding IsBusy}" Value="True"&gt;
+            &lt;Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource Accent}" /&gt;
+        &lt;/DataTrigger&gt;
+        &lt;DataTrigger Binding="{Binding IsOffline}" Value="True"&gt;
+            &lt;Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccRed}" /&gt;
+        &lt;/DataTrigger&gt;
+    &lt;/DataTemplate.Triggers&gt;
+&lt;/DataTemplate&gt;</pre>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 4: RESULTS BROWSER                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Screen 4: ResultsBrowserView — Failure-First Navigation</h2>
+<p>Finding a failed test requires drilling through build → set → test → log. Failed tests don't surface.</p>
+
+<h3>Before / After: Results View</h3>
+<div class="mockup-pair">
+    <!-- BEFORE -->
+    <div class="mockup">
+        <div class="mockup-label before">❌ BEFORE — Flat Build List</div>
+        <div class="mockup-content" style="height: 300px; padding: 12px;">
+            <div style="display: flex; gap: 12px; margin-bottom: 8px;">
+                <span class="mock-tab active">All Results</span>
+                <span class="mock-tab">By Agent</span>
+            </div>
+            <div style="font-size: 11px;">
+                <div style="background: var(--card); padding: 8px; margin: 3px 0; border-radius: 4px; display: flex; justify-content: space-between;">
+                    <span>OAK_main_20260521.9</span>
+                    <span style="color: var(--green);">342 passed</span>
+                </div>
+                <div style="background: var(--card); padding: 8px; margin: 3px 0; border-radius: 4px; display: flex; justify-content: space-between;">
+                    <span>OAK_main_20260521.8</span>
+                    <span style="color: var(--green);">340 passed, <span style="color:var(--red)">2 failed</span></span>
+                </div>
+                <div style="background: var(--card); padding: 8px; margin: 3px 0; border-radius: 4px; display: flex; justify-content: space-between;">
+                    <span>OAK_main_20260520.7</span>
+                    <span style="color: var(--green);">342 passed</span>
+                </div>
+                <div style="background: var(--card); padding: 8px; margin: 3px 0; border-radius: 4px; display: flex; justify-content: space-between;">
+                    <span>OAK_main_20260520.6</span>
+                    <span style="color: var(--green);">339 passed, <span style="color:var(--red)">3 failed</span></span>
+                </div>
+            </div>
+            <div class="problem-callout" style="bottom: 40px; left: 10px;">
+                <span class="problem-num">1</span> User must click into each build to find which tests failed — 3 clicks to reach a failure
+            </div>
+            <div class="problem-callout" style="top: 60px; right: 10px;">
+                <span class="problem-num">2</span> Passing builds dominate the list when failures are the priority
+            </div>
+        </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="mockup">
+        <div class="mockup-label after">✅ AFTER — Failures First with Jump Links</div>
+        <div class="mockup-content" style="height: 300px; padding: 12px;">
+            <div style="display: flex; gap: 12px; margin-bottom: 8px; align-items: center;">
+                <span class="mock-tab active" style="color:var(--red); border-color:var(--red);">Failures (5)</span>
+                <span class="mock-tab">All Results</span>
+                <span class="mock-tab">By Agent</span>
+                <span style="flex:1;"></span>
+                <span style="font-size:10px; color:var(--text-muted);">Last 7 days</span>
+            </div>
+            <!-- Failure cards -->
+            <div style="font-size: 11px;">
+                <div style="background: #1a0f0f; border: 1px solid #4a2020; padding: 10px; margin: 4px 0; border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <strong style="color:var(--red);">Login_InvalidCredentials_Returns401</strong>
+                        <span class="mock-badge" style="background:#4a2020; color:var(--red);">FAILED</span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">OAK_main_20260521.8 • jvgr1 • AuthTests • <span style="color:var(--red)">Assert.Equal failed: 200 ≠ 401</span></div>
+                    <div style="margin-top: 6px;">
+                        <span class="mock-btn" style="font-size:9px; border-color:var(--red); color:var(--red);">View Log</span>
+                        <span class="mock-btn" style="font-size:9px;">Agent Log</span>
+                        <span class="mock-btn" style="font-size:9px;">History (failed 3x)</span>
+                    </div>
+                </div>
+                <div style="background: #1a0f0f; border: 1px solid #4a2020; padding: 10px; margin: 4px 0; border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <strong style="color:var(--red);">Session_Timeout_CleansUp</strong>
+                        <span class="mock-badge" style="background:#4a2020; color:var(--red);">FAILED</span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">OAK_main_20260521.8 • jvkpri • SessionTests • <span style="color:var(--red)">Timeout: 30000ms</span></div>
+                    <div style="margin-top: 6px;">
+                        <span class="mock-btn" style="font-size:9px; border-color:var(--red); color:var(--red);">View Log</span>
+                        <span class="mock-btn" style="font-size:9px;">Agent Log</span>
+                        <span class="mock-btn" style="font-size:9px;">History (new failure)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="callout" style="top: 10px; left: 10px; max-width: 170px;">
+                <span class="callout-num">1</span> "Failures" tab is default — 0 clicks to see problems
+            </div>
+            <div class="callout" style="bottom: 40px; right: 10px; max-width: 170px;">
+                <span class="callout-num">2</span> One-click "Agent Log" jumps to the exact log section for this test
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3>Diff Summary — Results Browser</h3>
+<ul class="changes-list">
+    <li><strong>Default to "Failures" tab</strong>: Show failed tests across all recent builds, flattened<div class="why">WHY: 80% of ResultsBrowser visits are to investigate failures. Don't make them navigate. Criteria #3.</div></li>
+    <li><strong>One-click "Agent Log" link</strong>: Jump directly to the execution log section for that test<div class="why">WHY: Eliminates the "which agent ran it?" investigation step. Criteria #7 (Power User).</div></li>
+    <li><strong>Failure history badge</strong>: "failed 3x" or "new failure" gives instant pattern recognition<div class="why">WHY: Flaky tests (repeated failures) vs new regressions need different investigation. Criteria #8.</div></li>
+    <li><strong>Inline error message preview</strong>: First line of assertion failure visible without clicking<div class="why">WHY: Often you can diagnose "Assert.Equal failed: 200 ≠ 401" at a glance. Criteria #9 (Density).</div></li>
+</ul>
+
+<table>
+    <tr><th>Change</th><th>Effort</th><th>Priority</th></tr>
+    <tr><td>Failures-first tab with flattened test results</td><td><span class="effort-badge effort-m">M</span></td><td><span class="priority-badge p0">P0</span></td></tr>
+    <tr><td>"Agent Log" navigation link</td><td><span class="effort-badge effort-s">S</span></td><td><span class="priority-badge p1">P1</span></td></tr>
+    <tr><td>Failure history count (query previous results)</td><td><span class="effort-badge effort-m">M</span></td><td><span class="priority-badge p2">P2</span></td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CROSS-CUTTING IMPROVEMENTS                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Cross-Cutting Improvements (Apply Everywhere)</h2>
+
+<h3>1. DesignTokens Consumption</h3>
+<div class="code-block">
+<span class="code-label">DesignTokens.xaml — Add MaxWidth tokens</span>
+<pre>&lt;!-- Add these to DesignTokens.xaml --&gt;
+&lt;sys:Double x:Key="TreePanelMaxWidthPercent"&gt;0.35&lt;/sys:Double&gt;
+&lt;sys:Double x:Key="LogPaneMaxHeightPercent"&gt;0.40&lt;/sys:Double&gt;
+&lt;sys:Double x:Key="AgentPanelMaxWidthPercent"&gt;0.35&lt;/sys:Double&gt;</pre>
+</div>
+
+<h3>2. Shared Panel Toggle Animation Helper</h3>
+<div class="code-block">
+<span class="code-label">Helpers/PanelAnimator.cs — Reusable across all panels</span>
+<pre>public static class PanelAnimator
+{
+    public static void AnimateColumnWidth(
+        ColumnDefinition column, double toWidth,
+        TimeSpan duration, Action? onComplete = null)
+    {
+        // Store current as pixel
+        double fromWidth = column.ActualWidth;
+        var proxy = new AnimationProxy { Value = fromWidth };
+
+        var anim = new DoubleAnimation(fromWidth, toWidth, duration)
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+
+        anim.Completed += (s, e) =>
+        {
+            column.Width = toWidth > 30
+                ? new GridLength(toWidth, GridUnitType.Pixel)
+                : GridLength.Auto;
+            onComplete?.Invoke();
+        };
+
+        // Animate via proxy — update column on each tick
+        proxy.ValueChanged += (newVal) =>
+        {
+            column.Width = new GridLength(newVal, GridUnitType.Pixel);
+        };
+
+        proxy.BeginAnimation(AnimationProxy.ValueProperty, anim);
+    }
+}
+
+// DependencyObject subclass to enable animation on a plain double
+public class AnimationProxy : Animatable
+{
+    public static readonly DependencyProperty ValueProperty =
+        DependencyProperty.Register("Value", typeof(double), typeof(AnimationProxy),
+            new PropertyMetadata(0.0, OnValueChanged));
+
+    public double Value
+    {
+        get => (double)GetValue(ValueProperty);
+        set => SetValue(ValueProperty, value);
+    }
+
+    public event Action&lt;double&gt;? ValueChanged;
+
+    private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((AnimationProxy)d).ValueChanged?.Invoke((double)e.NewValue);
+
+    protected override Freezable CreateInstanceCore() => new AnimationProxy();
+}</pre>
+</div>
+
+<h3>3. AutomationProperties for Accessibility</h3>
+<div class="code-block">
+<span class="code-label">Add to all interactive elements in panel headers</span>
+<pre>&lt;!-- Every toggle button needs a readable name --&gt;
+&lt;ToggleButton IsChecked="{Binding IsAgentPanePinned}"
+              AutomationProperties.Name="Toggle Agent Panel"
+              AutomationProperties.HelpText="Pin or auto-hide the agent panel" /&gt;
+
+&lt;ToggleButton IsChecked="{Binding IsLogPanePinned}"
+              AutomationProperties.Name="Toggle Execution Log"
+              AutomationProperties.HelpText="Pin or auto-hide the execution log" /&gt;
+
+&lt;!-- GridSplitters --&gt;
+&lt;GridSplitter AutomationProperties.Name="Resize tree panel width" /&gt;
+&lt;GridSplitter AutomationProperties.Name="Resize log panel height" /&gt;</pre>
+</div>
+
+<h3>4. Focus Management for Panel Toggle</h3>
+<div class="code-block">
+<span class="code-label">MainWindow.xaml.cs — Move focus when panel hides</span>
+<pre>private void ApplyAgentPaneLayout(bool pinned)
+{
+    // ... existing logic ...
+    
+    if (!pinned)
+    {
+        // Move focus to Properties panel so keyboard users aren't stranded
+        Dispatcher.InvokeAsync(() =>
+        {
+            var propsPanel = GetPropertiesPanel();
+            propsPanel?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+}</pre>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- KEYBOARD SHORTCUT MAP                                              -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Proposed Keyboard Shortcut Map</h2>
+
+<table class="shortcut-table">
+    <tr><th>Shortcut</th><th>Action</th><th>Scope</th></tr>
+    <tr><td>Ctrl+O</td><td>Open WatchList file</td><td>Global</td></tr>
+    <tr><td>Ctrl+S</td><td>Save WatchList</td><td>Global</td></tr>
+    <tr><td>Ctrl+Shift+S</td><td>Save As</td><td>Global</td></tr>
+    <tr><td>Ctrl+R</td><td>Refresh from disk</td><td>Global</td></tr>
+    <tr><td>F5</td><td>Execute All</td><td>Global</td></tr>
+    <tr><td>Shift+F5</td><td>Cancel Execution</td><td>Global</td></tr>
+    <tr><td>Ctrl+F</td><td>Focus tree search box</td><td>Tree Panel</td></tr>
+    <tr><td>Delete</td><td>Delete selected node</td><td>Tree Panel</td></tr>
+    <tr><td>Ctrl+1</td><td>Toggle WatchList panel (auto-hide)</td><td>Global</td></tr>
+    <tr><td>Ctrl+2</td><td>Toggle Agent panel (auto-hide)</td><td>Global</td></tr>
+    <tr><td>Ctrl+3</td><td>Toggle Execution Log (auto-hide)</td><td>Global</td></tr>
+    <tr><td>Ctrl+Shift+D</td><td>Open Execution Dashboard</td><td>Global</td></tr>
+    <tr><td>Ctrl+Shift+A</td><td>Open Agent Fleet View</td><td>Global</td></tr>
+    <tr><td>Ctrl+Shift+R</td><td>Open Results Browser</td><td>Global</td></tr>
+    <tr><td>Ctrl+Shift+L</td><td>Clear Execution Log</td><td>Log Panel</td></tr>
+    <tr><td>Ctrl+E</td><td>Focus Execution Log filter</td><td>Log Panel</td></tr>
+    <tr><td>Escape</td><td>Close dialog / Collapse expanded panel</td><td>Global</td></tr>
+    <tr><td>F1</td><td>Open Help</td><td>Global</td></tr>
+    <tr><td>Ctrl+T</td><td>Test All agents</td><td>Agent Panel</td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- ROLLOUT PLAN                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Rollout Plan</h2>
+
+<div class="rollout-phase" style="border-left-color: var(--red);">
+    <h4><span class="priority-badge p0">Phase 1 — P0 Fixes</span> (Ship This Week)</h4>
+    <ol style="margin-top: 12px; padding-left: 20px; color: var(--text-secondary);">
+        <li>Unify MinWidth values (remove dead XAML triggers, single source in code-behind)</li>
+        <li>Add MaxWidth cap on tree panel (35% via SizeChanged)</li>
+        <li>Add MaxHeight cap on log panel (40% via SizeChanged)</li>
+        <li>Consume DesignTokens via FindResource instead of magic numbers</li>
+        <li>Execution Dashboard auto-sort by severity (CollectionViewSource)</li>
+    </ol>
+    <p style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">Impact: Fixes the panel sizing bug. Users stop accidentally squashing properties panel.</p>
+</div>
+
+<div class="rollout-phase" style="border-left-color: var(--amber);">
+    <h4><span class="priority-badge p1">Phase 2 — P1 Improvements</span> (Next Sprint)</h4>
+    <ol style="margin-top: 12px; padding-left: 20px; color: var(--text-secondary);">
+        <li>Animated panel transitions (250ms ease-out)</li>
+        <li>Dashboard DataTemplateSelector (attention card vs compact card)</li>
+        <li>Agent Fleet: busy agent shows pipeline + progress + ETA</li>
+        <li>Results Browser: "Failures" tab as default</li>
+        <li>AutomationProperties on all toggle buttons and splitters</li>
+        <li>Ctrl+1/2/3 keyboard shortcuts for panel toggles</li>
+    </ol>
+    <p style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">Impact: App feels polished and professional. Triage-first pattern across all views.</p>
+</div>
+
+<div class="rollout-phase" style="border-left-color: var(--accent);">
+    <h4><span class="priority-badge p2">Phase 3 — P2 Polish</span> (When Capacity Allows)</h4>
+    <ol style="margin-top: 12px; padding-left: 20px; color: var(--text-secondary);">
+        <li>Tree panel auto-hide toggle (IsTreePanePinned)</li>
+        <li>Fleet utilization summary bar</li>
+        <li>Failure history count in Results Browser</li>
+        <li>Focus management on panel hide (move to adjacent panel)</li>
+        <li>"Reduce motion" user setting</li>
+    </ol>
+    <p style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">Impact: Accessibility compliance and power-user density improvements.</p>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- RISK CALLOUTS                                                       -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
+<div class="screen-section">
+<h2>Risk Callouts</h2>
+
+<div class="risk-box">
+    <strong>Panel animation on low-end hardware:</strong> WPF GridLength is not directly animatable. The proxy pattern may cause micro-stutters on Intel UHD 620 GPUs at 100% DPI scale. Mitigation: Test on representative hardware; provide fallback instant-snap when "Reduce motion" is enabled.
+</div>
+
+<div class="risk-box">
+    <strong>MaxWidth enforcement may fight user intent:</strong> If a user genuinely wants a wider tree panel (e.g., deep nesting), the 35% cap blocks them. Mitigation: Cap only prevents dragging past 35% — user can still control the actual position within bounds. Consider making the cap configurable in appsettings.
+</div>
+
+<div class="risk-box">
+    <strong>CollectionViewSource sorting performance:</strong> With 50+ active sessions all updating progress every second, sorting on each update could be expensive. Mitigation: Debounce sort refresh to every 2 seconds, or only re-sort when SeverityRank changes (not on every progress tick).
+</div>
+
+<div class="risk-box">
+    <strong>Panel state persistence across sessions:</strong> Currently saved widths are in-memory only. If user closes at a good layout, it's lost on restart. Mitigation: Persist panel widths/heights to user settings (appsettings or registry). Already partially supported via ViewModel property change — just needs to be saved/loaded.
+</div>
+</div>
+
+<hr style="border-color: var(--border); margin: 60px 0;">
+<p style="text-align: center; color: var(--text-muted); font-size: 0.9em;">
+    TestAgentSolution UX Improvement Plan — May 2026<br>
+    Open this file in any browser to preview mockups.
+</p>
+
+</div>
+</body>
+</html>

@@ -37,6 +37,11 @@
         <!-- Help -->
         <KeyBinding Key="F1" Command="{Binding OpenHelpCommand}" />
 
+        <!-- Panel toggles (Ctrl+1/2/3) -->
+        <KeyBinding Key="D1" Modifiers="Ctrl" Command="{Binding ToggleTreePanePinCommand}" />
+        <KeyBinding Key="D2" Modifiers="Ctrl" Command="{Binding ToggleAgentPanePinCommand}" />
+        <KeyBinding Key="D3" Modifiers="Ctrl" Command="{Binding ToggleLogPanePinCommand}" />
+
         <!-- Multi-session Execution Dashboard (standalone window) -->
         <KeyBinding Key="F12" Command="{Binding ExecutionDashboard.OpenDashboardWindowCommand}" />
     </Window.InputBindings>
@@ -887,12 +892,14 @@
                         <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
 
                         <!-- Panel toggles (compact) -->
-                        <ToggleButton IsChecked="{Binding IsAgentPanePinned}" ToolTip="Toggle Agent Panel"
+                        <ToggleButton IsChecked="{Binding IsAgentPanePinned}" ToolTip="Toggle Agent Panel (Ctrl+2)"
+                                      AutomationProperties.Name="Toggle Agent Panel"
                                       Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
                                       Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE77B;" FontSize="14" Foreground="{DynamicResource AccPeach}" />
                         </ToggleButton>
-                        <ToggleButton IsChecked="{Binding IsLogPanePinned}" ToolTip="Toggle Log Panel"
+                        <ToggleButton IsChecked="{Binding IsLogPanePinned}" ToolTip="Toggle Log Panel (Ctrl+3)"
+                                      AutomationProperties.Name="Toggle Execution Log"
                                       Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
                                       Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE7C5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
@@ -1479,48 +1486,25 @@
         <!-- MAIN CONTENT: 3-column, 3-row Grid                       -->
         <!-- Row 0 = Panels | Row 1 = Splitter | Row 2 = Log          -->
         <!-- ═══════════════════════════════════════════════════════ -->
-        <Grid>
+        <Grid x:Name="MainContentGrid" SizeChanged="MainContentGrid_SizeChanged">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="250" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition x:Name="RowLogPane" Height="2*" MinHeight="120" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2.5*" MinWidth="220" />    <!-- Col 0: Tree -->
+                <ColumnDefinition x:Name="ColTreePanel" Width="2.5*" MinWidth="220" /> <!-- Col 0: Tree -->
                 <ColumnDefinition Width="Auto" />                    <!-- Col 1: Splitter -->
-                <ColumnDefinition x:Name="ColNodeProperties" MinWidth="300"> <!-- Col 2: Node Props -->
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="5*" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsAgentPanePinned}" Value="False">
-                                    <Setter Property="Width" Value="*" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
+                <ColumnDefinition x:Name="ColNodeProperties" Width="5*" MinWidth="300" /> <!-- Col 2: Node Props -->
                 <ColumnDefinition x:Name="ColAgentSplitter" Width="Auto" /> <!-- Col 3: Splitter -->
-                <ColumnDefinition x:Name="ColAgentPanel" MinWidth="0">      <!-- Col 4: Agents -->
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="2*" />
-                            <Setter Property="MinWidth" Value="240" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsAgentPanePinned}" Value="False">
-                                    <Setter Property="Width" Value="Auto" />
-                                    <Setter Property="MinWidth" Value="28" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
+                <ColumnDefinition x:Name="ColAgentPanel" Width="2*" MinWidth="240" /> <!-- Col 4: Agents -->
             </Grid.ColumnDefinitions>
 
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- LEFT PANEL (Col 0, Row 0): TabControl                 -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgPanel}">
+            <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgPanel}"
+                    Visibility="{Binding IsTreePanePinned, Converter={StaticResource BoolVis}}">
                 <TabControl Background="Transparent" BorderThickness="0" Padding="0">
                     <TabControl.Resources>
                         <Style TargetType="TabItem" BasedOn="{StaticResource LeftPanelTab}" />
@@ -1594,7 +1578,9 @@
             <!-- Vertical splitter: Left | Center -->
             <GridSplitter Grid.Column="1" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                          ResizeBehavior="PreviousAndNext" />
+                          ResizeBehavior="PreviousAndNext"
+                          AutomationProperties.Name="Resize tree panel width"
+                          Visibility="{Binding IsTreePanePinned, Converter={StaticResource BoolVis}}" />
 
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- CENTER PANEL (Col 2, Row 0): Node Properties          -->
@@ -2171,6 +2157,7 @@
             <GridSplitter Grid.Column="3" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext"
+                          AutomationProperties.Name="Resize agent panel width"
                           Visibility="{Binding IsAgentPanePinned, Converter={StaticResource BoolVis}}" />
 
             <!-- ═══════════════════════════════════════════════════════ -->
@@ -2262,6 +2249,7 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <GridSplitter Grid.Row="1" Grid.ColumnSpan="5" Height="4" HorizontalAlignment="Stretch"
                           Background="{DynamicResource BgSurface}" ResizeBehavior="PreviousAndNext"
+                          AutomationProperties.Name="Resize log panel height"
                           Visibility="{Binding IsLogPanePinned, Converter={StaticResource BoolVis}}" />
 
             <!-- ═══════════════════════════════════════════════════════ -->

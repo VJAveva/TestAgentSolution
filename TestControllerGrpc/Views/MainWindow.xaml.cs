@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -32,9 +33,20 @@ public partial class MainWindow : Window
         private bool _isDragging;
     #pragma warning restore CS0414
 
-    // ?? Dockable pane saved sizes ??????????????????????????????????
+    // ── Dockable pane saved sizes ──────────────────────────────────────────
     private GridLength _savedAgentColWidth = new(3, GridUnitType.Star);
+    private GridLength _savedTreeColWidth = new(2.5, GridUnitType.Star);
     private GridLength _savedLogRowHeight = new(2, GridUnitType.Star);
+
+    // ── Panel sizing tokens (loaded from DesignTokens.xaml) ────────────────
+    private double _treePanelMinWidth = 220;
+    private double _agentPanelMinPinned = 280;
+    private double _agentPaneCollapsedWidth = 28;
+    private double _logPaneMinHeight = 120;
+    private double _logPaneCollapsedHeight = 28;
+    private double _treePanelMaxWidthPercent = 0.35;
+    private double _agentPanelMaxWidthPercent = 0.35;
+    private double _logPaneMaxHeightPercent = 0.40;
 
     // ?? System tray ??????????????????????????????????????????
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -43,6 +55,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LoadDesignTokens();
         _vm = App.Services.GetRequiredService<MainViewModel>();
         DataContext = _vm;
 
@@ -296,6 +309,10 @@ public partial class MainWindow : Window
         {
             ApplyLogPaneLayout(_vm.IsLogPanePinned);
         }
+        else if (e.PropertyName == nameof(MainViewModel.IsTreePanePinned))
+        {
+            ApplyTreePaneLayout(_vm.IsTreePanePinned);
+        }
     }
 
     private void ApplyAgentPaneLayout(bool pinned)
@@ -303,7 +320,7 @@ public partial class MainWindow : Window
         if (pinned)
         {
             ColAgentPanel.Width = _savedAgentColWidth;
-            ColAgentPanel.MinWidth = 280;
+            ColAgentPanel.MinWidth = _agentPanelMinPinned;
             ColAgentSplitter.Width = GridLength.Auto;
             ColNodeProperties.Width = new GridLength(3, GridUnitType.Star);
         }
@@ -313,9 +330,18 @@ public partial class MainWindow : Window
                 _savedAgentColWidth = ColAgentPanel.Width;
 
             ColAgentPanel.Width = GridLength.Auto;
-            ColAgentPanel.MinWidth = 28;
+            ColAgentPanel.MinWidth = _agentPaneCollapsedWidth;
             ColAgentSplitter.Width = new GridLength(0);
             ColNodeProperties.Width = new GridLength(1, GridUnitType.Star);
+
+            // Move focus to properties panel so keyboard users aren't stranded
+            Dispatcher.InvokeAsync(() =>
+            {
+                var propertiesPanel = MainContentGrid.Children
+                    .OfType<FrameworkElement>()
+                    .FirstOrDefault(c => Grid.GetColumn(c) == 2 && Grid.GetRow(c) == 0);
+                propertiesPanel?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }, System.Windows.Threading.DispatcherPriority.Input);
         }
     }
 
@@ -324,7 +350,7 @@ public partial class MainWindow : Window
         if (pinned)
         {
             RowLogPane.Height = _savedLogRowHeight;
-            RowLogPane.MinHeight = 120;
+            RowLogPane.MinHeight = _logPaneMinHeight;
         }
         else
         {
@@ -332,7 +358,88 @@ public partial class MainWindow : Window
                 _savedLogRowHeight = RowLogPane.Height;
 
             RowLogPane.Height = GridLength.Auto;
-            RowLogPane.MinHeight = 28;
+            RowLogPane.MinHeight = _logPaneCollapsedHeight;
+        }
+    }
+
+    private void ApplyTreePaneLayout(bool pinned)
+    {
+        if (pinned)
+        {
+            ColTreePanel.Width = _savedTreeColWidth;
+            ColTreePanel.MinWidth = _treePanelMinWidth;
+        }
+        else
+        {
+            if (ColTreePanel.Width.IsStar)
+                _savedTreeColWidth = ColTreePanel.Width;
+
+            ColTreePanel.Width = GridLength.Auto;
+            ColTreePanel.MinWidth = _agentPaneCollapsedWidth; // same 28px collapsed width
+
+            // Move keyboard focus to properties panel so user isn't stranded
+            Dispatcher.InvokeAsync(() =>
+            {
+                var propertiesPanel = MainContentGrid.Children
+                    .OfType<FrameworkElement>()
+                    .FirstOrDefault(c => Grid.GetColumn(c) == 2 && Grid.GetRow(c) == 0);
+                propertiesPanel?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }, System.Windows.Threading.DispatcherPriority.Input);
+        }
+    }
+
+    // ── Design tokens ──────────────────────────────────────────────────────
+    private void LoadDesignTokens()
+    {
+        if (TryFindResource("TreePanelMinWidth") is double treePanelMin)
+            _treePanelMinWidth = treePanelMin;
+        if (TryFindResource("AgentPanelMinPinned") is double agentMin)
+            _agentPanelMinPinned = agentMin;
+        if (TryFindResource("AgentPaneCollapsedWidth") is double agentCollapsed)
+            _agentPaneCollapsedWidth = agentCollapsed;
+        if (TryFindResource("LogPaneMinHeight") is double logMin)
+            _logPaneMinHeight = logMin;
+        if (TryFindResource("LogPaneCollapsedHeight") is double logCollapsed)
+            _logPaneCollapsedHeight = logCollapsed;
+        if (TryFindResource("TreePanelMaxWidthPercent") is double treeMax)
+            _treePanelMaxWidthPercent = treeMax;
+        if (TryFindResource("AgentPanelMaxWidthPercent") is double agentMax)
+            _agentPanelMaxWidthPercent = agentMax;
+        if (TryFindResource("LogPaneMaxHeightPercent") is double logMax)
+            _logPaneMaxHeightPercent = logMax;
+    }
+
+    // ── MaxWidth / MaxHeight enforcement on resize ─────────────────────────
+    private void MainContentGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not Grid grid || grid.ActualWidth < 1 || grid.ActualHeight < 1)
+            return;
+
+        // Tree panel: cap at configured percentage of grid width
+        double maxTreeWidth = grid.ActualWidth * _treePanelMaxWidthPercent;
+        if (ColTreePanel.ActualWidth > maxTreeWidth && maxTreeWidth > _treePanelMinWidth)
+        {
+            ColTreePanel.Width = new GridLength(maxTreeWidth, GridUnitType.Pixel);
+        }
+
+        // Agent panel: cap at configured percentage (only when pinned)
+        if (_vm.IsAgentPanePinned)
+        {
+            double maxAgentWidth = grid.ActualWidth * _agentPanelMaxWidthPercent;
+            if (ColAgentPanel.ActualWidth > maxAgentWidth && maxAgentWidth > _agentPanelMinPinned)
+            {
+                ColAgentPanel.Width = new GridLength(maxAgentWidth, GridUnitType.Pixel);
+            }
+        }
+
+        // Log pane: cap at configured percentage (only when pinned)
+        if (_vm.IsLogPanePinned)
+        {
+            double maxLogHeight = grid.ActualHeight * _logPaneMaxHeightPercent;
+            if (RowLogPane.ActualHeight > maxLogHeight && maxLogHeight > _logPaneMinHeight)
+            {
+                RowLogPane.Height = new GridLength(maxLogHeight, GridUnitType.Pixel);
+            }
         }
     }
 

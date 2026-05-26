@@ -269,6 +269,29 @@ public sealed partial class MainViewModel
         IsAgentPanePinned = true;
     }
 
+    // ── Tree pane dock commands ─────────────────────────────────────
+
+    /// <summary>Toggle pin/auto-hide for the tree (WatchList) pane.</summary>
+    [RelayCommand]
+    private void ToggleTreePanePin()
+    {
+        IsTreePanePinned = !IsTreePanePinned;
+    }
+
+    /// <summary>Hide the tree pane (restore via ribbon or Ctrl+1).</summary>
+    [RelayCommand]
+    private void HideTreePane()
+    {
+        IsTreePanePinned = false;
+    }
+
+    /// <summary>Show and pin the tree pane.</summary>
+    [RelayCommand]
+    private void ShowTreePane()
+    {
+        IsTreePanePinned = true;
+    }
+
     /// <summary>Export log entries to a file (text, log, or CSV).</summary>
     [RelayCommand]
     private void ExportLog()
