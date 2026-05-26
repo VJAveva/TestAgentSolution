@@ -197,11 +197,39 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                                 detail: $"Lost connection after {consecutiveFailures} consecutive failures. Last error: {regError}");
                         }
 
-                        continue; // Skip heartbeat — can't send to a controller we're not registered with
+                        // Still publish metrics to local subscribers (Agent Monitor)
+                        // even when controller is unreachable
+                        var regFailMetrics = _metrics.Collect();
+                        _broadcaster.Publish(new ExecutionEvent
+                        {
+                            ExecutionId = "",
+                            AgentName   = _settings.AgentName,
+                            Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+                            EventType   = ExecutionEventType.EventHeartbeat,
+                            AgentState  = _executor.CurrentState,
+                            Metrics     = regFailMetrics,
+                            Detail      = $"CPU {regFailMetrics.CpuUsagePct}% | Mem {regFailMetrics.MemoryUsedMb}MB | Disk {regFailMetrics.DiskFreeGb}GB free",
+                        });
+
+                        continue; // Skip controller heartbeat — not registered
                     }
                 }
 
                 var sysMetrics = _metrics.Collect();
+
+                // Always publish to local event subscribers (Agent Monitor)
+                // regardless of controller heartbeat outcome
+                _broadcaster.Publish(new ExecutionEvent
+                {
+                    ExecutionId = "",
+                    AgentName   = _settings.AgentName,
+                    Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+                    EventType   = ExecutionEventType.EventHeartbeat,
+                    AgentState  = _executor.CurrentState,
+                    Metrics     = sysMetrics,
+                    Detail      = $"CPU {sysMetrics.CpuUsagePct}% | Mem {sysMetrics.MemoryUsedMb}MB | Disk {sysMetrics.DiskFreeGb}GB free",
+                });
+
                 await _controller.SendHeartbeatAsync(_executor.CurrentState, sysMetrics, ct);
                 consecutiveFailures = 0;
                 heartbeatCount++;
@@ -213,17 +241,6 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                     _audit.Log("HeartbeatAcked",
                         detail: $"Heartbeat #{heartbeatCount}, CPU {sysMetrics.CpuUsagePct}%, Mem {sysMetrics.MemoryUsedMb}MB");
                 }
-
-                _broadcaster.Publish(new ExecutionEvent
-                {
-                    ExecutionId = "",
-                    AgentName   = _settings.AgentName,
-                    Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
-                    EventType   = ExecutionEventType.EventHeartbeat,
-                    AgentState  = _executor.CurrentState,
-                    Metrics     = sysMetrics,
-                    Detail      = $"CPU {sysMetrics.CpuUsagePct}% | Mem {sysMetrics.MemoryUsedMb}MB | Disk {sysMetrics.DiskFreeGb}GB free",
-                });
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
