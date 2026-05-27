@@ -12,9 +12,9 @@ export function useResults() {
   const setAlerts = useResultsStore(s => s.setAlerts);
 
   const fetchBuilds = useCallback(async () => {
-    const data = await apiFetch<BuildSummary[]>('/api/results/builds');
-    setBuilds(data);
-    return data;
+    const data = await apiFetch<{ items: BuildSummary[]; totalCount: number; page: number; pageSize: number }>('/api/results/builds');
+    setBuilds(data.items ?? []);
+    return data.items ?? [];
   }, [setBuilds]);
 
   const fetchBuild = useCallback(async (buildNumber: string) => {

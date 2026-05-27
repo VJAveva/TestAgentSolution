@@ -218,7 +218,7 @@ export function useSignalR(): HubConnection | null {
     // Results updated: re-fetch builds list when new results are available
     conn.on('ResultsUpdated', () => {
       axios.get('/api/results/builds').then(({ data }) => {
-        useResultsStore.getState().setBuilds(data);
+        useResultsStore.getState().setBuilds(data.items ?? []);
       }).catch(() => {});
     });
 
