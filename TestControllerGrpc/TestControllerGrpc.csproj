@@ -42,6 +42,7 @@
     <PackageReference Include="Google.Protobuf" Version="3.26.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <PackageReference Include="AvalonEdit" Version="6.2.0.78" />
+    <PackageReference Include="Material.Icons.WPF" Version="2.1.10" />
     <PackageReference Include="Polly.Core" Version="8.5.2" />
     <PackageReference Include="Svg.Skia" Version="2.0.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />

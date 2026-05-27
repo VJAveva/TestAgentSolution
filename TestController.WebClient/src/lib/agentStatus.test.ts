@@ -34,6 +34,15 @@ describe('isAgentOnline', () => {
     expect(isAgentOnline('Disconnected')).toBe(false);
   });
 
+  it('correctly distinguishes "Failed" (online) from "Error" (offline)', () => {
+    // "Failed (exit 1)" = command failed, agent is online
+    expect(isAgentOnline('Failed (exit 1)')).toBe(true);
+    // "Error" alone = agent error, treated as offline
+    expect(isAgentOnline('Error')).toBe(false);
+    // "Unreachable" = offline, even though it contains no online patterns
+    expect(isAgentOnline('Unreachable')).toBe(false);
+  });
+
   it('returns false for null/undefined/empty', () => {
     expect(isAgentOnline(null)).toBe(false);
     expect(isAgentOnline(undefined)).toBe(false);

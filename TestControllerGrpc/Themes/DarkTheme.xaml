@@ -112,4 +112,64 @@
     <SolidColorBrush x:Key="CancelledBadgeBg" Color="#339399B2" />
     <SolidColorBrush x:Key="PartialBadgeBg"   Color="#33FAB387" />
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         TreeView Spec — Test Plan tree design tokens (from mockup)
+         ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="BgWindowBrush"      Color="#FF14161B" />
+    <SolidColorBrush x:Key="BgPanelBrush"       Color="#FF1A1D23" />
+    <SolidColorBrush x:Key="BgHeaderBrush"      Color="#FF1C1F25" />
+    <SolidColorBrush x:Key="BgRowHoverBrush"    Color="#0AFFFFFF" />
+    <SolidColorBrush x:Key="BgRowSelectedBrush" Color="#244A90E2" />
+
+    <!-- Borders & rails -->
+    <SolidColorBrush x:Key="BorderSoftBrush"    Color="#0FFFFFFF" />
+    <SolidColorBrush x:Key="BorderMediumBrush"  Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="RailIdleBrush"      Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="RailActiveBrush"    Color="#804A90E2" />
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="TextStrongBrush"    Color="#FFF0F1F4" />
+    <SolidColorBrush x:Key="TextDefaultBrush"   Color="#FFD6D8DF" />
+    <SolidColorBrush x:Key="TextMutedBrush"     Color="#FF8A8F99" />
+    <SolidColorBrush x:Key="TextDimBrush"       Color="#FF6E727A" />
+
+    <!-- Action-type accent colors -->
+    <SolidColorBrush x:Key="CRunBrush"          Color="#FF74ACEA" />
+    <SolidColorBrush x:Key="CRemoteBrush"       Color="#FFC39ADF" />
+    <SolidColorBrush x:Key="CEmailBrush"        Color="#FFF0B070" />
+    <SolidColorBrush x:Key="CInitBrush"         Color="#FF5DD0A8" />
+    <SolidColorBrush x:Key="CRefBrush"          Color="#FFA8ACB5" />
+
+    <!-- Group accent colors -->
+    <SolidColorBrush x:Key="CSeqBrush"          Color="#FF74ACEA" />
+    <SolidColorBrush x:Key="CParBrush"          Color="#FFC39ADF" />
+    <SolidColorBrush x:Key="CEventBrush"        Color="#FFF0B070" />
+
+    <!-- Pill backgrounds (semi-transparent) -->
+    <SolidColorBrush x:Key="PillSeqBg"          Color="#244A90E2" />
+    <SolidColorBrush x:Key="PillParBg"          Color="#29C39ADF" />
+    <SolidColorBrush x:Key="PillEvtBg"          Color="#24F5A623" />
+    <SolidColorBrush x:Key="PillRunBg"          Color="#244A90E2" />
+    <SolidColorBrush x:Key="PillRmtBg"          Color="#29C39ADF" />
+    <SolidColorBrush x:Key="PillEmlBg"          Color="#24F5A623" />
+    <SolidColorBrush x:Key="PillInitBg"         Color="#245DD0A8" />
+    <SolidColorBrush x:Key="PillRefBg"          Color="#29A8ACB5" />
+
+    <!-- Status dot fills -->
+    <SolidColorBrush x:Key="SReadyBrush"        Color="#FF2D7A4A" />
+    <SolidColorBrush x:Key="SRunningBrush"      Color="#FFF5A623" />
+    <SolidColorBrush x:Key="SPassedBrush"       Color="#FF2D7A4A" />
+    <SolidColorBrush x:Key="SFailedBrush"       Color="#FFD04848" />
+    <SolidColorBrush x:Key="SIdleBrush"         Color="#FF4A4D55" />
+
+    <!-- File pill background -->
+    <SolidColorBrush x:Key="FilePillBgBrush"    Color="#0AFFFFFF" />
+
+    <!-- Count badge -->
+    <SolidColorBrush x:Key="CountBgBrush"       Color="#0AFFFFFF" />
+    <SolidColorBrush x:Key="CountRunningBg"     Color="#1AF5A623" />
+    <SolidColorBrush x:Key="CountFailedBg"      Color="#1AD04848" />
+
 </ResourceDictionary>

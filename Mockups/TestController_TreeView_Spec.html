@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>TestController — Test Plan Tree (UI/UX spec)</title>
+
+<!--
+================================================================================
+  PURPOSE OF THIS FILE  (Copilot / Cursor / Claude Code: read this first)
+================================================================================
+  This is a UI/UX SPECIFICATION for the TestController "WatchList Editor" tree.
+  Target implementation: WPF (.NET, C#) — TreeView control inside a Window
+  using MVVM. The actual app uses a dark theme similar to Visual Studio.
+
+  The hierarchy modeled here is:
+
+    TestPlan (file)
+      └─ TestItem            (a top-level test; was "WatchItem")
+          └─ EventTrigger    (e.g. "On Renamed")
+              └─ ActionGroup (Sequential | Parallel)
+                  └─ Action  (Run | RemoteCommand | SendEmail | Initialize | Reference)
+
+  NAMING DECISIONS (use these names in code, not the old ones):
+    OLD  ->  NEW
+    WatchList                ->  TestPlan
+    WatchItem                ->  TestItem        (top-level test scenario)
+    [Sequential] / [Parallel]->  ActionGroup with ExecutionMode = Sequential | Parallel
+    "Run Command" action     ->  ActionType.Run
+    "Remote Command" action  ->  ActionType.RemoteCommand
+    "Send Email" action      ->  ActionType.SendEmail
+    "Initialize"             ->  ActionType.Initialize
+    "Ref >"                  ->  ActionType.Reference
+
+  WHAT THIS FILE GIVES YOU:
+    1. Design tokens (colors, spacing, typography) — section A
+    2. A sample data model (JSON) showing the shape of the tree — section B
+    3. The visual mockup (HTML/CSS) with semantic class names — section C
+    4. Interaction notes (selection, hover, expand/collapse) — section D
+    5. WPF translation hints — section E (at bottom)
+
+  When generating XAML:
+    - Use ItemsControl / HierarchicalDataTemplate for the tree
+    - Map each ActionType to its own DataTemplate (icon + color + pill)
+    - Bind status dot to TestItem.Status enum (Ready | Running | Passed | Failed | Idle)
+    - File paths render as compact pills with the FULL path in ToolTip
+    - Use the colors below verbatim (they are tuned for the dark theme)
+================================================================================
+-->
+
+<style>
+/* ============================================================================
+   SECTION A — DESIGN TOKENS
+   These are the only colors and sizes the implementation should use.
+   In XAML, expose these as <SolidColorBrush> resources in App.xaml.
+   ============================================================================ */
+:root {
+  /* Surfaces */
+  --bg-window:        #14161b;   /* outermost window background */
+  --bg-panel:         #1a1d23;   /* tree container background */
+  --bg-header:        #1c1f25;   /* header strip background */
+  --bg-row-hover:     rgba(255,255,255,0.04);
+  --bg-row-selected:  rgba(74,144,226,0.14);
+
+  /* Borders & rails */
+  --border-soft:      rgba(255,255,255,0.06);
+  --border-medium:    rgba(255,255,255,0.12);
+  --rail-idle:        rgba(255,255,255,0.05);
+  --rail-active:      rgba(74,144,226,0.50);
+
+  /* Text */
+  --text-strong:      #f0f1f4;   /* test names */
+  --text-default:     #d6d8df;   /* node labels */
+  --text-muted:       #8a8f99;   /* counts, meta */
+  --text-dim:         #6e727a;   /* file pills, hints */
+
+  /* Action-type accents (each action gets its own color so the tree is scannable) */
+  --c-run:            #74acea;   /* local run command — blue */
+  --c-remote:         #c39adf;   /* remote command — purple */
+  --c-email:          #f0b070;   /* send email — amber */
+  --c-init:           #5dd0a8;   /* initialize — teal */
+  --c-ref:            #a8acb5;   /* reference — gray */
+
+  /* Group accents */
+  --c-seq:            #74acea;   /* sequential */
+  --c-par:            #c39adf;   /* parallel */
+  --c-event:          #f0b070;   /* event trigger */
+
+  /* Status dots */
+  --s-ready:          #2d7a4a;
+  --s-running:        #f5a623;
+  --s-passed:         #2d7a4a;
+  --s-failed:         #d04848;
+  --s-idle:           #4a4d55;
+
+  /* Typography */
+  --font-ui:    'Segoe UI', 'Inter', system-ui, sans-serif;
+  --font-mono:  'Cascadia Code', 'Consolas', monospace;
+
+  /* Sizes */
+  --row-h:          26px;        /* one tree row */
+  --row-pad-x:      8px;
+  --indent:         18px;        /* per nesting level */
+  --icon-sz:        14px;
+  --status-sz:      7px;
+  --radius-sm:      3px;
+  --radius-md:      4px;
+  --radius-lg:      8px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg-window);
+  color: var(--text-default);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { max-width: 760px; margin: 0 auto; padding: 24px; }
+
+.page h1 { font-size: 18px; font-weight: 500; color: var(--text-strong); margin: 0 0 4px; }
+.page h2 { font-size: 13px; font-weight: 500; color: var(--text-muted); margin: 28px 0 10px; letter-spacing: 0.5px; text-transform: uppercase; }
+.page p  { color: var(--text-muted); font-size: 12.5px; margin: 0 0 18px; }
+
+/* ============================================================================
+   SECTION C — TREE COMPONENT STYLES
+   ============================================================================ */
+.tree {
+  background: var(--bg-panel);
+  border: 0.5px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 8px 6px;
+}
+
+/* Tree header (TestPlan summary) */
+.tree-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 10px;
+  border-bottom: 0.5px solid var(--border-soft);
+  margin-bottom: 6px;
+}
+.tree-header-icon  { font-size: 17px; color: var(--c-run); }
+.tree-header-title { color: var(--text-strong); font-weight: 500; font-size: 13.5px; }
+.tree-header-sub   { color: var(--text-dim); font-size: 11.5px; }
+.tree-header-spacer{ flex: 1; }
+
+/* A single row in the tree */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-h);
+  padding: 0 var(--row-pad-x);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-default);
+  user-select: none;
+}
+.row:hover    { background: var(--bg-row-hover); }
+.row.selected { background: var(--bg-row-selected); }
+
+/* The chevron column. Always rendered (even for leaves) so labels align. */
+.chev { width: 12px; display: inline-flex; justify-content: center; color: var(--text-dim); font-size: 10px; }
+
+/* The status dot — only on TestItem rows */
+.dot { width: var(--status-sz); height: var(--status-sz); border-radius: 50%; flex-shrink: 0; }
+.dot.ready   { background: var(--s-ready); }
+.dot.running { background: var(--s-running); animation: pulse 1.4s ease-in-out infinite; }
+.dot.passed  { background: var(--s-passed); }
+.dot.failed  { background: var(--s-failed); }
+.dot.idle    { background: var(--s-idle); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Action icon */
+.icn { width: var(--icon-sz); display: inline-flex; justify-content: center; font-size: var(--icon-sz); flex-shrink: 0; }
+.icn.run     { color: var(--c-run); }
+.icn.remote  { color: var(--c-remote); }
+.icn.email   { color: var(--c-email); }
+.icn.init    { color: var(--c-init); }
+.icn.ref     { color: var(--c-ref); }
+.icn.event   { color: var(--c-event); }
+.icn.group   { color: var(--c-seq); }
+.icn.test    { color: var(--c-run); font-size: 15px; }
+
+/* Labels */
+.label        { color: var(--text-default); }
+.label.strong { color: var(--text-strong); font-weight: 500; }
+
+/* Pills (3-letter type tags) — uppercase, monospaced-feel */
+.pill {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.pill.seq    { background: rgba(74,144,226,0.14);  color: #74acea; }
+.pill.par    { background: rgba(195,154,223,0.16); color: #c39adf; }
+.pill.evt    { background: rgba(245,166,35,0.14);  color: #f0b070; }
+.pill.run    { background: rgba(74,144,226,0.14);  color: #74acea; }
+.pill.remote { background: rgba(195,154,223,0.16); color: #c39adf; }
+.pill.email  { background: rgba(245,166,35,0.14);  color: #f0b070; }
+.pill.init   { background: rgba(93,208,168,0.14);  color: #5dd0a8; }
+.pill.ref    { background: rgba(168,172,181,0.16); color: #a8acb5; }
+
+/* The compact file pill — full path goes in title attribute (XAML: ToolTip) */
+.file-pill {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.04);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Right-aligned step count badge */
+.count {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.04);
+  padding: 1px 7px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+.count.running { color: var(--s-running); background: rgba(245,166,35,0.10); }
+.count.failed  { color: var(--s-failed);  background: rgba(208,72,72,0.10); }
+
+/* Indent wrapper — provides the vertical guide rail for each nesting level */
+.indent { position: relative; margin-left: var(--indent); }
+.indent::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--rail-idle);
+}
+.indent.active::before { background: var(--rail-active); }
+
+/* Legend at the bottom of the spec */
+.legend {
+  margin-top: 18px;
+  padding: 10px 14px;
+  background: rgba(74,144,226,0.05);
+  border-left: 2px solid rgba(74,144,226,0.4);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.9;
+}
+.legend strong { color: var(--text-default); font-weight: 500; }
+
+/* JSON sample box */
+pre.data {
+  background: #0f1116;
+  color: #c8cad0;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--border-soft);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0;
+}
+</style>
+
+<!-- Tabler Icons (outline) — for the visual mockup only.
+     In WPF, replace with your icon library (e.g. Material.Icons, FontAwesome.Sharp, or PackIcons). -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+</head>
+
+<body>
+<div class="page">
+
+  <h1>TestController — Test Plan tree (UI/UX spec)</h1>
+  <p>Hand this file to an AI coding assistant alongside the prompt:
+     <em>"Translate this HTML/CSS spec into a WPF TreeView using the data model below. Match the dark theme exactly."</em></p>
+
+  <!-- ========================================================================
+       SECTION B — SAMPLE DATA MODEL (JSON)
+       This is the shape of the tree the UI binds to. In C#:
+         - TestPlan       { string Name, string FilePath, List<TestItem> Items }
+         - TestItem       { string Name, string TriggerFile, Status Status, List<EventTrigger> Events }
+         - EventTrigger   { string EventName, ExecutionMode Mode, List<ActionGroup> Groups }
+         - ActionGroup    { string Name, ExecutionMode Mode, List<IActionNode> Children }
+         - IActionNode    polymorphic: RunAction | RemoteCommandAction | SendEmailAction | InitializeAction | ReferenceAction
+       ======================================================================== -->
+  <h2>Data model (bind tree to this shape)</h2>
+<pre class="data">{
+  "type": "TestPlan",
+  "name": "Test Plan",
+  "filePath": "C:\\Plans\\WatchList.xml",
+  "items": [
+    {
+      "type": "TestItem",
+      "name": "Warm Setup on Four Nodes",
+      "triggerFile": "C:\\Triggers\\WarmSetup.txt",
+      "status": "Running",
+      "events": [{
+        "type": "EventTrigger",
+        "eventName": "On Renamed",
+        "mode": "Sequential",
+        "groups": [
+          {
+            "type": "ActionGroup", "name": "Run Agent Prep batch", "mode": "Parallel",
+            "children": [
+              { "type": "RemoteCommand", "host": "warmgrpsr", "command": "C:\\TestAgentService\\Prepare.bat" },
+              { "type": "RemoteCommand", "host": "warmhist",  "command": "C:\\TestAgentService\\Prepare.bat" },
+              { "type": "RemoteCommand", "host": "warmpri",   "command": "C:\\TestAgentService\\Prepare.bat" },
+              { "type": "RemoteCommand", "host": "warmbak",   "command": "C:\\TestAgentService\\Prepare.bat" }
+            ]
+          },
+          {
+            "type": "ActionGroup", "name": "Install Build on GR Node1 and other nodes", "mode": "Sequential",
+            "children": [
+              { "type": "RemoteCommand", "host": "warmgrpsr", "command": "C:\\TestSetup\\SP2023R2Train\\2024.exe" },
+              { "type": "Run",           "host": "local",     "command": "cmd /c install_local.bat" },
+              { "type": "Initialize",    "variableFile": "C:\\TestControllerService\\Variables.txt" },
+              { "type": "Reference",     "targetName": "RevertAgents" },
+              { "type": "SendEmail",     "to": "qa-leads@aveva.com", "subject": "Install completed on Warm Setup" }
+            ]
+          }
+        ]
+      }]
+    }
+  ]
+}</pre>
+
+  <!-- ========================================================================
+       SECTION C — VISUAL MOCKUP
+       The actual UI Copilot/Cursor should mirror in XAML.
+       ======================================================================== -->
+  <h2>Visual mockup</h2>
+
+  <div class="tree" role="tree" aria-label="Test plan">
+
+    <!-- Header: TestPlan -->
+    <div class="tree-header">
+      <i class="ti ti-clipboard-list tree-header-icon" aria-hidden="true"></i>
+      <span class="tree-header-title">Test Plan</span>
+      <span class="tree-header-sub">1 test · 11 steps</span>
+      <span class="tree-header-spacer"></span>
+      <span class="file-pill" title="C:\Plans\WatchList.xml">WatchList.xml</span>
+    </div>
+
+    <!-- TestItem: Warm Setup -->
+    <div class="row selected" role="treeitem" aria-expanded="true">
+      <span class="chev"><i class="ti ti-chevron-down" aria-hidden="true"></i></span>
+      <span class="dot running" title="Running"></span>
+      <i class="ti ti-test-pipe icn test" aria-hidden="true"></i>
+      <span class="label strong">Warm Setup on Four Nodes</span>
+      <span class="file-pill" title="C:\Triggers\WarmSetup.txt">WarmSetup.txt</span>
+      <span class="count running">running · 11 steps</span>
+    </div>
+
+    <div class="indent active">
+      <!-- EventTrigger -->
+      <div class="row">
+        <span class="chev"><i class="ti ti-chevron-down" aria-hidden="true"></i></span>
+        <i class="ti ti-bolt icn event" aria-hidden="true"></i>
+        <span class="label">On rename event</span>
+        <span class="pill evt">EVT</span>
+        <span class="pill seq">SEQ</span>
+      </div>
+
+      <div class="indent">
+
+        <!-- ActionGroup: parallel -->
+        <div class="row">
+          <span class="chev"><i class="ti ti-chevron-down" aria-hidden="true"></i></span>
+          <i class="ti ti-stack-2 icn group" style="color: var(--c-par)" aria-hidden="true"></i>
+          <span class="label">Run agent prep batch</span>
+          <span class="pill par">PAR</span>
+          <span class="count">4 actions</span>
+        </div>
+
+        <div class="indent">
+          <!-- Four RemoteCommand actions, run in parallel -->
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-server icn remote" aria-hidden="true"></i>
+            <span class="label">Remote command · <span style="color: var(--text-muted)">warmgrpsr</span></span>
+            <span class="pill remote">RMT</span>
+            <span class="file-pill" title="C:\TestAgentService\Prepare.bat">Prepare.bat</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-server icn remote" aria-hidden="true"></i>
+            <span class="label">Remote command · <span style="color: var(--text-muted)">warmhist</span></span>
+            <span class="pill remote">RMT</span>
+            <span class="file-pill" title="C:\TestAgentService\Prepare.bat">Prepare.bat</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-server icn remote" aria-hidden="true"></i>
+            <span class="label">Remote command · <span style="color: var(--text-muted)">warmpri</span></span>
+            <span class="pill remote">RMT</span>
+            <span class="file-pill" title="C:\TestAgentService\Prepare.bat">Prepare.bat</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-server icn remote" aria-hidden="true"></i>
+            <span class="label">Remote command · <span style="color: var(--text-muted)">warmbak</span></span>
+            <span class="pill remote">RMT</span>
+            <span class="file-pill" title="C:\TestAgentService\Prepare.bat">Prepare.bat</span>
+          </div>
+        </div>
+
+        <!-- ActionGroup: sequential — showcases all 5 action types -->
+        <div class="row">
+          <span class="chev"><i class="ti ti-chevron-down" aria-hidden="true"></i></span>
+          <i class="ti ti-stack-2 icn group" aria-hidden="true"></i>
+          <span class="label">Install build on GR Node1 and other nodes</span>
+          <span class="pill seq">SEQ</span>
+          <span class="count">5 actions</span>
+        </div>
+
+        <div class="indent">
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-server icn remote" aria-hidden="true"></i>
+            <span class="label">Remote command · <span style="color: var(--text-muted)">warmgrpsr</span></span>
+            <span class="pill remote">RMT</span>
+            <span class="file-pill" title="C:\TestSetup\SP2023R2Train\2024.exe">2024.exe</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-terminal-2 icn run" aria-hidden="true"></i>
+            <span class="label">Run command · <span style="color: var(--text-muted)">local</span></span>
+            <span class="pill run">RUN</span>
+            <span class="file-pill" title="cmd /c install_local.bat">install_local.bat</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-settings-cog icn init" aria-hidden="true"></i>
+            <span class="label">Initialize variables</span>
+            <span class="pill init">INIT</span>
+            <span class="file-pill" title="C:\TestControllerService\Variables.txt">Variables.txt</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-arrow-back-up icn ref" aria-hidden="true"></i>
+            <span class="label">Reference · <span style="color: var(--text-muted)">RevertAgents</span></span>
+            <span class="pill ref">REF</span>
+          </div>
+          <div class="row">
+            <span class="chev"></span>
+            <i class="ti ti-mail icn email" aria-hidden="true"></i>
+            <span class="label">Send email · <span style="color: var(--text-muted)">qa-leads@aveva.com</span></span>
+            <span class="pill email">EML</span>
+            <span class="file-pill" title="Install completed on Warm Setup">Install completed…</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================
+       Legend (visual reference for the implementer)
+       ======================================================================== -->
+  <div class="legend">
+    <strong>Action types</strong> &nbsp;
+    <span><i class="ti ti-terminal-2 icn run" aria-hidden="true"></i> Run</span> &nbsp;
+    <span><i class="ti ti-server icn remote" aria-hidden="true"></i> Remote command</span> &nbsp;
+    <span><i class="ti ti-mail icn email" aria-hidden="true"></i> Send email</span> &nbsp;
+    <span><i class="ti ti-settings-cog icn init" aria-hidden="true"></i> Initialize</span> &nbsp;
+    <span><i class="ti ti-arrow-back-up icn ref" aria-hidden="true"></i> Reference</span>
+    <br />
+    <strong>Group modes</strong> &nbsp;
+    <span class="pill seq">SEQ</span> Sequential &nbsp;
+    <span class="pill par">PAR</span> Parallel &nbsp;
+    <span class="pill evt">EVT</span> Event trigger
+    <br />
+    <strong>Status dots</strong> &nbsp;
+    <span class="dot ready"   style="display:inline-block; vertical-align:middle"></span> Ready &nbsp;
+    <span class="dot running" style="display:inline-block; vertical-align:middle"></span> Running &nbsp;
+    <span class="dot passed"  style="display:inline-block; vertical-align:middle"></span> Passed &nbsp;
+    <span class="dot failed"  style="display:inline-block; vertical-align:middle"></span> Failed &nbsp;
+    <span class="dot idle"    style="display:inline-block; vertical-align:middle"></span> Idle
+  </div>
+
+  <!-- ========================================================================
+       SECTION D — INTERACTION NOTES
+       ======================================================================== -->
+  <h2>Interaction notes</h2>
+  <ul style="color: var(--text-muted); font-size: 12.5px; line-height: 1.8;">
+    <li><strong style="color: var(--text-default)">Hover</strong> — row background changes to <code>--bg-row-hover</code>. Cursor: hand on chevron, default elsewhere.</li>
+    <li><strong style="color: var(--text-default)">Select</strong> — single click selects the row. Background becomes <code>--bg-row-selected</code>. Only one node selected at a time (single-select tree).</li>
+    <li><strong style="color: var(--text-default)">Expand/collapse</strong> — click chevron OR double-click row. Leaves (actions) have no chevron and don't expand.</li>
+    <li><strong style="color: var(--text-default)">File path pills</strong> — show only the filename. Full path appears on hover via tooltip. Click-to-copy is a nice-to-have.</li>
+    <li><strong style="color: var(--text-default)">Active-run highlight</strong> — when a TestItem is Running, its rail (the vertical guide line under it) tints blue (<code>--rail-active</code>) so the eye can follow execution down the tree.</li>
+    <li><strong style="color: var(--text-default)">Right-click</strong> — context menu (out of scope here, but reserve space for it): Run from here, Skip, Edit, Disable, Duplicate.</li>
+    <li><strong style="color: var(--text-default)">Keyboard</strong> — ↑/↓ moves selection, ←/→ collapses/expands, Enter opens edit dialog, Space toggles enabled.</li>
+  </ul>
+
+  <!-- ========================================================================
+       SECTION E — WPF TRANSLATION HINTS
+       ======================================================================== -->
+  <h2>WPF translation hints (for the Copilot)</h2>
+  <ul style="color: var(--text-muted); font-size: 12.5px; line-height: 1.8;">
+    <li>Use <code>TreeView</code> with <code>HierarchicalDataTemplate</code> per node type. Bind to a flat <code>ObservableCollection&lt;ITreeNode&gt;</code> where each node exposes its children.</li>
+    <li>Each <code>HierarchicalDataTemplate</code> should match a DataType (TestItem, EventTrigger, ActionGroup, RunAction, RemoteCommandAction, SendEmailAction, InitializeAction, ReferenceAction).</li>
+    <li>Declare every color in <code>App.xaml</code> as <code>SolidColorBrush</code> resources keyed by the CSS variable name (e.g. <code>BgPanelBrush</code>, <code>CRunBrush</code>). Reference them with <code>DynamicResource</code> so theme switching is possible later.</li>
+    <li>Status dot = a small <code>Ellipse</code> with a <code>DataTrigger</code> swapping the <code>Fill</code> based on the <code>Status</code> enum. The "running" pulse animation = a <code>DoubleAnimation</code> on <code>Opacity</code>, AutoReverse, RepeatBehavior=Forever.</li>
+    <li>Pills = a styled <code>Border</code> with a <code>TextBlock</code>. Define one <code>Style</code> with <code>Tag</code>-based triggers (Tag = "SEQ" / "PAR" / "RUN" / ...) to switch the background and foreground.</li>
+    <li>File pill = <code>Border</code> + <code>TextBlock</code> with <code>TextTrimming="CharacterEllipsis"</code>, <code>MaxWidth="200"</code>, and <code>ToolTip="{Binding FullPath}"</code>.</li>
+    <li>The vertical "rail" can be drawn either by setting a left <code>BorderThickness</code> on the items container, or by a <code>Decorator</code> in the <code>ItemContainerStyle</code>. The active variant is a <code>DataTrigger</code> on <code>IsAncestorOfRunningNode</code> (computed in the view model).</li>
+    <li>Icons: install <code>Material.Icons.WPF</code> or <code>FontAwesome.Sharp</code>. Map: Run→Terminal, RemoteCommand→Server, SendEmail→EmailOutline, Initialize→CogOutline, Reference→ArrowURightTop, EventTrigger→LightningBolt, ActionGroup→FormatListBulletedType, TestItem→TestTube.</li>
+    <li>Do NOT show full file paths inline. Always extract <code>Path.GetFileName(...)</code> for display and bind the full string to <code>ToolTip</code>.</li>
+  </ul>
+
+</div>
+</body>
+</html>
