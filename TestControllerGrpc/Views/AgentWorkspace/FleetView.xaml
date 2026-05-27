@@ -186,15 +186,14 @@
                                                                    Foreground="{DynamicResource TextP}"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    MaxWidth="120"/>
-                                                        <!-- Pipeline tag (visible when busy) -->
-                                                        <TextBlock FontSize="9" Margin="6,0,0,0"
-                                                                   Foreground="{DynamicResource Accent}"
-                                                                   VerticalAlignment="Center"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   MaxWidth="80"
-                                                                   Text="{Binding WatchItemTag}">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
+                                                        <!-- Pipeline tag pill (visible when busy) -->
+                                                        <Border Margin="6,0,0,0" CornerRadius="3"
+                                                                Padding="5,1" VerticalAlignment="Center"
+                                                                Background="{DynamicResource AccentBtnBg}"
+                                                                BorderBrush="{DynamicResource Accent}"
+                                                                BorderThickness="0.5">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
                                                                     <Setter Property="Visibility" Value="Collapsed"/>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding Status}" Value="Busy">
@@ -202,8 +201,13 @@
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
+                                                            </Border.Style>
+                                                            <TextBlock FontSize="9"
+                                                                       Foreground="{DynamicResource Accent}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       MaxWidth="160"
+                                                                       Text="{Binding PipelinePillText}"/>
+                                                        </Border>
                                                     </StackPanel>
                                                     <!-- Row 2: status detail -->
                                                     <TextBlock Grid.Row="1" Text="{Binding StatusDetail}"

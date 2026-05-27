@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels.AgentWorkspace;
@@ -168,6 +169,17 @@ public partial class FleetVM : ObservableObject, IDisposable
                         : agentLock.WatchItemTag;
                     busy++;
                 }
+
+                // Populate current action and progress for pill display
+                if (agentSummary != null)
+                {
+                    var running = agentSummary.Actions
+                        .FirstOrDefault(a => a.Outcome == ActionOutcome.Unknown);
+                    if (running != null)
+                        card.CurrentActionTag = running.ActionTag;
+                    if (agentSummary.TotalCount > 0)
+                        card.ProgressPercent = (int)(100.0 * agentSummary.CompletedCount / agentSummary.TotalCount);
+                }
             }
             else if (health != null && !health.IsHealthy)
             {
@@ -280,6 +292,27 @@ public partial class FleetCardVM : ObservableObject
     [ObservableProperty] private string _groupKey = "";
     [ObservableProperty] private string _owner = "";
     [ObservableProperty] private string _watchItemTag = "";
+    [ObservableProperty] private string _currentActionTag = "";
+    [ObservableProperty] private int _progressPercent = -1;  // -1 = unknown
     [ObservableProperty] private bool _isError;
     [ObservableProperty] private int _latencyMs = -1;  // -1 = not measured
+
+    /// <summary>Pill display: "Tag → Action 50%" or "Tag" if no action info.</summary>
+    public string PipelinePillText
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(WatchItemTag)) return "";
+            var text = WatchItemTag;
+            if (!string.IsNullOrEmpty(CurrentActionTag))
+                text += $" \u2192 {CurrentActionTag}";
+            if (ProgressPercent >= 0)
+                text += $" {ProgressPercent}%";
+            return text;
+        }
+    }
+
+    partial void OnWatchItemTagChanged(string value) => OnPropertyChanged(nameof(PipelinePillText));
+    partial void OnCurrentActionTagChanged(string value) => OnPropertyChanged(nameof(PipelinePillText));
+    partial void OnProgressPercentChanged(int value) => OnPropertyChanged(nameof(PipelinePillText));
 }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
+using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.ViewModels.Converters;
 
@@ -310,6 +311,11 @@ public sealed class NodeTooltipConverter : IMultiValueConverter
 
         if (nodeKind != "Action")
             return string.IsNullOrWhiteSpace(statusTooltip) ? null! : statusTooltip;
+
+        // Resolve [Token] placeholders for tooltip display
+        command = TreeNodeViewModel.ResolveTokens(command);
+        parameters = TreeNodeViewModel.ResolveTokens(parameters);
+        agentName = TreeNodeViewModel.ResolveTokens(agentName);
 
         var lines = new List<string>();
         if (!string.IsNullOrWhiteSpace(command))

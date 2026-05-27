@@ -472,7 +472,9 @@ public partial class MainWindow : Window
     {
         var node = WatchListTreeView.SelectedItem as TreeNodeViewModel;
         var nodeKind = node?.NodeKind;
-        if (nodeKind != _lastWatchListContextMenuNodeKind || _cachedWatchListContextMenu is null)
+        // Always rebuild for WatchItem (IsEnabled toggle is node-specific)
+        if (nodeKind != _lastWatchListContextMenuNodeKind || _cachedWatchListContextMenu is null
+            || nodeKind is "WatchItem")
         {
             _cachedWatchListContextMenu = BuildWatchListContextMenu(node);
             _lastWatchListContextMenuNodeKind = nodeKind;
@@ -495,6 +497,19 @@ public partial class MainWindow : Window
         if (node.NodeKind is "WatchItem")
         {
             menu.Items.Add(CreateMenuItemWithIcon("Trigger All Events", _vm.TriggerWatchItemCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(new Separator());
+
+            // Toggle: include/exclude this WatchItem from "Trigger All" execution
+            var enabledItem = new MenuItem
+            {
+                Header = "Include in Trigger All",
+                IsCheckable = true,
+                IsChecked = node.IsEnabled
+            };
+            var capturedNode = node;
+            enabledItem.Checked += (_, _) => capturedNode.IsEnabled = true;
+            enabledItem.Unchecked += (_, _) => capturedNode.IsEnabled = false;
+            menu.Items.Add(enabledItem);
             menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "Event")

@@ -5,6 +5,7 @@
         xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
         xmlns:views="clr-namespace:TestControllerGrpc.Views"
         xmlns:aw="clr-namespace:TestControllerGrpc.Views.AgentWorkspace"
+        xmlns:panels="clr-namespace:TestControllerGrpc.Views.Panels"
         Title="TestController  -  WatchList Editor"
         Height="900" Width="1400" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
@@ -1600,6 +1601,17 @@
                                       ItemTemplate="{StaticResource WatchTreeSpecTemplate}" />
                         </DockPanel>
                     </TabItem>
+
+                    <!-- History Tab (read-only observer, no gRPC interaction) -->
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                <TextBlock Text="History" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <panels:ExecutionHistoryPanel />
+                    </TabItem>
                 </TabControl>
             </Border>
 
@@ -1925,12 +1937,6 @@
                                             <Label Content="CHECK INTERVAL (s)" Style="{StaticResource Lbl}" />
                                             <TextBox Text="{Binding CompletionPollIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
                                                      ToolTip="How often to run the check command (seconds). Default: 30" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2">
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,18,0,0">
-                                                <Run Text="&#x24D8;" FontWeight="Bold" />
-                                                <Run Text=" Polls after Setup.exe exits to wait for msiexec child processes. Stops when check returns exit 1 or output contains DONE." />
-                                            </TextBlock>
                                         </StackPanel>
                                     </Grid>
                                     <StackPanel Orientation="Horizontal" Margin="0,5">

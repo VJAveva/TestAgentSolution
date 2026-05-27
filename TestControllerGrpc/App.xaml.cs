@@ -121,6 +121,7 @@ public partial class App : Application
                 });
 
                 services.AddSingleton<MainViewModel>();
+                services.AddSingleton<ExecutionHistoryPanelVM>();
 
                 // Build Results services
                 services.AddSingleton<TrxResultsParser>();
