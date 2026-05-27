@@ -1594,10 +1594,10 @@
                                 </Grid>
                             </StackPanel>
                             <TreeView x:Name="TemplateTreeView" ItemsSource="{Binding TemplateRoots}"
-                                      Background="Transparent" Foreground="{DynamicResource TextP}"
+                                      Background="Transparent" Foreground="{DynamicResource TextDefaultBrush}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
-                                      ItemContainerStyle="{StaticResource TVI}"
-                                      ItemTemplate="{StaticResource TemplateTreeTemplate}" />
+                                      ItemContainerStyle="{StaticResource SpecTVI}"
+                                      ItemTemplate="{StaticResource WatchTreeSpecTemplate}" />
                         </DockPanel>
                     </TabItem>
                 </TabControl>
