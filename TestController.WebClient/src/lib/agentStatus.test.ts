@@ -9,9 +9,24 @@ describe('isAgentOnline', () => {
     expect(isAgentOnline('AgentStateReady')).toBe(true);
   });
 
+  it('returns true for execution-related statuses', () => {
+    expect(isAgentOnline('Executing: deploy.cmd')).toBe(true);
+    expect(isAgentOnline('Ready')).toBe(true);
+    expect(isAgentOnline('AgentStateRunning')).toBe(true);
+    expect(isAgentOnline('Rebooting… waiting for agent')).toBe(true);
+    expect(isAgentOnline('Failed (exit 1)')).toBe(true);
+    expect(isAgentOnline('Waiting for previous command to finish (3/6)')).toBe(true);
+  });
+
+  it('returns true for compound online statuses', () => {
+    expect(isAgentOnline('Online · AgentStateReady')).toBe(true);
+    expect(isAgentOnline('Online (post-reboot)')).toBe(true);
+  });
+
   it('is case-insensitive', () => {
     expect(isAgentOnline('connected')).toBe(true);
     expect(isAgentOnline('ONLINE')).toBe(true);
+    expect(isAgentOnline('EXECUTING: TEST')).toBe(true);
   });
 
   it('returns false for offline patterns', () => {
@@ -50,6 +65,13 @@ describe('classifyAgentHealth', () => {
   it('returns online for known good statuses', () => {
     expect(classifyAgentHealth('Connected')).toBe('online');
     expect(classifyAgentHealth('Healthy')).toBe('online');
+  });
+
+  it('returns online for execution-related statuses', () => {
+    expect(classifyAgentHealth('Executing: deploy.cmd')).toBe('online');
+    expect(classifyAgentHealth('Ready')).toBe('online');
+    expect(classifyAgentHealth('Failed (exit 1)')).toBe('online');
+    expect(classifyAgentHealth('AgentStateRunning')).toBe('online');
   });
 
   it('returns offline for known bad statuses', () => {

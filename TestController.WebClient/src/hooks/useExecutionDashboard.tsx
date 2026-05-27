@@ -1,5 +1,5 @@
 import React, {
-  createContext, useContext, useReducer, useRef,
+  createContext, useContext, useReducer, useState,
   useCallback, useEffect, type ReactNode, type Dispatch
 } from 'react';
 import { useConnectionStore, type SignalRStatus } from '../stores/connectionStore';
@@ -356,25 +356,25 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   // Poll the proxy endpoint so that sessions triggered from the WPF
   // controller (whose SignalR events don't flow to this WebApi hub) still
   // appear and update in real-time.
-  const hasActiveRef = useRef(false);
+  // Track active state so the interval can speed up (3s) or slow down (8s).
+  const [hasActive, setHasActive] = useState(false);
   useEffect(() => {
-    // Use a faster interval (3s) when sessions are active, slower (8s) when idle.
-    const interval = hasActiveRef.current ? 3000 : 8000;
+    const interval = hasActive ? 3000 : 8000;
     const id = setInterval(() => {
       fetchProxySessions().catch(() => {/* swallow – proxy may be down */});
     }, interval);
     return () => clearInterval(id);
-  }, [fetchProxySessions]);
+  }, [fetchProxySessions, hasActive]);
 
   // Poll logs from WPF controller for active sessions.
   // The WPF controller exposes /api/execution/{sessionId}/recent-logs which
   // the WebApi proxies at /api/execution/proxy/logs/{sessionId}.
-  const activeSessionIdsRef = useRef<string[]>([]);
+  const [activeSessionIds, setActiveSessionIds] = useState<string[]>([]);
   useEffect(() => {
-    if (activeSessionIdsRef.current.length === 0) return;
+    if (activeSessionIds.length === 0) return;
 
     const fetchLogs = () => {
-      for (const sid of activeSessionIdsRef.current) {
+      for (const sid of activeSessionIds) {
         apiFetch<{ logs: DashboardLogEntry[]; sessionId: string }>(
           `/api/execution/proxy/logs/${encodeURIComponent(sid)}`
         )
@@ -397,7 +397,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     fetchLogs();
     const id = setInterval(fetchLogs, 4000);
     return () => clearInterval(id);
-  }, [activeSessionIdsRef.current.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSessionIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to SignalR events for dashboard-specific state
   useEffect(() => {
@@ -448,9 +448,19 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     .sort((a: SessionSummary, b: SessionSummary) =>
       new Date(b.startedUtc).getTime() - new Date(a.startedUtc).getTime());
 
-  // Track whether there are active sessions so polling can speed up
-  hasActiveRef.current = activeSessions.length > 0;
-  activeSessionIdsRef.current = activeSessions.map(s => s.sessionId);
+  // Update polling speed and log targets when active sessions change
+  const currentHasActive = activeSessions.length > 0;
+  const currentActiveIds = activeSessions.map(s => s.sessionId);
+  useEffect(() => {
+    setHasActive(currentHasActive);
+  }, [currentHasActive]);
+  useEffect(() => {
+    setActiveSessionIds(prev => {
+      const next = currentActiveIds;
+      if (prev.length === next.length && prev.every((id, i) => id === next[i])) return prev;
+      return next;
+    });
+  }, [currentActiveIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const completedSessions = sessions
     .filter((s: SessionSummary) => s.status !== 'Running' && s.status !== 'Queued')

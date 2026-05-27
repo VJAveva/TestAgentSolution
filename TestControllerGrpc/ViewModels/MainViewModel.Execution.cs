@@ -59,8 +59,17 @@ public sealed partial class MainViewModel
                 AddLog($"Cannot start '{tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
-            }
-        }
+            }            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Event execution: {tag}",
+            });        }
 
         eventNode.SetStatusRecursive("Running");
         eventNode.PropagateStatusUp();
@@ -98,6 +107,17 @@ public sealed partial class MainViewModel
         finally
         {
             _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Event completed: {tag}",
+            });
             CompleteSession(session);
         }
     }
@@ -136,8 +156,17 @@ public sealed partial class MainViewModel
                 AddLog($"Cannot start '{wi.Tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
-            }
-        }
+            }            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"WatchItem execution: {wi.Tag}",
+            });        }
 
         wiNode.SetStatusRecursive("Running");
         wiNode.PropagateStatusUp();
@@ -203,6 +232,17 @@ public sealed partial class MainViewModel
         finally
         {
             _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"WatchItem completed: {wi.Tag}",
+            });
             CompleteSession(session);
         }
     }

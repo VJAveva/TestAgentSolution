@@ -51,18 +51,29 @@ export default function FleetPage({ onSelectAgent }: FleetPageProps) {
 function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void }) {
   const isOnline = isAgentOnline(agent.status);
   const isBusy = agent.isLocked;
+  const isExecuting = isBusy || (agent.status?.toLowerCase().startsWith('executing') ?? false);
+  const hasFailure = agent.status?.toLowerCase().startsWith('failed') ?? false;
 
-  const borderColor = isBusy
+  const borderColor = isExecuting
     ? 'border-accent/60'
     : isOnline
       ? 'border-acc-green/60'
       : 'border-acc-red/60';
 
-  const bgTint = isBusy
+  const bgTint = isExecuting
     ? 'bg-accent/5'
     : isOnline
       ? 'bg-acc-green/5'
       : 'bg-acc-red/5';
+
+  // Status text color: amber for command failure, accent for executing, green for healthy
+  const statusColor = hasFailure
+    ? 'text-acc-amber'
+    : isExecuting
+      ? 'text-accent'
+      : isOnline
+        ? 'text-acc-green'
+        : 'text-acc-red';
 
   return (
     <div
@@ -80,7 +91,7 @@ function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void 
       <div className="space-y-1 text-xs">
         <div className="flex justify-between">
           <span className="text-text-muted">Status</span>
-          <span className={isOnline ? 'text-acc-green' : 'text-acc-red'}>{agent.status}</span>
+          <span className={statusColor}>{agent.status}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-text-muted">Address</span>

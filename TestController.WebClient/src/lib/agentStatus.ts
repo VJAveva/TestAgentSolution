@@ -12,7 +12,13 @@
 export type AgentHealthState = 'online' | 'offline' | 'unknown';
 
 /** Strings that definitively indicate the agent is reachable. */
-const ONLINE_PATTERNS = ['Connected', 'Online', 'Healthy', 'AgentStateReady'];
+const ONLINE_PATTERNS = [
+  'Connected', 'Online', 'Healthy', 'AgentStateReady',
+  // Execution-related states: agent is actively working (reachable by definition)
+  'Executing', 'Ready', 'AgentStateRunning', 'Rebooting',
+  'Failed',   // command failure — agent itself is still online
+  'Waiting',  // "Waiting for previous command to finish"
+];
 
 /** Strings that definitively indicate the agent is unreachable. */
 const OFFLINE_PATTERNS = ['Offline', 'Unhealthy', 'Disconnected', 'Unreachable', 'Error'];
