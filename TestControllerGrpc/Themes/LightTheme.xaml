@@ -168,5 +168,30 @@
     <!-- Count badge -->
     <SolidColorBrush x:Key="CountBgBrush"       Color="#08000000" />
     <SolidColorBrush x:Key="CountRunningBg"     Color="#1AD97706" />
+    <SolidColorBrush x:Key="CountFailedBg"      Color="#1ADC2626" />
+
+    <!-- High-Contrast glyph (invisible in Dark/Light, visible in HC) -->
+    <SolidColorBrush x:Key="HcGlyphFg"          Color="#00000000" />
+
+    <!-- Dashboard legacy tokens (theme-aware) -->
+    <SolidColorBrush x:Key="StatusRunningBg" Color="#1A2563EB" />
+    <SolidColorBrush x:Key="StatusRunningFg" Color="#FF2563EB" />
+    <SolidColorBrush x:Key="StatusSuccessBg" Color="#1A16A34A" />
+    <SolidColorBrush x:Key="StatusSuccessFg" Color="#FF16A34A" />
+    <SolidColorBrush x:Key="StatusFailedBg"  Color="#1ADC2626" />
+    <SolidColorBrush x:Key="StatusFailedFg"  Color="#FFDC2626" />
+    <SolidColorBrush x:Key="StatusWarningBg" Color="#1AD97706" />
+    <SolidColorBrush x:Key="StatusWarningFg" Color="#FFD97706" />
+    <SolidColorBrush x:Key="StatusIdleBg"    Color="#FFF3F4F6" />
+    <SolidColorBrush x:Key="StatusIdleFg"    Color="#FF9CA3AF" />
+    <SolidColorBrush x:Key="DashboardBg"     Color="#FFF8FAFC" />
+    <SolidColorBrush x:Key="CardBg"          Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="CardBorder"      Color="#FFE5E7EB" />
+    <SolidColorBrush x:Key="AgentColumnBg"   Color="#FFF1F5F9" />
+    <SolidColorBrush x:Key="RowBorder"       Color="#FFE5E7EB" />
+    <SolidColorBrush x:Key="TextPrimary"     Color="#FF1F2937" />
+    <SolidColorBrush x:Key="TextSecondary"   Color="#FF6B7280" />
+    <SolidColorBrush x:Key="TextDim"         Color="#FF9CA3AF" />
+    <SolidColorBrush x:Key="MonoFont"        Color="#FF0891B2" />
 
 </ResourceDictionary>

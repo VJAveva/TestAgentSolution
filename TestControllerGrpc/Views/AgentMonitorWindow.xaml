@@ -35,21 +35,35 @@
                 </Button>
                 <StackPanel Orientation="Horizontal">
                     <!-- Connection indicator -->
-                    <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Margin="0,0,4,0" VerticalAlignment="Center">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
-                                <Setter Property="Fill" Value="#F9E2AF" />
+                                <Setter Property="Fill" Value="{DynamicResource AccYellow}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ConnectionStatusText}" Value="Connected">
-                                        <Setter Property="Fill" Value="#A6E3A1" />
+                                        <Setter Property="Fill" Value="{DynamicResource AccGreen}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding ConnectionStatusText}" Value="Reconnecting">
-                                        <Setter Property="Fill" Value="#F9E2AF" />
+                                        <Setter Property="Fill" Value="{DynamicResource AccYellow}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- HC glyph fallback (visible only in High Contrast) -->
+                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10"
+                               FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource HcGlyphFg}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="&#xE783;" /> <!-- Warning -->
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConnectionStatusText}" Value="Connected">
+                                        <Setter Property="Text" Value="&#xE73E;" /> <!-- Checkmark -->
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock Text="{Binding MonitorAgentName}" FontWeight="Bold"
                                Foreground="{DynamicResource TextP}" FontSize="13" VerticalAlignment="Center" />
                     <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,0,0"
@@ -121,7 +135,7 @@
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   BorderThickness="0" CanUserSortColumns="True"
                   Foreground="{DynamicResource TextP}" FontSize="11.5"
-                  RowBackground="Transparent" AlternatingRowBackground="#08FFFFFF"
+                  RowBackground="Transparent" AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
                   Margin="6">
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">

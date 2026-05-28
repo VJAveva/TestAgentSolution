@@ -105,7 +105,7 @@
 
     <Grid>
         <!-- Loading overlay -->
-        <Border Background="#CC0F1629" Panel.ZIndex="10"
+        <Border Background="{DynamicResource OverlayBg}" Panel.ZIndex="10"
                 Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="28"
@@ -372,7 +372,7 @@
                 <!-- ?? HEALTH INDICATOR BAR ?? -->
                 <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" CornerRadius="6" Padding="12" Margin="8,4,8,4">
                     <Grid>
-                        <Border CornerRadius="4" Background="#1E293B" Height="36" />
+                        <Border CornerRadius="4" Background="{DynamicResource BgSurface}" Height="36" />
                         <Border CornerRadius="4" Height="36" HorizontalAlignment="Left">
                             <Border.Width>
                                 <MultiBinding Converter="{x:Static vm:PercentToWidthConverter.Instance}">
@@ -385,9 +385,9 @@
                             </Border.Background>
                         </Border>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="#FFFFFF"
+                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TreeBadgeFg}"
                                        Text="{Binding PassRatePercent, StringFormat='{}{0:F1}%'}" />
-                            <TextBlock FontSize="14" FontWeight="Bold" Foreground="#FFFFFF" Margin="12,0,0,0"
+                            <TextBlock FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TreeBadgeFg}" Margin="12,0,0,0"
                                        Text="{Binding HealthLabel}" />
                         </StackPanel>
                     </Grid>
@@ -414,9 +414,9 @@
                                 <TextBlock Grid.Column="1" Text="TOTAL" FontSize="10" FontWeight="Bold"
                                            Foreground="{DynamicResource TextS}" HorizontalAlignment="Center" />
                                 <TextBlock Grid.Column="2" Text="PASS" FontSize="10" FontWeight="Bold"
-                                           Foreground="#10B981" HorizontalAlignment="Center" />
+                                           Foreground="{DynamicResource AccGreen}" HorizontalAlignment="Center" />
                                 <TextBlock Grid.Column="3" Text="FAIL" FontSize="10" FontWeight="Bold"
-                                           Foreground="#EF4444" HorizontalAlignment="Center" />
+                                           Foreground="{DynamicResource AccRed}" HorizontalAlignment="Center" />
                                 <TextBlock Grid.Column="4" Text="NOT EXE" FontSize="9" FontWeight="Bold"
                                            Foreground="{DynamicResource TextS}" HorizontalAlignment="Center" />
                                 <TextBlock Grid.Column="5" Text="RATE" FontSize="10" FontWeight="Bold"
@@ -444,7 +444,7 @@
                                     <Setter Property="Foreground" Value="{DynamicResource TextP}" />
                                     <Style.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#08FFFFFF" />
+                                            <Setter Property="Background" Value="{DynamicResource BgRowHoverBrush}" />
                                         </Trigger>
                                     </Style.Triggers>
                                 </Style>
@@ -485,7 +485,7 @@
                                                 <Setter Property="Background" Value="Transparent" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding NodeLevel}" Value="TestResult">
-                                                        <Setter Property="Background" Value="#10EF4444" />
+                                                        <Setter Property="Background" Value="{DynamicResource AlertErrorBg}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -512,10 +512,10 @@
                                                                 <DataTrigger Binding="{Binding NodeLevel}" Value="Build">
                                                                     <Setter Property="FontWeight" Value="Bold" />
                                                                     <Setter Property="FontSize" Value="12" />
-                                                                    <Setter Property="Foreground" Value="#60A5FA" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding NodeLevel}" Value="TestResult">
-                                                                    <Setter Property="Foreground" Value="#EF4444" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
                                                                     <Setter Property="FontSize" Value="10" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -556,7 +556,7 @@
 
                                             <!-- Passed -->
                                             <TextBlock Grid.Column="2" Text="{Binding Passed}" FontSize="11"
-                                                       Foreground="#10B981" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                       Foreground="{DynamicResource AccGreen}" HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Style.Triggers>
@@ -575,7 +575,7 @@
                                                         <Setter Property="Foreground" Value="{DynamicResource TextP}" />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Failed, Converter={x:Static vm:GreaterThanZeroConverter.Instance}}" Value="True">
-                                                                <Setter Property="Foreground" Value="#EF4444" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
                                                                 <Setter Property="FontWeight" Value="Bold" />
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding NodeLevel}" Value="TestResult">

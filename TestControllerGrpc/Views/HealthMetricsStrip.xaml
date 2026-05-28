@@ -15,7 +15,7 @@
             <Setter Property="Height" Value="3" />
             <Setter Property="Width" Value="28" />
             <Setter Property="CornerRadius" Value="1.5" />
-            <Setter Property="Background" Value="#30FFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource BgRowHoverBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
@@ -48,8 +48,8 @@
             <Style TargetType="Border">
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsCritical}" Value="True">
-                        <Setter Property="Background" Value="#30FF4444" />
-                        <Setter Property="BorderBrush" Value="#80FF4444" />
+                        <Setter Property="Background" Value="{DynamicResource AlertErrorBg}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource AlertErrorBdr}" />
                     </DataTrigger>
                 </Style.Triggers>
             </Style>

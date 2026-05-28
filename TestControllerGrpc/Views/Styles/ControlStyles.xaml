@@ -35,7 +35,7 @@
     </Style>
 
     <!-- ═══ Card Border ═══ -->
-    <Style x:Key="CardBorder" TargetType="Border">
+    <Style x:Key="CardBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource BgCard}" />
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="Padding" Value="8,6" />

@@ -150,6 +150,36 @@
                 </Ellipse.Style>
             </Ellipse>
 
+            <!-- HC glyph fallback (letter glyph visible only in High Contrast) -->
+            <TextBlock Grid.Column="0" FontSize="9" FontWeight="Bold"
+                       Foreground="{DynamicResource HcGlyphFg}"
+                       VerticalAlignment="Center" Margin="0,0,5,0"
+                       IsHitTestVisible="False">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Text" Value="" />
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding NodeKind}" Value="WatchItem">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                <Setter Property="Text" Value="R" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                <Setter Property="Text" Value="&#x2713;" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                <Setter Property="Text" Value="&#x2717;" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                <Setter Property="Text" Value="&#x2717;" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
             <!-- ── Column 1: Material Icon (13px) ── -->
             <mi:MaterialIcon Grid.Column="1" Width="13" Height="13"
                              Margin="0,0,5,0" VerticalAlignment="Center">

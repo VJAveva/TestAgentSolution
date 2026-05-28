@@ -71,7 +71,7 @@
     </Style>
 
     <!-- Secondary/muted text -->
-    <Style x:Key="TextSecondary" TargetType="TextBlock">
+    <Style x:Key="TextSecondaryStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontUI}" />
         <Setter Property="FontSize" Value="{StaticResource FontSize11}" />
         <Setter Property="Foreground" Value="{DynamicResource TextS}" />

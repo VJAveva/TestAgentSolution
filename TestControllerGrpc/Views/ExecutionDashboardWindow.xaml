@@ -7,7 +7,7 @@
     Title="Execution Dashboard"
     Height="800" Width="1300" MinWidth="800" MinHeight="500"
     WindowStartupLocation="CenterScreen"
-    Background="{StaticResource DashboardBg}">
+    Background="{DynamicResource DashboardBg}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -20,46 +20,46 @@
         <!-- Shared Header: Summary Stats Bar                          -->
         <!-- ?????????????????????????????????????????????????????????? -->
         <UniformGrid Grid.Row="0" Rows="1" Margin="8">
-            <Border Background="{StaticResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding ActiveSessionCount}" FontSize="18" FontWeight="Medium"
-                               Foreground="{StaticResource StatusRunningFg}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource StatusRunningFg}" HorizontalAlignment="Center"/>
                     <TextBlock Text="Active Sessions" FontSize="10"
-                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{StaticResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding LockedAgentCount}" FontSize="18" FontWeight="Medium"
-                               Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center"/>
                     <TextBlock Text="Agents Locked" FontSize="10"
-                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{StaticResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding TotalPassedActions}" FontSize="18" FontWeight="Medium"
-                               Foreground="{StaticResource StatusSuccessFg}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource StatusSuccessFg}" HorizontalAlignment="Center"/>
                     <TextBlock Text="Actions Passed" FontSize="10"
-                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{StaticResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding TotalFailedActions}" FontSize="18" FontWeight="Medium"
-                               Foreground="{StaticResource StatusFailedFg}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource StatusFailedFg}" HorizontalAlignment="Center"/>
                     <TextBlock Text="Actions Failed" FontSize="10"
-                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{StaticResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock FontSize="18" FontWeight="Medium"
-                               Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Center">
+                               Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center">
                         <Run Text="{Binding OverallProgressPercent, Mode=OneWay}"/><Run Text="%"/>
                     </TextBlock>
                     <TextBlock Text="Overall Progress" FontSize="10"
-                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
         </UniformGrid>
@@ -73,7 +73,7 @@
             <TabControl.Resources>
                 <!-- Dark-themed tab header style -->
                 <Style TargetType="TabItem">
-                    <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                     <Setter Property="FontSize" Value="12"/>
                     <Setter Property="FontWeight" Value="Medium"/>
                     <Setter Property="Padding" Value="14,6"/>
@@ -94,13 +94,13 @@
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter TargetName="Bd" Property="BorderBrush"
-                                                Value="{StaticResource StatusRunningFg}"/>
+                                                Value="{DynamicResource StatusRunningFg}"/>
                                         <Setter Property="Foreground"
-                                                Value="{StaticResource StatusRunningFg}"/>
+                                                Value="{DynamicResource StatusRunningFg}"/>
                                     </Trigger>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter TargetName="Bd" Property="Background"
-                                                Value="#15FFFFFF"/>
+                                                Value="{DynamicResource BgRowHoverBrush}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -153,7 +153,7 @@
                                        Foreground="{StaticResource SpecTextSecondary}"
                                        VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBox x:Name="PipelineFilterBox" FontSize="11" MinWidth="220"
-                                     Background="{StaticResource BgCard}"
+                                     Background="{StaticResource DashBgCard}"
                                      Foreground="{StaticResource SpecTextPrimary}"
                                      BorderBrush="{StaticResource BorderSubtle}" Padding="6,3"
                                      TextChanged="PipelineFilterBox_TextChanged"/>
@@ -167,8 +167,8 @@
                                       ItemsSource="{Binding SessionsView}" Margin="8,4">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type exec:SessionCardVM}">
-                                    <Border Background="{StaticResource CardBg}"
-                                            BorderBrush="{StaticResource CardBorder}"
+                                    <Border Background="{DynamicResource CardBg}"
+                                            BorderBrush="{DynamicResource CardBorder}"
                                             BorderThickness="0.5" CornerRadius="6" Margin="0,0,0,6">
                                         <StackPanel>
                                             <!-- Session header -->
@@ -182,7 +182,7 @@
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <!-- Expand arrow -->
-                                                        <TextBlock FontSize="9" Foreground="{StaticResource TextDim}"
+                                                        <TextBlock FontSize="9" Foreground="{DynamicResource TextDim}"
                                                                    Margin="0,0,6,0" VerticalAlignment="Center"
                                                                    RenderTransformOrigin="0.5,0.5">
                                                             <TextBlock.Style>
@@ -200,16 +200,16 @@
                                                         <Border CornerRadius="3" Padding="5,1" Margin="0,0,6,0">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="{StaticResource StatusIdleBg}"/>
+                                                                    <Setter Property="Background" Value="{DynamicResource StatusIdleBg}"/>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                            <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusRunningBg}"/>
                                                                         </DataTrigger>
                                                                         <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                            <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}"/>
                                                                         </DataTrigger>
                                                                         <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                            <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusFailedBg}"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -217,16 +217,16 @@
                                                             <TextBlock Text="{Binding StatusBadge}" FontSize="10" FontWeight="Medium">
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
-                                                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                                                        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                                <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusRunningFg}"/>
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
@@ -235,32 +235,32 @@
                                                         </Border>
                                                         <!-- Pipeline name -->
                                                         <TextBlock Text="{Binding WatchItemTag}" FontSize="14" FontWeight="Medium"
-                                                                   Foreground="{StaticResource TextPrimary}"
+                                                                   Foreground="{DynamicResource TextPrimary}"
                                                                    VerticalAlignment="Center"/>
                                                         <!-- Build number -->
                                                         <TextBlock Text="{Binding BuildNumber}" FontSize="11"
-                                                                   FontFamily="Consolas" Foreground="{StaticResource TextDim}"
+                                                                   FontFamily="Consolas" Foreground="{DynamicResource TextDim}"
                                                                    Margin="8,0,0,0" VerticalAlignment="Center"
                                                                    Visibility="{Binding BuildNumber, Converter={StaticResource NullToCollapsed}}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                                         <!-- User badge -->
-                                                        <Border Background="{StaticResource StatusIdleBg}" CornerRadius="3"
+                                                        <Border Background="{DynamicResource StatusIdleBg}" CornerRadius="3"
                                                                 Padding="4,1" Margin="4,0">
                                                             <TextBlock Text="{Binding UserId}" FontSize="9"
                                                                        FontFamily="Consolas"
-                                                                       Foreground="{StaticResource TextSecondary}"/>
+                                                                       Foreground="{DynamicResource TextSecondary}"/>
                                                         </Border>
-                                                        <TextBlock Foreground="{StaticResource TextSecondary}" FontSize="11"
+                                                        <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="11"
                                                                    Margin="8,0" VerticalAlignment="Center">
                                                             <Run Text="{Binding Agents.Count, Mode=OneWay}"/>
                                                             <Run Text="agents"/>
                                                         </TextBlock>
                                                         <TextBlock Text="{Binding Elapsed}" FontFamily="Consolas" FontSize="11"
-                                                                   Foreground="{StaticResource TextSecondary}"
+                                                                   Foreground="{DynamicResource TextSecondary}"
                                                                    VerticalAlignment="Center" Margin="8,0"/>
                                                         <TextBlock FontSize="11" FontWeight="Medium"
-                                                                   Foreground="{StaticResource TextPrimary}"
+                                                                   Foreground="{DynamicResource TextPrimary}"
                                                                    VerticalAlignment="Center" Margin="8,0">
                                                             <Run Text="{Binding ProgressPercent, Mode=OneWay}"/><Run Text="%"/>
                                                         </TextBlock>
@@ -269,7 +269,7 @@
                                                                     RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                 CommandParameter="{Binding SessionId}"
                                                                 FontSize="10" Padding="6,2" Margin="8,0,0,0"
-                                                                Foreground="{StaticResource StatusFailedFg}"
+                                                                Foreground="{DynamicResource StatusFailedFg}"
                                                                 Visibility="{Binding Status, Converter={StaticResource RunningToVisible}}"/>
                                                     </StackPanel>
                                                 </Grid>
@@ -280,7 +280,7 @@
                                                           Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type exec:AgentRowVM}">
-                                                        <Border BorderBrush="{StaticResource RowBorder}" BorderThickness="0,1,0,0">
+                                                        <Border BorderBrush="{DynamicResource RowBorder}" BorderThickness="0,1,0,0">
                                                             <Grid>
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="120"/>
@@ -288,28 +288,28 @@
                                                                 </Grid.ColumnDefinitions>
                                                                 <!-- Agent name column -->
                                                                 <Border Grid.Column="0"
-                                                                        Background="{StaticResource AgentColumnBg}"
-                                                                        BorderBrush="{StaticResource RowBorder}"
+                                                                        Background="{DynamicResource AgentColumnBg}"
+                                                                        BorderBrush="{DynamicResource RowBorder}"
                                                                         BorderThickness="0,0,0.5,0"
                                                                         Padding="8,6" Cursor="Hand"
                                                                         MouseLeftButtonUp="AgentName_Click">
                                                                     <StackPanel>
                                                                         <TextBlock Text="{Binding AgentName}"
                                                                                    FontFamily="Consolas" FontSize="11" FontWeight="Medium"
-                                                                                   Foreground="{StaticResource TextPrimary}"/>
+                                                                                   Foreground="{DynamicResource TextPrimary}"/>
                                                                         <TextBlock Text="{Binding StatusText}" FontSize="9" Margin="0,2,0,0">
                                                                             <TextBlock.Style>
                                                                                 <Style TargetType="TextBlock">
-                                                                                    <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                                                                                     <Style.Triggers>
                                                                                         <DataTrigger Binding="{Binding Status}" Value="Executing">
-                                                                                            <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                                                                            <Setter Property="Foreground" Value="{DynamicResource StatusRunningFg}"/>
                                                                                         </DataTrigger>
                                                                                         <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                            <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                            <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                                                                         </DataTrigger>
                                                                                         <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                            <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                                                            <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                                                                         </DataTrigger>
                                                                                     </Style.Triggers>
                                                                                 </Style>
@@ -317,7 +317,7 @@
                                                                         </TextBlock>
                                                                         <!-- Progress bar -->
                                                                         <Border Height="3" CornerRadius="1.5"
-                                                                                Background="{StaticResource StatusIdleBg}"
+                                                                                Background="{DynamicResource StatusIdleBg}"
                                                                                 Margin="0,3,0,0">
                                                                             <Border CornerRadius="1.5" HorizontalAlignment="Left"
                                                                                     Width="{Binding ProgressPercent,
@@ -325,13 +325,13 @@
                                                                                         ConverterParameter=104}">
                                                                                 <Border.Style>
                                                                                     <Style TargetType="Border">
-                                                                                        <Setter Property="Background" Value="{StaticResource StatusRunningFg}"/>
+                                                                                        <Setter Property="Background" Value="{DynamicResource StatusRunningFg}"/>
                                                                                         <Style.Triggers>
                                                                                             <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                                <Setter Property="Background" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                <Setter Property="Background" Value="{DynamicResource StatusSuccessFg}"/>
                                                                                             </DataTrigger>
                                                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                                <Setter Property="Background" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                <Setter Property="Background" Value="{DynamicResource StatusFailedFg}"/>
                                                                                             </DataTrigger>
                                                                                         </Style.Triggers>
                                                                                     </Style>
@@ -354,20 +354,20 @@
                                                                                     <Border ToolTip="{Binding Tooltip}">
                                                                                         <Border.Style>
                                                                                             <Style TargetType="Border" BasedOn="{StaticResource ActionPillBase}">
-                                                                                                <Setter Property="Background" Value="{StaticResource StatusIdleBg}"/>
-                                                                                                <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+                                                                                                <Setter Property="Background" Value="{DynamicResource StatusIdleBg}"/>
+                                                                                                <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}"/>
                                                                                                 <Style.Triggers>
                                                                                                     <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                                                        <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
-                                                                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                                                                                                        <Setter Property="Background" Value="{DynamicResource StatusRunningBg}"/>
+                                                                                                        <Setter Property="BorderBrush" Value="{DynamicResource StatusRunningFg}"/>
                                                                                                     </DataTrigger>
                                                                                                     <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                                        <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
-                                                                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                        <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}"/>
+                                                                                                        <Setter Property="BorderBrush" Value="{DynamicResource StatusSuccessFg}"/>
                                                                                                     </DataTrigger>
                                                                                                     <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                                        <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
-                                                                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                        <Setter Property="Background" Value="{DynamicResource StatusFailedBg}"/>
+                                                                                                        <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
                                                                                                     </DataTrigger>
                                                                                                 </Style.Triggers>
                                                                                             </Style>
@@ -377,16 +377,16 @@
                                                                                                        VerticalAlignment="Center">
                                                                                                 <TextBlock.Style>
                                                                                                     <Style TargetType="TextBlock">
-                                                                                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                                                                                        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                                                                                                         <Style.Triggers>
                                                                                                             <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusRunningFg}"/>
                                                                                                             </DataTrigger>
                                                                                                             <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                                                                                             </DataTrigger>
                                                                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                                                                                             </DataTrigger>
                                                                                                         </Style.Triggers>
                                                                                                     </Style>
@@ -397,16 +397,16 @@
                                                                                                        TextTrimming="CharacterEllipsis" MaxWidth="180">
                                                                                                 <TextBlock.Style>
                                                                                                     <Style TargetType="TextBlock">
-                                                                                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                                                                                        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                                                                                                         <Style.Triggers>
                                                                                                             <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusRunningFg}"/>
                                                                                                             </DataTrigger>
                                                                                                             <DataTrigger Binding="{Binding Status}" Value="Success">
-                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                                                                                             </DataTrigger>
                                                                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                                                                <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                                                                                             </DataTrigger>
                                                                                                         </Style.Triggers>
                                                                                                     </Style>
@@ -416,7 +416,7 @@
                                                                                     </Border>
                                                                                     <!-- Arrow separator between chips -->
                                                                                     <TextBlock Text="&#x2192;" FontSize="9" Margin="4,0"
-                                                                                               Foreground="{StaticResource TextDim}"
+                                                                                               Foreground="{DynamicResource TextDim}"
                                                                                                VerticalAlignment="Center"/>
                                                                                 </StackPanel>
                                                                             </DataTemplate>
@@ -447,7 +447,7 @@
 
                     <!-- Time axis header -->
                     <Canvas Grid.Row="0" x:Name="TimeAxis" Height="24" Margin="130,0,8,0"
-                            Background="{StaticResource CardBg}" ClipToBounds="True"/>
+                            Background="{DynamicResource CardBg}" ClipToBounds="True"/>
 
                     <!-- Gantt body -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
@@ -461,18 +461,18 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <!-- Agent label -->
-                                        <Border Grid.Column="0" Background="{StaticResource AgentColumnBg}"
-                                                BorderBrush="{StaticResource RowBorder}" BorderThickness="0,0,0.5,0"
+                                        <Border Grid.Column="0" Background="{DynamicResource AgentColumnBg}"
+                                                BorderBrush="{DynamicResource RowBorder}" BorderThickness="0,0,0.5,0"
                                                 Padding="8,0">
                                             <TextBlock Text="{Binding AgentName}" FontFamily="Consolas" FontSize="11"
-                                                       FontWeight="Medium" Foreground="{StaticResource TextPrimary}"
+                                                       FontWeight="Medium" Foreground="{DynamicResource TextPrimary}"
                                                        VerticalAlignment="Center"/>
                                         </Border>
                                         <!-- Action bars: rendered by the custom GanttRow control
                                              (single OnRender pass instead of a per-bar ItemsControl) -->
                                         <controls:GanttRow Grid.Column="1"
                                                            Actions="{Binding Bars}"
-                                                           Background="{StaticResource BgCard}"/>
+                                                           Background="{StaticResource DashBgCard}"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -491,28 +491,28 @@
 
                     <!-- Log filter toolbar -->
                     <Border Grid.Row="0" Padding="8,6"
-                            BorderBrush="{StaticResource RowBorder}" BorderThickness="0,0,0,0.5">
+                            BorderBrush="{DynamicResource RowBorder}" BorderThickness="0,0,0,0.5">
                         <WrapPanel>
                             <!-- Session filter -->
                             <TextBlock Text="Session:" FontSize="11"
-                                       Foreground="{StaticResource TextSecondary}"
+                                       Foreground="{DynamicResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <ComboBox x:Name="SessionFilter" MinWidth="140" FontSize="11"
-                                      Background="{StaticResource CardBg}"
-                                      Foreground="{StaticResource TextPrimary}"
-                                      BorderBrush="{StaticResource CardBorder}"
+                                      Background="{DynamicResource CardBg}"
+                                      Foreground="{DynamicResource TextPrimary}"
+                                      BorderBrush="{DynamicResource CardBorder}"
                                       SelectionChanged="SessionFilter_Changed">
                                 <ComboBoxItem Content="All Sessions" IsSelected="True"/>
                             </ComboBox>
 
                             <!-- Severity filter -->
                             <TextBlock Text="Level:" FontSize="11"
-                                       Foreground="{StaticResource TextSecondary}"
+                                       Foreground="{DynamicResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="12,0,4,0"/>
                             <ComboBox x:Name="SeverityFilter" MinWidth="90" FontSize="11"
-                                      Background="{StaticResource CardBg}"
-                                      Foreground="{StaticResource TextPrimary}"
-                                      BorderBrush="{StaticResource CardBorder}"
+                                      Background="{DynamicResource CardBg}"
+                                      Foreground="{DynamicResource TextPrimary}"
+                                      BorderBrush="{DynamicResource CardBorder}"
                                       SelectionChanged="SeverityFilter_Changed">
                                 <ComboBoxItem Content="All" IsSelected="True"/>
                                 <ComboBoxItem Content="Error"/>
@@ -523,7 +523,7 @@
 
                             <!-- Agent toggle buttons -->
                             <TextBlock Text="Agents:" FontSize="11"
-                                       Foreground="{StaticResource TextSecondary}"
+                                       Foreground="{DynamicResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="12,0,4,0"/>
                             <ItemsControl x:Name="AgentTogglePanel">
                                 <ItemsControl.ItemsPanel>
@@ -535,13 +535,13 @@
 
                             <!-- Search box -->
                             <TextBox x:Name="LogSearchBox" MinWidth="150" FontSize="11" Margin="12,0,0,0"
-                                     Background="{StaticResource CardBg}"
-                                     Foreground="{StaticResource TextPrimary}"
-                                     BorderBrush="{StaticResource CardBorder}" Padding="6,3"
+                                     Background="{DynamicResource CardBg}"
+                                     Foreground="{DynamicResource TextPrimary}"
+                                     BorderBrush="{DynamicResource CardBorder}" Padding="6,3"
                                      TextChanged="LogSearch_TextChanged"/>
 
                             <!-- Entry count + clear -->
-                            <TextBlock FontSize="10" Foreground="{StaticResource TextDim}"
+                            <TextBlock FontSize="10" Foreground="{DynamicResource TextDim}"
                                        VerticalAlignment="Center" Margin="8,0">
                                 <Run Text="{Binding LogEntries.Count, Mode=OneWay}"/>
                                 <Run Text="entries"/>
@@ -573,34 +573,34 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{Binding Timestamp}"
                                                FontFamily="Consolas" FontSize="10"
-                                               Foreground="{StaticResource TextDim}"/>
+                                               Foreground="{DynamicResource TextDim}"/>
                                     <Border Grid.Column="1" CornerRadius="2" Padding="3,0" Margin="2,1"
-                                            Background="{StaticResource StatusIdleBg}"
+                                            Background="{DynamicResource StatusIdleBg}"
                                             HorizontalAlignment="Left" Cursor="Hand"
                                             MouseLeftButtonUp="LogSessionBadge_Click">
                                         <TextBlock Text="{Binding SessionName}"
                                                    FontFamily="Consolas" FontSize="9" FontWeight="Medium"
-                                                   Foreground="{StaticResource TextSecondary}"/>
+                                                   Foreground="{DynamicResource TextSecondary}"/>
                                     </Border>
                                     <TextBlock Grid.Column="2" Text="{Binding AgentName}"
                                                FontFamily="Consolas" FontSize="10"
-                                               Foreground="{StaticResource MonoFont}"
+                                               Foreground="{DynamicResource TextSecondary}"
                                                Cursor="Hand" MouseLeftButtonUp="LogAgentName_Click"/>
                                     <TextBlock Grid.Column="3" Text="{Binding Message}"
                                                FontFamily="Consolas" FontSize="10"
                                                TextTrimming="CharacterEllipsis">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Severity}" Value="Error">
-                                                        <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                                                        <Setter Property="Foreground" Value="{StaticResource StatusWarningFg}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource StatusWarningFg}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Severity}" Value="Success">
-                                                        <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -617,7 +617,7 @@
         <!-- ?????????????????????????????????????????????????????????? -->
         <!-- Connection status footer (per spec)                       -->
         <!-- ?????????????????????????????????????????????????????????? -->
-        <Border Grid.Row="2" Background="{StaticResource BgCard}"
+        <Border Grid.Row="2" Background="{StaticResource DashBgCard}"
                 BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0"
                 Padding="12,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

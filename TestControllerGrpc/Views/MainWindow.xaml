@@ -407,6 +407,39 @@
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- HC status glyph overlay (visible only in High Contrast) -->
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                               Margin="0,0,-2,-2" FontSize="8" FontWeight="Bold"
+                               Foreground="{DynamicResource HcGlyphFg}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="R" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2713;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2717;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="!" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2014;" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
                 <!-- Node text with status-aware styling -->
                 <TextBlock Text="{Binding ResolvedDisplayText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
@@ -592,6 +625,39 @@
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- HC status glyph overlay (visible only in High Contrast) -->
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                               Margin="0,0,-2,-2" FontSize="8" FontWeight="Bold"
+                               Foreground="{DynamicResource HcGlyphFg}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="R" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2713;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2717;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="!" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2014;" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
                 <!-- Node text with status-aware styling -->
                 <TextBlock Text="{Binding ResolvedDisplayText}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">

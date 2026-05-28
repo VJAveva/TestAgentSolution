@@ -175,11 +175,11 @@
                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Good:" FontSize="10" Foreground="#10B981" VerticalAlignment="Center" Margin="2,0,3,0" />
+                            <TextBlock Text="Good:" FontSize="10" Foreground="{DynamicResource AccGreen}" VerticalAlignment="Center" Margin="2,0,3,0" />
                             <TextBox Text="{Binding GoodThreshold, UpdateSourceTrigger=PropertyChanged}"
                                      Style="{StaticResource Fld}" Width="42" Margin="0" FontSize="11" VerticalAlignment="Center" />
                             <TextBlock Text="%" FontSize="10" Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="1,0,8,0" />
-                            <TextBlock Text="Warn:" FontSize="10" Foreground="#F59E0B" VerticalAlignment="Center" Margin="0,0,3,0" />
+                            <TextBlock Text="Warn:" FontSize="10" Foreground="{DynamicResource AccYellow}" VerticalAlignment="Center" Margin="0,0,3,0" />
                             <TextBox Text="{Binding WarningThreshold, UpdateSourceTrigger=PropertyChanged}"
                                      Style="{StaticResource Fld}" Width="42" Margin="0" FontSize="11" VerticalAlignment="Center" />
                             <TextBlock Text="%" FontSize="10" Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="1,0,4,0" />
@@ -268,7 +268,7 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Border CornerRadius="4" Padding="10,4" Margin="2"
                                     Background="{Binding PassRatePercent, Converter={StaticResource PassRateConv}}">
-                                <TextBlock FontSize="13" FontWeight="Bold" Foreground="#FFFFFF">
+                                <TextBlock FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TreeBadgeFg}">
                                     <Run Text="{Binding PassRatePercent, StringFormat='{}{0:F1}%', Mode=OneWay}" />
                                     <Run Text=" " />
                                     <Run Text="{Binding HealthLabel, Mode=OneWay}" />
@@ -277,11 +277,11 @@
                             <Border Width="1" Background="{DynamicResource Bdr}" Margin="6,4" />
                             <TextBlock FontSize="11" Foreground="{DynamicResource TextP}" VerticalAlignment="Center" Margin="4,0">
                                 <Run Text="Total: " Foreground="{DynamicResource TextS}" />
-                                <Run Text="{Binding StatTotal, Mode=OneWay}" FontWeight="Bold" Foreground="#60A5FA" />
+                                <Run Text="{Binding StatTotal, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource Accent}" />
                                 <Run Text="  Pass: " Foreground="{DynamicResource TextS}" />
-                                <Run Text="{Binding StatPassed, Mode=OneWay}" FontWeight="Bold" Foreground="#10B981" />
+                                <Run Text="{Binding StatPassed, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource AccGreen}" />
                                 <Run Text="  Fail: " Foreground="{DynamicResource TextS}" />
-                                <Run Text="{Binding StatFailed, Mode=OneWay}" FontWeight="Bold" Foreground="#EF4444" />
+                                <Run Text="{Binding StatFailed, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
                             </TextBlock>
                         </StackPanel>
                         <TextBlock Text="Statistics" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
@@ -298,7 +298,7 @@
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding AlertStatusText}" FontSize="11"
-                           Foreground="#F59E0B" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
+                           Foreground="{DynamicResource AccYellow}" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding StatusMessage}" FontSize="11" FontFamily="Consolas"
                            Foreground="{DynamicResource TextS}" TextTrimming="CharacterEllipsis" />
             </DockPanel>
@@ -309,7 +309,7 @@
         <!-- ??????????????????????????????????????????????????????????? -->
         <Grid>
             <!-- Loading overlay -->
-            <Border Background="#CC0F1629" Panel.ZIndex="10"
+            <Border Background="{DynamicResource OverlayBg}" Panel.ZIndex="10"
                     Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="28"
@@ -413,7 +413,7 @@
                                     <ItemsControl ItemsSource="{Binding UseCaseTrends}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="#08FFFFFF" CornerRadius="3" Padding="8,4" Margin="0,1">
+                                                <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="3" Padding="8,4" Margin="0,1">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="30" />
@@ -523,13 +523,13 @@
                             </TabItem.Header>
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,8,8,4">
-                                    <TextBlock FontSize="11" FontWeight="Bold" Foreground="#EF4444"
+                                    <TextBlock FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccRed}"
                                                VerticalAlignment="Center" Margin="0,0,12,0">
                                         <Run Text="{Binding FailureAlerts.Count, Mode=OneWay}" />
                                         <Run Text=" tests failing consecutively" />
                                     </TextBlock>
                                     <Button Content="Send QA Alert" Style="{StaticResource SmBtn}" Command="{Binding SendQaAlertCommand}"
-                                            Background="#EF4444" Foreground="#FFFFFF" FontSize="10" Padding="8,3" Margin="0,0,4,0" />
+                                            Background="{DynamicResource AccRed}" Foreground="{DynamicResource TreeBadgeFg}" FontSize="10" Padding="8,3" Margin="0,0,4,0" />
                                     <Button Content="Copy Alerts" Style="{StaticResource SmBtn}" Command="{Binding CopyAlertListCommand}"
                                             Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}" FontSize="10" Padding="8,3" />
                                 </StackPanel>
@@ -537,19 +537,19 @@
                                             <ItemsControl ItemsSource="{Binding FailureAlerts}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="#10EF4444" CornerRadius="3" Padding="8,3" Margin="0,1">
+                                                <Border Background="{DynamicResource AlertErrorBg}" CornerRadius="3" Padding="8,3" Margin="0,1">
                                                     <DockPanel>
                                                         <TextBlock DockPanel.Dock="Left" FontSize="10" FontWeight="Bold" Width="65" VerticalAlignment="Center"
                                                                    Margin="0,0,8,0">
                                                             <TextBlock.Style>
                                                                 <Style TargetType="TextBlock">
-                                                                    <Setter Property="Foreground" Value="#F59E0B" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding Priority}" Value="CRITICAL">
-                                                                            <Setter Property="Foreground" Value="#EF4444" />
+                                                                            <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
                                                                         </DataTrigger>
                                                                         <DataTrigger Binding="{Binding Priority}" Value="HIGH">
-                                                                            <Setter Property="Foreground" Value="#EA580C" />
+                                                                            <Setter Property="Foreground" Value="{DynamicResource AccPeach}" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -566,10 +566,10 @@
                                                                 Command="{Binding DataContext.AnalyzeFailurePatternCommand,
                                                                                   RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                 CommandParameter="{Binding TestName}"
-                                                                Background="#1E293B" Foreground="#60A5FA" BorderBrush="#334155"
+                                                                Background="{DynamicResource BgCard}" Foreground="{DynamicResource Accent}" BorderBrush="{DynamicResource Bdr}"
                                                                 FontSize="10" FontWeight="SemiBold" Padding="6,2" Margin="6,0,0,0"
                                                                 Cursor="Hand" />
-                                                        <TextBlock FontSize="11" Foreground="#EF4444" TextTrimming="CharacterEllipsis"
+                                                        <TextBlock FontSize="11" Foreground="{DynamicResource AccRed}" TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center" ToolTip="{Binding LastError}">
                                                             <Run Text="{Binding TestName, Mode=OneWay}" FontWeight="SemiBold" />
                                                             <Run Text=" &#x2014; " Foreground="{DynamicResource TextS}" />
@@ -605,8 +605,8 @@
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   VirtualizingStackPanel.IsVirtualizing="True">
                             <ListView.Resources>
-                                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#2289B4FA" />
-                                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#1189B4FA" />
+                                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{Binding Color, Source={StaticResource BgRowSelectedBrush}}" />
+                                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{Binding Color, Source={StaticResource BgRowHoverBrush}}" />
                             </ListView.Resources>
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">
@@ -618,7 +618,7 @@
                                     <Setter Property="BorderThickness" Value="0,0,0,0.5" />
                                     <Style.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#08FFFFFF" />
+                                            <Setter Property="Background" Value="{DynamicResource BgRowHoverBrush}" />
                                         </Trigger>
                                     </Style.Triggers>
                                 </Style>
@@ -684,18 +684,18 @@
                                                                     <DataTrigger Binding="{Binding NodeLevel}" Value="AllBuilds">
                                                                         <Setter Property="FontWeight" Value="Bold" />
                                                                         <Setter Property="FontSize" Value="12.5" />
-                                                                        <Setter Property="Foreground" Value="#60A5FA" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding NodeLevel}" Value="Build">
                                                                         <Setter Property="FontWeight" Value="Bold" />
                                                                         <Setter Property="FontSize" Value="12" />
-                                                                        <Setter Property="Foreground" Value="#60A5FA" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding Outcome}" Value="Failed">
-                                                                        <Setter Property="Foreground" Value="#EF4444" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding Outcome}" Value="Passed">
-                                                                        <Setter Property="Foreground" Value="#10B981" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
@@ -731,7 +731,7 @@
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate DataType="{x:Type vm:ResultsFlatNode}">
                                                 <TextBlock Text="{Binding Passed}" FontSize="11" HorizontalAlignment="Center"
-                                                           Foreground="#10B981">
+                                                           Foreground="{DynamicResource AccGreen}">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
                                                             <Style.Triggers>
@@ -759,7 +759,7 @@
                                                                     <Setter Property="Visibility" Value="Hidden" />
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding Failed, Converter={x:Static vm:GreaterThanZeroConverter.Instance}}" Value="True">
-                                                                    <Setter Property="Foreground" Value="#EF4444" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
                                                                     <Setter Property="FontWeight" Value="Bold" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -908,18 +908,18 @@
                                         <!-- Error Message -->
                                         <TextBlock Text="ERROR MESSAGE" FontSize="10" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
-                                        <Border Background="#10FFFFFF" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
                                             <TextBox Text="{Binding DetailErrorMessage, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"
-                                                     Foreground="#EF4444" FontFamily="Consolas" FontSize="11"
+                                                     Foreground="{DynamicResource AccRed}" FontFamily="Consolas" FontSize="11"
                                                      MaxHeight="150" VerticalScrollBarVisibility="Auto" />
                                         </Border>
 
                                         <!-- Stack Trace -->
                                         <TextBlock Text="STACK TRACE" FontSize="10" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
-                                        <Border Background="#10FFFFFF" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
                                             <TextBox Text="{Binding DetailStackTrace, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"
@@ -930,7 +930,7 @@
                                         <!-- Stdout -->
                                         <TextBlock Text="STDOUT" FontSize="10" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
-                                        <Border Background="#10FFFFFF" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
                                             <TextBox Text="{Binding DetailStdOut, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"
@@ -959,7 +959,7 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Padding="6,3" Margin="0,1" CornerRadius="3"
-                                                            Background="#08FFFFFF">
+                                                            Background="{DynamicResource BgRowHoverBrush}">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="18" />

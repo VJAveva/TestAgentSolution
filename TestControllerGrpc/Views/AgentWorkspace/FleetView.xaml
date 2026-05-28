@@ -128,24 +128,24 @@
                                                     MouseLeftButtonUp="Card_Click">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{StaticResource StatusSuccessBg}"/>
-                                                        <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
+                                                        <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource StatusSuccessFg}"/>
                                                         <Setter Property="BorderThickness" Value="1"/>
                                                         <Setter Property="Opacity" Value="0.65"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Status}" Value="Busy">
-                                                                <Setter Property="Background" Value="{StaticResource StatusRunningBg}"/>
-                                                                <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                                                                <Setter Property="Background" Value="{DynamicResource StatusRunningBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusRunningFg}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                                                <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
-                                                                <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                                <Setter Property="Background" Value="{DynamicResource StatusFailedBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                                                <Setter Property="Background" Value="{StaticResource StatusFailedBg}"/>
-                                                                <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                                                                <Setter Property="Background" Value="{DynamicResource StatusFailedBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
                                                                 <Setter Property="Opacity" Value="0.7"/>
                                                             </DataTrigger>
                                                             <Trigger Property="IsMouseOver" Value="True">
@@ -181,6 +181,27 @@
                                                                 </Style>
                                                             </Ellipse.Style>
                                                         </Ellipse>
+                                                        <!-- HC glyph fallback -->
+                                                        <TextBlock FontSize="8" FontWeight="Bold" Margin="0,0,3,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource HcGlyphFg}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="&#x2713;"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                                            <Setter Property="Text" Value="R"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                            <Setter Property="Text" Value="&#x2717;"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                                            <Setter Property="Text" Value="&#x2717;"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                         <TextBlock Text="{Binding AgentName}" FontSize="11"
                                                                    FontWeight="SemiBold" FontFamily="Consolas"
                                                                    Foreground="{DynamicResource TextP}"
