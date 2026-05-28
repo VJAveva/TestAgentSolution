@@ -20,6 +20,13 @@ public sealed class ControllerHub : Hub
     private readonly AgentLockManager _lockManager;
     private readonly ExecutionSessionManager _sessionManager;
 
+    // Scale fix: Cache fleet snapshot for 2s to prevent O(agents×clients) rebuild.
+    // Multiple browser tabs reconnecting simultaneously all call RequestFleetSnapshot,
+    // generating N×200 LINQ traversals. Cache ensures only 1 build per 2 seconds.
+    private static readonly object _snapshotLock = new();
+    private static IReadOnlyList<AgentFleetGroupDto>? _cachedSnapshot;
+    private static DateTime _snapshotExpiry = DateTime.MinValue;
+
     public ControllerHub(
         ILogger<ControllerHub> logger,
         IAgentGrpcDispatcher dispatcher,
@@ -83,10 +90,19 @@ public sealed class ControllerHub : Hub
     /// <summary>
     /// Client calls this on connect or reconnect to get the current
     /// fleet snapshot before applying incremental updates.
+    /// Uses a 2-second cache to avoid redundant rebuilds when many clients connect.
     /// </summary>
     public IReadOnlyList<AgentFleetGroupDto> RequestFleetSnapshot()
     {
-        return BuildFleetSnapshot();
+        lock (_snapshotLock)
+        {
+            if (_cachedSnapshot != null && DateTime.UtcNow < _snapshotExpiry)
+                return _cachedSnapshot;
+
+            _cachedSnapshot = BuildFleetSnapshot();
+            _snapshotExpiry = DateTime.UtcNow.AddSeconds(2);
+            return _cachedSnapshot;
+        }
     }
 
     private IReadOnlyList<AgentFleetGroupDto> BuildFleetSnapshot()

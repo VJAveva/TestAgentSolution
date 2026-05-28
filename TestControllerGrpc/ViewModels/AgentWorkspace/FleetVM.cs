@@ -36,6 +36,9 @@ public partial class FleetVM : ObservableObject, IDisposable
     private readonly DispatcherTimer _healthTimer;
     private bool _isProbing;
 
+    /// <summary>Debounce timer: coalesces rapid event bursts into a single Refresh.</summary>
+    private readonly DispatcherTimer _refreshDebounce;
+
     public FleetVM(
         IAgentGrpcDispatcher dispatcher,
         AgentLockManager lockManager,
@@ -48,13 +51,26 @@ public partial class FleetVM : ObservableObject, IDisposable
         _sessionManager = sessionManager;
         _uiDispatcher = uiDispatcher;
 
-        events.Subscribe<AgentLocksChangedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
-        events.Subscribe<ExecutionStartedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
-        events.Subscribe<ExecutionCompletedEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
-        events.Subscribe<AgentHeartbeatEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
-        events.Subscribe<AgentRegisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
-        events.Subscribe<AgentUnregisteredEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
-        events.Subscribe<NodeProgressEvent>(_ => uiDispatcher.InvokeAsync(Refresh));
+        // Scale fix: Debounce all event-driven refreshes to prevent UI starvation.
+        // At 200 agents with heartbeats every 5s, up to 40 events/second can arrive.
+        // Without debounce, Refresh() is called for each one (full Cards.Clear + rebuild).
+        _refreshDebounce = new DispatcherTimer(DispatcherPriority.Background, uiDispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        _refreshDebounce.Tick += (_, _) =>
+        {
+            _refreshDebounce.Stop();
+            Refresh();
+        };
+
+        events.Subscribe<AgentLocksChangedEvent>(_ => ScheduleRefresh());
+        events.Subscribe<ExecutionStartedEvent>(_ => ScheduleRefresh());
+        events.Subscribe<ExecutionCompletedEvent>(_ => ScheduleRefresh());
+        events.Subscribe<AgentHeartbeatEvent>(_ => ScheduleRefresh());
+        events.Subscribe<AgentRegisteredEvent>(_ => ScheduleRefresh());
+        events.Subscribe<AgentUnregisteredEvent>(_ => ScheduleRefresh());
+        events.Subscribe<NodeProgressEvent>(_ => ScheduleRefresh());
 
         // 5-second periodic health probe to detect power cycle recovery
         _healthTimer = new DispatcherTimer(
@@ -72,6 +88,21 @@ public partial class FleetVM : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         _healthTimer.Stop();
+        _refreshDebounce.Stop();
+    }
+
+    /// <summary>
+    /// Coalesces multiple event-driven refresh requests within 250ms into one Refresh() call.
+    /// Safe to call from any thread — marshals to UI dispatcher.
+    /// </summary>
+    private void ScheduleRefresh()
+    {
+        _uiDispatcher.InvokeAsync(() =>
+        {
+            // Restart the timer each time — only the LAST event in a burst triggers Refresh.
+            _refreshDebounce.Stop();
+            _refreshDebounce.Start();
+        });
     }
 
     /// <summary>

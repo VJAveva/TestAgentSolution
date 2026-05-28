@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 
@@ -227,14 +228,24 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     // ?? Core recursive executor (non-tracked) ?????????????????????????????
 
+    /// <summary>Max concurrent agent operations in parallel mode to prevent ThreadPool starvation.</summary>
+    private const int MaxParallelDegree = 50;
+
     protected async Task<bool> ExecuteChildrenAsync(
         List<IActionNode> children, ExecutionMode mode, bool parentFailAndContinue,
         PipelineExecutionContext ctx, CancellationToken ct)
     {
         if (mode == ExecutionMode.Parallel)
         {
-            var tasks = children.Select(child =>
-                ExecuteNodeAsync(child, ctx, ct)).ToList();
+            // Scale fix: Bound parallelism to prevent ThreadPool starvation at 200 agents.
+            // Without this, 200 parallel Task.WhenAll calls exhaust all available threads.
+            using var gate = new SemaphoreSlim(MaxParallelDegree, MaxParallelDegree);
+            var tasks = children.Select(async child =>
+            {
+                await gate.WaitAsync(ct);
+                try { return await ExecuteNodeAsync(child, ctx, ct); }
+                finally { gate.Release(); }
+            }).ToList();
             var results = await Task.WhenAll(tasks);
             return results.All(r => r);
         }
@@ -305,8 +316,14 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (mode == ExecutionMode.Parallel)
         {
-            var tasks = children.Select(child =>
-                ExecuteNodeTrackedAsync(child, ctx, session, ct)).ToList();
+            // Scale fix: Bound parallelism to prevent ThreadPool starvation at 200 agents.
+            using var gate = new SemaphoreSlim(MaxParallelDegree, MaxParallelDegree);
+            var tasks = children.Select(async child =>
+            {
+                await gate.WaitAsync(ct);
+                try { return await ExecuteNodeTrackedAsync(child, ctx, session, ct); }
+                finally { gate.Release(); }
+            }).ToList();
             var results = await Task.WhenAll(tasks);
             return results.All(r => r);
         }

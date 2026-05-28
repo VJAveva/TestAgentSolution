@@ -250,6 +250,23 @@ export function useSignalR(): HubConnection | null {
       });
     });
 
+    // Batched output (scale fix: server batches lines every 500ms)
+    conn.on('AgentOutputBatch', (batch: Array<{
+      agentName?: string; line?: string; kind?: string; sessionId?: string;
+    }>) => {
+      const store = useExecutionStore.getState();
+      for (const data of batch) {
+        store.addLog({
+          message: data.line ?? '',
+          agent: data.agentName,
+          sessionId: data.sessionId,
+          timestamp: new Date().toISOString(),
+          kind: data.kind as 'stdout' | 'stderr',
+          severity: data.kind === 'stderr' ? 'error' : 'info',
+        });
+      }
+    });
+
     // Agent lifecycle
     conn.on('AgentRegistered', (data: { agentName?: string }) => {
       if (data.agentName) useAgentStore.getState().updateStatus(data.agentName, 'Connected');

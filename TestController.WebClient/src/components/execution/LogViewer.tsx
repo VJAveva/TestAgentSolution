@@ -88,10 +88,14 @@ export default function LogViewer() {
 
     connection.on('LogEntry', handleLog);
     connection.on('AgentOutput', handleEvent);
+    connection.on('AgentOutputBatch', (batch: any[]) => {
+      for (const data of batch) handleEvent(data);
+    });
 
     return () => {
       connection.off('LogEntry', handleLog);
       connection.off('AgentOutput', handleEvent);
+      connection.off('AgentOutputBatch');
     };
   }, [connection, paused]);
 

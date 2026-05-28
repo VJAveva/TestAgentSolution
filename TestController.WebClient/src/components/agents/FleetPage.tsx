@@ -1,7 +1,12 @@
+import { memo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Server, Lock, Unlock, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useFleetState } from '../../hooks/useFleetState';
 import { isAgentOnline } from '../../lib/agentStatus';
 import type { FleetAgent } from '../../types/agentWorkspace';
+
+const COLS = 3; // Cards per row (matches xl:grid-cols-3)
+const ROW_HEIGHT = 140; // Approximate card height in px
 
 interface FleetPageProps {
   onSelectAgent: (name: string) => void;
@@ -9,6 +14,15 @@ interface FleetPageProps {
 
 export default function FleetPage({ onSelectAgent }: FleetPageProps) {
   const { fleet, loading, error, refresh } = useFleetState();
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const rowCount = Math.ceil(fleet.length / COLS);
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 3,
+  });
 
   if (loading) {
     return <div className="flex items-center justify-center h-full text-text-muted text-sm">Loading fleet…</div>;
@@ -38,17 +52,39 @@ export default function FleetPage({ onSelectAgent }: FleetPageProps) {
       {fleet.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-text-muted text-xs">No agents registered.</div>
       ) : (
-        <div className="flex-1 overflow-auto p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {fleet.map(agent => (
-            <FleetCard key={agent.name} agent={agent} onClick={() => onSelectAgent(agent.name)} />
-          ))}
+        <div ref={parentRef} className="flex-1 overflow-auto p-4">
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map(virtualRow => {
+              const startIdx = virtualRow.index * COLS;
+              const rowAgents = fleet.slice(startIdx, startIdx + COLS);
+              return (
+                <div
+                  key={virtualRow.key}
+                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {rowAgents.map(agent => (
+                    <FleetCard key={agent.name} agent={agent} onSelect={onSelectAgent} />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void }) {
+// Scale fix: Memoize FleetCard to avoid re-rendering all 200 cards when one agent changes.
+// Without memo, React re-renders every card on each fleet state update.
+const FleetCard = memo(function FleetCard({ agent, onSelect }: { agent: FleetAgent; onSelect: (name: string) => void }) {
   const isOnline = isAgentOnline(agent.status);
   const isBusy = agent.isLocked;
   const isExecuting = isBusy || (agent.status?.toLowerCase().startsWith('executing') ?? false);
@@ -78,7 +114,7 @@ function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void 
   return (
     <div
       className={`rounded-lg p-3 cursor-pointer border transition-all hover:ring-1 hover:ring-accent/40 ${borderColor} ${bgTint}`}
-      onClick={onClick}
+      onClick={() => onSelect(agent.name)}
     >
       <div className="flex items-center gap-2 mb-2">
         <Server size={16} className="text-text-muted shrink-0" />
@@ -124,4 +160,4 @@ function FleetCard({ agent, onClick }: { agent: FleetAgent; onClick: () => void 
       </div>
     </div>
   );
-}
+});

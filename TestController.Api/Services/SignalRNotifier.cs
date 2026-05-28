@@ -50,6 +50,11 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private readonly Dictionary<string, object> _pendingHeartbeats = new();
     private Timer? _heartbeatTimer;
 
+    // Output batching: coalesces rapid output lines into batch pushes (500ms)
+    private readonly object _outputLock = new();
+    private readonly List<object> _pendingOutputLines = new();
+    private Timer? _outputTimer;
+
     public SignalRNotifier(
         IHubContext<ControllerHub> hub,
         IActionPipelineExecutor executor,
@@ -104,6 +109,9 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
 
         // Heartbeat flush timer (1 batch/second)
         _heartbeatTimer = new Timer(FlushHeartbeats, null, 1000, 1000);
+
+        // Output flush timer (batch every 500ms for near-realtime display)
+        _outputTimer = new Timer(FlushOutput, null, 500, 500);
 
         _logger.LogInformation(
             "SignalRNotifier started � subscribed to: LogEntry, NodeProgress, " +
@@ -216,7 +224,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     {
         var severity = string.Equals(e.Kind, "stderr", StringComparison.OrdinalIgnoreCase)
             ? "Error" : "Info";
-        SendSafe("AgentOutput", new
+        var payload = new
         {
             sessionId = e.SessionId,
             agentName = e.AgentName,
@@ -226,7 +234,28 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             severity,
             category  = "Output",
             message   = $"[{e.AgentName}:{e.Kind}] {SecurityRedactor.Redact(e.Line)}",
-        });
+        };
+
+        // Scale fix: Buffer output lines and flush every 500ms.
+        // At 200 agents producing output, this reduces hundreds of individual
+        // SignalR broadcasts per second down to 2 batch calls.
+        lock (_outputLock)
+        {
+            _pendingOutputLines.Add(payload);
+        }
+    }
+
+    private void FlushOutput(object? state)
+    {
+        List<object> batch;
+        lock (_outputLock)
+        {
+            if (_pendingOutputLines.Count == 0) return;
+            batch = new List<object>(_pendingOutputLines);
+            _pendingOutputLines.Clear();
+        }
+
+        SendSafe("AgentOutputBatch", batch);
     }
 
     private void OnOutputReceived(string agentName, string line, string kind)
@@ -470,6 +499,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     public void Dispose()
     {
         _heartbeatTimer?.Dispose();
+        _outputTimer?.Dispose();
         _executor.LogEntry -= OnLogEntry;
         _executor.NodeProgress -= OnNodeProgress;
         _dispatcher.OutputReceived -= OnOutputReceived;

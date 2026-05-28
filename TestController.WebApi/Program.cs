@@ -20,6 +20,11 @@ try
 {
 var builder = WebApplication.CreateBuilder(args);
 
+// Scale fix: Pre-warm ThreadPool for 200 concurrent agent operations.
+// Default min = CPU core count (8-16); under load, .NET adds threads at 500ms/thread.
+// At 200 agents with parallel health checks + gRPC streams, need immediate capacity.
+ThreadPool.SetMinThreads(workerThreads: 200, completionPortThreads: 200);
+
 // Allow long-running executions triggered via WebClient.
 // Without these, Kestrel defaults (130s keepalive, minimum data rates)
 // kill connections during long test runs that produce no output for minutes.
