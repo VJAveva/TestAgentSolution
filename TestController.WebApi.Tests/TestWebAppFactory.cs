@@ -43,7 +43,7 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
                   <Action Type="RunCommand" Command="echo" Parameters="hello" />
                 </Event>
               </WatchItem>
-              <WatchItem Tag="DisabledBuild" Path="C:\Trigger2" Filter="trigger2.txt">
+              <WatchItem Tag="DisabledBuild" Path="C:\Trigger2" Filter="trigger2.txt" IsEnabled="false">
                 <Event Type="Renamed" ExecutionType="Sequential" />
               </WatchItem>
             </WatchList>

@@ -488,4 +488,49 @@ public class WatchListXmlParserTests : IDisposable
         // Tag="" should not appear in the XML (AddIfNotEmpty skips empty strings)
         Assert.DoesNotContain("Tag=\"\"", xml);
     }
+
+    [Fact]
+    public void Load_Should_ParseIsEnabled_When_AttributePresent()
+    {
+        var xml = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <WatchList>
+              <WatchItem Tag="Enabled" Path="C:\A" Filter="*.txt">
+                <Event Type="Renamed" ExecutionType="Sequential" />
+              </WatchItem>
+              <WatchItem Tag="Disabled" Path="C:\B" Filter="*.txt" IsEnabled="false">
+                <Event Type="Renamed" ExecutionType="Sequential" />
+              </WatchItem>
+            </WatchList>
+            """;
+        var path = WriteTempXml("is_enabled.xml", xml);
+
+        var config = WatchListXmlParser.Load(path);
+
+        Assert.True(config.WatchItems[0].IsEnabled);
+        Assert.False(config.WatchItems[1].IsEnabled);
+    }
+
+    [Fact]
+    public void Save_Should_RoundTripIsEnabled_When_False()
+    {
+        var config = new WatchListConfig();
+        config.WatchItems.Add(new WatchItemConfig
+        {
+            Tag = "Active", Path = @"C:\A", Filter = "*.txt", IsEnabled = true,
+            Events = [new EventConfig { Type = "Renamed", ExecutionType = ExecutionMode.Sequential }]
+        });
+        config.WatchItems.Add(new WatchItemConfig
+        {
+            Tag = "Inactive", Path = @"C:\B", Filter = "*.txt", IsEnabled = false,
+            Events = [new EventConfig { Type = "Renamed", ExecutionType = ExecutionMode.Sequential }]
+        });
+
+        var path = Path.Combine(_tempDir, "is_enabled_rt.xml");
+        WatchListXmlParser.Save(config, path);
+
+        var reloaded = WatchListXmlParser.Load(path);
+        Assert.True(reloaded.WatchItems[0].IsEnabled);
+        Assert.False(reloaded.WatchItems[1].IsEnabled);
+    }
 }

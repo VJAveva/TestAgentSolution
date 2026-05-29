@@ -262,6 +262,37 @@
             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
         </Style>
 
+        <!-- Slim ribbon ScrollViewer: thin scrollbar, only visible on hover -->
+        <Style x:Key="RibbonScrollViewer" TargetType="ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ScrollContentPresenter Grid.Row="0" CanContentScroll="{TemplateBinding CanContentScroll}" />
+                            <ScrollBar x:Name="PART_HorizontalScrollBar" Grid.Row="1"
+                                       Orientation="Horizontal" Height="3" Opacity="0"
+                                       Maximum="{TemplateBinding ScrollableWidth}"
+                                       ViewportSize="{TemplateBinding ViewportWidth}"
+                                       Value="{TemplateBinding HorizontalOffset}"
+                                       Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PART_HorizontalScrollBar" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ── Ribbon button styles ── -->
         <Style x:Key="RibbonBtn" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource BtnBg}" />
@@ -795,13 +826,13 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" MaxWidth="280" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <!-- Health Metrics Strip (always visible, right column) -->
                 <views:HealthMetricsStrip Grid.Column="2" DataContext="{Binding HealthMetrics}"
-                                          Margin="0,2,6,2" />
+                                          Margin="0,2,6,2" MaxWidth="560" />
 
                 <!-- Status + Active Sessions (middle column) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
@@ -847,7 +878,10 @@
                         BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1"
                         ClipToBounds="True"
                         Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource BoolVis}}">
-                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                  CanContentScroll="True" Focusable="False"
+                                  Style="{StaticResource RibbonScrollViewer}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- File -->
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding LoadVocabularyCommand}"
                                 ToolTip="Open (Ctrl+O)" Height="28" MinWidth="28" Padding="4,2">
@@ -1009,7 +1043,8 @@
                             </StackPanel>
                         </Border>
 
-                    </WrapPanel>
+                    </StackPanel>
+                    </ScrollViewer>
                 </Border>
 
                 <TabControl Grid.Column="0" Background="Transparent" BorderThickness="0" Padding="0"
@@ -1049,7 +1084,10 @@
                     <!-- ─── HOME TAB ─── -->
                     <TabItem Header="HOME">
                         <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                          CanContentScroll="True" Focusable="False"
+                                          Style="{StaticResource RibbonScrollViewer}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <!-- File Operations -->
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
@@ -1282,13 +1320,15 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                            </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
 
                     <!-- ─── EXECUTION TAB ─── -->
                     <TabItem Header="EXECUTION">
                         <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <ScrollViewer Style="{StaticResource RibbonScrollViewer}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
@@ -1473,11 +1513,13 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
                     <!-- ─── TOOLS TAB ─── -->
                     <TabItem Header="TOOLS">
                         <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <ScrollViewer Style="{StaticResource RibbonScrollViewer}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
@@ -1511,6 +1553,7 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
                 </TabControl>

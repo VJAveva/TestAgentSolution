@@ -296,9 +296,18 @@ public sealed partial class MainViewModel
 
         WriteBackAll();
 
-        WatchListRoot?.SetStatusRecursive("Running");
-
         var enabledItems = _config.WatchItems.Where(wi => wi.IsEnabled).ToList();
+
+        // Only mark enabled WatchItem nodes as Running; disabled items stay Idle
+        if (WatchListRoot is not null)
+        {
+            WatchListRoot.ExecutionStatus = "Running";
+            foreach (var wi in enabledItems)
+            {
+                var node = WatchListRoot.Children.FirstOrDefault(c => ReferenceEquals(c.ModelObject, wi));
+                node?.SetStatusRecursive("Running");
+            }
+        }
         AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) � parallel");
 
         var tasks = enabledItems.Select(async wi =>
