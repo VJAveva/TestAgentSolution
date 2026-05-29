@@ -90,7 +90,7 @@ public sealed partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            eventNode.SetFailed("Cancelled by user");
+            eventNode.CancelWithDescendants();
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event cancelled: {ev.Type}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
@@ -224,7 +224,7 @@ public sealed partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            wiNode.SetFailed("Cancelled by user");
+            wiNode.CancelWithDescendants();
             wiNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] WatchItem cancelled: {wi.Tag}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, "Cancelled", 0, 0, 0));
@@ -468,7 +468,7 @@ public sealed partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            groupNode.SetFailed("Cancelled by user");
+            groupNode.CancelWithDescendants();
             groupNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] ActionGroup cancelled: {ag.Tag}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
@@ -574,7 +574,7 @@ public sealed partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            actionNode.SetFailed("Cancelled by user");
+            actionNode.CancelWithDescendants();
             actionNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Action cancelled: {action.Command}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));

@@ -20,8 +20,19 @@ public sealed partial class PipelineSession : ObservableObject
     [ObservableProperty] private int _passedActions;
     [ObservableProperty] private int _failedActions;
     [ObservableProperty] private double _progressPercent;
+    [ObservableProperty] private int _agentCount = 1;
+    [ObservableProperty] private string _elapsed = "0:00:00";
 
     public CancellationTokenSource Cts { get; } = new();
+
+    /// <summary>Formatted action progress string (e.g. "3/12 actions").</summary>
+    public string ActionProgress => $"{CompletedActions}/{TotalActions} actions";
+
+    partial void OnCompletedActionsChanged(int value)
+        => OnPropertyChanged(nameof(ActionProgress));
+
+    partial void OnTotalActionsChanged(int value)
+        => OnPropertyChanged(nameof(ActionProgress));
 
     /// <summary>The underlying ExecutionSession from the session manager.</summary>
     public ExecutionSession? ExecutionSession { get; set; }

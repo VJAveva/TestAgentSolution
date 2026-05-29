@@ -126,7 +126,7 @@ public sealed partial class MainViewModel
                 AddLog($"Refreshed: {VocabFilePath}", LogSeverity.Success);
             }
 
-            StatusMessage = $"Refreshed — {config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
+            StatusMessage = $"Refreshed — {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
         }
         catch (Exception ex)
         {

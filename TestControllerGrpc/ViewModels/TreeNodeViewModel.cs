@@ -160,6 +160,23 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         ExecutionStatus = "Failed";
     }
 
+    /// <summary>Mark this node as Cancelled and recursively cancel any descendants still showing Running.</summary>
+    public void CancelWithDescendants()
+    {
+        ExecutionStatus = "Cancelled";
+        CancelRunningDescendants();
+    }
+
+    private void CancelRunningDescendants()
+    {
+        foreach (var c in Children)
+        {
+            if (c.ExecutionStatus == "Running")
+                c.ExecutionStatus = "Cancelled";
+            c.CancelRunningDescendants();
+        }
+    }
+
     /// <summary>Recursively set status on this node and all descendants.</summary>
     public void SetStatusRecursive(string status)
     {

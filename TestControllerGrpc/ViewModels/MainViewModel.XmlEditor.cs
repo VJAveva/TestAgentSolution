@@ -89,7 +89,7 @@ public sealed partial class MainViewModel
 
                 parsed.FilePath = _config.FilePath;
                 ApplyConfig(parsed);
-                InlineXmlEditorStatus = $"Applied: {parsed.WatchItems.Count} WatchItems, {parsed.Templates.Count} Templates.";
+                InlineXmlEditorStatus = $"Applied: {parsed.WatchItems.Count} watch {(parsed.WatchItems.Count == 1 ? "item" : "items")}, {parsed.Templates.Count} {(parsed.Templates.Count == 1 ? "template" : "templates")}.";
                 AddLog($"WatchList updated via inline XML editor", LogSeverity.Success);
             }
         }
@@ -114,7 +114,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void ApplyXmlEditor()
     {
-        // Kept for backward compatibility — delegates to the window flow
+        // Kept for backward compatibility ï¿½ delegates to the window flow
         if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         OpenRawXmlEditorWindow();
     }
@@ -142,7 +142,7 @@ public sealed partial class MainViewModel
         var xml = WatchListXmlParser.SerializeWatchItem(oldWi);
 
         var editorVm = new WatchItemXmlEditorViewModel(xml);
-        editorVm.WindowTitle = $"WatchItem XML Editor — {oldWi.Tag}";
+        editorVm.WindowTitle = $"WatchItem XML Editor ï¿½ {oldWi.Tag}";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
 
@@ -207,7 +207,7 @@ public sealed partial class MainViewModel
         var xml = WatchListXmlParser.SerializeWatchList(_config);
 
         var editorVm = new WatchItemXmlEditorViewModel(xml);
-        editorVm.WindowTitle = "WatchList XML Editor — Full";
+        editorVm.WindowTitle = "WatchList XML Editor ï¿½ Full";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
         if (Application.Current.MainWindow is { } mainWindow)

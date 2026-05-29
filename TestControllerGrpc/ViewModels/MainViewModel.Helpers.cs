@@ -140,7 +140,7 @@ public sealed partial class MainViewModel
             try
             {
                 RebuildAllTrees();
-                StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates";
+                StatusMessage = $"{config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
             }
             catch (Exception ex)
             {
@@ -303,8 +303,8 @@ public sealed partial class MainViewModel
     {
         if (_sessionManager.HasAnyActiveExecution)
         {
-            // Differential reload — only update changed watchers, don't tear down running pipelines
-            AddLog("Hot-reload (differential — executions active)");
+            // Differential reload ï¿½ only update changed watchers, don't tear down running pipelines
+            AddLog("Hot-reload (differential ï¿½ executions active)");
             _watcherManager.ApplyDiff(config.WatchItems);
             _config = config;
             _executor.LoadTemplates(config.Templates);
@@ -313,7 +313,7 @@ public sealed partial class MainViewModel
                 try
                 {
                     RebuildAllTrees();
-                    StatusMessage = $"{config.WatchItems.Count} WatchItems, {config.Templates.Count} Templates (diff reload)";
+                    StatusMessage = $"{config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")} (diff reload)";
                 }
                 catch (Exception ex)
                 {
@@ -404,7 +404,7 @@ public sealed partial class MainViewModel
     private void OnTriggerFired(string p, string f) => AddLog($"Trigger: {p} > {f}");
 
     /// <summary>
-    /// Called when a trigger file is parsed — merges all extracted key-value pairs
+    /// Called when a trigger file is parsed ï¿½ merges all extracted key-value pairs
     /// into the shared TokenValues dictionary so the tree UI shows resolved text.
     /// </summary>
     private void OnTriggerParametersLoaded(string watchItemTag, Dictionary<string, string> parameters)

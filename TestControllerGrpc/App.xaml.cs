@@ -123,6 +123,15 @@ public partial class App : Application
                 services.AddSingleton<MainViewModel>();
                 services.AddSingleton<ExecutionHistoryPanelVM>();
 
+                // Health threshold settings (operator-configurable)
+                services.AddSingleton(sp =>
+                {
+                    var config = sp.GetRequiredService<IConfiguration>();
+                    var settings = new TestControllerGrpc.ViewModels.HealthThresholdSettings();
+                    config.GetSection("HealthThresholds").Bind(settings);
+                    return settings;
+                });
+
                 // Build Results services
                 services.AddSingleton<TrxResultsParser>();
                 services.AddSingleton(sp =>

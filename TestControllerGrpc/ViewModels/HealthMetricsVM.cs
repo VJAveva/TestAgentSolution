@@ -6,6 +6,19 @@ using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
+/// <summary>Operator-configurable health thresholds loaded from appsettings.json.</summary>
+public sealed class HealthThresholdSettings
+{
+    public double CpuAmber { get; set; } = 60;
+    public double CpuRed { get; set; } = 85;
+    public double MemoryAmber { get; set; } = 70;
+    public double MemoryRed { get; set; } = 85;
+    public double DiskAmber { get; set; } = 70;
+    public double DiskRed { get; set; } = 85;
+    public double NetworkAmberMs { get; set; } = 50;
+    public double NetworkRedMs { get; set; } = 150;
+}
+
 /// <summary>
 /// ViewModel for the compact health metrics strip in the ribbon.
 /// Polls controller-local metrics (CPU, memory, disk, network latency)
@@ -38,24 +51,33 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
     [ObservableProperty] private HealthLevel _memoryHealth = HealthLevel.Green;
     [ObservableProperty] private HealthLevel _diskHealth = HealthLevel.Green;
     [ObservableProperty] private HealthLevel _networkHealth = HealthLevel.Green;
+    [ObservableProperty] private HealthLevel _agentsHealth = HealthLevel.Green;
     [ObservableProperty] private HealthLevel _overallHealth = HealthLevel.Green;
+
+    // ── Tooltip strings ─────────────────────────────────────────────
+    [ObservableProperty] private string _cpuTooltip = "";
+    [ObservableProperty] private string _memoryTooltip = "";
+    [ObservableProperty] private string _diskTooltip = "";
+    [ObservableProperty] private string _networkTooltip = "";
+    [ObservableProperty] private string _agentsTooltip = "";
 
     // ── Alert state ─────────────────────────────────────────────────
     [ObservableProperty] private bool _isCritical;
     [ObservableProperty] private string _alertSummary = "";
+    [ObservableProperty] private int _issueCount;
+    [ObservableProperty] private string _healthPillText = "✓ Healthy";
 
-    // ── Thresholds ──────────────────────────────────────────────────
-    private const double CpuAmber = 60, CpuRed = 85;
-    private const double MemAmber = 60, MemRed = 85;
-    private const double DiskAmber = 70, DiskRed = 90;
-    private const double NetAmber = 50, NetRed = 200;
+    // ── Thresholds (configurable via appsettings.json HealthThresholds section) ──
+    private readonly HealthThresholdSettings _thresholds;
 
     public HealthMetricsVM(
         IAgentGrpcDispatcher dispatcher,
-        ExecutionSessionManager sessionManager)
+        ExecutionSessionManager sessionManager,
+        HealthThresholdSettings? thresholds = null)
     {
         _dispatcher = dispatcher;
         _sessionManager = sessionManager;
+        _thresholds = thresholds ?? new HealthThresholdSettings();
 
         try { _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total"); }
         catch { /* PerformanceCounter may not be available in all environments */ }
@@ -89,7 +111,8 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
             CpuPercent = _cpuCounter?.NextValue() ?? 0;
         }
         catch { CpuPercent = 0; }
-        CpuHealth = Classify(CpuPercent, CpuAmber, CpuRed);
+        CpuHealth = Classify(CpuPercent, _thresholds.CpuAmber, _thresholds.CpuRed);
+        CpuTooltip = $"CPU: {CpuPercent:F0}%\nGreen: < {_thresholds.CpuAmber}%\nAmber: {_thresholds.CpuAmber} – {_thresholds.CpuRed}%\nRed: > {_thresholds.CpuRed}%";
     }
 
     private void RefreshMemory()
@@ -112,7 +135,8 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
             MemoryTotalGb = 0;
             MemoryPercent = 0;
         }
-        MemoryHealth = Classify(MemoryPercent, MemAmber, MemRed);
+        MemoryHealth = Classify(MemoryPercent, _thresholds.MemoryAmber, _thresholds.MemoryRed);
+        MemoryTooltip = $"Memory: {MemoryUsedGb:F1} / {MemoryTotalGb:F1} GB ({MemoryPercent:F0}%)\nGreen: < {_thresholds.MemoryAmber}%\nAmber: {_thresholds.MemoryAmber} – {_thresholds.MemoryRed}%\nRed: > {_thresholds.MemoryRed}%";
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -143,7 +167,8 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
             DiskPercent = Math.Round((drive.TotalSize - drive.AvailableFreeSpace) / (double)drive.TotalSize * 100, 1);
         }
         catch { }
-        DiskHealth = Classify(DiskPercent, DiskAmber, DiskRed);
+        DiskHealth = Classify(DiskPercent, _thresholds.DiskAmber, _thresholds.DiskRed);
+        DiskTooltip = $"Disk: {DiskUsedGb:F1} / {DiskTotalGb:F1} GB ({DiskPercent:F0}%)\nGreen: < {_thresholds.DiskAmber}%\nAmber: {_thresholds.DiskAmber} – {_thresholds.DiskRed}%\nRed: > {_thresholds.DiskRed}%";
     }
 
     private void RefreshNetwork()
@@ -169,7 +194,8 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
         else
             NetworkLatencyMs = 15; // All healthy — low latency assumed
 
-        NetworkHealth = Classify(NetworkLatencyMs, NetAmber, NetRed);
+        NetworkHealth = Classify(NetworkLatencyMs, _thresholds.NetworkAmberMs, _thresholds.NetworkRedMs);
+        NetworkTooltip = $"Network latency: {NetworkLatencyMs:F0} ms\nGreen: < {_thresholds.NetworkAmberMs} ms\nAmber: {_thresholds.NetworkAmberMs} – {_thresholds.NetworkRedMs} ms\nRed: > {_thresholds.NetworkRedMs} ms";
     }
 
     private void RefreshAgents()
@@ -177,6 +203,19 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
         AgentsTotal = _dispatcher.RegisteredAgentCount;
         var allHealth = _dispatcher.GetAllAgentHealth();
         AgentsOnline = allHealth.Values.Count(h => h.IsHealthy);
+
+        if (AgentsTotal == 0)
+            AgentsHealth = HealthLevel.Green;
+        else if (AgentsOnline < AgentsTotal / 2)
+            AgentsHealth = HealthLevel.Red;
+        else if (AgentsOnline < AgentsTotal)
+            AgentsHealth = HealthLevel.Amber;
+        else
+            AgentsHealth = HealthLevel.Green;
+
+        AgentsTooltip = $"Agents: {AgentsOnline} / {AgentsTotal} online\n" +
+                        (AgentsOnline == AgentsTotal ? "All agents healthy" :
+                         $"{AgentsTotal - AgentsOnline} agent(s) offline");
     }
 
     private void RefreshSessions()
@@ -201,30 +240,35 @@ public sealed partial class HealthMetricsVM : ObservableObject, IDisposable
     {
         var worst = (HealthLevel)Math.Max(
             Math.Max((int)CpuHealth, (int)MemoryHealth),
-            Math.Max((int)DiskHealth, (int)NetworkHealth));
-
-        // Also consider agent availability
-        if (AgentsTotal > 0 && AgentsOnline < AgentsTotal / 2)
-            worst = HealthLevel.Red;
-        else if (AgentsTotal > 0 && AgentsOnline < AgentsTotal)
-            worst = (HealthLevel)Math.Max((int)worst, (int)HealthLevel.Amber);
+            Math.Max(Math.Max((int)DiskHealth, (int)NetworkHealth), (int)AgentsHealth));
 
         OverallHealth = worst;
         IsCritical = worst == HealthLevel.Red;
 
-        if (IsCritical)
+        // Count all non-green issues for the health pill
+        var alerts = new List<string>();
+        if (CpuHealth >= HealthLevel.Amber) alerts.Add(CpuHealth == HealthLevel.Red ? "CPU overloaded" : "CPU elevated");
+        if (MemoryHealth >= HealthLevel.Amber) alerts.Add(MemoryHealth == HealthLevel.Red ? "Memory pressure" : "Memory elevated");
+        if (DiskHealth >= HealthLevel.Amber) alerts.Add(DiskHealth == HealthLevel.Red ? "Disk full risk" : "Disk elevated");
+        if (NetworkHealth >= HealthLevel.Amber) alerts.Add(NetworkHealth == HealthLevel.Red ? "Network degraded" : "Network slow");
+        var offlineCount = AgentsTotal - AgentsOnline;
+        if (offlineCount > 0) alerts.Add($"{offlineCount} agent{(offlineCount > 1 ? "s" : "")} offline");
+
+        IssueCount = alerts.Count;
+
+        if (worst == HealthLevel.Red)
         {
-            var alerts = new List<string>();
-            if (CpuHealth == HealthLevel.Red) alerts.Add("CPU overloaded");
-            if (MemoryHealth == HealthLevel.Red) alerts.Add("Memory pressure");
-            if (DiskHealth == HealthLevel.Red) alerts.Add("Disk full risk");
-            if (NetworkHealth == HealthLevel.Red) alerts.Add("Network degraded");
-            var offlineCount = AgentsTotal - AgentsOnline;
-            if (offlineCount > 0) alerts.Add($"{offlineCount} agent{(offlineCount > 1 ? "s" : "")} offline");
+            HealthPillText = $"⚠ {alerts.Count} critical";
             AlertSummary = $"{alerts.Count} critical · {string.Join(" · ", alerts)}";
+        }
+        else if (worst == HealthLevel.Amber)
+        {
+            HealthPillText = $"⚠ {alerts.Count} warning{(alerts.Count > 1 ? "s" : "")}";
+            AlertSummary = $"{alerts.Count} warning · {string.Join(" · ", alerts)}";
         }
         else
         {
+            HealthPillText = "✓ Healthy";
             AlertSummary = "";
         }
     }

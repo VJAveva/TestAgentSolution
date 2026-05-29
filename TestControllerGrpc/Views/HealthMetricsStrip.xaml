@@ -5,19 +5,8 @@
              VerticalAlignment="Center">
 
     <UserControl.Resources>
-        <!-- Health-color converter -->
         <local:HealthLevelToBrushConverter x:Key="HealthBrush" />
         <BooleanToVisibilityConverter x:Key="BoolVis" />
-        <local:PercentToWidthConverter x:Key="PercentToWidth" />
-        <local:LatencyToWidthConverter x:Key="LatencyToWidth" />
-
-        <Style x:Key="MetricBar" TargetType="Border">
-            <Setter Property="Height" Value="3" />
-            <Setter Property="Width" Value="28" />
-            <Setter Property="CornerRadius" Value="1.5" />
-            <Setter Property="Background" Value="{DynamicResource BgRowHoverBrush}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
 
         <Style x:Key="MetricLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="9" />
@@ -28,11 +17,9 @@
         <Style x:Key="MetricValue" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!-- Pulsing animation for critical state -->
         <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
             <DoubleAnimation Storyboard.TargetName="HealthDot"
                              Storyboard.TargetProperty="Opacity"
@@ -41,155 +28,67 @@
         </Storyboard>
     </UserControl.Resources>
 
-    <Border x:Name="StripBorder" CornerRadius="4" Padding="6,2" Margin="2,0"
-            Background="{DynamicResource GroupBg}" BorderThickness="1"
-            BorderBrush="{DynamicResource Bdr}">
-        <Border.Style>
-            <Style TargetType="Border">
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsCritical}" Value="True">
-                        <Setter Property="Background" Value="{DynamicResource AlertErrorBg}" />
-                        <Setter Property="BorderBrush" Value="{DynamicResource AlertErrorBdr}" />
-                    </DataTrigger>
-                </Style.Triggers>
-            </Style>
-        </Border.Style>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-        <StackPanel>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-
-            <!-- Overall Health Dot + CTRL label -->
-            <StackPanel Orientation="Horizontal" Margin="0,0,6,0">
-                <Ellipse x:Name="HealthDot" Width="8" Height="8" VerticalAlignment="Center"
-                         Fill="{Binding OverallHealth, Converter={StaticResource HealthBrush}}" />
-                <TextBlock Text="CTRL" FontSize="8" FontWeight="Bold" Margin="3,0,0,0"
-                           Foreground="{DynamicResource TextS}" VerticalAlignment="Center" />
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- CPU -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="CPU" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource MetricValue}">
-                        <Run Text="{Binding CpuPercent, StringFormat={}{0:F0}%}" />
-                    </TextBlock>
-                    <Border Style="{StaticResource MetricBar}" Margin="4,0,0,0">
-                        <Border CornerRadius="2" HorizontalAlignment="Left"
-                                Height="4" Width="{Binding CpuPercent, Converter={StaticResource PercentToWidth}}"
-                                Background="{Binding CpuHealth, Converter={StaticResource HealthBrush}}" />
-                    </Border>
-                </StackPanel>
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- Memory -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="MEM" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource MetricValue}">
-                        <Run Text="{Binding MemoryUsedGb, StringFormat={}{0:F1}}" />
-                        <Run Text="GB" FontSize="8" />
-                    </TextBlock>
-                    <Border Style="{StaticResource MetricBar}" Margin="4,0,0,0">
-                        <Border CornerRadius="2" HorizontalAlignment="Left"
-                                Height="4" Width="{Binding MemoryPercent, Converter={StaticResource PercentToWidth}}"
-                                Background="{Binding MemoryHealth, Converter={StaticResource HealthBrush}}" />
-                    </Border>
-                </StackPanel>
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- Disk -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="DISK" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource MetricValue}">
-                        <Run Text="{Binding DiskPercent, StringFormat={}{0:F0}%}" />
-                    </TextBlock>
-                    <Border Style="{StaticResource MetricBar}" Margin="4,0,0,0">
-                        <Border CornerRadius="2" HorizontalAlignment="Left"
-                                Height="4" Width="{Binding DiskPercent, Converter={StaticResource PercentToWidth}}"
-                                Background="{Binding DiskHealth, Converter={StaticResource HealthBrush}}" />
-                    </Border>
-                </StackPanel>
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- Network Latency -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="NET" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource MetricValue}">
-                        <Run Text="{Binding NetworkLatencyMs, StringFormat={}{0:F0}}" />
-                        <Run Text="ms" FontSize="8" />
-                    </TextBlock>
-                    <Border Style="{StaticResource MetricBar}" Margin="4,0,0,0">
-                        <Border CornerRadius="2" HorizontalAlignment="Left"
-                                Height="4" Width="{Binding NetworkLatencyMs, Converter={StaticResource LatencyToWidth}}"
-                                Background="{Binding NetworkHealth, Converter={StaticResource HealthBrush}}" />
-                    </Border>
-                </StackPanel>
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- Agents Online -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="AGENTS" />
-                <TextBlock Style="{StaticResource MetricValue}">
-                    <Run Text="{Binding AgentsOnline, Mode=OneWay}" Foreground="{DynamicResource AccGreen}" />
-                    <Run Text="/" FontSize="9" /><Run Text="{Binding AgentsTotal, Mode=OneWay}" />
-                </TextBlock>
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- Active Sessions -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="SESSIONS" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource MetricValue}">
-                        <Run Text="{Binding ActiveSessionCount, Mode=OneWay}" />
-                    </TextBlock>
-                    <TextBlock Text="{Binding SessionElapsed}" FontSize="9"
-                               Foreground="{DynamicResource TextS}" Margin="4,0,0,0"
-                               VerticalAlignment="Center" />
-                </StackPanel>
-            </StackPanel>
-
-            <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,6" />
-
-            <!-- WatchItems + Templates counts -->
-            <StackPanel Margin="6,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource MetricLabel}" Text="ITEMS" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource MetricValue}"
-                               Foreground="{DynamicResource AccGreen}">
-                        <Run Text="{Binding DataContext.ActiveWatchers, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
-                    </TextBlock>
-                    <TextBlock Text="W" FontSize="8" Foreground="{DynamicResource TextS}"
-                               VerticalAlignment="Center" Margin="2,0,6,0" />
-                    <TextBlock Style="{StaticResource MetricValue}"
-                               Foreground="{DynamicResource AccMauve}">
-                        <Run Text="{Binding DataContext.TemplateRoots.Count, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
-                    </TextBlock>
-                    <TextBlock Text="T" FontSize="8" Foreground="{DynamicResource TextS}"
-                               VerticalAlignment="Center" Margin="2,0,0,0" />
-                </StackPanel>
-            </StackPanel>
-
-            </StackPanel>
-
-            <!-- Alert Summary (shown only in critical state, below metrics) -->
-            <TextBlock Text="{Binding AlertSummary}" FontSize="9" FontWeight="SemiBold"
-                       Foreground="{DynamicResource AccRed}" Margin="0,2,0,0"
-                       TextTrimming="CharacterEllipsis" MaxWidth="400"
-                       Visibility="{Binding IsCritical, Converter={StaticResource BoolVis}}" />
+        <!-- CPU -->
+        <StackPanel Margin="6,0" VerticalAlignment="Center" ToolTip="{Binding CpuTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="CPU" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding CpuHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding CpuPercent, StringFormat={}{0:F0}%}" />
+            </TextBlock>
         </StackPanel>
-    </Border>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="2,4" />
+
+        <!-- Memory -->
+        <StackPanel Margin="6,0" VerticalAlignment="Center" ToolTip="{Binding MemoryTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="MEM" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding MemoryHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding MemoryUsedGb, StringFormat={}{0:F1}}" />
+                <Run Text="GB" FontSize="8" Foreground="{DynamicResource TextS}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="2,4" />
+
+        <!-- Disk -->
+        <StackPanel Margin="6,0" VerticalAlignment="Center" ToolTip="{Binding DiskTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="DISK" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding DiskHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding DiskPercent, StringFormat={}{0:F0}%}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="2,4" />
+
+        <!-- Network Latency -->
+        <StackPanel Margin="6,0" VerticalAlignment="Center" ToolTip="{Binding NetworkTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="NET" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding NetworkHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding NetworkLatencyMs, StringFormat={}{0:F0}}" />
+                <Run Text="ms" FontSize="8" Foreground="{DynamicResource TextS}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="2,4" />
+
+        <!-- Agents -->
+        <StackPanel Margin="6,0" VerticalAlignment="Center" ToolTip="{Binding AgentsTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="AGENTS" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding AgentsHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding AgentsOnline, Mode=OneWay}" />
+                <Run Text="/" FontSize="9" Foreground="{DynamicResource TextS}" />
+                <Run Text="{Binding AgentsTotal, Mode=OneWay}" />
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Hidden elements for pulse animation target -->
+        <Ellipse x:Name="HealthDot" Width="0" Height="0" Opacity="1" />
+
+    </StackPanel>
 </UserControl>

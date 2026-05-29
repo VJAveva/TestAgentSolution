@@ -36,6 +36,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IAppLogger _appLogger;
     private readonly IEventAggregator _events;
     private readonly AgentLockManager _lockManager;
+    private readonly HealthThresholdSettings _healthThresholds;
+    private readonly System.Windows.Threading.DispatcherTimer _sessionElapsedTimer;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
@@ -77,6 +79,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Count of active sessions for display.</summary>
     [ObservableProperty] private int _activeSessionCount;
+    [ObservableProperty] private string _totalSessionsElapsed = "";
 
     // ── Agent Lock Display ──────────────────────────────────────────
     /// <summary>Current agent lock state for admin dashboard binding.</summary>
@@ -283,7 +286,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IActionPipelineExecutor executor, IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
         BuildResultsViewModel buildResultsVM, IAppLogger appLogger,
-        IEventAggregator events, AgentLockManager lockManager)
+        IEventAggregator events, AgentLockManager lockManager,
+        HealthThresholdSettings healthThresholds)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -294,6 +298,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _appLogger = appLogger;
         _events = events;
         _lockManager = lockManager;
+        _healthThresholds = healthThresholds;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher);
@@ -342,7 +347,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
         // ── Controller health metrics strip ─────────────────────────
-        HealthMetrics = new HealthMetricsVM(dispatcher, sessionManager);
+        HealthMetrics = new HealthMetricsVM(dispatcher, sessionManager, _healthThresholds);
+
+        // ── Session elapsed timer (updates Elapsed on active sessions) ──
+        _sessionElapsedTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _sessionElapsedTimer.Tick += (_, _) =>
+        {
+            var totalElapsed = TimeSpan.Zero;
+            foreach (var s in ActiveSessions.Where(s => s.Status == "Running"))
+            {
+                var elapsed = DateTime.UtcNow - s.StartedUtc;
+                s.Elapsed = elapsed.TotalHours >= 1
+                    ? $"{(int)elapsed.TotalHours}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}"
+                    : $"{elapsed.Minutes}:{elapsed.Seconds:D2}";
+                totalElapsed += elapsed;
+            }
+            TotalSessionsElapsed = totalElapsed.TotalHours >= 1
+                ? $"{(int)totalElapsed.TotalHours}:{totalElapsed.Minutes:D2}:{totalElapsed.Seconds:D2}"
+                : $"{totalElapsed.Minutes}:{totalElapsed.Seconds:D2}";
+        };
+        _sessionElapsedTimer.Start();
 
         // Cancel requests raised from the dashboard cancel the matching
         // PipelineSession's CTS via the existing ActiveSessions tracking.
@@ -438,6 +465,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _executionCts?.Dispose();
 
         // Stop the multi-session dashboard's refresh timer + event subscriptions.
+        _sessionElapsedTimer.Stop();
         ExecutionDashboard?.Dispose();
         HealthMetrics?.Dispose();
         AgentWorkspace?.Dispose();
