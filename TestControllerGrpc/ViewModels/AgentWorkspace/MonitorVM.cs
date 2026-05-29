@@ -490,19 +490,31 @@ public partial class MonitorVM : ObservableObject
         var pastSessions = _sessionManager.GetHistory(50)
             .Where(s => s.LockedAgents.Any(a =>
                 string.Equals(a, AgentName, StringComparison.OrdinalIgnoreCase)))
-            .Take(20);
+            .Take(30);
 
         foreach (var s in pastSessions)
         {
-            History.Add(new HistoryEntryVM
+            // Show individual actions this agent executed (action-level granularity)
+            var agentActions = s.ActionResults
+                .Where(a => string.Equals(a.AgentName, AgentName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Sequence);
+
+            foreach (var action in agentActions)
             {
-                SessionId = s.SessionId,
-                PipelineName = s.WatchItemTag,
-                Date = s.StartedUtc.ToLocalTime().ToString("MMM dd HH:mm"),
-                Outcome = s.State.ToString(),
-                Duration = ((s.CompletedUtc ?? DateTime.UtcNow) - s.StartedUtc).ToString(@"hh\:mm\:ss"),
-                UserId = s.UserId,
-            });
+                History.Add(new HistoryEntryVM
+                {
+                    SessionId = s.SessionId,
+                    PipelineName = s.WatchItemTag,
+                    ActionTag = action.ActionTag,
+                    Command = TruncateCommand(action.Command),
+                    CommandFull = action.Command,
+                    Date = action.StartedUtc.ToLocalTime().ToString("MMM dd HH:mm:ss"),
+                    Outcome = action.Outcome.ToString(),
+                    Duration = action.Duration.ToString(@"hh\:mm\:ss"),
+                    ExitCode = action.ExitCode?.ToString() ?? "",
+                    UserId = s.UserId,
+                });
+            }
         }
     }
 
@@ -622,8 +634,12 @@ public partial class HistoryEntryVM : ObservableObject
 {
     [ObservableProperty] private string _sessionId = "";
     [ObservableProperty] private string _pipelineName = "";
+    [ObservableProperty] private string _actionTag = "";
+    [ObservableProperty] private string _command = "";
+    [ObservableProperty] private string _commandFull = "";
     [ObservableProperty] private string _date = "";
     [ObservableProperty] private string _outcome = "";
     [ObservableProperty] private string _duration = "";
+    [ObservableProperty] private string _exitCode = "";
     [ObservableProperty] private string _userId = "";
 }

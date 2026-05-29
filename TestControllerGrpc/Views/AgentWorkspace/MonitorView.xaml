@@ -664,33 +664,54 @@
                                                 CornerRadius="4" Padding="8,6" Margin="0,2">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="140"/>
+                                                    <ColumnDefinition Width="130"/>
                                                     <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="70"/>
-                                                    <ColumnDefinition Width="70"/>
+                                                    <ColumnDefinition Width="100"/>
+                                                    <ColumnDefinition Width="64"/>
+                                                    <ColumnDefinition Width="60"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding PipelineName}" FontWeight="Medium"
+                                                <TextBlock Text="{Binding PipelineName}" FontSize="10"
+                                                           Foreground="{DynamicResource TextDim}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip="{Binding PipelineName}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding ActionTag}" FontWeight="Medium"
                                                            FontSize="11" Foreground="{DynamicResource TextPrimary}"
-                                                           VerticalAlignment="Center"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding Date}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip="{Binding ActionTag}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Command}"
+                                                           FontFamily="Consolas" FontSize="10"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip="{Binding CommandFull}"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding Date}"
                                                            FontFamily="Consolas" FontSize="10"
                                                            Foreground="{DynamicResource TextDim}"
                                                            VerticalAlignment="Center"/>
-                                                <TextBlock Grid.Column="2" Text="{Binding Duration}"
+                                                <TextBlock Grid.Column="4" Text="{Binding Duration}"
                                                            FontFamily="Consolas" FontSize="10"
                                                            Foreground="{DynamicResource TextDim}"
                                                            VerticalAlignment="Center"/>
-                                                <TextBlock Grid.Column="3" Text="{Binding Outcome}"
+                                                <TextBlock Grid.Column="5" Text="{Binding Outcome}"
                                                            FontFamily="Consolas" FontSize="10" FontWeight="Medium"
                                                            VerticalAlignment="Center">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
                                                             <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Outcome}" Value="Completed">
+                                                                <DataTrigger Binding="{Binding Outcome}" Value="Success">
                                                                     <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding Outcome}" Value="Failed">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Outcome}" Value="Terminated">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Outcome}" Value="TimedOut">
                                                                     <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
