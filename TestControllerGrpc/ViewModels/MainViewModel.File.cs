@@ -1,13 +1,15 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels;
 
-// ── File Operations (Open, Save, SaveAs, Refresh) ───────────────────
+// -- File Operations (Open, Save, SaveAs, Refresh) -------------------
 public sealed partial class MainViewModel
 {
     [RelayCommand]
@@ -15,7 +17,7 @@ public sealed partial class MainViewModel
     {
         if (IsDirty)
         {
-            var result = MessageBox.Show("Save changes before opening a new file?",
+            var result = ThemedMessageBox.Show("Save changes before opening a new file?",
                 "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Cancel) return;
             if (result == MessageBoxResult.Yes) SaveVocabulary();
@@ -51,7 +53,7 @@ public sealed partial class MainViewModel
             // the actual agent names instead of [Token] placeholders.
             ResolveAgentNamesInConfig(_config);
 
-            // Suppress the file-watcher reload — we're saving our own in-memory state
+            // Suppress the file-watcher reload � we're saving our own in-memory state
             _vocabMonitor.SuppressNextReload();
 
             WatchListXmlParser.Save(_config, VocabFilePath);
@@ -97,7 +99,7 @@ public sealed partial class MainViewModel
 
             if (_sessionManager.HasAnyActiveExecution)
             {
-                // DIFFERENTIAL reload — preserve running watchers
+                // DIFFERENTIAL reload � preserve running watchers
                 _config = config;
                 _executor.LoadTemplates(config.Templates);
                 _watcherManager.ApplyDiff(config.WatchItems);
@@ -115,18 +117,18 @@ public sealed partial class MainViewModel
                 });
 
                 IsDirty = false;
-                AddLog($"Refreshed (differential — {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
+                AddLog($"Refreshed (differential � {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
                     LogSeverity.Success);
             }
             else
             {
-                // FULL reload — no executions running
+                // FULL reload � no executions running
                 ApplyConfig(config);
                 IsDirty = false;
                 AddLog($"Refreshed: {VocabFilePath}", LogSeverity.Success);
             }
 
-            StatusMessage = $"Refreshed — {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
+            StatusMessage = $"Refreshed � {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
         }
         catch (Exception ex)
         {

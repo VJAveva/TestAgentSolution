@@ -7,6 +7,8 @@ using TestControllerGrpc.Services;
 using TestControllerGrpc.Views;
 using TestControllerGrpc.ViewModels;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels.Execution;
 
 /// <summary>
@@ -630,7 +632,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         var card = Sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (card == null) return;
 
-        var result = System.Windows.MessageBox.Show(
+        var result = ThemedMessageBox.Show(
             $"Cancel session '{card.WatchItemTag}'?\n\n" +
             $"User: {card.UserId}\n" +
             $"Agents: {card.LockedAgentsList}\n" +

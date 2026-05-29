@@ -8,6 +8,8 @@ using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestAgentGrpc;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 
 /// <summary>
@@ -524,7 +526,7 @@ public partial class MonitorVM : ObservableObject
 
     private void ForceRelease()
     {
-        var result = MessageBox.Show(
+        var result = ThemedMessageBox.Show(
             $"Force release lock on '{AgentName}'?\n\nThis removes the lock but does NOT cancel the pipeline.",
             "Force Release", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
@@ -534,7 +536,7 @@ public partial class MonitorVM : ObservableObject
 
     private async Task RebootAsync()
     {
-        var result = MessageBox.Show(
+        var result = ThemedMessageBox.Show(
             $"Reboot agent '{AgentName}'?\n\nAny running test will be interrupted.",
             "Reboot Agent", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
@@ -555,7 +557,7 @@ public partial class MonitorVM : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Reboot failed: {ex.Message}", "Error",
+            ThemedMessageBox.Show($"Reboot failed: {ex.Message}", "Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

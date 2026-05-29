@@ -1,6 +1,8 @@
 using System.Windows;
 using TestControllerGrpc.ViewModels;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.Views.Dialogs;
 
 public partial class FailureAnalysisDialog : Window
@@ -22,7 +24,7 @@ public partial class FailureAnalysisDialog : Window
         }
         catch
         {
-            MessageBox.Show("Could not copy to clipboard.", "Copy",
+            ThemedMessageBox.Show("Could not copy to clipboard.", "Copy",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -32,7 +34,7 @@ public partial class FailureAnalysisDialog : Window
         var build = _vm.LatestBuildName;
         if (string.IsNullOrEmpty(build))
         {
-            MessageBox.Show("No build available to view log for.", "View Log",
+            ThemedMessageBox.Show("No build available to view log for.", "View Log",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }

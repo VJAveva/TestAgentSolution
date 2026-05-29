@@ -118,28 +118,11 @@
             <Setter Property="Foreground" Value="{DynamicResource TextS}" /><Setter Property="FontSize" Value="11" />
             <Setter Property="Padding" Value="0,6,0,2" /><Setter Property="FontWeight" Value="Medium" />
         </Style>
-        <Style TargetType="ComboBox" x:Key="Cmb">
-            <Setter Property="Background" Value="{DynamicResource BgCard}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <!-- Cmb key kept for backward compat; inherits the implicit themed ComboBox style -->
+        <Style TargetType="ComboBox" x:Key="Cmb" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="Margin" Value="0,2,0,5" />
-            <Setter Property="Padding" Value="6,4" />
-        </Style>
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="{DynamicResource BgCard}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-            <Setter Property="Padding" Value="6,4" />
-            <Style.Triggers>
-                <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource Accent}" />
-                    <Setter Property="Foreground" Value="{DynamicResource TreeBadgeFg}" />
-                </Trigger>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BgSurface}" />
-                    <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-                </Trigger>
-            </Style.Triggers>
+            <Setter Property="Height" Value="28" />
+            <Setter Property="FontSize" Value="11" />
         </Style>
         <Style x:Key="Sec" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="Bold" />
@@ -1822,32 +1805,23 @@
         <!-- ═══════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource BgPanel}" Padding="6,4"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <!-- Col 0: File path -->
-                <TextBlock Grid.Column="0" FontSize="10" FontFamily="Consolas"
+            <DockPanel>
+                <!-- Far left: File path -->
+                <TextBlock DockPanel.Dock="Left" FontSize="11" FontFamily="Consolas"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource TextS}" TextTrimming="CharacterEllipsis"
-                           MaxWidth="250" ToolTip="{Binding VocabFilePath}" Margin="4,0,8,0">
+                           MaxWidth="250" ToolTip="{Binding VocabFilePath}" Margin="4,0,12,0">
                     <Run Text="{Binding VocabFilePath}" />
                 </TextBlock>
 
-                <Rectangle Grid.Column="1" Width="1" Fill="{DynamicResource Bdr}" Margin="4,3" />
-
-                <!-- Col 2: Health Pill (escalating) -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0">
+                <!-- Far right: Health Pill + flyout -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,4,0"
+                            VerticalAlignment="Center">
                     <ToggleButton x:Name="HealthPillToggle" Cursor="Hand"
                                   Padding="6,2" BorderThickness="1" VerticalAlignment="Center">
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
-                                <Border x:Name="PillBorder" CornerRadius="8" Padding="8,2"
+                                <Border x:Name="PillBorder" CornerRadius="8" Padding="8,3"
                                         BorderThickness="1" BorderBrush="{DynamicResource Bdr}">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -1864,7 +1838,7 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
-                                    <TextBlock FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"
+                                    <TextBlock FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"
                                                Text="{Binding HealthMetrics.HealthPillText}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
@@ -1890,12 +1864,13 @@
                            PlacementTarget="{Binding ElementName=HealthPillToggle}"
                            Placement="Top" StaysOpen="False" AllowsTransparency="True"
                            PopupAnimation="Fade" VerticalOffset="-4">
-                        <Border Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource Bdr}"
+                        <Border Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource Bdr}"
                                 BorderThickness="1" CornerRadius="6" Padding="12,10"
-                                MinWidth="280" MaxWidth="400">
+                                MinWidth="280" MaxWidth="400" MaxHeight="260">
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="10" Opacity="0.25" ShadowDepth="3" Direction="270"/>
                             </Border.Effect>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel>
                                 <TextBlock FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextP}"
                                            Margin="0,0,0,8">
@@ -1951,28 +1926,23 @@
                                     </TextBlock>
                                 </Grid>
                             </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </Popup>
                 </StackPanel>
 
-                <!-- Col 3: System telemetry (fills remaining space) -->
-                <views:HealthMetricsStrip Grid.Column="3" DataContext="{Binding HealthMetrics}"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <!-- Right of metrics: thin divider before pill -->
+                <Rectangle DockPanel.Dock="Right" Width="1" Fill="{DynamicResource Bdr}" Margin="8,4" Opacity="0.6" />
 
-                <!-- Col 4: Workload counters (right-aligned, deduplicated) -->
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center"
-                            HorizontalAlignment="Right" Margin="8,0,4,0">
-                    <TextBlock FontSize="11" Foreground="{DynamicResource TextS}" VerticalAlignment="Center">
-                        <Run Text="Watchers: " /><Run Text="{Binding ActiveWatchers, Mode=OneWay}" Foreground="{DynamicResource AccGreen}" FontWeight="Bold" />
-                    </TextBlock>
-                    <TextBlock FontSize="11" Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="10,0,0,0">
-                        <Run Text="Templates: " /><Run Text="{Binding TemplateRoots.Count, Mode=OneWay}" Foreground="{DynamicResource AccMauve}" FontWeight="Bold" />
-                    </TextBlock>
-                    <TextBlock Text=" EXECUTING " Foreground="{DynamicResource AccRed}" FontWeight="Bold"
-                               FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}" />
-                </StackPanel>
-            </Grid>
+                <!-- Right: EXECUTING indicator -->
+                <TextBlock DockPanel.Dock="Right" Text=" EXECUTING " Foreground="{DynamicResource AccRed}" FontWeight="Bold"
+                           FontSize="11" VerticalAlignment="Center" Margin="6,0"
+                           Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}" />
+
+                <!-- Center/Right: Metrics strip fills remaining space, right-aligned -->
+                <views:HealthMetricsStrip DataContext="{Binding HealthMetrics}"
+                                          HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </DockPanel>
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════ -->

@@ -11,6 +11,8 @@ using Microsoft.Win32;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels;
 
 public partial class BuildResultsViewModel : ObservableObject
@@ -156,7 +158,7 @@ public partial class BuildResultsViewModel : ObservableObject
                 if (dispatcher != null)
                 {
                     await dispatcher.InvokeAsync(() =>
-                        MessageBox.Show(
+                        ThemedMessageBox.Show(
                             $"Failure analysis failed for '{testName}':\n\n{ex.Message}",
                             "Failure Pattern Analysis",
                             MessageBoxButton.OK, MessageBoxImage.Warning));

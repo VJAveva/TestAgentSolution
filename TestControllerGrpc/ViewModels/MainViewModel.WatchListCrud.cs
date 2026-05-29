@@ -2,6 +2,8 @@ using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels;
 
 // ?? WatchList CRUD (Add/Delete/Move WatchItem/Event/Action/Group/Ref/Init) ??
@@ -166,7 +168,7 @@ public sealed partial class MainViewModel
         var title = "Confirm Delete";
 
         // Show confirmation dialog
-        var result = MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        var result = ThemedMessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result == MessageBoxResult.Yes)
         {
             // Proceed with deletion

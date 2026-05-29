@@ -9,6 +9,8 @@ using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc;
 
 public partial class App : Application
@@ -37,7 +39,7 @@ public partial class App : Application
 
         if (!isNew)
         {
-            var answer = MessageBox.Show(
+            var answer = ThemedMessageBox.Show(
                 "TestController is already running.\n\n" +
                 "YES = Kill old instance and start fresh\n" +
                 "NO = Cancel (switch to existing window manually)",
@@ -53,7 +55,7 @@ public partial class App : Application
                 _singleInstanceMutex = new Mutex(true, mutexName, out isNew);
                 if (!isNew)
                 {
-                    MessageBox.Show(
+                    ThemedMessageBox.Show(
                         "Old process still running. Wait a moment and retry.",
                         "Startup Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                     Shutdown(1);
@@ -160,7 +162,7 @@ public partial class App : Application
             {
                 CrashDumpHelper.RecordCrash("HostStart", t.Exception);
                 Dispatcher.BeginInvoke(new Action(() =>
-                    MessageBox.Show(
+                    ThemedMessageBox.Show(
                         "The application host failed to start. See crash log:\n" + CrashDumpHelper.CrashLogPath,
                         "Startup error", MessageBoxButton.OK, MessageBoxImage.Error)));
             }
@@ -180,7 +182,7 @@ public partial class App : Application
             return;
         }
 
-        MessageBox.Show(
+        ThemedMessageBox.Show(
             $"Unhandled UI exception:\n\n{e.Exception.GetType().Name}: {e.Exception.Message}\n\n" +
             $"Details: {CrashDumpHelper.CrashLogPath}",
             "Unhandled Exception", MessageBoxButton.OK, MessageBoxImage.Error);

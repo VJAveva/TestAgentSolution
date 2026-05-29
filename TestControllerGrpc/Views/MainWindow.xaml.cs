@@ -15,6 +15,8 @@ using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.Views;
 
 public partial class MainWindow : Window
@@ -123,7 +125,7 @@ public partial class MainWindow : Window
 
             if (hasActive)
             {
-                var result = MessageBox.Show(
+                var result = ThemedMessageBox.Show(
                     "A pipeline is still running.\n\n" +
                     "Exiting will cancel all running executions.\n\n" +
                     "Continue?",

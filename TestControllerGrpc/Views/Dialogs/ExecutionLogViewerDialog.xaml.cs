@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.ViewModels;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.Views.Dialogs;
 
 public partial class ExecutionLogViewerDialog : Window
@@ -39,7 +41,7 @@ public partial class ExecutionLogViewerDialog : Window
 
             if (report == null)
             {
-                MessageBox.Show("No log data returned from API.", "Execution Log",
+                ThemedMessageBox.Show("No log data returned from API.", "Execution Log",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return null;
             }
@@ -49,7 +51,7 @@ public partial class ExecutionLogViewerDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to load execution log:\n{ex.Message}",
+            ThemedMessageBox.Show($"Failed to load execution log:\n{ex.Message}",
                 "Execution Log", MessageBoxButton.OK, MessageBoxImage.Warning);
             return null;
         }
@@ -86,7 +88,7 @@ public partial class ExecutionLogViewerDialog : Window
         }
         catch
         {
-            MessageBox.Show("Could not copy to clipboard.", "Copy",
+            ThemedMessageBox.Show("Could not copy to clipboard.", "Copy",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }

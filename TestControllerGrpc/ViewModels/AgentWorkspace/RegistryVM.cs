@@ -6,6 +6,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Services;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 
 public partial class RegistryVM : ObservableObject, IDisposable
@@ -23,6 +25,9 @@ public partial class RegistryVM : ObservableObject, IDisposable
     [ObservableProperty] private string _editName = "";
     [ObservableProperty] private string _editAddress = "http://localhost:5200";
     [ObservableProperty] private string _testResult = "";
+
+    private const int DefaultGrpcPort = 5200;
+    private bool _addressManuallyEdited;
 
     /// <summary>True when editing an existing agent (not adding new).</summary>
     private bool _isEditingExisting;
@@ -152,6 +157,7 @@ public partial class RegistryVM : ObservableObject, IDisposable
     {
         if (value != null)
         {
+            _addressManuallyEdited = true; // existing agent has its own address — don't overwrite
             EditName = value.Name;
             EditAddress = value.Address;
             IsEditing = true;
@@ -160,11 +166,37 @@ public partial class RegistryVM : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Auto-fill gRPC address when hostname changes (unless manually edited).</summary>
+    partial void OnEditNameChanged(string value)
+    {
+        if (_addressManuallyEdited) return;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            EditAddress = $"http://localhost:{DefaultGrpcPort}";
+        }
+        else
+        {
+            EditAddress = $"http://{value.Trim()}:{DefaultGrpcPort}";
+        }
+    }
+
+    /// <summary>Track manual edits to the address field.</summary>
+    partial void OnEditAddressChanged(string value)
+    {
+        // If the new value doesn't match the auto-generated pattern, mark as manually edited
+        var expectedAuto = string.IsNullOrWhiteSpace(EditName)
+            ? $"http://localhost:{DefaultGrpcPort}"
+            : $"http://{EditName.Trim()}:{DefaultGrpcPort}";
+        if (!string.Equals(value, expectedAuto, StringComparison.OrdinalIgnoreCase))
+            _addressManuallyEdited = true;
+    }
+
     public void StartAddNew()
     {
         SelectedRow = null;
+        _addressManuallyEdited = false;
         EditName = "";
-        EditAddress = "http://localhost:5200";
+        EditAddress = $"http://localhost:{DefaultGrpcPort}";
         TestResult = "";
         IsEditing = true;
         IsEditingExisting = false;
@@ -175,12 +207,12 @@ public partial class RegistryVM : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(EditName))
         {
-            MessageBox.Show("Agent name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ThemedMessageBox.Show("Agent name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (string.IsNullOrWhiteSpace(EditAddress))
         {
-            MessageBox.Show("Address is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ThemedMessageBox.Show("Address is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -194,7 +226,7 @@ public partial class RegistryVM : ObservableObject, IDisposable
             (SelectedRow == null || !string.Equals(r.Name, SelectedRow.Name, StringComparison.OrdinalIgnoreCase)));
         if (existingWithAddress != null)
         {
-            MessageBox.Show(
+            ThemedMessageBox.Show(
                 $"Address '{agentAddress}' is already registered to agent '{existingWithAddress.Name}'.",
                 "Duplicate Address", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -222,7 +254,7 @@ public partial class RegistryVM : ObservableObject, IDisposable
         var message = isNewAgent 
             ? $"Agent '{agentName}' registered successfully." 
             : $"Agent '{agentName}' updated successfully.";
-        MessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+        ThemedMessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     [RelayCommand]
@@ -304,7 +336,7 @@ public partial class RegistryVM : ObservableObject, IDisposable
         if (SelectedRow == null) return;
 
         var agentName = SelectedRow.Name;
-        var result = MessageBox.Show(
+        var result = ThemedMessageBox.Show(
             $"Unregister agent '{agentName}'?\n\nPipelines using this agent will fail.",
             "Unregister Agent", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
@@ -313,7 +345,7 @@ public partial class RegistryVM : ObservableObject, IDisposable
         Refresh();
         ClearForm();
 
-        MessageBox.Show($"Agent '{agentName}' unregistered successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+        ThemedMessageBox.Show($"Agent '{agentName}' unregistered successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     [RelayCommand]

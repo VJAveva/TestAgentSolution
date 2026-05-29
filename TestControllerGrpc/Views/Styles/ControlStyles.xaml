@@ -365,4 +365,210 @@
         </Setter>
     </Style>
 
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- THEMED COMBOBOX                                                    -->
+    <!-- Dark-fill, rounded, flat chevron, themed popup.                    -->
+    <!-- Applied implicitly (no x:Key) so all ComboBoxes pick it up.        -->
+    <!-- Uses DynamicResource throughout for Light / Dark / HC support.      -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ComboBox toggle button (the closed-state chrome) -->
+    <Style x:Key="ThemedComboToggle" TargetType="ToggleButton">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="ClickMode" Value="Press" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Border" CornerRadius="5"
+                            Background="{DynamicResource FieldBg}"
+                            BorderBrush="{DynamicResource Bdr}"
+                            BorderThickness="1" SnapsToDevicePixels="True">
+                        <!-- Chevron glyph (right side) -->
+                        <Path x:Name="Chevron" HorizontalAlignment="Right" VerticalAlignment="Center"
+                              Margin="0,0,10,0" Width="8" Height="5"
+                              Fill="{DynamicResource TextS}" Stretch="Uniform"
+                              Data="M 0,0 L 4,4 L 8,0 Z"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Path.RenderTransform>
+                                <RotateTransform Angle="0" />
+                            </Path.RenderTransform>
+                        </Path>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource FocusRing}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Chevron" Property="RenderTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="180" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ComboBox editable text box -->
+    <Style x:Key="ThemedComboTextBox" TargetType="TextBox">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="AllowDrop" Value="True" />
+        <Setter Property="MinWidth" Value="1" />
+        <Setter Property="MinHeight" Value="1" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                  Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Implicit ComboBox style -->
+    <Style TargetType="ComboBox">
+        <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+        <Setter Property="Background" Value="{DynamicResource FieldBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="10,6,28,6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <!-- Toggle fills the entire control -->
+                        <ToggleButton x:Name="ToggleButton"
+                                      Style="{StaticResource ThemedComboToggle}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
+
+                        <!-- Selected content -->
+                        <ContentPresenter x:Name="ContentSite"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left" />
+
+                        <!-- Editable textbox (hidden unless IsEditable) -->
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 Style="{StaticResource ThemedComboTextBox}"
+                                 Margin="{TemplateBinding Padding}"
+                                 HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 Background="Transparent"
+                                 Focusable="True" Visibility="Hidden"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}" />
+
+                        <!-- Dropdown popup -->
+                        <Popup x:Name="Popup" Placement="Bottom"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True" Focusable="False"
+                               PopupAnimation="Slide">
+                            <Border x:Name="DropDownBorder"
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                    Background="{DynamicResource BgCard}"
+                                    BorderBrush="{DynamicResource Bdr}"
+                                    BorderThickness="1" CornerRadius="5"
+                                    Margin="0,2,0,0" Padding="0,4"
+                                    SnapsToDevicePixels="True">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="12" Opacity="0.35"
+                                                      ShadowDepth="4" Direction="270" />
+                                </Border.Effect>
+                                <ScrollViewer SnapsToDevicePixels="True">
+                                    <StackPanel IsItemsHost="True"
+                                                KeyboardNavigation.DirectionalNavigation="Contained" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter Property="IsTabStop" Value="False" />
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Implicit ComboBoxItem style -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd" Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="3" Margin="4,1">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverItemBg}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedItemBg}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- THEMED TOOLTIP                                                     -->
+    <!-- Dark fill, rounded corners, soft shadow, themed text.              -->
+    <!-- Applied implicitly — all ToolTips pick this up automatically.      -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource BgCard}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MaxWidth" Value="420" />
+        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="5" Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" Opacity="0.30"
+                                              ShadowDepth="3" Direction="270" />
+                        </Border.Effect>
+                        <ContentPresenter />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

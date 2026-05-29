@@ -5,6 +5,8 @@ using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels;
 
 // ?? Import/Export WatchItems + Templates ????????????????????????????
@@ -264,7 +266,7 @@ public sealed partial class MainViewModel
                 if (_config.Templates.Any(e =>
                     string.Equals(e.ID, t.ID, StringComparison.OrdinalIgnoreCase)))
                 {
-                    var result = MessageBox.Show(
+                    var result = ThemedMessageBox.Show(
                         $"Template '{t.ID}' already exists. Replace it?",
                         "Duplicate Template",
                         MessageBoxButton.YesNo,
