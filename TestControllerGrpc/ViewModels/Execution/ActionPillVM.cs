@@ -61,7 +61,10 @@ public partial class ActionPillVM : ObservableObject
         {
             var lines = new List<string>();
             if (!string.IsNullOrEmpty(Command))
-                lines.Add($"Command: {Command}");
+            {
+                var resolved = TreeNodeViewModel.ResolveTokens(Command);
+                lines.Add($"Command: {resolved}");
+            }
             lines.Add($"Status: {Status}");
             if (ExitCode != 0)
                 lines.Add($"Exit code: {ExitCode}");

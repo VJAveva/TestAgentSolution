@@ -15,6 +15,12 @@ public sealed class WatchListConfig
     public string FilePath { get; set; } = "";
 
     /// <summary>
+    /// Path to a global variables parameter file applied across all WatchItems.
+    /// Tokens from this file are loaded first (before per-WatchItem Initialize files).
+    /// </summary>
+    public string GlobalVariablesFile { get; set; } = "";
+
+    /// <summary>
     /// Non-fatal diagnostic messages produced during <c>WatchListXmlParser.Load</c>
     /// (e.g. deprecated attribute usage). UI hosts surface these via their
     /// log panel after a successful load. Empty for files that parse cleanly.

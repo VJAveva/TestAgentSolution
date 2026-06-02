@@ -54,7 +54,7 @@ public sealed partial class MainViewModel
                     // Skip items that are currently executing
                     if (_sessionManager.HasActiveExecution(item.Tag))
                     {
-                        AddLog($"? Skipped '{item.Tag}' ó currently executing", LogSeverity.Warning);
+                        AddLog($"? Skipped '{item.Tag}' ÔøΩ currently executing", LogSeverity.Warning);
                         skipped++;
                         continue;
                     }
@@ -84,7 +84,7 @@ public sealed partial class MainViewModel
             // Update executor templates
             _executor.LoadTemplates(_config.Templates);
 
-            // INCREMENTAL tree update ó insert new nodes, update replaced nodes
+            // INCREMENTAL tree update ÔøΩ insert new nodes, update replaced nodes
             // WITHOUT destroying existing TreeNodeViewModels (preserves execution status)
             Application.Current?.Dispatcher.InvokeAsync(() =>
             {
@@ -115,12 +115,12 @@ public sealed partial class MainViewModel
                         }
                         else if (existingNode is null)
                         {
-                            // Brand new item ó append to tree
+                            // Brand new item ÔøΩ append to tree
                             var newNode = TreeNodeViewModel.FromWatchItem(item);
                             newNode.Parent = WatchListRoot;
                             WatchListRoot.Children.Add(newNode);
                         }
-                        // else: item is currently executing ó already skipped above,
+                        // else: item is currently executing ÔøΩ already skipped above,
                         // node stays as-is with its execution status
                     }
 
@@ -164,7 +164,14 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            AddLog($"? Import failed: {ex.Message}", LogSeverity.Error);
+            var fileName = Path.GetFileName(dlg.FileName);
+            _appLogger.Error("Import", $"Failed to import WatchItems from '{dlg.FileName}': {ex.Message}", ex);
+            AddLog($"‚ùå Import failed: {ex.Message}", LogSeverity.Error);
+            ThemedMessageBox.Show(
+                $"Failed to import WatchItems from '{fileName}'.\n\n{ex.GetType().Name}: {ex.Message}",
+                "Import Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
 

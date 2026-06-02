@@ -156,6 +156,26 @@ public sealed partial class MainViewModel
     private void LoadTokensFromConfig(WatchListConfig config)
     {
         TreeNodeViewModel.TokenValues.Clear();
+
+        // Load global variables file first (lowest priority — can be overridden by per-WatchItem Initialize files)
+        if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))
+        {
+            try
+            {
+                var entries = ParameterResolver.ParseParameterFile(config.GlobalVariablesFile);
+                foreach (var (key, value) in entries)
+                {
+                    TreeNodeViewModel.TokenValues[key] = value;
+                    if (key.StartsWith('_'))
+                        TreeNodeViewModel.TokenValues[key[1..]] = value;
+                }
+            }
+            catch (Exception ex)
+            {
+                _appLogger.Warn("Tokens", $"Failed to load global variables file '{config.GlobalVariablesFile}': {ex.Message}");
+            }
+        }
+
         foreach (var wi in config.WatchItems)
             foreach (var ev in wi.Events)
                 LoadTokensFromChildren(ev.Children);

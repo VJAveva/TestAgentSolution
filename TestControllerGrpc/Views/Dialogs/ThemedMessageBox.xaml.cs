@@ -20,7 +20,9 @@ public partial class ThemedMessageBox : Window
         InitializeComponent();
         SetupIcon(icon);
         SetupButtons(buttons);
-        Owner = GetActiveWindow();
+        var owner = GetActiveWindow();
+        if (owner != null && owner != this)
+            Owner = owner;
     }
 
     /// <summary>Drop-in replacement for MessageBox.Show with themed styling.</summary>

@@ -4,7 +4,7 @@
              xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
              xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels.Converters"
              xmlns:spec="clr-namespace:TestControllerGrpc.ViewModels.Converters.Spec"
-             StartupUri="Views/MainWindow.xaml">
+             >
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

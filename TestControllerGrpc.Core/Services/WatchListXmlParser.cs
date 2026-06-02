@@ -20,6 +20,11 @@ public static class WatchListXmlParser
 
         var config = new WatchListConfig { FilePath = filePath };
 
+        // Parse GlobalVariablesFile attribute from root element
+        var globalVarsAttr = root.Attribute("GlobalVariablesFile");
+        if (globalVarsAttr is not null)
+            config.GlobalVariablesFile = globalVarsAttr.Value;
+
         // Phase 3.22: detect deprecated install-log attributes once and emit a
         // single warning so users know the attributes will be silently dropped
         // on the next save.
@@ -139,6 +144,9 @@ public static class WatchListXmlParser
     public static void Save(WatchListConfig config, string filePath)
     {
         var root = new XElement("WatchList");
+
+        if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))
+            root.Add(new XAttribute("GlobalVariablesFile", config.GlobalVariablesFile));
 
         foreach (var wi in config.WatchItems)
         {

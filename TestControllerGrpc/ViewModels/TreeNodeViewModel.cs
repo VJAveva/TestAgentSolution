@@ -81,10 +81,47 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     }
 
     /// <summary>Auto-sync IsEnabled toggle back to the model (e.g. WatchItemConfig.IsEnabled).</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    private static bool _suppressIsEnabledPropagation;
+
     partial void OnIsEnabledChanged(bool value)
     {
         if (ModelObject is WatchItemConfig wi)
             wi.IsEnabled = value;
+
+        // Propagate parent → children: when WatchList root is toggled, update all WatchItem children
+        if (!_suppressIsEnabledPropagation && NodeKind == NodeKinds.WatchList)
+        {
+            _suppressIsEnabledPropagation = true;
+            try
+            {
+                foreach (var child in Children)
+                {
+                    if (child.NodeKind == NodeKinds.WatchItem)
+                        child.IsEnabled = value;
+                }
+            }
+            finally
+            {
+                _suppressIsEnabledPropagation = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes whether all WatchItem children are enabled (true), none (false), or mixed (null).
+    /// Used by UI for three-state display on the WatchList root.
+    /// </summary>
+    public bool? ComputeChildrenEnabledState()
+    {
+        if (NodeKind != NodeKinds.WatchList || Children.Count == 0) return IsEnabled;
+        var watchItems = Children.Where(c => c.NodeKind == NodeKinds.WatchItem).ToList();
+        if (watchItems.Count == 0) return IsEnabled;
+        bool allEnabled = watchItems.All(c => c.IsEnabled);
+        bool allDisabled = watchItems.All(c => !c.IsEnabled);
+        if (allEnabled) return true;
+        if (allDisabled) return false;
+        return null; // mixed
     }
 
     // ── Tree search/filter visibility ───────────────────────────────

@@ -27,8 +27,15 @@ public class BuildReportHtmlGenerator
 
     private static string Enc(string? s) => WebUtility.HtmlEncode(s ?? "");
 
-    private static string TruncateError(string? msg) =>
-        msg is null ? "" : msg.Length > 120 ? msg[..120] + "�" : msg;
+    private static string TruncateError(string? msg)
+    {
+        if (msg is null) return "";
+        if (msg.Length <= 200) return msg;
+        // Cut at last space before limit to avoid splitting mid-word/label
+        var cutPoint = msg.LastIndexOf(' ', 200);
+        if (cutPoint < 100) cutPoint = 200;
+        return msg[..cutPoint] + "…";
+    }
     private string GetPatternLabel(string testName)
     {
         try { return _patternAnalyzer?.GetCompactLabel(testName) ?? "\u2014"; }
@@ -570,11 +577,12 @@ function navigateFail(dir){
 
         var allUseCases = build.UseCases
             .OrderByDescending(u => u.Failed)
-            .ThenBy(u => u.UseCaseName)
+            .ThenByDescending(u => u.Total)
+            .ThenBy(u => u.UseCaseName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         sb.AppendLine("<!DOCTYPE html>");
-        sb.AppendLine("<html lang=\"en\"><head><meta charset=\"UTF-8\"></head>");
+        sb.AppendLine("<html lang=\"en\"><head><meta charset=\"utf-8\"><title>TestAgent CI Results</title></head>");
         sb.AppendLine("<body style=\"margin:0;padding:0;background-color:#f0f2f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;\">");
 
         // Outer wrapper
@@ -609,7 +617,7 @@ function navigateFail(dir){
         sb.AppendLine("<td width=\"50%\" style=\"vertical-align:top;\">");
         sb.AppendLine("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\">");
         sb.AppendLine($"<tr><td style=\"padding-bottom:10px;\"><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Build Info</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{Enc(build.BuildNumber)}</span></td></tr>");
-        sb.AppendLine($"<tr><td><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Run Date</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{DateTime.Now:yyyy-MM-dd  HH:mm:ss}</span></td></tr>");
+        sb.AppendLine($"<tr><td><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Run Date</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{DateTime.Now:yyyy-MM-dd HH:mm:ss}</span></td></tr>");
         sb.AppendLine("</table></td>");
         sb.AppendLine("</tr></table></td></tr></table></td></tr>");
 
@@ -617,7 +625,7 @@ function navigateFail(dir){
         sb.AppendLine("<tr><td style=\"padding:24px 36px 0 36px;\">");
         sb.AppendLine("<h2 style=\"margin:0 0 14px 0;font-size:16px;font-weight:700;color:#1a202c;border-bottom:2px solid #e2e8f0;padding-bottom:8px;\">Overall Summary</h2>");
         sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
-        AppendEmailKpiCard(sb, $"{passRate:F0}%", "Pass Rate", passRate >= GoodThreshold ? "#f0fdf4" : "#fef2f2",
+        AppendEmailKpiCard(sb, $"{passRate:F1}%", "Pass Rate", passRate >= GoodThreshold ? "#f0fdf4" : "#fef2f2",
             passRate >= GoodThreshold ? "#bbf7d0" : "#fecaca", passRate >= GoodThreshold ? "#16a34a" : "#dc2626",
             passRate >= GoodThreshold ? "#4ade80" : "#f87171");
         AppendEmailKpiCard(sb, build.TotalTests.ToString(), "Total Tests", "#eff6ff", "#bfdbfe", "#2563eb", "#60a5fa");

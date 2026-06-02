@@ -533,12 +533,23 @@ public partial class MainWindow : Window
         // ?? Add commands (context-sensitive) ??????????????????????????
         if (node.NodeKind is "WatchList")
         {
+            // Enable All / Disable All toggle for WatchList root
+            var enableAllItem = CreateMenuItemWithIcon("Enable All WatchItems", null, "\uE73E", "AccGreen");
+            enableAllItem.Click += (_, _) => node.IsEnabled = true;
+            menu.Items.Add(enableAllItem);
+
+            var disableAllItem = CreateMenuItemWithIcon("Disable All WatchItems", null, "\uE711", "AccRed");
+            disableAllItem.Click += (_, _) => node.IsEnabled = false;
+            menu.Items.Add(disableAllItem);
+            menu.Items.Add(new Separator());
+
             menu.Items.Add(CreateMenuItemWithIcon("Add WatchItem", _vm.AddWatchItemCommand, "\uE710", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems�", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
-            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems�", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems…", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML�", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML…", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit Global Variables…", _vm.EditGlobalVariablesCommand, "\uE8A1", "AccYellow"));
         }
         else if (node.NodeKind is "WatchItem")
         {
@@ -657,6 +668,8 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "Template")
         {
+            menu.Items.Add(CreateMenuItemWithIcon("Edit Template XML…", _vm.EditSingleTemplateXmlCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
             menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
             menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToTemplateCommand, "\uE71B", "AccMauve"));

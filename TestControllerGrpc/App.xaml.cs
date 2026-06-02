@@ -153,6 +153,9 @@ public partial class App : Application
 
         Services = _host.Services;
 
+        var mainWindow = new Views.MainWindow();
+        mainWindow.Show();
+
         // Observe host startup so any RpcException / hosted-service failure
         // is logged instead of escaping as an unobserved task exception
         // (which the OS would surface as 0xC000041D and kill the process).
