@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Hosting;
 using TestAgentGrpc;
 using TestAgentGrpc.Clients;
 using TestAgentGrpc.Services;
@@ -12,14 +15,70 @@ using TestControllerGrpc.Services;
 var logDir = AppLogger.DefaultLogDirectory;
 CrashDumpHelper.InstallGlobalHandlers("agent", logDir);
 
-// ── Single-instance guard ──────────────────────────────────────────────
-using var mutex = new Mutex(true, "TestAgentGrpc", out bool createdNew);
+// ── Single-instance guard (Global\ prefix works across all Windows sessions) ──
+using var mutex = new Mutex(true, @"Global\TestAgentGrpc-SingleInstance", out bool createdNew);
 if (!createdNew)
 {
-    MessageBox.Show("TestAgent is already running.", "TestAgent",
-        MessageBoxButtons.OK, MessageBoxIcon.Information);
+    const string msg = "Another instance of TestAgentGrpc is already running. This instance will exit.";
+    WriteEventLog(msg, EventLogEntryType.Error);
+    Console.Error.WriteLine(msg);
+    // Also show a message box when running interactively (no-op when run as service)
+    if (Environment.UserInteractive)
+    {
+        MessageBox.Show(msg, "TestAgent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+    Environment.Exit(2);
     return;
 }
+
+// ── Pre-flight port check ──────────────────────────────────────────────
+var preflightConfig = new ConfigurationBuilder()
+    .AddJsonFile("appsettings.json", optional: true)
+    .AddEnvironmentVariables()
+    .AddCommandLine(args)
+    .Build();
+var grpcPort = preflightConfig.GetValue("AgentSettings:GrpcPort", 5200);
+
+if (!TryReservePort(grpcPort, out string portConflictDetails))
+{
+    // Try fallback ports if configured
+    var allowFallback = preflightConfig.GetValue("AgentSettings:AllowPortFallback", false);
+    var fallbackPorts = preflightConfig.GetSection("AgentSettings:FallbackPorts").Get<int[]>() ?? [];
+    var resolved = false;
+
+    if (allowFallback && fallbackPorts.Length > 0)
+    {
+        foreach (var fallback in fallbackPorts)
+        {
+            if (TryReservePort(fallback, out _))
+            {
+                var warnMsg = $"Primary port {grpcPort} unavailable ({portConflictDetails}); using fallback port {fallback}.";
+                WriteEventLog(warnMsg, EventLogEntryType.Warning);
+                Console.WriteLine(warnMsg);
+                grpcPort = fallback;
+                resolved = true;
+                break;
+            }
+        }
+    }
+
+    if (!resolved)
+    {
+        var msg = $"Cannot start: port {grpcPort} is unavailable. {portConflictDetails}";
+        WriteEventLog(msg, EventLogEntryType.Error);
+        Console.Error.WriteLine(msg);
+        CrashDumpHelper.AppendCrashLog($"[Startup] Port conflict: {msg}");
+        if (Environment.UserInteractive)
+        {
+            MessageBox.Show(msg, "TestAgent \u2014 Port Conflict", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        Environment.Exit(3);
+        return;
+    }
+}
+
+// Override the port in environment so builder picks up the (possibly fallback) value
+Environment.SetEnvironmentVariable("ASPNETCORE_AgentSettings__GrpcPort", grpcPort.ToString());
 
 // ── Build host ─────────────────────────────────────────────────────────
 try
@@ -36,6 +95,13 @@ builder.Services.Configure<NotificationSettings>(
     builder.Configuration.GetSection("NotificationSettings"));
 builder.Services.Configure<AuditSettings>(
     builder.Configuration.GetSection("AuditSettings"));
+
+// ── Graceful shutdown configuration ────────────────────────────────────
+builder.Services.Configure<HostOptions>(opts =>
+{
+    opts.ShutdownTimeout = TimeSpan.FromSeconds(30);
+    opts.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -234,4 +300,86 @@ static X509Certificate2 LoadServerCertificate(AgentKestrelOptions opts)
             $"Certificate with thumbprint '{opts.CertThumbprint}' not found in LocalMachine\\My store.");
 
     return certs[0];
+}
+
+// ── Helper: Pre-flight port availability check ─────────────────────────
+static bool TryReservePort(int port, out string details)
+{
+    try
+    {
+        using var listener = new TcpListener(IPAddress.IPv6Any, port);
+        listener.Server.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
+        listener.Start();
+        listener.Stop();
+        details = "OK";
+        return true;
+    }
+    catch (SocketException)
+    {
+        details = FindPortHolder(port);
+        return false;
+    }
+}
+
+// ── Helper: Identify which process holds a port ────────────────────────
+static string FindPortHolder(int port)
+{
+    try
+    {
+        var psi = new ProcessStartInfo("netstat", "-ano")
+        {
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var proc = Process.Start(psi);
+        if (proc is null) return "(could not start netstat)";
+
+        var output = proc.StandardOutput.ReadToEnd();
+        proc.WaitForExit(10_000);
+
+        var line = output.Split('\n')
+            .FirstOrDefault(l => l.Contains($":{port}") && l.Contains("LISTENING"));
+
+        if (line is null) return $"port {port} in use (no LISTENING entry found — may be in TIME_WAIT)";
+
+        var tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var pidStr = tokens.LastOrDefault();
+        if (pidStr is null || !int.TryParse(pidStr, out var pid))
+            return $"holder PID unknown ({line.Trim()})";
+
+        try
+        {
+            var p = Process.GetProcessById(pid);
+            return $"held by {p.ProcessName} (PID {pid})";
+        }
+        catch
+        {
+            return $"held by PID {pid} (process no longer exists — socket in TIME_WAIT)";
+        }
+    }
+    catch (Exception ex)
+    {
+        return $"diagnostic failed: {ex.Message}";
+    }
+}
+
+// ── Helper: Write to Windows Event Log (best-effort) ───────────────────
+static void WriteEventLog(string message, EventLogEntryType entryType)
+{
+    try
+    {
+        const string source = "TestAgentGrpc";
+        if (!EventLog.SourceExists(source))
+        {
+            // Creating event sources requires admin; if it fails, just skip.
+            try { EventLog.CreateEventSource(source, "Application"); }
+            catch { /* best effort */ }
+        }
+        EventLog.WriteEntry(source, message, entryType);
+    }
+    catch
+    {
+        // Event log write is best-effort; don't crash because of it.
+    }
 }

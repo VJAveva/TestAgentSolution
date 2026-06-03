@@ -20,6 +20,8 @@ public sealed class AgentSettings
     }
 
     public int GrpcPort { get; set; } = 5200;
+    public bool AllowPortFallback { get; set; }
+    public int[] FallbackPorts { get; set; } = [];
     public string ControllerAddress { get; set; } = "http://localhost:5100";
     public string? AgentEndpoint { get; set; }
 

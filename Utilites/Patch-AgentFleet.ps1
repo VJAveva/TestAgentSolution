@@ -90,6 +90,8 @@ param(
     
     [int]$PortCheckTimeoutSeconds = 60,
     
+    [int]$PortSustainSeconds = 30,
+    
     [int]$RebootTimeoutSeconds = 300,
     
     [string]$vCloudServer = "vcloud.dev.wonderware.com",
@@ -183,6 +185,7 @@ $patchResults = $Agents | ForEach-Object -Parallel {
     $svcName = $using:ServiceName
     $port = $using:GrpcPort
     $portTimeout = $using:PortCheckTimeoutSeconds
+    $portSustain = $using:PortSustainSeconds
     $cred = $using:AgentCredential
     $dryRun = $using:DryRun
     
@@ -346,6 +349,21 @@ $patchResults = $Agents | ForEach-Object -Parallel {
             throw "Port $port did not come up within $portTimeout seconds"
         }
         $result.Steps += "Port $port OK"
+        
+        # STEP 9b: Verify port STAYS up (catches crash-on-startup)
+        if ($portSustain -gt 0) {
+            Log-Agent "Verifying port $port sustained for ${portSustain}s..."
+            $sustainStart = Get-Date
+            while (((Get-Date) - $sustainStart).TotalSeconds -lt $portSustain) {
+                Start-Sleep -Seconds 5
+                $check = Test-NetConnection -ComputerName $agent `
+                    -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue
+                if (-not $check) {
+                    throw "Port $port came up but failed to remain listening (crashed within ${portSustain}s of start — check Event Log on $agent for port conflict or startup error)"
+                }
+            }
+            $result.Steps += "Port sustained ${portSustain}s"
+        }
         
         # STEP 10: Read new version
         try {
