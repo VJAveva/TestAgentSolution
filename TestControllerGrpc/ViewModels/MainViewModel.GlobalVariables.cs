@@ -106,7 +106,26 @@ public sealed partial class MainViewModel
             }
         }
 
-        // 4) Refresh tokens in UI
+        // 4) Update each WatchItem's model and tree node so the UI shows
+        //    the correct per-pipeline build number and drop location.
+        foreach (var wi in _config.WatchItems)
+        {
+            wi.LastBuildNumber = buildNumber;
+            wi.LastDropLocation = dropLocation;
+        }
+        if (WatchListRoot is not null)
+        {
+            foreach (var child in WatchListRoot.Children)
+            {
+                if (child.NodeKind == NodeKinds.WatchItem)
+                {
+                    child.LastBuildNumber = buildNumber;
+                    child.LastDropLocation = dropLocation;
+                }
+            }
+        }
+
+        // 5) Refresh tokens in UI
         LoadTokensFromConfig(_config);
 
         AddLog($"Global build set: {buildNumber} → updated {updatedCount} parameter file(s)", LogSeverity.Success);

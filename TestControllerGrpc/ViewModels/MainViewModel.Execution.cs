@@ -314,13 +314,44 @@ public sealed partial class MainViewModel
         {
             if (IsWatchItemRunning(wi.Tag))
             {
-                AddLog($"WatchItem '{wi.Tag}' is already running � skipping");
+                AddLog($"WatchItem '{wi.Tag}' is already running — skipping");
                 return true;
             }
 
             var session = CreateSession(wi.Tag);
             var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
                 ReferenceEquals(c.ModelObject, wi));
+
+            // Acquire agent locks so Fleet cards turn blue during execution
+            var parameters = wiNode != null
+                ? CollectInitializeParameters(wiNode)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+            if (requiredAgents.Count > 0)
+            {
+                var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+                var (locked, conflicts) = _lockManager.TryLockAgents(
+                    requiredAgents, session.SessionId, wi.Tag, wpfUser, "WPF");
+                if (!locked)
+                {
+                    var conflictMsg = string.Join(", ",
+                        conflicts.Select(c => $"{c.AgentName}←{c.UserId}"));
+                    AddLog($"Cannot start '{wi.Tag}' — agents busy: {conflictMsg}", LogSeverity.Warning);
+                    await Application.Current!.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
+                    return true; // skip this WatchItem, not a failure of the batch
+                }
+                _events.Publish(new AgentLocksChangedEvent
+                {
+                    Locks = _lockManager.GetAllLocks()
+                        .Select(l => new AgentLockInfo
+                        {
+                            AgentName = l.AgentName, SessionId = l.SessionId,
+                            WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                            Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                        }).ToList(),
+                    Reason = $"TriggerAll execution: {wi.Tag}",
+                });
+            }
 
             await Application.Current!.Dispatcher.InvokeAsync(() =>
             {
@@ -341,6 +372,7 @@ public sealed partial class MainViewModel
                         WatchItemPath = wi.Path,
                         TriggerFileName = $"[ManualTriggerAll:{ev.Type}]",
                         SessionId = session.SessionId,
+                        Parameters = parameters,
                     };
                     try
                     {
@@ -349,7 +381,7 @@ public sealed partial class MainViewModel
                     catch (Exception ex)
                     {
                         wiSuccess = false;
-                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} � {ex.Message}", LogSeverity.Error);
+                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
                     }
                 }
 
@@ -377,6 +409,18 @@ public sealed partial class MainViewModel
             }
             finally
             {
+                _lockManager.ReleaseSession(session.SessionId);
+                _events.Publish(new AgentLocksChangedEvent
+                {
+                    Locks = _lockManager.GetAllLocks()
+                        .Select(l => new AgentLockInfo
+                        {
+                            AgentName = l.AgentName, SessionId = l.SessionId,
+                            WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                            Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                        }).ToList(),
+                    Reason = $"TriggerAll completed: {wi.Tag}",
+                });
                 await Application.Current!.Dispatcher.InvokeAsync(() => CompleteSession(session));
             }
 
