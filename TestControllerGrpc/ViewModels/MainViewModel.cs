@@ -202,8 +202,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Search match count for display.</summary>
     [ObservableProperty] private int _searchMatchCount;
 
-    /// <summary>Available session IDs for the filter dropdown.</summary>
-    public ObservableCollection<string> AvailableSessionIds { get; } = new() { "" };
+    /// <summary>Available session IDs for the filter dropdown. "All" = no filter.</summary>
+    public ObservableCollection<string> AvailableSessionIds { get; } = new() { "All" };
 
     /// <summary>Pre-compiled regex for search (null if plain text mode).</summary>
     private System.Text.RegularExpressions.Regex? _searchRegex;
@@ -325,6 +325,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
         _subscriptions.Add(events.Subscribe<ExecutionCompletedEvent>(_ =>
             Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
+
+        // Issue #3: Immediately add new sessions to the filter dropdown
+        // so users can filter by session as soon as execution starts.
+        _subscriptions.Add(events.Subscribe<ExecutionStartedEvent>(e =>
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                if (!string.IsNullOrEmpty(e.SessionId) && !AvailableSessionIds.Contains(e.SessionId))
+                    AvailableSessionIds.Add(e.SessionId);
+            })));
 
         // Always start with a single empty WatchList root
         InitializeEmptyWatchList();

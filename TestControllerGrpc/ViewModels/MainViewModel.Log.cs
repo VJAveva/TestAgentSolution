@@ -17,7 +17,7 @@ public sealed partial class MainViewModel
     {
         LogFilterTag = "";
         LogFilterAgent = "";
-        LogFilterSession = "";
+        LogFilterSession = "All";
         LogLevelFilter = "All";
         LogSearchText = "";
         IsRegexSearch = false;
@@ -49,7 +49,7 @@ public sealed partial class MainViewModel
     {
         var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
         var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
-        var hasSessionFilter = !string.IsNullOrWhiteSpace(LogFilterSession);
+        var hasSessionFilter = !string.IsNullOrWhiteSpace(LogFilterSession) && LogFilterSession != "All";
         var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
         var hasSeverityFilter = LogLevelFilter != "All";
         var errorsOnly = ShowErrorsOnly;
@@ -77,6 +77,10 @@ public sealed partial class MainViewModel
             SearchMatchCount = FilteredLogEntries.Count;
         else
             SearchMatchCount = 0;
+
+        // Update copy button label to reflect current filter state
+        OnPropertyChanged(nameof(CopyButtonLabel));
+        OnPropertyChanged(nameof(HasActiveLogFilters));
     }
 
     /// <summary>Pure filter predicate � no field access, fully parameterized for thread safety.</summary>
@@ -152,22 +156,38 @@ public sealed partial class MainViewModel
         bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter)
     {
         return PassesFilter(entry, hasTagFilter, hasAgentFilter,
-            !string.IsNullOrWhiteSpace(LogFilterSession),
+            !string.IsNullOrWhiteSpace(LogFilterSession) && LogFilterSession != "All",
             hasSearchFilter, hasSeverityFilter,
             ShowErrorsOnly, IsRegexSearch, _searchRegex,
             LogFilterTag, LogFilterAgent, LogFilterSession, LogSearchText, LogLevelFilter);
     }
 
-    /// <summary>Copy all log entries to clipboard.</summary>
+    /// <summary>Copy log entries to clipboard. Copies filtered view when filters are active.</summary>
     [RelayCommand]
     private void CopyLog()
     {
+        var source = HasActiveLogFilters ? FilteredLogEntries : LogEntries;
         var sb = new StringBuilder();
-        foreach (var e in LogEntries)
+        foreach (var e in source)
             sb.AppendLine(e.FullText);
         if (sb.Length > 0)
             Clipboard.SetText(sb.ToString());
     }
+
+    /// <summary>Whether any log filter is currently applied.</summary>
+    public bool HasActiveLogFilters =>
+        (!string.IsNullOrWhiteSpace(LogFilterTag)) ||
+        (!string.IsNullOrWhiteSpace(LogFilterAgent)) ||
+        (!string.IsNullOrWhiteSpace(LogFilterSession) && LogFilterSession != "All") ||
+        (LogLevelFilter != "All") ||
+        (!string.IsNullOrWhiteSpace(LogSearchText)) ||
+        ShowErrorsOnly;
+
+    /// <summary>Dynamic button label: shows count when filters are active.</summary>
+    public string CopyButtonLabel =>
+        HasActiveLogFilters
+            ? $"Copy Filtered ({FilteredLogEntries.Count})"
+            : "Copy All";
 
     /// <summary>Copy only failed/error log entries to clipboard.</summary>
     [RelayCommand]
@@ -192,7 +212,7 @@ public sealed partial class MainViewModel
         LogWarningCount = 0;
         SearchMatchCount = 0;
         AvailableSessionIds.Clear();
-        AvailableSessionIds.Add("");
+        AvailableSessionIds.Add("All");
     }
 
     /// <summary>Toggle the log panel collapsed/expanded state.</summary>

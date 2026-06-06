@@ -34,6 +34,7 @@ public class ExecutionController : ControllerBase
     private readonly IAppLogger _appLogger;
     private readonly ISessionOwnershipChecker _ownershipChecker;
     private readonly ISecurityAuditLogger _auditLogger;
+    private readonly IEventAggregator _events;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
@@ -50,7 +51,8 @@ public class ExecutionController : ControllerBase
         IRealtimeNotifier notifier,
         IAppLogger appLogger,
         ISessionOwnershipChecker ownershipChecker,
-        ISecurityAuditLogger auditLogger)
+        ISecurityAuditLogger auditLogger,
+        IEventAggregator events)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -61,6 +63,7 @@ public class ExecutionController : ControllerBase
         _appLogger = appLogger;
         _ownershipChecker = ownershipChecker;
         _auditLogger = auditLogger;
+        _events = events;
     }
 
     /// <summary>GET /api/execution/sessions � list active sessions.</summary>
@@ -447,6 +450,9 @@ public class ExecutionController : ControllerBase
                     _ => "Success",
                 };
 
+                _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, finalState,
+                    completedSession?.SucceededCount ?? 0, completedSession?.FailedCount ?? 0, completedSession?.TotalActions ?? 0));
+
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -460,6 +466,8 @@ public class ExecutionController : ControllerBase
             }
             catch (OperationCanceledException)
             {
+                _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, "Cancelled", 0, 0, 0));
+
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -471,6 +479,8 @@ public class ExecutionController : ControllerBase
             }
             catch (Exception ex)
             {
+                _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, "Failed", 0, 0, 0));
+
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -489,6 +499,9 @@ public class ExecutionController : ControllerBase
                     BroadcastLockChange("Pipeline completed");
             }
         });
+
+        // Notify both SignalR clients and in-process subscribers (FleetVM)
+        _events.Publish(new ExecutionStartedEvent(sessionId, watchItemTag, evt.Type, source));
 
         await _hub.Clients.Group("global").SendAsync("ExecutionStarted", new
         {
@@ -809,7 +822,10 @@ public class ExecutionController : ControllerBase
                 Duration = FormatDuration(DateTime.UtcNow - l.LockedAtUtc),
             }).ToList();
 
-        _ = _notifier.NotifyAgentLocksChanged(new AgentLocksChangedEvent
+        // Publish to event aggregator so WPF FleetVM (and SignalRNotifier) both receive it.
+        // Previously only called _notifier directly, which sent to SignalR but never
+        // notified the in-process FleetVM — causing agent cards to stay green.
+        _events.Publish(new AgentLocksChangedEvent
         {
             Locks = locks,
             Reason = reason,
@@ -915,6 +931,8 @@ public class ExecutionController : ControllerBase
                 exitCode = act.ExitCode,
                 errorMessage = act.ErrorMessage,
                 duration = act.Duration.ToString(@"mm\:ss"),
+                startedUtc = act.StartedUtc.ToString("o"),
+                durationSeconds = (int)act.Duration.TotalSeconds,
             }),
         }),
     };

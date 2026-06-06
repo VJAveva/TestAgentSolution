@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 import { SessionCard } from './SessionCard';
 import { LogPanel } from './LogPanel';
@@ -15,6 +15,13 @@ export default function ExecutionDashboard() {
   const [splitPercent, setSplitPercent] = useState(60);
   const [showCompleted, setShowCompleted] = useState(false);
   const [filterText, setFilterText] = useState('');
+
+  // Auto-show completed sessions when no active sessions exist
+  useEffect(() => {
+    if (activeSessions.length === 0 && completedSessions.length > 0) {
+      setShowCompleted(true);
+    }
+  }, [activeSessions.length, completedSessions.length]);
 
   const loadDemoData = useCallback(() => {
     apiFetch<{ active: any[]; history: any[] }>('/api/execution/demo-sessions')

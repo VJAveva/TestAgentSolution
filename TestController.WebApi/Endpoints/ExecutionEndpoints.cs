@@ -23,7 +23,69 @@ public static class ExecutionEndpoints
         group.MapGet("/proxy/dashboard-sessions", ProxyDashboardSessions);
         group.MapGet("/proxy/status", ProxyExecutionStatus);
         group.MapGet("/proxy/logs/{sessionId}", ProxySessionLogs);
+        group.MapGet("/dashboard-metrics", GetDashboardMetrics);
         return group;
+    }
+
+    /// <summary>GET /api/execution/dashboard-metrics — aggregate metrics for the dashboard header strip.</summary>
+    private static async Task<IResult> GetDashboardMetrics(
+        ExecutionSessionManager sessionManager,
+        ControllerProxyService proxy)
+    {
+        var localActive = sessionManager.GetActiveSessions();
+        var localHistory = sessionManager.GetHistory(20);
+        var allSessions = localActive.Concat(localHistory).ToList();
+
+        // Try to get richer data from the WPF controller proxy
+        var proxied = await proxy.GetDashboardSessionsAsync();
+        int activeSessions = localActive.Count;
+        int agentsLocked = 0;
+        int actionsPassed = 0;
+        int actionsFailed = 0;
+        int totalActions = 0;
+        int completedActions = 0;
+
+        if (proxied is not null)
+        {
+            activeSessions = proxied.Active.Count;
+            foreach (var s in proxied.Active)
+            {
+                if (s.TryGetProperty("lockedAgents", out var la) && la.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    agentsLocked += la.GetArrayLength();
+                if (s.TryGetProperty("passedActions", out var pa))
+                    actionsPassed += pa.GetInt32();
+                if (s.TryGetProperty("failedActions", out var fa))
+                    actionsFailed += fa.GetInt32();
+                if (s.TryGetProperty("totalActions", out var ta))
+                    totalActions += ta.GetInt32();
+                if (s.TryGetProperty("completedActions", out var ca))
+                    completedActions += ca.GetInt32();
+            }
+        }
+        else
+        {
+            foreach (var s in localActive)
+            {
+                agentsLocked += s.LockedAgents.Length;
+                actionsPassed += s.SucceededCount;
+                actionsFailed += s.FailedCount;
+                totalActions += s.SnapshotNodes.Count;
+                completedActions += s.ActionResults.Count;
+            }
+        }
+
+        var overallProgress = totalActions > 0
+            ? (int)((double)completedActions / totalActions * 100)
+            : 0;
+
+        return Results.Ok(new
+        {
+            activeSessions,
+            agentsLocked,
+            actionsPassed,
+            actionsFailed,
+            overallProgress,
+        });
     }
 
     /// <summary>POST /api/execution/trigger-all � trigger all WatchItems.</summary>
@@ -547,6 +609,8 @@ public static class ExecutionEndpoints
                 exitCode = act.ExitCode,
                 errorMessage = act.ErrorMessage,
                 duration = act.Duration.ToString(@"mm\:ss"),
+                startedUtc = act.StartedUtc.ToString("o"),
+                durationSeconds = (int)act.Duration.TotalSeconds,
             }).Cast<object>().ToList();
 
             // Append pending actions that haven't started for this agent

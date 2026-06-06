@@ -277,8 +277,13 @@ export function useSignalR(): HubConnection | null {
     conn.on('AgentStatusChanged', (data: { agentName?: string; status?: string }) => {
       if (data.agentName && data.status) useAgentStore.getState().updateStatus(data.agentName, data.status);
     });
-    conn.on('AgentHeartbeats', (_batch: unknown[]) => {
-      // Heartbeat payloads handled by agent detail components if needed
+    conn.on('AgentHeartbeats', (batch: Array<{ agentName?: string; state?: string }>) => {
+      const store = useAgentStore.getState();
+      for (const hb of batch) {
+        if (hb.agentName && hb.state) {
+          store.updateStatus(hb.agentName, hb.state);
+        }
+      }
     });
 
     // WatchList hot-reload: refetch tree when server signals config change

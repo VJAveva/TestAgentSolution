@@ -440,6 +440,7 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="10,6,28,6" />
         <Setter Property="FontSize" Value="12" />
+        <Setter Property="MaxDropDownHeight" Value="320" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />

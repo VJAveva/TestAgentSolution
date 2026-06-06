@@ -18,7 +18,7 @@ public partial class TimelineVM : ObservableObject, IDisposable
     {
         _dashboard = dashboard;
         _refreshTimer = new DispatcherTimer(
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(2),
             DispatcherPriority.Background,
             OnRefreshTick,
             dispatcher);
@@ -144,5 +144,25 @@ public partial class TimelineBar : ObservableObject
     [ObservableProperty] private string _status = "Pending";
     [ObservableProperty] private double _offsetSeconds;
     [ObservableProperty] private double _durationSeconds;
+    [ObservableProperty] private double _baselineDurationSeconds;
     [ObservableProperty] private string _tooltip = "";
+
+    /// <summary>
+    /// Burnout level: "Normal" (under baseline), "Approaching" (100-120% of baseline),
+    /// "Exceeded" (over 120% of baseline), or "Unknown" (no baseline data).
+    /// </summary>
+    public string BurnoutLevel
+    {
+        get
+        {
+            if (BaselineDurationSeconds <= 0) return "Unknown";
+            var ratio = DurationSeconds / BaselineDurationSeconds;
+            if (ratio > 1.2) return "Exceeded";
+            if (ratio > 1.0) return "Approaching";
+            return "Normal";
+        }
+    }
+
+    partial void OnDurationSecondsChanged(double value) => OnPropertyChanged(nameof(BurnoutLevel));
+    partial void OnBaselineDurationSecondsChanged(double value) => OnPropertyChanged(nameof(BurnoutLevel));
 }

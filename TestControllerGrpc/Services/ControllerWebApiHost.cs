@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TestController.Api;
+using TestController.Api.Security;
 using TestController.Api.Services;
 using TestControllerGrpc.Models;
 
@@ -32,6 +33,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly AgentLockManager _lockManager;
     private readonly IAppLogger _appLogger;
     private readonly ILogger<ControllerWebApiHost> _logger;
+    private readonly IConfiguration _config;
     private readonly int _port;
     private WebApplication? _app;
     private Task? _serverTask;
@@ -63,6 +65,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _lockManager = lockManager;
         _appLogger = appLogger;
         _logger = logger;
+        _config = config;
         _port = config.GetValue<int>("WebApiPort", 5200);
     }
 
@@ -105,6 +108,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         {
             var builder = WebApplication.CreateBuilder();
 
+            // Import the WPF app's configuration (so Security section is available)
+            builder.Configuration.AddConfiguration(_config);
+
             builder.WebHost.ConfigureKestrel(kestrel =>
             {
                 kestrel.ListenAnyIP(_port, o =>
@@ -129,6 +135,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_resultsConfig);
             builder.Services.AddSingleton(_lockManager);
             builder.Services.AddSingleton(_appLogger);
+
+            // Register security services (ISessionOwnershipChecker, ISecurityAuditLogger, auth)
+            builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 
             // Use the shared API library for controllers, hub, and bridge
             builder.Services.AddControllerApi()
@@ -171,6 +180,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             _app = builder.Build();
 
             _app.UseCors("WebClient");
+
+            // Authentication + authorization middleware
+            _app.UseMultiIdentitySecurity();
 
             // Map shared controllers, hub, and start the SignalR bridge
             // (UseControllerApi registers RequestLoggingMiddleware)

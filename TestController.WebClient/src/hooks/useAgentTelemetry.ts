@@ -1,21 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import type { AgentTelemetry } from '../types/agentWorkspace';
-import { useConnectionStore } from '../stores/connectionStore';
 import { errorThrottle } from '../lib/errorThrottle';
 
-/** Default polling interval when no execution is active. */
+/** Default polling interval for the agent monitor page. */
 const DEFAULT_INTERVAL_MS = 2000;
-/** Backed-off interval when SignalR indicates active execution. */
-const BACKOFF_INTERVAL_MS = 15000;
 
 /**
  * Hook to poll agent telemetry at a configurable interval (default 2s).
- * Automatically backs off to 15s when the SignalR connection is active
- * and streaming execution events (active sessions detected).
  *
- * This prevents hammering the telemetry endpoint during installs/executions
- * when real-time state is already pushed via SignalR.
+ * Always polls at the default interval regardless of SignalR state because:
+ * - SignalR does NOT push individual agent telemetry to the monitor page
+ * - The WebAPI caches telemetry and returns it without hitting the agent gRPC
+ *   during execution, so the poll is cheap and safe
+ * - The monitor page MUST stay responsive (showing current command, CPU, etc.)
+ *   even during active sessions — that's the whole point of the monitor
  */
 export function useAgentTelemetry(agentName: string | null, intervalMs = DEFAULT_INTERVAL_MS) {
   const [telemetry, setTelemetry] = useState<AgentTelemetry | null>(null);
@@ -23,13 +22,6 @@ export function useAgentTelemetry(agentName: string | null, intervalMs = DEFAULT
   const mountedRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const consecutiveFailures = useRef(0);
-
-  const signalRStatus = useConnectionStore(s => s.status);
-
-  // Back off when connected and likely receiving live events
-  const effectiveInterval = signalRStatus === 'connected'
-    ? BACKOFF_INTERVAL_MS
-    : intervalMs;
 
   const fetchTelemetry = useCallback(async () => {
     if (!agentName) return;
@@ -65,14 +57,14 @@ export function useAgentTelemetry(agentName: string | null, intervalMs = DEFAULT
     // Fetch immediately on mount/agent change
     fetchTelemetry();
 
-    // Set up polling with the effective interval
-    timerRef.current = setInterval(fetchTelemetry, effectiveInterval);
+    // Set up polling at the configured interval
+    timerRef.current = setInterval(fetchTelemetry, intervalMs);
 
     return () => {
       mountedRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [agentName, effectiveInterval, fetchTelemetry]);
+  }, [agentName, intervalMs, fetchTelemetry]);
 
   return { telemetry, error, refresh: fetchTelemetry };
 }

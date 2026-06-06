@@ -153,12 +153,11 @@ public partial class FleetVM : ObservableObject, IDisposable
         var allHealth = _dispatcher.GetAllAgentHealth();
         var allLocks = _lockManager.GetAllLocks();
 
-        Cards.Clear();
-        Groups.Clear();
         int busy = 0, free = 0, offline = 0, failed = 0;
 
-        // Build all cards first
-        var allCards = new List<FleetCardVM>();
+        // Track which agents are still present so we can remove stale cards
+        var activeAgentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var agentName in agents)
         {
             // Apply filter
@@ -166,7 +165,14 @@ public partial class FleetVM : ObservableObject, IDisposable
                 !agentName.Contains(FilterText, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var card = new FleetCardVM { AgentName = agentName };
+            activeAgentNames.Add(agentName);
+
+            // Find existing card or create new one (in-place mutation preserves focus)
+            var card = Cards.FirstOrDefault(c =>
+                string.Equals(c.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
+            bool isNew = card == null;
+            card ??= new FleetCardVM { AgentName = agentName };
+
             var address = _dispatcher.GetAgentAddress(agentName) ?? "";
             card.Address = address;
 
@@ -198,6 +204,7 @@ public partial class FleetVM : ObservableObject, IDisposable
                     card.StatusDetail = agentSummary != null
                         ? $"{agentSummary.CompletedCount}/{agentSummary.TotalCount} actions"
                         : agentLock.WatchItemTag;
+                    card.IsError = false;
                     busy++;
                 }
 
@@ -211,6 +218,11 @@ public partial class FleetVM : ObservableObject, IDisposable
                     if (agentSummary.TotalCount > 0)
                         card.ProgressPercent = (int)(100.0 * agentSummary.CompletedCount / agentSummary.TotalCount);
                 }
+                else
+                {
+                    card.CurrentActionTag = "";
+                    card.ProgressPercent = -1;
+                }
             }
             else if (health != null && !health.IsHealthy)
             {
@@ -219,21 +231,42 @@ public partial class FleetVM : ObservableObject, IDisposable
                     ? $"{health.ConsecutiveFailures} failures"
                     : "Unreachable";
                 card.IsError = true;
+                card.SessionId = "";
+                card.GroupKey = "";
+                card.Owner = "";
+                card.WatchItemTag = "";
+                card.CurrentActionTag = "";
+                card.ProgressPercent = -1;
                 offline++;
             }
             else
             {
                 card.Status = "Free";
                 card.StatusDetail = "Idle";
+                card.IsError = false;
+                card.SessionId = "";
+                card.GroupKey = "";
+                card.Owner = "";
+                card.WatchItemTag = "";
+                card.CurrentActionTag = "";
+                card.ProgressPercent = -1;
                 free++;
             }
 
-            allCards.Add(card);
-            Cards.Add(card);
+            if (isNew)
+                Cards.Add(card);
         }
 
-        // Build groups: assigned groups (by session) + Available pool
-        var assigned = allCards
+        // Remove cards for agents that are no longer registered or filtered out
+        for (int i = Cards.Count - 1; i >= 0; i--)
+        {
+            if (!activeAgentNames.Contains(Cards[i].AgentName))
+                Cards.RemoveAt(i);
+        }
+
+        // Rebuild groups (lightweight — groups don't hold focus state)
+        Groups.Clear();
+        var assigned = Cards
             .Where(c => !string.IsNullOrEmpty(c.GroupKey))
             .GroupBy(c => c.GroupKey)
             .Select(g => new FleetGroupVM(
@@ -245,7 +278,7 @@ public partial class FleetVM : ObservableObject, IDisposable
             .OrderBy(g => g.Title)
             .ToList();
 
-        var availableCards = allCards
+        var availableCards = Cards
             .Where(c => string.IsNullOrEmpty(c.GroupKey))
             .OrderBy(c => c.AgentName)
             .ToList();
@@ -261,16 +294,16 @@ public partial class FleetVM : ObservableObject, IDisposable
             Groups.Add(g);
         Groups.Add(availableGroup);
 
-        TotalCount = allCards.Count;
+        TotalCount = Cards.Count;
         BusyCount = busy;
         FreeCount = free;
         OfflineCount = offline;
         FailedCount = failed;
-        IsEmpty = allCards.Count == 0;
+        IsEmpty = Cards.Count == 0;
 
         // Utilization bar: proportional width (max 80px) based on busy/total
-        UtilizationBarWidth = allCards.Count > 0
-            ? (int)(80.0 * busy / allCards.Count)
+        UtilizationBarWidth = Cards.Count > 0
+            ? (int)(80.0 * busy / Cards.Count)
             : 0;
     }
 

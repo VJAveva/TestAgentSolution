@@ -3039,9 +3039,9 @@
                                 <Button Content="Clear" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource YellowBtnBg}" Foreground="{DynamicResource AccYellow}"
                                         Command="{Binding ClearLogCommand}" ToolTip="Clear all log entries (Ctrl+Shift+L)" />
-                                <Button Content="Copy All" Style="{StaticResource SmBtn}"
+                                <Button Content="{Binding CopyButtonLabel}" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                        Command="{Binding CopyLogCommand}" ToolTip="Copy all log entries to clipboard (Ctrl+Shift+C)" />
+                                        Command="{Binding CopyLogCommand}" ToolTip="Copy log entries to clipboard (Ctrl+Shift+C)" />
                                 <Button Content="Copy Errors" Style="{StaticResource SmBtn}"
                                         Foreground="{DynamicResource AccRed}"
                                         Command="{Binding CopyFailedLogCommand}" ToolTip="Copy only error lines to clipboard" />

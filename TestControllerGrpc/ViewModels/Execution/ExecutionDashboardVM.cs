@@ -457,10 +457,25 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                     status: MapOutcome(action.Outcome),
                     exitCode: action.ExitCode ?? 0,
                     errorMessage: action.ErrorMessage ?? "",
-                    duration: action.DurationText);
+                    duration: action.DurationText,
+                    startedUtc: action.StartedUtc,
+                    durationSeconds: action.Duration.TotalSeconds);
             }
         }
         card.RecalculateCounters();
+
+        // Issue #7 fallback: use the session model's direct completed/total
+        // counts to ensure progress advances even if pill status tracking
+        // lags behind due to tag mismatches or race conditions.
+        var sessionCompleted = summaries.Sum(s => s.CompletedCount);
+        var sessionTotal = summaries.Sum(s => s.TotalCount);
+        if (sessionTotal > 0)
+        {
+            var effectiveTotal = Math.Max(card.TotalActions, sessionTotal);
+            var directProgress = (int)(sessionCompleted * 100.0 / effectiveTotal);
+            if (directProgress > card.ProgressPercent)
+                card.ProgressPercent = directProgress;
+        }
     }
 
     // Wrapper used by OnExecutionCompleted, which already has the card but
