@@ -7,6 +7,7 @@ namespace TestAgentDisplay.ViewModels;
 
 /// <summary>
 /// ViewModel for a single agent node — live state, output, metrics, history.
+/// Tracks snapshot age to indicate data freshness (DISPLAY-002).
 /// </summary>
 public sealed partial class AgentNodeViewModel : ObservableObject
 {
@@ -24,15 +25,19 @@ public sealed partial class AgentNodeViewModel : ObservableObject
     [ObservableProperty] private int _failedCount;
     [ObservableProperty] private string _lastEventTime = "—";
     [ObservableProperty] private Brush _stateBrush = Brushes.Gray;
+    [ObservableProperty] private string _snapshotAge = "";
+    [ObservableProperty] private bool _isSnapshotStale;
 
     public ObservableCollection<OutputLine> OutputLines { get; } = new();
     public ObservableCollection<ExecutionHistoryItem> History { get; } = new();
 
     private const int MaxOutputLines = 5000;
+    private DateTime _lastSnapshotUtc = DateTime.MinValue;
 
     public void HandleEvent(ExecutionEvent evt)
     {
         LastEventTime = evt.Timestamp?.ToDateTime().ToLocalTime().ToString("HH:mm:ss") ?? "—";
+        UpdateSnapshotFreshness();
 
         switch (evt.EventType)
         {
@@ -63,7 +68,9 @@ public sealed partial class AgentNodeViewModel : ObservableObject
                 AddOutput("", "#444444");
                 Activity = $"Completed (exit {evt.ExitCode})";
                 CompletedCount++;
+                // DISPLAY-002: Clear stale command on completion
                 CurrentCommand = "";
+                CurrentExecutionId = "";
                 SetState("Ready", "#00C9A7");
                 break;
 
@@ -72,7 +79,9 @@ public sealed partial class AgentNodeViewModel : ObservableObject
                 AddOutput("", "#444444");
                 Activity = $"Failed: {evt.ErrorMessage}";
                 FailedCount++;
+                // DISPLAY-002: Clear stale command on failure
                 CurrentCommand = "";
+                CurrentExecutionId = "";
                 SetState("Ready", "#00C9A7");
                 break;
 
@@ -80,7 +89,9 @@ public sealed partial class AgentNodeViewModel : ObservableObject
                 AddOutput($"🛑 [{evt.ExecutionId}] {evt.Detail}", "#EF5350");
                 Activity = "Terminated";
                 FailedCount++;
+                // DISPLAY-002: Clear stale command on termination
                 CurrentCommand = "";
+                CurrentExecutionId = "";
                 SetState("Ready", "#00C9A7");
                 break;
 
@@ -95,7 +106,12 @@ public sealed partial class AgentNodeViewModel : ObservableObject
                     MemoryUsedMb = evt.Metrics.MemoryUsedMb;
                     DiskFreeGb = evt.Metrics.DiskFreeGb;
                 }
-                UpdateAgentState(evt.AgentState);
+                // Only apply heartbeat state when not tracking a local execution.
+                // Heartbeats during the RunCommand→ExecuteAsync race window could
+                // report Ready before the executor has transitioned to Running,
+                // causing the "Current Action" display to flicker.
+                if (string.IsNullOrEmpty(CurrentExecutionId))
+                    UpdateAgentState(evt.AgentState);
                 break;
 
             case ExecutionEventType.EventProgress:
@@ -111,6 +127,8 @@ public sealed partial class AgentNodeViewModel : ObservableObject
         {
             SetState("Offline", "#78909C");
             Activity = "Disconnected";
+            // DISPLAY-002: Clear command on disconnect to avoid stale display
+            CurrentCommand = "";
         }
     }
 
@@ -121,10 +139,18 @@ public sealed partial class AgentNodeViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(snap.AgentName))
             DisplayName = snap.AgentName;
 
-        UpdateAgentState(snap.State);
-        Activity = snap.CurrentActivity;
-        CurrentCommand = snap.CurrentCommand;
-        CurrentExecutionId = snap.CurrentExecutionId;
+        // Only update state/activity from snapshot if we're not tracking an
+        // active execution locally. The event stream is the authoritative source
+        // during execution — snapshot polling would overwrite with stale data
+        // and cause the "Current Action" display to flicker.
+        if (string.IsNullOrEmpty(CurrentExecutionId))
+        {
+            UpdateAgentState(snap.State);
+            Activity = snap.CurrentActivity;
+            CurrentCommand = snap.CurrentCommand;
+            CurrentExecutionId = snap.CurrentExecutionId;
+        }
+
         CompletedCount = snap.ExecutionsCompleted;
         FailedCount = snap.ExecutionsFailed;
         if (snap.Metrics is not null)
@@ -133,6 +159,24 @@ public sealed partial class AgentNodeViewModel : ObservableObject
             MemoryUsedMb = snap.Metrics.MemoryUsedMb;
             DiskFreeGb = snap.Metrics.DiskFreeGb;
         }
+
+        // DISPLAY-002: Track snapshot freshness
+        _lastSnapshotUtc = DateTime.UtcNow;
+        UpdateSnapshotFreshness();
+    }
+
+    /// <summary>
+    /// Updates the snapshot age display. Data older than 60s is considered stale.
+    /// Called from ApplySnapshot (which sets _lastSnapshotUtc) and periodically.
+    /// </summary>
+    public void UpdateSnapshotFreshness()
+    {
+        var age = DateTime.UtcNow - _lastSnapshotUtc;
+        IsSnapshotStale = age > TimeSpan.FromSeconds(60);
+        SnapshotAge = age.TotalSeconds < 5 ? "just now"
+            : age.TotalSeconds < 60 ? $"{age.TotalSeconds:F0}s ago"
+            : age.TotalMinutes < 60 ? $"{age.TotalMinutes:F0}m ago"
+            : $"{age.TotalHours:F0}h ago";
     }
 
     public void ApplyHistory(ExecutionHistoryReply history)

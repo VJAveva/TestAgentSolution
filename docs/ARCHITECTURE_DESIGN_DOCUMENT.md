@@ -1,9 +1,9 @@
 # TestAgentSolution — Architecture Design Document
 
-**Version:** 2.1 — Post-Single-Hub Unification  
-**Branch:** `upgrade-to-NET10`  
+**Version:** 2.2 — Post-Communication-Hardening  
+**Branch:** `ExeDashboadImpl`  
 **Date:** June 2025  
-**Scope:** All recent architectural changes, recommendations, performance analysis, and E2E blocking points
+**Scope:** All recent architectural changes, recommendations, performance analysis, E2E blocking points, and Controller–Agent communication hardening
 
 ---
 
@@ -162,6 +162,70 @@ app.UseControllerApi();                // maps controllers + hub + starts bridge
 | **Missing results endpoint mapping** | `MapResultsEndpoints()` was never called in `Program.cs`. Fixed: added `app.MapGroup("/api/results").MapResultsEndpoints()` |
 | **ResultsController route mismatch** | `[HttpGet("{buildNumber}")]` mapped to `/api/results/{buildNumber}` but tests/clients expected `/api/results/builds/{buildNumber}`. Fixed: route changed to `[HttpGet("builds/{buildNumber}")]` |
 | **ResultsController incomplete response** | `GetBuilds()` returned only `{buildNumber, modified}` but clients expected `{totalTests, passedTests, failedTests, passRate, health}`. Fixed: now parses each build folder with `TrxResultsParser` + `BuildResultsAggregator` |
+
+### 3.7 Controller–Agent Communication Hardening (ExeDashboadImpl branch)
+
+**What changed:** The gRPC communication between Controller and Agent was hardened to prevent and recover from the "Agent Busy" stuck state, where agents become permanently unresponsive due to failed cancellation flows or corrupted HTTP/2 channels.
+
+#### New Components
+
+| Component | Location | Purpose |
+|---|---|---|
+| `StuckExecutionWatchdog` | `TestAgentGrpc/Services/` | `BackgroundService` polling every 60s. If agent stuck in `Running` beyond `MaxExecutionTimeoutMinutes + WatchdogGraceMinutes`, force-resets via `CommandExecutor.ForceReady()` |
+| `ControllerTimeoutOptions` | `TestControllerGrpc/` | Strongly-typed configuration class bound from `appsettings.json ? Controller:Timeouts`. Replaces all hardcoded timeout values in `AgentGrpcDispatcher` |
+| `ExecutionStreamSafeguardTests` | `TestControllerGrpc.Tests/` | 324-line test suite covering active execution guard, busy-recovery, ForceReady escalation, and channel reset |
+
+#### `IAgentGrpcDispatcher` Interface Additions
+
+| New Method | Behavior |
+|---|---|
+| `bool IsAgentExecuting(string agentName)` | Returns `true` if a `RunCommandStreamed` call is actively in-flight for the agent |
+| `Task<bool> ResetChannelAsync(string agentName)` | Disposes old gRPC channel, creates fresh connection, pings to verify. Blocked during active execution to prevent stream interference |
+
+#### Active Execution Guard
+
+During `RunCommandStreamed`, the agent is tracked in `_activeExecutions`. Any concurrent `TestConnectionAsync` or health poll returns a **synthetic snapshot** (state=Running, currentCommand from tracking) without issuing a gRPC call. This prevents HTTP/2 GOAWAY/RST_STREAM from killing the in-flight stream.
+
+#### Busy-Recovery Flow (Configurable)
+
+```
+Agent reports BUSY on command dispatch
+    ? Wait up to BusyRecoveryMaxSeconds (default: 120)
+    ? Poll every BusyRecoveryIntervalSeconds (default: 10)
+    ? If still busy ? call ForceReady RPC on agent
+    ? If ForceReady succeeds ? retry command
+    ? If consecutive failures ? AutoResetFailureThreshold (default: 10)
+        ? async ResetChannelAsync (dispose + recreate gRPC channel)
+```
+
+#### `ControllerTimeoutOptions` Configuration
+
+```json
+"Controller": {
+  "Timeouts": {
+    "TestConnectionTimeoutSeconds": 5,
+    "PingTimeoutSeconds": 3,
+    "BusyRecoveryMaxSeconds": 120,
+    "BusyRecoveryIntervalSeconds": 10,
+    "ChannelConnectTimeoutSeconds": 30,
+    "KeepAlivePingDelaySeconds": 60,
+    "KeepAlivePingTimeoutSeconds": 30,
+    "PooledConnectionIdleMinutes": 5,
+    "CircuitBreakerBreakSeconds": 15,
+    "AutoResetFailureThreshold": 10,
+    "OuterSafetyNetTimeoutHours": 24,
+    "RetryMaxAttempts": 3,
+    "RetryDelaySeconds": 1
+  }
+}
+```
+
+#### Agent-Side Settings
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `MaxExecutionTimeoutMinutes` | `120` | Hard safety-net timeout for executions with no explicit timeout |
+| `WatchdogGraceMinutes` | `5` | Grace period beyond max timeout before watchdog force-resets |
 
 ---
 

@@ -44,17 +44,17 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
             request.Name, agentGrpcAddress, context.Peer);
 
         // Register under the friendly name so WatchList XML AgentName references resolve
+        // (dispatcher publishes AgentRegisteredEvent internally)
         _dispatcher.RegisterAgent(request.Name, agentGrpcAddress);
 
-        _events.Publish(new AgentRegisteredEvent(request.Name, agentGrpcAddress));
         return Task.FromResult(new Empty());
     }
 
     public override Task<Empty> UnRegister(TestAgentRef request, ServerCallContext context)
     {
         _logger.LogInformation("Agent unregistered via gRPC: {Name}", request.Name);
+        // Dispatcher publishes AgentUnregisteredEvent internally
         _dispatcher.UnregisterAgent(request.Name);
-        _events.Publish(new AgentUnregisteredEvent(request.Name));
         return Task.FromResult(new Empty());
     }
 

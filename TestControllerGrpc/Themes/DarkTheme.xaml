@@ -94,4 +94,106 @@
     <!-- Watermark -->
     <sys:Double x:Key="WatermarkOpacity">0.08</sys:Double>
 
+    <!-- Agent latency indicator -->
+    <SolidColorBrush x:Key="LatencyGood"    Color="#FFA6E3A1" />
+    <SolidColorBrush x:Key="LatencyWarn"    Color="#FFF9E2AF" />
+    <SolidColorBrush x:Key="LatencyBad"     Color="#FFF38BA8" />
+
+    <!-- Panel focus indicator -->
+    <SolidColorBrush x:Key="FocusRing"      Color="#4489B4FA" />
+
+    <!-- Scrollbar track -->
+    <SolidColorBrush x:Key="ScrollbarTrack"      Color="#11FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumb"      Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumbHover" Color="#55FFFFFF" />
+    <SolidColorBrush x:Key="ScrollbarThumbDrag"  Color="#77FFFFFF" />
+
+    <!-- Badge pill backgrounds -->
+    <SolidColorBrush x:Key="CancelledBadgeBg" Color="#339399B2" />
+    <SolidColorBrush x:Key="PartialBadgeBg"   Color="#33FAB387" />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TreeView Spec — Test Plan tree design tokens (from mockup)
+         ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="BgWindowBrush"      Color="#FF14161B" />
+    <SolidColorBrush x:Key="BgPanelBrush"       Color="#FF1A1D23" />
+    <SolidColorBrush x:Key="BgHeaderBrush"      Color="#FF1C1F25" />
+    <SolidColorBrush x:Key="BgRowHoverBrush"    Color="#0AFFFFFF" />
+    <SolidColorBrush x:Key="BgRowSelectedBrush" Color="#244A90E2" />
+
+    <!-- Borders & rails -->
+    <SolidColorBrush x:Key="BorderSoftBrush"    Color="#0FFFFFFF" />
+    <SolidColorBrush x:Key="BorderMediumBrush"  Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="RailIdleBrush"      Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="RailActiveBrush"    Color="#804A90E2" />
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="TextStrongBrush"    Color="#FFF0F1F4" />
+    <SolidColorBrush x:Key="TextDefaultBrush"   Color="#FFD6D8DF" />
+    <SolidColorBrush x:Key="TextMutedBrush"     Color="#FF8A8F99" />
+    <SolidColorBrush x:Key="TextDimBrush"       Color="#FF6E727A" />
+
+    <!-- Action-type accent colors -->
+    <SolidColorBrush x:Key="CRunBrush"          Color="#FF74ACEA" />
+    <SolidColorBrush x:Key="CRemoteBrush"       Color="#FFC39ADF" />
+    <SolidColorBrush x:Key="CEmailBrush"        Color="#FFF0B070" />
+    <SolidColorBrush x:Key="CInitBrush"         Color="#FF5DD0A8" />
+    <SolidColorBrush x:Key="CRefBrush"          Color="#FFA8ACB5" />
+
+    <!-- Group accent colors -->
+    <SolidColorBrush x:Key="CSeqBrush"          Color="#FF74ACEA" />
+    <SolidColorBrush x:Key="CParBrush"          Color="#FFC39ADF" />
+    <SolidColorBrush x:Key="CEventBrush"        Color="#FFF0B070" />
+
+    <!-- Pill backgrounds (semi-transparent) -->
+    <SolidColorBrush x:Key="PillSeqBg"          Color="#244A90E2" />
+    <SolidColorBrush x:Key="PillParBg"          Color="#29C39ADF" />
+    <SolidColorBrush x:Key="PillEvtBg"          Color="#24F5A623" />
+    <SolidColorBrush x:Key="PillRunBg"          Color="#244A90E2" />
+    <SolidColorBrush x:Key="PillRmtBg"          Color="#29C39ADF" />
+    <SolidColorBrush x:Key="PillEmlBg"          Color="#24F5A623" />
+    <SolidColorBrush x:Key="PillInitBg"         Color="#245DD0A8" />
+    <SolidColorBrush x:Key="PillRefBg"          Color="#29A8ACB5" />
+
+    <!-- Status dot fills -->
+    <SolidColorBrush x:Key="SReadyBrush"        Color="#FF2D7A4A" />
+    <SolidColorBrush x:Key="SRunningBrush"      Color="#FFF5A623" />
+    <SolidColorBrush x:Key="SPassedBrush"       Color="#FF2D7A4A" />
+    <SolidColorBrush x:Key="SFailedBrush"       Color="#FFD04848" />
+    <SolidColorBrush x:Key="SIdleBrush"         Color="#FF4A4D55" />
+
+    <!-- File pill background -->
+    <SolidColorBrush x:Key="FilePillBgBrush"    Color="#0AFFFFFF" />
+
+    <!-- Count badge -->
+    <SolidColorBrush x:Key="CountBgBrush"       Color="#0AFFFFFF" />
+    <SolidColorBrush x:Key="CountRunningBg"     Color="#1AF5A623" />
+    <SolidColorBrush x:Key="CountFailedBg"      Color="#1AD04848" />
+
+    <!-- High-Contrast glyph (invisible in Dark/Light, visible in HC) -->
+    <SolidColorBrush x:Key="HcGlyphFg"          Color="#00000000" />
+
+    <!-- Dashboard legacy tokens (theme-aware) -->
+    <SolidColorBrush x:Key="StatusRunningBg" Color="#FF1A3A5C" />
+    <SolidColorBrush x:Key="StatusRunningFg" Color="#FF4D9CF5" />
+    <SolidColorBrush x:Key="StatusSuccessBg" Color="#FF1A3D2A" />
+    <SolidColorBrush x:Key="StatusSuccessFg" Color="#FF22C55E" />
+    <SolidColorBrush x:Key="StatusFailedBg"  Color="#FF3D1A1A" />
+    <SolidColorBrush x:Key="StatusFailedFg"  Color="#FFEF4444" />
+    <SolidColorBrush x:Key="StatusWarningBg" Color="#FF3D2E0A" />
+    <SolidColorBrush x:Key="StatusWarningFg" Color="#FFF59E0B" />
+    <SolidColorBrush x:Key="StatusIdleBg"    Color="#FF1E2130" />
+    <SolidColorBrush x:Key="StatusIdleFg"    Color="#FF6B7280" />
+    <SolidColorBrush x:Key="DashboardBg"     Color="#FF0F1119" />
+    <SolidColorBrush x:Key="CardBg"          Color="#FF171B27" />
+    <SolidColorBrush x:Key="CardBorder"      Color="#FF2A2F45" />
+    <SolidColorBrush x:Key="AgentColumnBg"   Color="#FF131620" />
+    <SolidColorBrush x:Key="RowBorder"       Color="#FF1E2235" />
+    <SolidColorBrush x:Key="TextPrimary"     Color="#FFE4E6F0" />
+    <SolidColorBrush x:Key="TextSecondary"   Color="#FF9099B8" />
+    <SolidColorBrush x:Key="TextDim"         Color="#FF5E6580" />
+    <SolidColorBrush x:Key="MonoFont"        Color="#FF06B6D4" />
+
 </ResourceDictionary>

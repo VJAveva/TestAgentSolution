@@ -28,7 +28,7 @@ export function configureAxios(): void {
   axios.interceptors.request.use(config => {
     config.headers = config.headers ?? {};
     if (!config.headers['X-Request-Id']) {
-      config.headers['X-Request-Id'] = crypto.randomUUID().slice(0, 8);
+      config.headers['X-Request-Id'] = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)).slice(0, 8);
     }
     return config;
   });

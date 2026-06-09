@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -11,6 +13,8 @@ namespace TestAgentDisplay.Services;
 /// Manages gRPC connections to multiple TestAgent nodes.
 /// For each agent, opens a <c>SubscribeAgentEvents</c> streaming RPC
 /// and forwards events to the UI via callbacks.
+/// Uses jittered exponential backoff for reconnection (DISPLAY-003)
+/// and execution-aware polling throttle (DISPLAY-001).
 /// </summary>
 public sealed class AgentConnectionManager : IDisposable
 {
@@ -21,6 +25,10 @@ public sealed class AgentConnectionManager : IDisposable
 
     public bool IsConnected(string address) =>
         _connections.TryGetValue(address, out var c) && c.IsConnected;
+
+    /// <summary>Returns whether the agent at the given address is currently executing.</summary>
+    public bool IsExecuting(string address) =>
+        _connections.TryGetValue(address, out var c) && c.IsExecuting;
 
     public async Task ConnectAsync(string address, CancellationToken ct = default)
     {
@@ -45,6 +53,11 @@ public sealed class AgentConnectionManager : IDisposable
     public async Task<AgentSnapshot?> GetSnapshotAsync(string address, CancellationToken ct = default)
     {
         if (!_connections.TryGetValue(address, out var conn)) return null;
+
+        // DISPLAY-001: Skip snapshot polling during active execution to avoid
+        // loading agents with additional gRPC calls while they're running commands.
+        if (conn.IsExecuting) return null;
+
         try
         {
             return await conn.Client.GetAgentSnapshotAsync(new Empty(), cancellationToken: ct);
@@ -68,10 +81,14 @@ public sealed class AgentConnectionManager : IDisposable
         if (!_connections.TryGetValue(address, out var conn)) return null;
         try
         {
+            // Apply a 30-second deadline to prevent the UI from hanging indefinitely
+            // if the agent is unreachable or the gRPC channel is stuck.
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
             return await conn.Client.RunCommandAsync(new RunCommandRequest
             {
                 Command = command, Arguments = arguments
-            }, cancellationToken: ct);
+            }, cancellationToken: cts.Token);
         }
         catch { return null; }
     }
@@ -125,7 +142,7 @@ public sealed class AgentConnectionManager : IDisposable
         _connections.Clear();
     }
 
-    // ── Single agent connection ────────────────────────────────────────
+    // ── Single agent connection with jittered exponential backoff ─────
 
     private sealed class AgentConnection : IDisposable
     {
@@ -134,8 +151,14 @@ public sealed class AgentConnectionManager : IDisposable
         private readonly GrpcChannel _channel;
         private CancellationTokenSource? _cts;
 
+        // Jittered backoff parameters (DISPLAY-003)
+        private const int InitialBackoffMs = 1000;
+        private const int MaxBackoffMs = 60_000;
+        private static readonly Random _jitterRng = new();
+
         public TestAgentService.TestAgentServiceClient Client { get; }
         public bool IsConnected { get; private set; }
+        public bool IsExecuting { get; private set; }
 
         public AgentConnection(string address, AgentConnectionManager owner)
         {
@@ -149,6 +172,15 @@ public sealed class AgentConnectionManager : IDisposable
                 KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
                 ConnectTimeout = TimeSpan.FromSeconds(15),
             };
+
+            // Enable TLS when address uses HTTPS
+            if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                handler.SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                };
+            }
 
             _channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
             {
@@ -167,32 +199,73 @@ public sealed class AgentConnectionManager : IDisposable
 
         private async Task StreamEventsLoop(CancellationToken ct)
         {
+            int consecutiveFailures = 0;
+
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
                     using var call = Client.SubscribeAgentEvents(new Empty(), cancellationToken: ct);
                     IsConnected = true;
+                    consecutiveFailures = 0; // Reset on successful connection
                     _owner.OnConnectionChanged(_address, true);
 
                     await foreach (var evt in call.ResponseStream.ReadAllAsync(ct))
                     {
+                        // Track execution state for polling backoff (DISPLAY-001)
+                        UpdateExecutionState(evt);
                         _owner.OnEvent(_address, evt);
                     }
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
                 {
                     IsConnected = false;
+                    IsExecuting = false;
                     _owner.OnConnectionChanged(_address, false);
-                    try { await Task.Delay(5000, ct); } catch { break; }
+                    consecutiveFailures++;
+                    var delay = ComputeJitteredBackoff(consecutiveFailures);
+                    try { await Task.Delay(delay, ct); } catch { break; }
                 }
                 catch (OperationCanceledException) { break; }
                 catch
                 {
                     IsConnected = false;
+                    IsExecuting = false;
                     _owner.OnConnectionChanged(_address, false);
-                    try { await Task.Delay(3000, ct); } catch { break; }
+                    consecutiveFailures++;
+                    var delay = ComputeJitteredBackoff(consecutiveFailures);
+                    try { await Task.Delay(delay, ct); } catch { break; }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Computes jittered exponential backoff: base * 2^(failures-1) + random jitter.
+        /// Prevents synchronized reconnection storms across multiple agents.
+        /// </summary>
+        private static int ComputeJitteredBackoff(int failures)
+        {
+            var baseDelay = InitialBackoffMs * (1 << Math.Min(failures - 1, 6)); // Cap exponent at 6 (64s)
+            baseDelay = Math.Min(baseDelay, MaxBackoffMs);
+            // Add ±25% jitter
+            var jitter = _jitterRng.Next(-baseDelay / 4, baseDelay / 4);
+            return Math.Max(500, baseDelay + jitter);
+        }
+
+        /// <summary>Tracks whether the agent is currently executing to support polling backoff.</summary>
+        private void UpdateExecutionState(ExecutionEvent evt)
+        {
+            switch (evt.EventType)
+            {
+                case ExecutionEventType.EventStarted:
+                case ExecutionEventType.EventProgress:
+                    IsExecuting = true;
+                    break;
+                case ExecutionEventType.EventCompleted:
+                case ExecutionEventType.EventFailed:
+                case ExecutionEventType.EventTerminated:
+                    IsExecuting = false;
+                    break;
             }
         }
 

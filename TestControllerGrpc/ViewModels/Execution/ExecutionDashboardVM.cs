@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -7,6 +6,8 @@ using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.Views;
 using TestControllerGrpc.ViewModels;
+
+using TestControllerGrpc.Views.Dialogs;
 
 namespace TestControllerGrpc.ViewModels.Execution;
 
@@ -80,6 +81,12 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             SelectedAgentName = null;
         });
         ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
+
+        // Initialize sorted view for triage-first display.
+        InitSessionsView();
+
+        // Load any sessions persisted from a previous run (crash recovery).
+        LoadPersistedSessions();
     }
 
     /// <summary>
@@ -108,6 +115,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             SelectedAgentName = null;
         });
         ClearLogsCommand = new RelayCommand(() => LogEntries.Clear());
+
+        InitSessionsView();
     }
 
     /// <summary>
@@ -122,6 +131,23 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
     public ObservableCollection<SessionCardVM> Sessions { get; } = new();
     public RangeObservableCollection<LogEntryVM> LogEntries { get; } = new();
+
+    /// <summary>
+    /// Sorted view of Sessions — severity-descending (Failed first), then progress ascending.
+    /// UI should bind to this for triage-first display.
+    /// </summary>
+    public System.ComponentModel.ICollectionView SessionsView { get; private set; } = null!;
+
+    private void InitSessionsView()
+    {
+        SessionsView = System.Windows.Data.CollectionViewSource.GetDefaultView(Sessions);
+        SessionsView.SortDescriptions.Add(
+            new System.ComponentModel.SortDescription(nameof(SessionCardVM.SeverityRank),
+                System.ComponentModel.ListSortDirection.Descending));
+        SessionsView.SortDescriptions.Add(
+            new System.ComponentModel.SortDescription(nameof(SessionCardVM.ProgressPercent),
+                System.ComponentModel.ListSortDirection.Ascending));
+    }
 
     /// <summary>Timeline VM created by the dashboard window; set externally after construction.</summary>
     private TimelineVM? _timelineVm;
@@ -185,7 +211,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // P2-1: agent-attributed lines now carry entry.AgentName, so strict
         // equality filters them correctly. Session-scoped lines (executor
         // emissions, lifecycle messages) legitimately have no agent and must
-        // remain visible under any agent selection � keep the empty-matches-all
+        // remain visible under any agent selection � keep the empty-matches-all
         // rule.
         if (!string.IsNullOrEmpty(SelectedAgentName) &&
             !string.IsNullOrEmpty(entry.AgentName) &&
@@ -264,7 +290,13 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                 IsExpanded = true,
             };
 
+            // Pre-populate all action pills as "Pending" from the snapshot tree
+            // so the user can see the full scope of the pipeline/group being executed.
+            if (session?.SnapshotNodes?.Count > 0)
+                PopulatePendingActions(card, session.SnapshotNodes, session.ResolvedParameters);
+
             Sessions.Insert(0, card);
+            card.RecalculateCounters();
             RecalculateStats();
         });
     }
@@ -300,8 +332,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
             }
 
             card.Status = e.State;
-            card.PassedActions = e.Passed;
-            card.FailedActions = e.Failed;
+            if (e.Passed > 0) card.PassedActions = e.Passed;
+            if (e.Failed > 0) card.FailedActions = e.Failed;
             card.ProgressPercent = 100;
             card.IsExpanded = false;
 
@@ -425,10 +457,25 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                     status: MapOutcome(action.Outcome),
                     exitCode: action.ExitCode ?? 0,
                     errorMessage: action.ErrorMessage ?? "",
-                    duration: action.DurationText);
+                    duration: action.DurationText,
+                    startedUtc: action.StartedUtc,
+                    durationSeconds: action.Duration.TotalSeconds);
             }
         }
         card.RecalculateCounters();
+
+        // Issue #7 fallback: use the session model's direct completed/total
+        // counts to ensure progress advances even if pill status tracking
+        // lags behind due to tag mismatches or race conditions.
+        var sessionCompleted = summaries.Sum(s => s.CompletedCount);
+        var sessionTotal = summaries.Sum(s => s.TotalCount);
+        if (sessionTotal > 0)
+        {
+            var effectiveTotal = Math.Max(card.TotalActions, sessionTotal);
+            var directProgress = (int)(sessionCompleted * 100.0 / effectiveTotal);
+            if (directProgress > card.ProgressPercent)
+                card.ProgressPercent = directProgress;
+        }
     }
 
     // Wrapper used by OnExecutionCompleted, which already has the card but
@@ -447,6 +494,52 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         ActionOutcome.TimedOut   => "Failed",
         _                        => "Running",
     };
+
+    /// <summary>
+    /// Walks the snapshot action tree and pre-populates all leaf action pills as "Pending"
+    /// so the user can see the full pipeline scope before execution progresses.
+    /// </summary>
+    private static void PopulatePendingActions(
+        SessionCardVM card, IReadOnlyList<IActionNode> nodes, Dictionary<string, string>? parameters)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    var agentName = ResolveAgentName(action.AgentName, parameters);
+                    var row = card.GetOrCreateAgent(agentName);
+                    row.UpdateAction(
+                        tag: action.ResolvedTag,
+                        actionType: action.Type.ToString(),
+                        command: action.Command,
+                        status: "Pending");
+                    break;
+
+                case ActionGroupConfig group:
+                    PopulatePendingActions(card, group.Children, parameters);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Resolves [_Variable] references for agent name display.</summary>
+    private static string ResolveAgentName(string agentName, Dictionary<string, string>? parameters)
+    {
+        if (string.IsNullOrEmpty(agentName))
+            return "Controller";
+
+        if (parameters != null && agentName.StartsWith('[') && agentName.EndsWith(']'))
+        {
+            var varName = agentName[1..^1];
+            if (parameters.TryGetValue(varName, out var resolved))
+                return resolved;
+            if (varName.StartsWith('_') && parameters.TryGetValue(varName[1..], out resolved))
+                return resolved;
+        }
+
+        return agentName;
+    }
 
     private void HarvestLogs(SessionCardVM card, ExecutionSession session)
     {
@@ -536,7 +629,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // P2-2: Passed/Failed totals span all retained cards (Running +
         // Completed within the MaxSessionCards window) so the KPI strip
         // doesn't snap to zero the moment the last session finishes.
-        // OverallProgressPercent stays Running-only � averaging completed
+        // OverallProgressPercent stays Running-only � averaging completed
         // cards (always 100%) would mask in-flight progress.
         TotalPassedActions = Sessions.Sum(s => s.PassedActions);
         TotalFailedActions = Sessions.Sum(s => s.FailedActions);
@@ -554,7 +647,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         var card = Sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (card == null) return;
 
-        var result = System.Windows.MessageBox.Show(
+        var result = ThemedMessageBox.Show(
             $"Cancel session '{card.WatchItemTag}'?\n\n" +
             $"User: {card.UserId}\n" +
             $"Agents: {card.LockedAgentsList}\n" +
@@ -586,13 +679,231 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         SelectedAgentName = null;
     }
 
-    // ?? Window launch command ????????????????????????????????????????????????????
+    // ── Snapshot Recovery ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reloads persisted session snapshots from disk. Use after a crash to
+    /// see which pipeline step failed. Previously-loaded recovered sessions
+    /// are replaced; live running sessions are preserved.
+    /// </summary>
+    [RelayCommand]
+    private void ReloadSnapshots()
+    {
+        LoadPersistedSessions();
+        RecalculateStats();
+    }
+
+    /// <summary>
+    /// Loads completed/crashed sessions from the persisted snapshot file
+    /// and adds them as non-running cards to the dashboard.
+    /// </summary>
+    private void LoadPersistedSessions()
+    {
+        if (_sessionManager == null) return;
+
+        var persisted = _sessionManager.GetPersistedHistory();
+        if (persisted.Count == 0) return;
+
+        foreach (var entry in persisted)
+        {
+            // Skip if a card for this session already exists (it's still live)
+            if (Sessions.Any(s => s.SessionId == entry.SessionId)) continue;
+
+            // Also skip if the session is currently active in-process
+            if (_sessionManager.GetSession(entry.SessionId) is { State: SessionState.Running })
+                continue;
+
+            var state = entry.State == nameof(SessionState.Running)
+                ? "Failed"   // Was running when we crashed
+                : entry.State;
+
+            var card = new SessionCardVM
+            {
+                SessionId = entry.SessionId,
+                WatchItemTag = entry.WatchItemTag,
+                UserId = entry.UserId,
+                Source = entry.Source + (entry.State == nameof(SessionState.Running) ? " (Crashed)" : " (Recovered)"),
+                Status = state,
+                BuildNumber = entry.ResolvedParameters?.TryGetValue(WatchListConstants.BuildNumberKey, out var bn) == true
+                    ? bn : "",
+                LockedAgentsList = entry.LockedAgents != null ? string.Join(", ", entry.LockedAgents) : "",
+                IsExpanded = false,
+                ProgressPercent = 100,
+            };
+
+            // Populate agent rows and action pills from persisted results
+            foreach (var ar in entry.ActionResults ?? [])
+            {
+                var agentName = ar.AgentName ?? "Controller";
+                var row = card.GetOrCreateAgent(agentName);
+                row.UpdateAction(
+                    tag: ar.ActionTag,
+                    actionType: ar.ActionType,
+                    command: ar.Command,
+                    status: ar.Outcome == nameof(ActionOutcome.Success) ? "Success"
+                        : ar.Outcome == nameof(ActionOutcome.Failed) ? "Failed"
+                        : ar.Outcome == nameof(ActionOutcome.Terminated) ? "Failed"
+                        : ar.Outcome == nameof(ActionOutcome.TimedOut) ? "Failed"
+                        : "Unknown",
+                    exitCode: ar.ExitCode ?? 0,
+                    errorMessage: ar.ErrorMessage ?? "",
+                    duration: ar.Duration ?? "");
+            }
+
+            card.RecalculateCounters();
+            Sessions.Add(card);
+        }
+    }
+
+    // ── Window launch command ────────────────────────────────────────────
+
+    private WeakReference<ExecutionDashboardWindow>? _dashboardWindowRef;
 
     [RelayCommand]
     private void OpenDashboardWindow()
     {
+        if (_dashboardWindowRef != null && _dashboardWindowRef.TryGetTarget(out var existing))
+        {
+            if (existing.IsVisible)
+            {
+                existing.Activate();
+            }
+            else
+            {
+                existing.Show();
+                existing.Activate();
+            }
+            return;
+        }
+
         var win = new ExecutionDashboardWindow { DataContext = this };
+        _dashboardWindowRef = new WeakReference<ExecutionDashboardWindow>(win);
+        win.Closed += (_, _) => _dashboardWindowRef = null;
         win.Show();
+    }
+
+    // ── Demo Data (for testing the dashboard UI without a real pipeline run) ──
+
+    /// <summary>
+    /// Populates the dashboard with realistic fake sessions so you can verify
+    /// the Pipeline View, Timeline, and Log tabs render correctly without
+    /// actually triggering a pipeline. Call from code-behind or a debug menu.
+    /// </summary>
+    [RelayCommand]
+    private void LoadDemoData()
+    {
+        Sessions.Clear();
+        LogEntries.Clear();
+
+        var now = DateTime.UtcNow;
+
+        // Session 1: Running pipeline (3 agents, mixed status)
+        var s1 = new SessionCardVM
+        {
+            SessionId = "demo01",
+            WatchItemTag = "Deploy.WebApi",
+            UserId = "developer1",
+            Source = "WPF",
+            Status = "Running",
+            BuildNumber = "2026.05.04.1",
+            Elapsed = "02:15",
+            IsExpanded = true,
+            LockedAgentsList = "Agent-01, Agent-02, Agent-03",
+        };
+
+        var a1r1 = new AgentRowVM { AgentName = "Agent-01", Status = "Success" };
+        a1r1.Actions.Add(new ActionPillVM { Tag = "Install Build", ActionType = "RunRemoteCommand", Command = @"\\server\install.cmd", Status = "Success", Duration = "45s", StartedUtc = now.AddSeconds(-135), DurationSeconds = 45 });
+        a1r1.Actions.Add(new ActionPillVM { Tag = "Run Smoke Tests", ActionType = "RunRemoteCommand", Command = @"\\server\smoke.cmd", Status = "Success", Duration = "30s", StartedUtc = now.AddSeconds(-90), DurationSeconds = 30 });
+        a1r1.Actions.Add(new ActionPillVM { Tag = "Reboot", ActionType = "RunRemoteCommand", Command = "shutdown /r /t 0", Status = "Success", Duration = "60s", StartedUtc = now.AddSeconds(-60), DurationSeconds = 60 });
+        a1r1.CompletedCount = 3; a1r1.TotalCount = 3; a1r1.ProgressPercent = 100;
+
+        var a1r2 = new AgentRowVM { AgentName = "Agent-02", Status = "Executing" };
+        a1r2.Actions.Add(new ActionPillVM { Tag = "Install Build", ActionType = "RunRemoteCommand", Command = @"\\server\install.cmd", Status = "Success", Duration = "48s", StartedUtc = now.AddSeconds(-130), DurationSeconds = 48 });
+        a1r2.Actions.Add(new ActionPillVM { Tag = "Run Integration", ActionType = "RunRemoteCommand", Command = @"\\server\integration.cmd", Status = "Running", ProgressPercent = 65, StartedUtc = now.AddSeconds(-80), DurationSeconds = 0 });
+        a1r2.Actions.Add(new ActionPillVM { Tag = "Email: Results", ActionType = "SendMail", Command = "qa-team@company.com", Status = "Pending" });
+        a1r2.CompletedCount = 1; a1r2.TotalCount = 3; a1r2.ProgressPercent = 33;
+
+        var a1r3 = new AgentRowVM { AgentName = "Agent-03", Status = "Executing" };
+        a1r3.Actions.Add(new ActionPillVM { Tag = "Install Build", ActionType = "RunRemoteCommand", Command = @"\\server\install.cmd", Status = "Success", Duration = "52s", StartedUtc = now.AddSeconds(-125), DurationSeconds = 52 });
+        a1r3.Actions.Add(new ActionPillVM { Tag = "Run Perf Suite", ActionType = "RunRemoteCommand", Command = @"\\server\perf.cmd", Status = "Running", ProgressPercent = 30, StartedUtc = now.AddSeconds(-70), DurationSeconds = 0 });
+        a1r3.CompletedCount = 1; a1r3.TotalCount = 2; a1r3.ProgressPercent = 50;
+
+        s1.Agents.Add(a1r1);
+        s1.Agents.Add(a1r2);
+        s1.Agents.Add(a1r3);
+        s1.RecalculateCounters();
+
+        // Session 2: Completed with failures (2 agents)
+        var s2 = new SessionCardVM
+        {
+            SessionId = "demo02",
+            WatchItemTag = "Nightly.FullSuite",
+            UserId = "scheduler",
+            Source = "WebClient",
+            Status = "Failed",
+            BuildNumber = "2026.05.03.7",
+            Elapsed = "15:42",
+            IsExpanded = true,
+            LockedAgentsList = "Agent-04, Agent-05",
+        };
+
+        var a2r1 = new AgentRowVM { AgentName = "Agent-04", Status = "Success" };
+        a2r1.Actions.Add(new ActionPillVM { Tag = "Install Build", ActionType = "RunRemoteCommand", Command = @"\\nightly\install.cmd", Status = "Success", Duration = "1m 10s", StartedUtc = now.AddMinutes(-16), DurationSeconds = 70 });
+        a2r1.Actions.Add(new ActionPillVM { Tag = "Run Unit Tests", ActionType = "RunRemoteCommand", Command = @"dotnet test", Status = "Success", Duration = "8m 30s", StartedUtc = now.AddMinutes(-14), DurationSeconds = 510 });
+        a2r1.Actions.Add(new ActionPillVM { Tag = "Collect Results", ActionType = "RunCommand", Command = @"copy *.trx \\results", Status = "Success", Duration = "5s", StartedUtc = now.AddMinutes(-6), DurationSeconds = 5 });
+        a2r1.CompletedCount = 3; a2r1.TotalCount = 3; a2r1.ProgressPercent = 100;
+
+        var a2r2 = new AgentRowVM { AgentName = "Agent-05", Status = "Failed" };
+        a2r2.Actions.Add(new ActionPillVM { Tag = "Install Build", ActionType = "RunRemoteCommand", Command = @"\\nightly\install.cmd", Status = "Success", Duration = "1m 15s", StartedUtc = now.AddMinutes(-16), DurationSeconds = 75 });
+        a2r2.Actions.Add(new ActionPillVM { Tag = "Run E2E Tests", ActionType = "RunRemoteCommand", Command = @"\\nightly\e2e.cmd", Status = "Failed", ExitCode = 1, ErrorMessage = "3 test cases failed: LoginTest, PaymentTest, CheckoutTest", Duration = "12m 5s", StartedUtc = now.AddMinutes(-14), DurationSeconds = 725 });
+        a2r2.Actions.Add(new ActionPillVM { Tag = "Cleanup", ActionType = "RunRemoteCommand", Command = @"\\nightly\cleanup.cmd", Status = "Skipped" });
+        a2r2.CompletedCount = 2; a2r2.TotalCount = 3; a2r2.ProgressPercent = 67;
+
+        s2.Agents.Add(a2r1);
+        s2.Agents.Add(a2r2);
+        s2.RecalculateCounters();
+
+        // Session 3: Completed successfully (1 agent)
+        var s3 = new SessionCardVM
+        {
+            SessionId = "demo03",
+            WatchItemTag = "Build.QuickVerify",
+            UserId = "ci-bot",
+            Source = "WebClient",
+            Status = "Success",
+            BuildNumber = "2026.05.04.3",
+            Elapsed = "03:20",
+            IsExpanded = false,
+            LockedAgentsList = "Agent-01",
+        };
+
+        var a3r1 = new AgentRowVM { AgentName = "Agent-01", Status = "Success" };
+        a3r1.Actions.Add(new ActionPillVM { Tag = "Install Build", ActionType = "RunRemoteCommand", Command = @"\\server\install.cmd", Status = "Success", Duration = "40s", StartedUtc = now.AddMinutes(-4), DurationSeconds = 40 });
+        a3r1.Actions.Add(new ActionPillVM { Tag = "Quick BVT", ActionType = "RunRemoteCommand", Command = @"\\server\bvt.cmd", Status = "Success", Duration = "2m 30s", StartedUtc = now.AddMinutes(-3), DurationSeconds = 150 });
+        a3r1.CompletedCount = 2; a3r1.TotalCount = 2; a3r1.ProgressPercent = 100;
+
+        s3.Agents.Add(a3r1);
+        s3.RecalculateCounters();
+
+        Sessions.Add(s1);
+        Sessions.Add(s2);
+        Sessions.Add(s3);
+
+        // Demo log entries
+        var logs = new[]
+        {
+            new LogEntryVM { Timestamp = now.AddSeconds(-135).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-01", Category = "Action", Message = "Starting: Install Build", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-90).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-01", Category = "Action", Message = "Install completed (exit code 0)", Severity = "Success" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-80).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-02", Category = "Action", Message = "Starting: Run Integration Tests", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-70).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-03", Category = "Action", Message = "Starting: Run Perf Suite", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-60).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-02", Category = "stdout", Message = "Running test 42/65... TestPaymentFlow", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddMinutes(-14).ToString("HH:mm:ss"), SessionId = "demo02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "Action", Message = "Starting: Run E2E Tests", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddMinutes(-2).ToString("HH:mm:ss"), SessionId = "demo02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "stderr", Message = "FAIL: LoginTest - Element '#submit-btn' not found after 30s timeout", Severity = "Error" },
+            new LogEntryVM { Timestamp = now.AddMinutes(-1).ToString("HH:mm:ss"), SessionId = "demo02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "Action", Message = "E2E Tests failed (exit code 1): 3 failures", Severity = "Error" },
+        };
+        LogEntries.AddRange(logs);
+
+        RecalculateStats();
     }
 
     /// <summary>Stops the refresh timer and releases all event subscriptions.</summary>

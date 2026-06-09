@@ -4,6 +4,8 @@
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
         xmlns:views="clr-namespace:TestControllerGrpc.Views"
+        xmlns:aw="clr-namespace:TestControllerGrpc.Views.AgentWorkspace"
+        xmlns:panels="clr-namespace:TestControllerGrpc.Views.Panels"
         Title="TestController  -  WatchList Editor"
         Height="900" Width="1400" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
@@ -36,6 +38,11 @@
         <!-- Help -->
         <KeyBinding Key="F1" Command="{Binding OpenHelpCommand}" />
 
+        <!-- Panel toggles (Ctrl+1/2/3) -->
+        <KeyBinding Key="D1" Modifiers="Ctrl" Command="{Binding ToggleTreePanePinCommand}" />
+        <KeyBinding Key="D2" Modifiers="Ctrl" Command="{Binding ToggleAgentPanePinCommand}" />
+        <KeyBinding Key="D3" Modifiers="Ctrl" Command="{Binding ToggleLogPanePinCommand}" />
+
         <!-- Multi-session Execution Dashboard (standalone window) -->
         <KeyBinding Key="F12" Command="{Binding ExecutionDashboard.OpenDashboardWindowCommand}" />
     </Window.InputBindings>
@@ -59,6 +66,7 @@
         <vm:ProgressPercentToWidthConverter x:Key="ProgressPercentToWidth" />
         <vm:IntToVisibilityConverter x:Key="IntToVis" />
         <vm:NonEmptyToVisibilityConverter x:Key="NonEmptyVis" />
+        <views:HealthLevelToBrushConverter x:Key="HealthBrush" />
 
         <x:Array x:Key="EventTypes" Type="{x:Type sys:String}">
             <sys:String>Renamed</sys:String><sys:String>Created</sys:String><sys:String>Changed</sys:String>
@@ -110,28 +118,11 @@
             <Setter Property="Foreground" Value="{DynamicResource TextS}" /><Setter Property="FontSize" Value="11" />
             <Setter Property="Padding" Value="0,6,0,2" /><Setter Property="FontWeight" Value="Medium" />
         </Style>
-        <Style TargetType="ComboBox" x:Key="Cmb">
-            <Setter Property="Background" Value="{DynamicResource BgCard}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <!-- Cmb key kept for backward compat; inherits the implicit themed ComboBox style -->
+        <Style TargetType="ComboBox" x:Key="Cmb" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="Margin" Value="0,2,0,5" />
-            <Setter Property="Padding" Value="6,4" />
-        </Style>
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="{DynamicResource BgCard}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-            <Setter Property="Padding" Value="6,4" />
-            <Style.Triggers>
-                <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource Accent}" />
-                    <Setter Property="Foreground" Value="{DynamicResource TreeBadgeFg}" />
-                </Trigger>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BgSurface}" />
-                    <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-                </Trigger>
-            </Style.Triggers>
+            <Setter Property="Height" Value="28" />
+            <Setter Property="FontSize" Value="11" />
         </Style>
         <Style x:Key="Sec" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="Bold" />
@@ -255,6 +246,37 @@
             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
         </Style>
 
+        <!-- Slim ribbon ScrollViewer: thin scrollbar, only visible on hover -->
+        <Style x:Key="RibbonScrollViewer" TargetType="ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ScrollContentPresenter Grid.Row="0" CanContentScroll="{TemplateBinding CanContentScroll}" />
+                            <ScrollBar x:Name="PART_HorizontalScrollBar" Grid.Row="1"
+                                       Orientation="Horizontal" Height="3" Opacity="0"
+                                       Maximum="{TemplateBinding ScrollableWidth}"
+                                       ViewportSize="{TemplateBinding ViewportWidth}"
+                                       Value="{TemplateBinding HorizontalOffset}"
+                                       Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PART_HorizontalScrollBar" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ── Ribbon button styles ── -->
         <Style x:Key="RibbonBtn" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource BtnBg}" />
@@ -346,6 +368,7 @@
         <HierarchicalDataTemplate x:Key="WatchTreeTemplate" DataType="{x:Type vm:TreeNodeViewModel}" ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal" Margin="0,1"
                         ToolTip="{Binding StatusTooltip}">
+                <!-- Context menu is built dynamically in code-behind (MainWindow.xaml.cs) -->
                 <!-- Icon container: semantic glyph + status overlay dot -->
                 <Grid Width="24" Height="20" Margin="0,0,5,0">
                     <!-- Icon background -->
@@ -377,6 +400,14 @@
                                         <Setter Property="Visibility" Value="Visible" />
                                         <Setter Property="Fill" Value="{DynamicResource StatusBlue}" />
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusYellow}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                                         <Setter Property="Visibility" Value="Visible" />
                                         <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
@@ -385,6 +416,39 @@
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- HC status glyph overlay (visible only in High Contrast) -->
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                               Margin="0,0,-2,-2" FontSize="8" FontWeight="Bold"
+                               Foreground="{DynamicResource HcGlyphFg}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="R" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2713;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2717;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="!" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2014;" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
                 <!-- Node text with status-aware styling -->
                 <TextBlock Text="{Binding ResolvedDisplayText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
@@ -408,6 +472,14 @@
                                 <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
                                     <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                    <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                    <Setter Property="FontStyle" Value="Italic" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource TextS}" />
                                     <Setter Property="FontStyle" Value="Italic" />
@@ -420,29 +492,100 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <!-- Status symbol inline -->
-                <TextBlock Text="{Binding StatusSymbol}" FontSize="11" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Foreground" Value="Transparent" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <!-- Status indicator: animated spinner (Running) / MDL2 glyphs (terminal states) -->
+                <Grid Margin="6,0,0,0" VerticalAlignment="Center" Width="14" Height="14">
+                    <!-- Running: spinning sync glyph
+                         Animation runs via Loaded EventTrigger (not DataTrigger.EnterActions)
+                         to avoid "Cannot animate immutable object" crash when WPF freezes
+                         the RotateTransform during HierarchicalDataTemplate instantiation. -->
+                    <TextBlock x:Name="SpinnerGlyph" Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource Accent}" RenderTransformOrigin="0.5,0.5"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="0" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="30">
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                         From="0" To="360" Duration="0:0:1.2" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </TextBlock.Triggers>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Success: CheckMark -->
+                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccGreen}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Failed: Cancel/X -->
+                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccRed}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- PartialFailure: Warning -->
+                    <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccYellow}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Cancelled: Blocked -->
+                    <TextBlock Text="&#xE25B;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource StatusGray}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </StackPanel>
         </HierarchicalDataTemplate>
 
@@ -479,10 +622,51 @@
                                         <Setter Property="Visibility" Value="Visible" />
                                         <Setter Property="Fill" Value="{DynamicResource StatusBlue}" />
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusYellow}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- HC status glyph overlay (visible only in High Contrast) -->
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                               Margin="0,0,-2,-2" FontSize="8" FontWeight="Bold"
+                               Foreground="{DynamicResource HcGlyphFg}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="R" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2713;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2717;" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="!" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="Text" Value="&#x2014;" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
                 <!-- Node text with status-aware styling -->
                 <TextBlock Text="{Binding ResolvedDisplayText}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
@@ -513,29 +697,100 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <!-- Status symbol inline -->
-                <TextBlock Text="{Binding StatusSymbol}" FontSize="11" FontWeight="Bold" Margin="6,0,0,0" VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Foreground" Value="Transparent" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <!-- Status indicator: animated spinner (Running) / MDL2 glyphs (terminal states) -->
+                <Grid Margin="6,0,0,0" VerticalAlignment="Center" Width="14" Height="14">
+                    <!-- Running: spinning sync glyph
+                         Animation runs via Loaded EventTrigger (not DataTrigger.EnterActions)
+                         to avoid "Cannot animate immutable object" crash when WPF freezes
+                         the RotateTransform during HierarchicalDataTemplate instantiation. -->
+                    <TextBlock x:Name="TplSpinnerGlyph" Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource Accent}" RenderTransformOrigin="0.5,0.5"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="0" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="30">
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                         From="0" To="360" Duration="0:0:1.2" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </TextBlock.Triggers>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Success: CheckMark -->
+                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccGreen}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Success">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Failed: Cancel/X -->
+                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccRed}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Failed">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- PartialFailure: Warning -->
+                    <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource AccYellow}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Cancelled: Blocked -->
+                    <TextBlock Text="&#xE25B;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                               Foreground="{DynamicResource StatusGray}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </StackPanel>
         </HierarchicalDataTemplate>
     </Window.Resources>
@@ -546,80 +801,321 @@
         <!-- ═══════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBg}"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <!-- Simplified Layout toggle + status -->
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
-                            HorizontalAlignment="Right" Margin="12,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Status + Active Sessions (right column) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                            HorizontalAlignment="Right" Margin="8,0">
                     <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource AccGreen}"
                                FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
 
-                    <!-- Active Sessions indicator -->
-                    <ItemsControl ItemsSource="{Binding ActiveSessions}" Margin="0,0,12,0"
-                                  Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border CornerRadius="3" Padding="6,2" Margin="2,0"
-                                        Background="{DynamicResource RunningBadgeBg}">
+                    <!-- Sessions dropdown button (replaces inline chips) -->
+                    <ToggleButton x:Name="SessionsDropdownToggle" Margin="0,0,12,0"
+                                  Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}"
+                                  Background="{DynamicResource RunningBadgeBg}"
+                                  BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                                  Padding="8,3" Cursor="Hand">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding DisplayLabel}" FontSize="10"
-                                                   Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
-                                        <TextBlock FontSize="10" Foreground="{DynamicResource TextS}" Margin="6,0,0,0"
-                                                   VerticalAlignment="Center">
-                                            <Run Text="{Binding ProgressPercent, StringFormat={}{0:F0}%, Mode=OneWay}" />
+                                        <Ellipse Width="7" Height="7" Fill="{DynamicResource Accent}" Margin="0,0,6,0"
+                                                 VerticalAlignment="Center">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExecuting}" Value="True">
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard RepeatBehavior="Forever">
+                                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                         From="1" To="0.3" Duration="0:0:0.8"
+                                                                                         AutoReverse="True"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextP}" VerticalAlignment="Center">
+                                            <Run Text="Sessions "/>
+                                            <Run Text="{Binding ActiveSessionCount, Mode=OneWay}"/>
                                         </TextBlock>
-                                        <Button Content="✕" FontSize="8" Padding="4,0" Margin="4,0,0,0"
-                                                Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                                Foreground="{DynamicResource AccRed}"
-                                                Command="{Binding DataContext.CancelSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip="Cancel this session" />
+                                        <TextBlock Text=" ▾" FontSize="9" Foreground="{DynamicResource TextS}"
+                                                   VerticalAlignment="Center" Margin="4,0,0,0"/>
                                     </StackPanel>
                                 </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                    </ToggleButton>
 
-                    <!-- Simplified Layout toggle -->
-                    <Border Background="{DynamicResource GroupBg}" CornerRadius="10" Padding="6,3" Margin="4,0">
-                        <StackPanel Orientation="Horizontal">
-                            <ToggleButton IsChecked="{Binding IsSimplifiedLayout}" Cursor="Hand"
-                                          ToolTip="Toggle Simplified Layout (hides ribbon, more workspace)">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="Track" Width="36" Height="18" CornerRadius="9"
-                                                Background="{DynamicResource BgSurface}" BorderThickness="1"
-                                                BorderBrush="{DynamicResource Bdr}">
-                                            <Ellipse x:Name="Thumb" Width="14" Height="14" Fill="{DynamicResource TextS}"
-                                                     HorizontalAlignment="Left" Margin="1,0,0,0" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsChecked" Value="True">
-                                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}" />
-                                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent}" />
-                                                <Setter TargetName="Thumb" Property="Fill" Value="White" />
-                                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
-                                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,1,0" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
-                            <TextBlock Text="Simplified" FontSize="10" Foreground="{DynamicResource TextS}"
-                                       VerticalAlignment="Center" Margin="6,0,0,0" />
-                        </StackPanel>
-                    </Border>
+                    <!-- Sessions dropdown popup -->
+                    <Popup IsOpen="{Binding IsChecked, ElementName=SessionsDropdownToggle}"
+                           PlacementTarget="{Binding ElementName=SessionsDropdownToggle}"
+                           Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade" HorizontalOffset="0" VerticalOffset="4">
+                        <Border Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource Bdr}"
+                                BorderThickness="1" CornerRadius="6" Padding="0"
+                                MinWidth="420" MaxWidth="520" MaxHeight="440">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="12" Opacity="0.3" ShadowDepth="4" Direction="270"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Header -->
+                                <Border Grid.Row="0" Padding="12,10" BorderBrush="{DynamicResource Bdr}"
+                                        BorderThickness="0,0,0,1">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Left" FontSize="12" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextP}" VerticalAlignment="Center">
+                                            <Run Text="Active sessions ("/>
+                                            <Run Text="{Binding ActiveSessionCount, Mode=OneWay}"/>
+                                            <Run Text=")"/>
+                                        </TextBlock>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                                    HorizontalAlignment="Right">
+                                            <Button Content="+ New run" FontSize="10" FontWeight="SemiBold"
+                                                    Background="Transparent" Foreground="{DynamicResource Accent}"
+                                                    BorderThickness="0" Cursor="Hand" Padding="6,2" Margin="0,0,10,0"
+                                                    Command="{Binding TriggerAllWatchItemsCommand}"
+                                                    ToolTip="Start a new execution run"/>
+                                            <Button Content="Cancel all" FontSize="10"
+                                                    Background="Transparent" Foreground="{DynamicResource AccRed}"
+                                                    BorderThickness="0" Cursor="Hand" Padding="6,2"
+                                                    Command="{Binding CancelExecutionCommand}"
+                                                    ToolTip="Cancel all running sessions"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <!-- Session list -->
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled" Padding="6,4">
+                                    <ItemsControl ItemsSource="{Binding ActiveSessions}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <!-- Row container with colored left bar -->
+                                                <Border Margin="4,3" Padding="10,8" CornerRadius="4"
+                                                        Background="{DynamicResource StatusIdleBg}"
+                                                        BorderThickness="2,0,0,0">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="BorderBrush" Value="#F0B070"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                    <Setter Property="BorderBrush" Value="#5DD0A8"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                    <Setter Property="BorderBrush" Value="#D04848"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Cancelled">
+                                                                    <Setter Property="BorderBrush" Value="#A8ACB5"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <!-- Row 0, Col 0: Session ID -->
+                                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                                                   Text="{Binding SessionId}" FontFamily="Consolas"
+                                                                   FontSize="10" Foreground="{DynamicResource Accent}"
+                                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                                                        <!-- Row 0, Col 1: Pipeline name -->
+                                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                                                   Text="{Binding WatchItemTag}" FontSize="11"
+                                                                   FontWeight="Medium" Foreground="{DynamicResource TextP}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center"/>
+
+                                                        <!-- Row 0, Col 2: Status pill -->
+                                                        <Border Grid.Row="0" Grid.Column="2" CornerRadius="3"
+                                                                Padding="5,1" Margin="6,0" VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="{DynamicResource RunningBadgeBg}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusFailedBg}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="Cancelled">
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusIdleBg}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock FontSize="9" FontWeight="Bold"
+                                                                       Text="{Binding Status}" VerticalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Cancelled">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Border>
+
+                                                        <!-- Row 0, Col 3: Action buttons -->
+                                                        <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal"
+                                                                    VerticalAlignment="Center">
+                                                            <!-- Cancel (shown for Running) -->
+                                                            <Button Content="⏹" FontSize="13" Padding="3,2"
+                                                                    Background="Transparent" BorderThickness="0"
+                                                                    Foreground="#8A8F99" Cursor="Hand"
+                                                                    Command="{Binding DataContext.CancelSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    ToolTip="Cancel this session">
+                                                                <Button.Style>
+                                                                    <Style TargetType="Button">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Cancelled">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Button.Style>
+                                                            </Button>
+                                                            <!-- Retry (shown for Failed) -->
+                                                            <Button Content="↻" FontSize="13" Padding="3,2"
+                                                                    Background="Transparent" BorderThickness="0"
+                                                                    Foreground="#8A8F99" Cursor="Hand"
+                                                                    Command="{Binding DataContext.TriggerAllWatchItemsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    ToolTip="Retry this pipeline">
+                                                                <Button.Style>
+                                                                    <Style TargetType="Button">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Button.Style>
+                                                            </Button>
+                                                            <!-- Open (always shown) -->
+                                                            <Button Content="↗" FontSize="13" Padding="3,2"
+                                                                    Background="Transparent" BorderThickness="0"
+                                                                    Foreground="#8A8F99" Cursor="Hand"
+                                                                    Command="{Binding DataContext.ExecutionDashboard.OpenDashboardWindowCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    ToolTip="Open execution dashboard"/>
+                                                        </StackPanel>
+
+                                                        <!-- Row 1: Progress bar + percent -->
+                                                        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                                                              Margin="0,6,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid Grid.Column="0" Height="4" Margin="0,0,8,0">
+                                                                <Border Background="{DynamicResource Bdr}" CornerRadius="2"/>
+                                                                <Border CornerRadius="2" HorizontalAlignment="Left"
+                                                                        Background="{DynamicResource Accent}"
+                                                                        Width="{Binding ProgressPercent, Converter={StaticResource ProgressPercentToWidth}, ConverterParameter=100}"/>
+                                                            </Grid>
+                                                            <TextBlock Grid.Column="1" FontFamily="Consolas" FontSize="10"
+                                                                       Foreground="{DynamicResource TextS}"
+                                                                       VerticalAlignment="Center">
+                                                                <Run Text="{Binding ProgressPercent, StringFormat={}{0:F0}%, Mode=OneWay}"/>
+                                                            </TextBlock>
+                                                        </Grid>
+
+                                                        <!-- Row 2: Metadata (agents, actions, elapsed) -->
+                                                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
+                                                                    Orientation="Horizontal" Margin="0,4,0,0">
+                                                            <TextBlock FontSize="9" Foreground="{DynamicResource TextS}">
+                                                                <Run Text="{Binding AgentCount, Mode=OneWay}"/>
+                                                                <Run Text=" agent(s) · "/>
+                                                                <Run Text="{Binding ActionProgress, Mode=OneWay}"/>
+                                                                <Run Text=" · ⏱ "/>
+                                                                <Run Text="{Binding Elapsed, Mode=OneWay}"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <!-- Footer -->
+                                <Border Grid.Row="2" Padding="12,8" BorderBrush="{DynamicResource Bdr}"
+                                        BorderThickness="0,1,0,0">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" FontSize="10"
+                                                   Foreground="{DynamicResource TextS}"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <Run Text="Total elapsed: "/>
+                                            <Run Text="{Binding TotalSessionsElapsed, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="10" Foreground="{DynamicResource TextS}"
+                                                   VerticalAlignment="Center">
+                                            <Run Text="{Binding ActiveSessionCount, Mode=OneWay}"/>
+                                            <Run Text=" session(s) active"/>
+                                        </TextBlock>
+                                    </DockPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Popup>
+
                 </StackPanel>
 
                 <!-- ══ COMPACT TOOLBAR (simplified mode only) ══ -->
-                <Border DockPanel.Dock="Top" Padding="4,3" Background="{DynamicResource RibbonTabBg}"
+                <Border Grid.Column="0" Padding="4,3" Background="{DynamicResource RibbonTabBg}"
                         BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1"
+                        ClipToBounds="True"
                         Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource BoolVis}}">
-                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                  CanContentScroll="True" Focusable="False"
+                                  Style="{StaticResource RibbonScrollViewer}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- File -->
                         <Button Style="{StaticResource RibbonBtn}" Command="{Binding LoadVocabularyCommand}"
                                 ToolTip="Open (Ctrl+O)" Height="28" MinWidth="28" Padding="4,2">
@@ -728,14 +1224,64 @@
                                 ToolTip="Help (F1)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" FontSize="14" Foreground="{DynamicResource Accent}" />
                         </Button>
+                        <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
 
-                        <!-- Theme (compact) -->
-                        <ComboBox ItemsSource="{Binding AvailableThemes}" SelectedItem="{Binding SelectedTheme}"
-                                  Style="{StaticResource Cmb}" Width="100" Margin="8,0,0,0" Padding="4,2" ToolTip="Theme" />
-                    </WrapPanel>
+                        <!-- Panel toggles (compact) -->
+                        <ToggleButton IsChecked="{Binding IsTreePanePinned}" ToolTip="Toggle Tree Panel (Ctrl+1)"
+                                      AutomationProperties.Name="Toggle Tree Panel"
+                                      Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
+                                      Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE8B7;" FontSize="14" Foreground="{DynamicResource Accent}" />
+                        </ToggleButton>
+                        <ToggleButton IsChecked="{Binding IsAgentPanePinned}" ToolTip="Toggle Agent Panel (Ctrl+2)"
+                                      AutomationProperties.Name="Toggle Agent Panel"
+                                      Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
+                                      Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE77B;" FontSize="14" Foreground="{DynamicResource AccPeach}" />
+                        </ToggleButton>
+                        <ToggleButton IsChecked="{Binding IsLogPanePinned}" ToolTip="Toggle Log Panel (Ctrl+3)"
+                                      AutomationProperties.Name="Toggle Execution Log"
+                                      Height="28" MinWidth="28" Padding="4,2" Cursor="Hand"
+                                      Background="{DynamicResource BtnBg}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE7C5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
+                        </ToggleButton>
+                        <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
+
+                        <!-- Exit Simplified (compact) -->
+                        <Border Background="{DynamicResource GroupBg}" CornerRadius="10" Padding="6,3" Margin="2,0">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton IsChecked="{Binding IsSimplifiedLayout}" Cursor="Hand"
+                                              ToolTip="Exit Simplified Layout (show full ribbon)">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Track" Width="36" Height="18" CornerRadius="9"
+                                                    Background="{DynamicResource Accent}" BorderThickness="1"
+                                                    BorderBrush="{DynamicResource Accent}">
+                                                <Ellipse x:Name="Thumb" Width="14" Height="14" Fill="White"
+                                                         HorizontalAlignment="Right" Margin="0,0,1,0" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="False">
+                                                    <Setter TargetName="Track" Property="Background" Value="{DynamicResource BgSurface}" />
+                                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Bdr}" />
+                                                    <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource TextS}" />
+                                                    <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Left" />
+                                                    <Setter TargetName="Thumb" Property="Margin" Value="1,0,0,0" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+                                <TextBlock Text="Simplified" FontSize="10" Foreground="{DynamicResource TextS}"
+                                           VerticalAlignment="Center" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                    </ScrollViewer>
                 </Border>
 
-                <TabControl Background="Transparent" BorderThickness="0" Padding="0"
+                <TabControl Grid.Column="0" Background="Transparent" BorderThickness="0" Padding="0"
                             Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource InvBoolVis}}">
                     <TabControl.Resources>
                         <Style TargetType="TabItem">
@@ -771,8 +1317,11 @@
 
                     <!-- ─── HOME TAB ─── -->
                     <TabItem Header="HOME">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                          CanContentScroll="True" Focusable="False"
+                                          Style="{StaticResource RibbonScrollViewer}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <!-- File Operations -->
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
@@ -841,10 +1390,10 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddWatchItemCommand}"
-                                                    ToolTip="Add a new WatchItem to the root">
+                                                    ToolTip="Add a new Test Item to the root">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE710;" Foreground="{DynamicResource Accent}" />
-                                                    <TextBlock Text="WatchItem" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                    <TextBlock Text="Test Item" FontSize="10" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding AddChildNodeCommand}"
@@ -890,7 +1439,7 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="WatchList" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
+                                        <TextBlock Text="Test Plan" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -961,14 +1510,60 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <!-- View -->
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <StackPanel Margin="0,0,10,0">
+                                                <TextBlock Text="Theme" FontSize="9" Foreground="{DynamicResource TextS}" Margin="0,0,0,2" />
+                                                <ComboBox ItemsSource="{Binding AvailableThemes}"
+                                                          SelectedItem="{Binding SelectedTheme}"
+                                                          Style="{StaticResource Cmb}" Width="120" />
+                                            </StackPanel>
+                                            <Border Background="{DynamicResource BgSurface}" CornerRadius="10" Padding="6,4">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <ToggleButton IsChecked="{Binding IsSimplifiedLayout}" Cursor="Hand"
+                                                                  ToolTip="Toggle Simplified Layout (hides ribbon, more workspace)">
+                                                        <ToggleButton.Template>
+                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                <Border x:Name="Track" Width="36" Height="18" CornerRadius="9"
+                                                                        Background="{DynamicResource BgSurface}" BorderThickness="1"
+                                                                        BorderBrush="{DynamicResource Bdr}">
+                                                                    <Ellipse x:Name="Thumb" Width="14" Height="14" Fill="{DynamicResource TextS}"
+                                                                             HorizontalAlignment="Left" Margin="1,0,0,0" />
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsChecked" Value="True">
+                                                                        <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}" />
+                                                                        <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                                        <Setter TargetName="Thumb" Property="Fill" Value="White" />
+                                                                        <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                                                        <Setter TargetName="Thumb" Property="Margin" Value="0,0,1,0" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </ToggleButton.Template>
+                                                    </ToggleButton>
+                                                    <TextBlock Text="Simplified" FontSize="10" Foreground="{DynamicResource TextS}"
+                                                               VerticalAlignment="Center" Margin="6,0,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="View" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
 
                     <!-- ─── EXECUTION TAB ─── -->
                     <TabItem Header="EXECUTION">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <ScrollViewer Style="{StaticResource RibbonScrollViewer}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
@@ -1094,44 +1689,72 @@
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <CheckBox IsChecked="{Binding IsLogPanePinned}" VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource TextP}" />
-                                            <TextBlock Text=" Execution Log" FontSize="11" Foreground="{DynamicResource TextP}"
-                                                       VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <ToggleButton IsChecked="{Binding IsLogPanePinned}" Cursor="Hand"
+                                                          ToolTip="Show/Hide Execution Log">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border x:Name="Track" Width="32" Height="16" CornerRadius="8"
+                                                                Background="{DynamicResource Accent}" BorderThickness="1"
+                                                                BorderBrush="{DynamicResource Accent}">
+                                                            <Ellipse x:Name="Thumb" Width="12" Height="12" Fill="White"
+                                                                     HorizontalAlignment="Right" Margin="0,0,1,0" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="False">
+                                                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource BgSurface}" />
+                                                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Bdr}" />
+                                                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource TextS}" />
+                                                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Left" />
+                                                                <Setter TargetName="Thumb" Property="Margin" Value="1,0,0,0" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                            </ToggleButton>
+                                            <TextBlock Text="Execution Log" FontSize="11" Foreground="{DynamicResource TextP}"
+                                                       VerticalAlignment="Center" Margin="6,0,0,0" />
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                            <CheckBox IsChecked="{Binding IsAgentPanePinned}" VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource TextP}" />
-                                            <TextBlock Text=" Agent Panel" FontSize="11" Foreground="{DynamicResource TextP}"
-                                                       VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <ToggleButton IsChecked="{Binding IsAgentPanePinned}" Cursor="Hand"
+                                                          ToolTip="Show/Hide Agent Panel">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border x:Name="Track" Width="32" Height="16" CornerRadius="8"
+                                                                Background="{DynamicResource Accent}" BorderThickness="1"
+                                                                BorderBrush="{DynamicResource Accent}">
+                                                            <Ellipse x:Name="Thumb" Width="12" Height="12" Fill="White"
+                                                                     HorizontalAlignment="Right" Margin="0,0,1,0" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="False">
+                                                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource BgSurface}" />
+                                                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Bdr}" />
+                                                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource TextS}" />
+                                                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Left" />
+                                                                <Setter TargetName="Thumb" Property="Margin" Value="1,0,0,0" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                            </ToggleButton>
+                                            <TextBlock Text="Agent Panel" FontSize="11" Foreground="{DynamicResource TextP}"
+                                                       VerticalAlignment="Center" Margin="6,0,0,0" />
                                         </StackPanel>
                                         <TextBlock Text="Panels" FontSize="9" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                            </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
                     <!-- ─── TOOLS TAB ─── -->
                     <TabItem Header="TOOLS">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="Theme:" FontSize="11" Foreground="{DynamicResource TextS}"
-                                                       VerticalAlignment="Center" Margin="4,0,8,0" />
-                                            <ComboBox ItemsSource="{Binding AvailableThemes}"
-                                                      SelectedItem="{Binding SelectedTheme}"
-                                                      Style="{StaticResource Cmb}" Width="140" Margin="0" />
-                                        </StackPanel>
-                                        <TextBlock Text="Appearance" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <ScrollViewer Style="{StaticResource RibbonScrollViewer}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
@@ -1163,108 +1786,215 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
-                            </WrapPanel>
+                            </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
                 </TabControl>
-            </DockPanel>
+            </Grid>
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════ -->
-        <!-- STATUSBAR (Row 2)                                         -->
+        <!-- STATUSBAR — single consolidated row                       -->
         <!-- ═══════════════════════════════════════════════════════════ -->
-        <Border DockPanel.Dock="Bottom" Background="{DynamicResource BgPanel}" Padding="8,5"
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource BgPanel}" Padding="6,4"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <!-- Left: File path -->
-                <TextBlock Grid.Column="0" FontSize="10" FontFamily="Consolas" VerticalAlignment="Center"
+            <DockPanel>
+                <!-- Far left: File path -->
+                <TextBlock DockPanel.Dock="Left" FontSize="11" FontFamily="Consolas"
+                           VerticalAlignment="Center"
                            Foreground="{DynamicResource TextS}" TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding VocabFilePath}" Margin="4,0">
-                    <Run Text="File: " FontWeight="SemiBold" /><Run Text="{Binding VocabFilePath}" />
+                           MaxWidth="250" ToolTip="{Binding VocabFilePath}" Margin="4,0,12,0">
+                    <Run Text="{Binding VocabFilePath}" />
                 </TextBlock>
 
-                <!-- Center: Application status -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
-                    <TextBlock FontSize="11" Foreground="{DynamicResource TextS}">
-                        <Run Text="Watchers: " /><Run Text="{Binding ActiveWatchers, Mode=OneWay}" Foreground="{DynamicResource AccGreen}" FontWeight="Bold" />
-                        <Run Text="  Templates: " /><Run Text="{Binding TemplateRoots.Count, Mode=OneWay}" Foreground="{DynamicResource AccMauve}" FontWeight="Bold" />
-                    </TextBlock>
-                    <TextBlock Text=" EXECUTING " Foreground="{DynamicResource AccRed}" FontWeight="Bold"
-                               FontSize="11" VerticalAlignment="Center" Margin="8,0"
-                               Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}" />
+                <!-- Far right: Health Pill + flyout -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,4,0"
+                            VerticalAlignment="Center">
+                    <ToggleButton x:Name="HealthPillToggle" Cursor="Hand"
+                                  Padding="6,2" BorderThickness="1" VerticalAlignment="Center">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="PillBorder" CornerRadius="8" Padding="8,3"
+                                        BorderThickness="1" BorderBrush="{DynamicResource Bdr}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HealthMetrics.OverallHealth}" Value="Amber">
+                                                    <Setter Property="Background" Value="{DynamicResource RunningBadgeBg}" />
+                                                    <Setter Property="BorderBrush" Value="#F0B070" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding HealthMetrics.OverallHealth}" Value="Red">
+                                                    <Setter Property="Background" Value="{DynamicResource AlertErrorBg}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccRed}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               Text="{Binding HealthMetrics.HealthPillText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HealthMetrics.OverallHealth}" Value="Amber">
+                                                        <Setter Property="Foreground" Value="#B87A30" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding HealthMetrics.OverallHealth}" Value="Red">
+                                                        <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                    </ToggleButton>
+
+                    <!-- Health flyout popup -->
+                    <Popup IsOpen="{Binding IsChecked, ElementName=HealthPillToggle}"
+                           PlacementTarget="{Binding ElementName=HealthPillToggle}"
+                           Placement="Top" StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade" VerticalOffset="-4">
+                        <Border Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource Bdr}"
+                                BorderThickness="1" CornerRadius="6" Padding="12,10"
+                                MinWidth="280" MaxWidth="400" MaxHeight="260">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" Opacity="0.25" ShadowDepth="3" Direction="270"/>
+                            </Border.Effect>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextP}"
+                                           Margin="0,0,0,8">
+                                    <Run Text="Controller health — "/>
+                                    <Run Text="{Binding HealthMetrics.IssueCount, Mode=OneWay}"/>
+                                    <Run Text=" issue(s)"/>
+                                </TextBlock>
+
+                                <!-- Issue rows -->
+                                <StackPanel Margin="0,0,0,4"
+                                            Visibility="{Binding HealthMetrics.IsCritical, Converter={StaticResource BoolVis}}">
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource TextS}" TextWrapping="Wrap"
+                                               Text="{Binding HealthMetrics.AlertSummary}" />
+                                </StackPanel>
+
+                                <!-- Detail metrics -->
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="CPU" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,2" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="8,2"
+                                               Foreground="{Binding HealthMetrics.CpuHealth, Converter={StaticResource HealthBrush}}">
+                                        <Run Text="{Binding HealthMetrics.CpuPercent, StringFormat={}{0:F0}%, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Memory" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,2" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="8,2"
+                                               Foreground="{Binding HealthMetrics.MemoryHealth, Converter={StaticResource HealthBrush}}">
+                                        <Run Text="{Binding HealthMetrics.MemoryUsedGb, StringFormat={}{0:F1} GB, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,2" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="8,2"
+                                               Foreground="{Binding HealthMetrics.DiskHealth, Converter={StaticResource HealthBrush}}">
+                                        <Run Text="{Binding HealthMetrics.DiskPercent, StringFormat={}{0:F0}%, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Network" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,2" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="8,2"
+                                               Foreground="{Binding HealthMetrics.NetworkHealth, Converter={StaticResource HealthBrush}}">
+                                        <Run Text="{Binding HealthMetrics.NetworkLatencyMs, StringFormat={}{0:F0} ms, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Agents" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,2" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="8,2"
+                                               Foreground="{Binding HealthMetrics.AgentsHealth, Converter={StaticResource HealthBrush}}">
+                                        <Run Text="{Binding HealthMetrics.AgentsOnline, Mode=OneWay}" /><Run Text="/" /><Run Text="{Binding HealthMetrics.AgentsTotal, Mode=OneWay}" /><Run Text=" online" />
+                                    </TextBlock>
+                                </Grid>
+                            </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
                 </StackPanel>
 
-                <!-- Right: Agent status -->
-                <TextBlock Grid.Column="2" FontSize="11" Foreground="{DynamicResource TextS}"
-                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="4,0">
-                    <Run Text="Agents: " /><Run Text="{Binding AgentStatusSummary, Mode=OneWay}" Foreground="{DynamicResource Accent}" FontWeight="Bold" />
-                </TextBlock>
-            </Grid>
+                <!-- Right of metrics: thin divider before pill -->
+                <Rectangle DockPanel.Dock="Right" Width="1" Fill="{DynamicResource Bdr}" Margin="8,4" Opacity="0.6" />
+
+                <!-- Right: EXECUTING indicator -->
+                <TextBlock DockPanel.Dock="Right" Text=" EXECUTING " Foreground="{DynamicResource AccRed}" FontWeight="Bold"
+                           FontSize="11" VerticalAlignment="Center" Margin="6,0"
+                           Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}" />
+
+                <!-- Center/Right: Metrics strip fills remaining space, right-aligned -->
+                <views:HealthMetricsStrip DataContext="{Binding HealthMetrics}"
+                                          HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </DockPanel>
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════ -->
         <!-- MAIN CONTENT: 3-column, 3-row Grid                       -->
         <!-- Row 0 = Panels | Row 1 = Splitter | Row 2 = Log          -->
         <!-- ═══════════════════════════════════════════════════════ -->
-        <Grid>
+        <Grid x:Name="MainContentGrid" SizeChanged="MainContentGrid_SizeChanged">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="250" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition x:Name="RowLogPane" Height="2*" MinHeight="120" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2.5*" MinWidth="220" />    <!-- Col 0: Tree -->
+                <ColumnDefinition x:Name="ColTreePanel" Width="2.5*" MinWidth="220" /> <!-- Col 0: Tree -->
                 <ColumnDefinition Width="Auto" />                    <!-- Col 1: Splitter -->
-                <ColumnDefinition x:Name="ColNodeProperties" MinWidth="300"> <!-- Col 2: Node Props -->
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="5*" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsAgentPanePinned}" Value="False">
-                                    <Setter Property="Width" Value="*" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
+                <ColumnDefinition x:Name="ColNodeProperties" Width="5*" MinWidth="300" /> <!-- Col 2: Node Props -->
                 <ColumnDefinition x:Name="ColAgentSplitter" Width="Auto" /> <!-- Col 3: Splitter -->
-                <ColumnDefinition x:Name="ColAgentPanel" MinWidth="0">      <!-- Col 4: Agents -->
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="2*" />
-                            <Setter Property="MinWidth" Value="240" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsAgentPanePinned}" Value="False">
-                                    <Setter Property="Width" Value="Auto" />
-                                    <Setter Property="MinWidth" Value="28" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
+                <ColumnDefinition x:Name="ColAgentPanel" Width="2*" MinWidth="240" /> <!-- Col 4: Agents -->
             </Grid.ColumnDefinitions>
 
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- LEFT PANEL (Col 0, Row 0): TabControl                 -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgPanel}">
+
+            <!-- Collapsed tree pane: vertical restore tab -->
+            <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgCard}"
+                    Width="28" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,1,0"
+                    Visibility="{Binding IsTreePanePinned, Converter={StaticResource InvBoolVis}}">
+                <Button Command="{Binding ShowTreePaneCommand}" Cursor="Hand"
+                        ToolTip="Show WatchList tree (Ctrl+1)"
+                        Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                               Foreground="{DynamicResource Accent}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.LayoutTransform>
+                            <RotateTransform Angle="-90" />
+                        </TextBlock.LayoutTransform>
+                    </TextBlock>
+                </Button>
+            </Border>
+
+            <!-- Full tree panel (visible when pinned) -->
+            <Border Grid.Column="0" Grid.Row="0" Background="{DynamicResource BgPanel}"
+                    Visibility="{Binding IsTreePanePinned, Converter={StaticResource BoolVis}}">
                 <TabControl Background="Transparent" BorderThickness="0" Padding="0">
                     <TabControl.Resources>
                         <Style TargetType="TabItem" BasedOn="{StaticResource LeftPanelTab}" />
                     </TabControl.Resources>
 
-                    <!-- WatchList Tab -->
+                    <!-- Test Plan Tab -->
                     <TabItem>
                         <TabItem.Header>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                <TextBlock Text="WatchList" VerticalAlignment="Center" />
+                                <TextBlock Text="Test Plan" VerticalAlignment="Center" />
                             </StackPanel>
                         </TabItem.Header>
                         <DockPanel>
@@ -1283,10 +2013,10 @@
                                 </Grid>
                             </StackPanel>
                             <TreeView x:Name="WatchListTreeView" ItemsSource="{Binding TreeRoots}"
-                                      Background="Transparent" Foreground="{DynamicResource TextP}"
+                                      Background="Transparent" Foreground="{DynamicResource TextDefaultBrush}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
-                                      ItemContainerStyle="{StaticResource TVI}"
-                                      ItemTemplate="{StaticResource WatchTreeTemplate}"
+                                      ItemContainerStyle="{StaticResource SpecTVI}"
+                                      ItemTemplate="{StaticResource WatchTreeSpecTemplate}"
                                       AllowDrop="True" />
                         </DockPanel>
                     </TabItem>
@@ -1315,11 +2045,22 @@
                                 </Grid>
                             </StackPanel>
                             <TreeView x:Name="TemplateTreeView" ItemsSource="{Binding TemplateRoots}"
-                                      Background="Transparent" Foreground="{DynamicResource TextP}"
+                                      Background="Transparent" Foreground="{DynamicResource TextDefaultBrush}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
-                                      ItemContainerStyle="{StaticResource TVI}"
-                                      ItemTemplate="{StaticResource TemplateTreeTemplate}" />
+                                      ItemContainerStyle="{StaticResource SpecTVI}"
+                                      ItemTemplate="{StaticResource WatchTreeSpecTemplate}" />
                         </DockPanel>
+                    </TabItem>
+
+                    <!-- History Tab (read-only observer, no gRPC interaction) -->
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                <TextBlock Text="History" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </TabItem.Header>
+                        <panels:ExecutionHistoryPanel />
                     </TabItem>
                 </TabControl>
             </Border>
@@ -1327,7 +2068,9 @@
             <!-- Vertical splitter: Left | Center -->
             <GridSplitter Grid.Column="1" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                          ResizeBehavior="PreviousAndNext" />
+                          ResizeBehavior="PreviousAndNext"
+                          AutomationProperties.Name="Resize tree panel width"
+                          Visibility="{Binding IsTreePanePinned, Converter={StaticResource BoolVis}}" />
 
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- CENTER PANEL (Col 2, Row 0): Node Properties          -->
@@ -1357,15 +2100,13 @@
                                     <TextBlock Text="FAILED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
                                 </Border>
                                 <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
-                                        Background="{DynamicResource RunningBadgeBg}"
+                                        Background="{DynamicResource PartialBadgeBg}"
                                         Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=PartialFailure}">
                                     <TextBlock Text="PARTIAL" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccPeach}" />
                                 </Border>
                                 <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
+                                        Background="{DynamicResource CancelledBadgeBg}"
                                         Visibility="{Binding ExecutionStatus, Converter={StaticResource VisWhen}, ConverterParameter=Cancelled}">
-                                    <Border.Background>
-                                        <SolidColorBrush Color="#339399B2" />
-                                    </Border.Background>
                                     <TextBlock Text="CANCELLED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
                                 </Border>
                                 <TextBlock Text="{Binding NodeKind, StringFormat='[ {0} ]'}"
@@ -1413,10 +2154,10 @@
                                             <Run Text="{Binding DataContext.VocabFilePath, RelativeSource={RelativeSource AncestorType=Window}}" FontFamily="Consolas" />
                                         </TextBlock>
                                         <TextBlock Foreground="{DynamicResource TextS}" FontSize="12" Margin="0,2">
-                                            <Run Text="WatchItems: " FontWeight="SemiBold" />
+                                            <Run Text="Test Items: " FontWeight="SemiBold" />
                                             <Run Text="{Binding ChildCount, Mode=OneWay}" Foreground="{DynamicResource AccGreen}" FontWeight="Bold" />
                                         </TextBlock>
-                                        <TextBlock Text="This is the single WatchList root. Use + WatchItem to add items, or Open to load from file."
+                                        <TextBlock Text="This is the single Test Plan root. Use + Test Item to add items, or Open to load from file."
                                                    FontSize="11" Foreground="{DynamicResource TextS}" TextWrapping="Wrap" Margin="0,8,0,0" FontStyle="Italic" />
                                     </StackPanel>
                                 </Border>
@@ -1568,10 +2309,10 @@
                                                     ToolTip="Open WatchItem XML Editor with validation, auto-fix, and structure preview">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,4,0" />
-                                                    <TextBlock Text="Edit WatchItem XML" />
+                                                    <TextBlock Text="Edit Test Item XML" />
                                                 </StackPanel>
                                             </Button>
-                                            <TextBlock Text="WatchItem XML Editor" FontSize="11" FontWeight="SemiBold"
+                                            <TextBlock Text="Test Item XML Editor" FontSize="11" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource AccPeach}" VerticalAlignment="Center" />
                                         </DockPanel>
                                     </Border>
@@ -1604,6 +2345,8 @@
                             </StackPanel>
                             <!-- ===== Action ===== -->
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Action, FallbackValue=Collapsed}">
+                                <Label Content="TAG" Style="{StaticResource Lbl}" />
+                                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
                                 <Label Content="ACTION TYPE" Style="{StaticResource Lbl}" />
                                 <ComboBox ItemsSource="{StaticResource ActionTypes}" SelectedItem="{Binding ActionTypeText}" Style="{StaticResource Cmb}" />
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunCommand|RunRemoteCommand}">
@@ -1644,12 +2387,6 @@
                                             <Label Content="CHECK INTERVAL (s)" Style="{StaticResource Lbl}" />
                                             <TextBox Text="{Binding CompletionPollIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"
                                                      ToolTip="How often to run the check command (seconds). Default: 30" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2">
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextS}" Margin="0,18,0,0">
-                                                <Run Text="&#x24D8;" FontWeight="Bold" />
-                                                <Run Text=" Polls after Setup.exe exits to wait for msiexec child processes. Stops when check returns exit 1 or output contains DONE." />
-                                            </TextBlock>
                                         </StackPanel>
                                     </Grid>
                                     <StackPanel Orientation="Horizontal" Margin="0,5">
@@ -1776,8 +2513,8 @@
                                           Foreground="{DynamicResource TextP}"
                                           BorderThickness="1"
                                           BorderBrush="{DynamicResource Bdr}"
-                                          RowBackground="#10FFFFFF"
-                                          AlternatingRowBackground="#18FFFFFF"
+                                          RowBackground="{DynamicResource BtnBg}"
+                                          AlternatingRowBackground="{DynamicResource InfoBoxBg}"
                                           MaxHeight="200"
                                           Margin="0,0,0,4">
                                     <DataGrid.Columns>
@@ -1791,7 +2528,7 @@
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <Button Content="✕" FontSize="10"
-                                                            Background="Transparent" Foreground="#F85149"
+                                                            Background="Transparent" Foreground="{DynamicResource AccRed}"
                                                             BorderThickness="0" Cursor="Hand" Padding="4,0"
                                                             Command="{Binding DataContext.RemoveParameterEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding}" />
@@ -1830,7 +2567,7 @@
 
                             <!-- ══ Execution Error Panel ══ -->
                             <Border Margin="0,12,0,0" Padding="8" CornerRadius="4"
-                                    Background="#20EF4444" BorderBrush="#40EF4444" BorderThickness="1">
+                                    Background="{DynamicResource AlertErrorBg}" BorderBrush="{DynamicResource AlertErrorBdr}" BorderThickness="1">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Visibility" Value="Visible" />
@@ -1843,10 +2580,10 @@
                                 </Border.Style>
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="&#x2716;" Foreground="#EF4444" FontWeight="Bold"
+                                        <TextBlock Text="&#x2716;" Foreground="{DynamicResource AccRed}" FontWeight="Bold"
                                                    FontSize="12" Margin="0,0,4,0" />
                                         <TextBlock Text="LAST EXECUTION ERROR" FontSize="10"
-                                                   FontWeight="Bold" Foreground="#EF4444" />
+                                                   FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
                                         <TextBlock Text="{Binding LastExitCode, StringFormat=' (exit {0})'}"
                                                    FontSize="10" Foreground="{DynamicResource TextS}"
                                                    Margin="4,0,0,0" />
@@ -1854,7 +2591,7 @@
                                     <TextBox Text="{Binding LastExecutionError, Mode=OneWay}"
                                              IsReadOnly="True" TextWrapping="Wrap"
                                              Background="Transparent" BorderThickness="0"
-                                             Foreground="#EF4444" FontFamily="Consolas" FontSize="11"
+                                             Foreground="{DynamicResource AccRed}" FontFamily="Consolas" FontSize="11"
                                              MaxHeight="100" VerticalScrollBarVisibility="Auto" />
                                 </StackPanel>
                             </Border>
@@ -1904,6 +2641,7 @@
             <GridSplitter Grid.Column="3" Grid.Row="0" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext"
+                          AutomationProperties.Name="Resize agent panel width"
                           Visibility="{Binding IsAgentPanePinned, Converter={StaticResource BoolVis}}" />
 
             <!-- ═══════════════════════════════════════════════════════ -->
@@ -1957,129 +2695,12 @@
                                 <TextBlock Text="Agents" FontSize="13" FontWeight="Bold"
                                            Foreground="{DynamicResource AccPeach}" Margin="0,0,6,0" />
                                 <TextBlock FontSize="10" Foreground="{DynamicResource TextS}" VerticalAlignment="Center">
-                                    <Run Text="(" /><Run Text="{Binding RegisteredAgents.Count, Mode=OneWay}" /><Run Text=")" />
+                                    <Run Text="(" /><Run Text="{Binding AgentWorkspace.Fleet.Cards.Count, Mode=OneWay}" /><Run Text=")" />
                                 </TextBlock>
                             </StackPanel>
                         </DockPanel>
                     </Border>
-                    <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-                        <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="2*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <Label Content="Name" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding NewAgentName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <Label Content="gRPC Address" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding NewAgentAddress, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas" FontSize="11" />
-                                </StackPanel>
-                            </Grid>
-                            <WrapPanel Orientation="Horizontal" Margin="0,5,0,5">
-                                <Button Content="Register + Test" Style="{StaticResource SmBtn}"
-                                        Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
-                                        Command="{Binding RegisterAgentCommand}" ToolTip="Register new agent and test connection" />
-                                <Button Content="Test All" Style="{StaticResource SmBtn}"
-                                        Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                        Command="{Binding TestAllAgentsCommand}" ToolTip="Test connectivity to all registered agents" />
-                                <Button Content="Test" Style="{StaticResource SmBtn}"
-                                        Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                                        Command="{Binding TestConnectionCommand}" ToolTip="Test connectivity to selected agent" />
-                                <Button Content="Diagnose" Style="{StaticResource SmBtn}"
-                                        Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
-                                        Command="{Binding DiagnoseAgentCommand}" ToolTip="Run full connectivity diagnostic" />
-                                <Button Content="&#x1F4CA; Monitor" Style="{StaticResource SmBtn}"
-                                        Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                        Command="{Binding OpenAgentMonitorCommand}"
-                                        CommandParameter="{Binding SelectedAgent}"
-                                        ToolTip="Open live execution monitor for selected agent" />
-                                <Button Content="Remove" Style="{StaticResource DangerBtn}"
-                                        Command="{Binding UnregisterAgentCommand}" ToolTip="Remove selected agent" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
-                    <ListBox ItemsSource="{Binding RegisteredAgents}"
-                         SelectedItem="{Binding SelectedAgent}"
-                         Background="Transparent" BorderThickness="0"
-                         Margin="6,5,6,6">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="4,3" />
-                            <Setter Property="Margin" Value="0,2" />
-                            <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                    <ListBox.ItemTemplate>
-                            <DataTemplate>
-                            <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8,6">
-                                <StackPanel>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding StatusIcon}" FontSize="13" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Online">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                                            <Setter Property="FontWeight" Value="Bold" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Testing">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding ConnectionStatus}" Value="Error">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AccPeach}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextP}">
-                                                <Run Text="{Binding Name, Mode=OneWay}" />
-                                                <Run Text="  " />
-                                                <Run Text="{Binding Address, Mode=OneWay}" FontFamily="Consolas" FontSize="10" Foreground="{DynamicResource TextS}" />
-                                            </TextBlock>
-                                            <TextBlock Text="{Binding DetailLine}" FontSize="10" FontFamily="Consolas" Margin="0,1,0,0">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="{DynamicResource TextS}" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding ConnectionStatus}" Value="Online">
-                                                                <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding ConnectionStatus}" Value="Offline">
-                                                                <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="2" Text="{Binding LastChecked}" FontSize="9" FontFamily="Consolas"
-                                                   Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="6,0,0,0" />
-                                    </Grid>
-                                    <Border Background="{DynamicResource AlertErrorBg}" CornerRadius="3" Padding="6,4" Margin="0,4,0,0"
-                                            BorderBrush="{DynamicResource AlertErrorBdr}" BorderThickness="1">
-                                        <TextBlock Text="{Binding ErrorDetail}" FontSize="9" FontFamily="Consolas"
-                                                   Foreground="{DynamicResource AccRed}" TextWrapping="Wrap" />
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <aw:AgentWorkspaceView DataContext="{Binding AgentWorkspace}" />
                 </DockPanel>
             </Border>
 
@@ -2101,7 +2722,7 @@
                         <TextBlock Text="Agents" FontSize="11" FontWeight="SemiBold"
                                    Foreground="{DynamicResource AccPeach}" />
                         <TextBlock FontSize="9" Foreground="{DynamicResource TextS}" Margin="4,0,0,0">
-                            <Run Text="(" /><Run Text="{Binding RegisteredAgents.Count, Mode=OneWay}" /><Run Text=")" />
+                            <Run Text="(" /><Run Text="{Binding AgentWorkspace.Fleet.Cards.Count, Mode=OneWay}" /><Run Text=")" />
                         </TextBlock>
                     </StackPanel>
                 </Button>
@@ -2112,6 +2733,7 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <GridSplitter Grid.Row="1" Grid.ColumnSpan="5" Height="4" HorizontalAlignment="Stretch"
                           Background="{DynamicResource BgSurface}" ResizeBehavior="PreviousAndNext"
+                          AutomationProperties.Name="Resize log panel height"
                           Visibility="{Binding IsLogPanePinned, Converter={StaticResource BoolVis}}" />
 
             <!-- ═══════════════════════════════════════════════════════ -->
@@ -2194,18 +2816,18 @@
                                 </TextBlock>
                                 <!-- Error count badge -->
                                 <Border CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                        Background="#33EF4444"
+                                        Background="{DynamicResource FailedBadgeBg}"
                                         Visibility="{Binding LogErrorCount, Converter={StaticResource IntToVis}}">
-                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#EF4444">
+                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccRed}">
                                         <Run Text="{Binding LogErrorCount, Mode=OneWay}" />
                                         <Run Text=" errors" />
                                     </TextBlock>
                                 </Border>
                                 <!-- Warning count badge -->
                                 <Border CornerRadius="8" Padding="6,1" Margin="4,0,0,0"
-                                        Background="#33F59E0B"
+                                        Background="{DynamicResource YellowBtnBg}"
                                         Visibility="{Binding LogWarningCount, Converter={StaticResource IntToVis}}">
-                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="#F59E0B">
+                                    <TextBlock FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccYellow}">
                                         <Run Text="{Binding LogWarningCount, Mode=OneWay}" />
                                         <Run Text=" warn" />
                                     </TextBlock>
@@ -2417,9 +3039,9 @@
                                 <Button Content="Clear" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource YellowBtnBg}" Foreground="{DynamicResource AccYellow}"
                                         Command="{Binding ClearLogCommand}" ToolTip="Clear all log entries (Ctrl+Shift+L)" />
-                                <Button Content="Copy All" Style="{StaticResource SmBtn}"
+                                <Button Content="{Binding CopyButtonLabel}" Style="{StaticResource SmBtn}"
                                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                                        Command="{Binding CopyLogCommand}" ToolTip="Copy all log entries to clipboard (Ctrl+Shift+C)" />
+                                        Command="{Binding CopyLogCommand}" ToolTip="Copy log entries to clipboard (Ctrl+Shift+C)" />
                                 <Button Content="Copy Errors" Style="{StaticResource SmBtn}"
                                         Foreground="{DynamicResource AccRed}"
                                         Command="{Binding CopyFailedLogCommand}" ToolTip="Copy only error lines to clipboard" />

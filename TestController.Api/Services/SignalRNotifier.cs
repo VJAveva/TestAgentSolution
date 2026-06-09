@@ -11,10 +11,10 @@ namespace TestController.Api.Services;
 /// to a single <see cref="ControllerHub"/> via <see cref="IHubContext{THub}"/>.
 ///
 /// Subscribes to:
-///   � C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
-///   � C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
-///   � C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
-///   � <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
+///   � C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
+///   � C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
+///   � C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
+///   � <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
 ///     AgentHeartbeat, ExecutionStarted, ExecutionCompleted)
 ///
 /// Includes heartbeat throttling: coalesces rapid heartbeats into a single
@@ -30,6 +30,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IEventAggregator _events;
+    private readonly ExecutionSessionManager _sessionManager;
     private readonly CachedBuildResultsProvider _buildResults;
     private readonly ILogger<SignalRNotifier> _logger;
 
@@ -49,12 +50,18 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     private readonly Dictionary<string, object> _pendingHeartbeats = new();
     private Timer? _heartbeatTimer;
 
+    // Output batching: coalesces rapid output lines into batch pushes (500ms)
+    private readonly object _outputLock = new();
+    private readonly List<object> _pendingOutputLines = new();
+    private Timer? _outputTimer;
+
     public SignalRNotifier(
         IHubContext<ControllerHub> hub,
         IActionPipelineExecutor executor,
         IAgentGrpcDispatcher dispatcher,
         IVocabularyMonitor vocabMonitor,
         IEventAggregator events,
+        ExecutionSessionManager sessionManager,
         CachedBuildResultsProvider buildResults,
         ILogger<SignalRNotifier> logger)
     {
@@ -63,6 +70,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _dispatcher = dispatcher;
         _vocabMonitor = vocabMonitor;
         _events = events;
+        _sessionManager = sessionManager;
         _buildResults = buildResults;
         _logger = logger;
     }
@@ -91,7 +99,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
         _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
         _subLocksChanged = _events.Subscribe<AgentLocksChangedEvent>(e => _ = NotifyAgentLocksChanged(e));
-        // ? These carry SessionId � fixes "Pipeline view not updating" because
+        // ? These carry SessionId � fixes "Pipeline view not updating" because
         //   the WebClient looks up the card by sessionId on every ActionProgress.
         _subNodeProgress = _events.Subscribe<NodeProgressEvent>(OnNodeProgressEvent);
         _subAgentOutput = _events.Subscribe<AgentOutputEvent>(OnAgentOutputEvent);
@@ -102,8 +110,11 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         // Heartbeat flush timer (1 batch/second)
         _heartbeatTimer = new Timer(FlushHeartbeats, null, 1000, 1000);
 
+        // Output flush timer (batch every 500ms for near-realtime display)
+        _outputTimer = new Timer(FlushOutput, null, 500, 500);
+
         _logger.LogInformation(
-            "SignalRNotifier started � subscribed to: LogEntry, NodeProgress, " +
+            "SignalRNotifier started � subscribed to: LogEntry, NodeProgress, " +
             "OutputReceived, StatusChanged, AgentRegistered, AgentUnregistered, " +
             "Heartbeat, ExecutionStarted, ExecutionCompleted, ConfigReloaded, " +
             "NodeProgressEvent (with SessionId), AgentOutputEvent (with SessionId)");
@@ -148,7 +159,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             severity,
             category = entry.Category,
             agentName,
-            message = entry.Message,
+            message = SecurityRedactor.Redact(entry.Message),
         });
     }
 
@@ -159,11 +170,11 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             var agentName = string.IsNullOrEmpty(action.AgentName) ? "Controller" : action.AgentName;
             SendSafe("ActionProgress", new
             {
-                actionTag = action.Order,
+                actionTag = action.ResolvedTag,
                 actionType = action.Type.ToString(),
                 agentName,
-                command = action.Command,
-                status,
+                command = SecurityRedactor.Redact(action.Command),
+                status = SecurityRedactor.Redact(status),
                 timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
             });
         }
@@ -195,10 +206,10 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             agentName       = e.AgentName,
             actionTag       = e.NodeTag,
             actionType      = e.ActionType,
-            command         = e.Command,
-            status          = e.Status,
+            command         = SecurityRedactor.Redact(e.Command),
+            status          = SecurityRedactor.Redact(e.Status),
             exitCode        = e.ExitCode,
-            errorMessage    = e.ErrorMessage,
+            errorMessage    = SecurityRedactor.Redact(e.ErrorMessage),
             duration        = e.Duration,
             progressPercent = e.ProgressPercent,
             timestamp       = DateTime.Now.ToString("HH:mm:ss.fff"),
@@ -213,17 +224,38 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     {
         var severity = string.Equals(e.Kind, "stderr", StringComparison.OrdinalIgnoreCase)
             ? "Error" : "Info";
-        SendSafe("AgentOutput", new
+        var payload = new
         {
             sessionId = e.SessionId,
             agentName = e.AgentName,
-            line      = e.Line,
+            line      = SecurityRedactor.Redact(e.Line),
             kind      = e.Kind,
             timestamp = e.Timestamp.ToString("HH:mm:ss.fff"),
             severity,
             category  = "Output",
-            message   = $"[{e.AgentName}:{e.Kind}] {e.Line}",
-        });
+            message   = $"[{e.AgentName}:{e.Kind}] {SecurityRedactor.Redact(e.Line)}",
+        };
+
+        // Scale fix: Buffer output lines and flush every 500ms.
+        // At 200 agents producing output, this reduces hundreds of individual
+        // SignalR broadcasts per second down to 2 batch calls.
+        lock (_outputLock)
+        {
+            _pendingOutputLines.Add(payload);
+        }
+    }
+
+    private void FlushOutput(object? state)
+    {
+        List<object> batch;
+        lock (_outputLock)
+        {
+            if (_pendingOutputLines.Count == 0) return;
+            batch = new List<object>(_pendingOutputLines);
+            _pendingOutputLines.Clear();
+        }
+
+        SendSafe("AgentOutputBatch", batch);
     }
 
     private void OnOutputReceived(string agentName, string line, string kind)
@@ -232,13 +264,13 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         SendSafe("AgentOutput", new
         {
             agentName,
-            line,
+            line = SecurityRedactor.Redact(line),
             kind,
             timestamp = ts,
             sessionId = "",
             severity = kind == "stderr" ? "Error" : "Info",
             category = "Output",
-            message = $"[{agentName}:{kind}] {line}",
+            message = $"[{agentName}:{kind}] {SecurityRedactor.Redact(line)}",
         });
     }
 
@@ -247,7 +279,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         SendSafe("AgentStatusChanged", new
         {
             agentName,
-            status,
+            status = SecurityRedactor.Redact(status),
             timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
         });
     }
@@ -310,6 +342,13 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
 
     private void OnExecutionStarted(ExecutionStartedEvent e)
     {
+        // Include pending actions from the snapshot tree so the WebClient can
+        // pre-populate all pills as "Pending" (user sees the full pipeline scope)
+        var session = _sessionManager.GetSession(e.SessionId);
+        var pendingActions = session?.SnapshotNodes?.Count > 0
+            ? ExtractPendingActions(session.SnapshotNodes, session.ResolvedParameters)
+            : Array.Empty<object>();
+
         SendSafe("ExecutionStarted", new
         {
             sessionId = e.SessionId,
@@ -317,7 +356,55 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             eventType = e.EventType,
             startTime = DateTime.UtcNow.ToString("o"),
             source = e.Source,
+            pendingActions,
         });
+    }
+
+    /// <summary>Walks the snapshot tree and emits flat action descriptors for the WebClient.</summary>
+    private static object[] ExtractPendingActions(
+        IReadOnlyList<IActionNode> nodes, Dictionary<string, string>? parameters)
+    {
+        var result = new List<object>();
+        CollectActions(nodes, parameters, result);
+        return result.ToArray();
+    }
+
+    private static void CollectActions(
+        IReadOnlyList<IActionNode> nodes, Dictionary<string, string>? parameters, List<object> result)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    var agent = ResolveAgent(action.AgentName, parameters);
+                    result.Add(new
+                    {
+                        tag = action.ResolvedTag,
+                        actionType = action.Type.ToString(),
+                        agentName = agent,
+                        command = SecurityRedactor.Redact(action.Command),
+                        status = "Pending",
+                    });
+                    break;
+
+                case ActionGroupConfig group:
+                    CollectActions(group.Children, parameters, result);
+                    break;
+            }
+        }
+    }
+
+    private static string ResolveAgent(string agentName, Dictionary<string, string>? parameters)
+    {
+        if (string.IsNullOrEmpty(agentName)) return "Controller";
+        if (parameters != null && agentName.StartsWith('[') && agentName.EndsWith(']'))
+        {
+            var varName = agentName[1..^1];
+            if (parameters.TryGetValue(varName, out var resolved)) return resolved;
+            if (varName.StartsWith('_') && parameters.TryGetValue(varName[1..], out resolved)) return resolved;
+        }
+        return agentName;
     }
 
     private void OnExecutionCompleted(ExecutionCompletedEvent e)
@@ -333,6 +420,13 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             passed = e.Passed,
             failed = e.Failed,
             total = e.Total,
+            timestamp = DateTime.UtcNow.ToString("o"),
+        });
+
+        // Notify Results page to refresh build list
+        SendSafe("ResultsUpdated", new
+        {
+            watchItemTag = e.WatchItemTag,
             timestamp = DateTime.UtcNow.ToString("o"),
         });
     }
@@ -352,7 +446,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     public Task NotifyAgentLocksChanged(AgentLocksChangedEvent e)
     {
         // Lock changes go to all connected clients (everyone needs to update UI)
-        return _hub.Clients.Group("global").SendAsync("AgentLocksChanged", new
+        return SendSafeAsync("AgentLocksChanged", new
         {
             locks = e.Locks,
             reason = e.Reason,
@@ -360,7 +454,21 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         });
     }
 
-    // ?? Transport ??????????????????????????????????????????????????????
+    // ── Fleet panel notifications ──────────────────────────────────────────────
+
+    public Task NotifyFleetAgentUpdated(AgentFleetDto agent)
+        => SendSafeAsync("FleetAgentUpdated", agent);
+
+    public Task NotifyFleetAgentRemoved(string agentId)
+        => SendSafeAsync("FleetAgentRemoved", agentId);
+
+    public Task NotifyFleetSnapshot(IReadOnlyList<AgentFleetGroupDto> groups)
+        => SendSafeAsync("FleetSnapshot", groups);
+
+    // ── Transport ──────────────────────────────────────────────────────────────
+
+    /// <summary>Broadcast timeout to prevent slow clients from blocking sends.</summary>
+    private static readonly TimeSpan BroadcastTimeout = TimeSpan.FromSeconds(5);
 
     private void SendSafe(string method, object? arg)
     {
@@ -371,10 +479,16 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     {
         try
         {
+            using var cts = new CancellationTokenSource(BroadcastTimeout);
             if (arg is not null)
-                await _hub.Clients.Group("global").SendAsync(method, arg);
+                await _hub.Clients.Group("global").SendAsync(method, arg, cts.Token);
             else
-                await _hub.Clients.Group("global").SendAsync(method);
+                await _hub.Clients.Group("global").SendAsync(method, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("SignalR broadcast timed out for {Method} after {Timeout}s",
+                method, BroadcastTimeout.TotalSeconds);
         }
         catch (Exception ex)
         {
@@ -385,6 +499,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     public void Dispose()
     {
         _heartbeatTimer?.Dispose();
+        _outputTimer?.Dispose();
         _executor.LogEntry -= OnLogEntry;
         _executor.NodeProgress -= OnNodeProgress;
         _dispatcher.OutputReceived -= OnOutputReceived;

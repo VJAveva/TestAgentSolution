@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConnectionStore } from '../../stores/connectionStore';
+import { useExecutionStore } from '../../stores/executionStore';
 import { Download, Pause, Play, Trash2 } from 'lucide-react';
 
 interface LogEntry {
@@ -33,18 +34,33 @@ export default function LogViewer() {
   const parentRef = useRef<HTMLDivElement>(null);
   const bufferRef = useRef<LogEntry[]>([]);
   const connection = useConnectionStore(s => s.connection);
+  const storeLogs = useExecutionStore(s => s.logs);
+
+  // Seed with historical logs from the global store on first mount
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || storeLogs.length === 0) return;
+    seededRef.current = true;
+    setAllEntries(storeLogs.map(l => ({
+      message: l.message ?? '',
+      agent: l.agent ?? '',
+      sessionId: l.sessionId ?? '',
+      timestamp: l.timestamp ?? '',
+      severity: (l.severity ?? 'info').toLowerCase(),
+    })));
+  }, [storeLogs]);
 
   // Subscribe to SignalR log events directly for high-capacity buffering
   useEffect(() => {
     if (!connection) return;
 
-    const handleLog = (entry: { message?: string; agent?: string; sessionId?: string; timestamp?: string; severity?: string }) => {
+    const handleLog = (entry: { message?: string; agent?: string; agentName?: string; sessionId?: string; timestamp?: string; severity?: string }) => {
       const logEntry: LogEntry = {
         message: entry.message ?? '',
-        agent: entry.agent ?? '',
+        agent: entry.agentName ?? entry.agent ?? '',
         sessionId: entry.sessionId ?? '',
         timestamp: entry.timestamp ?? new Date().toISOString(),
-        severity: entry.severity ?? 'info',
+        severity: (entry.severity ?? 'info').toLowerCase(),
       };
 
       if (paused) {
@@ -60,21 +76,26 @@ export default function LogViewer() {
       });
     };
 
-    const handleEvent = (agent: string, line: string, kind: string) => {
+    const handleEvent = (data: { agentName?: string; line?: string; kind?: string; sessionId?: string; timestamp?: string }) => {
       handleLog({
-        message: line,
-        agent,
-        timestamp: new Date().toISOString(),
-        severity: kind === 'stderr' ? 'error' : 'info',
+        message: data.line,
+        agent: data.agentName,
+        sessionId: data.sessionId,
+        timestamp: data.timestamp ?? new Date().toISOString(),
+        severity: data.kind === 'stderr' ? 'error' : 'info',
       });
     };
 
-    connection.on('ExecutionLog', handleLog);
-    connection.on('ExecutionEvent', handleEvent);
+    connection.on('LogEntry', handleLog);
+    connection.on('AgentOutput', handleEvent);
+    connection.on('AgentOutputBatch', (batch: any[]) => {
+      for (const data of batch) handleEvent(data);
+    });
 
     return () => {
-      connection.off('ExecutionLog', handleLog);
-      connection.off('ExecutionEvent', handleEvent);
+      connection.off('LogEntry', handleLog);
+      connection.off('AgentOutput', handleEvent);
+      connection.off('AgentOutputBatch');
     };
   }, [connection, paused]);
 

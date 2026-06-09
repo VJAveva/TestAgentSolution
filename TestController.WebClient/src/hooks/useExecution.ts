@@ -8,7 +8,7 @@ export function useExecution() {
   const setSessions = useExecutionStore(s => s.setSessions);
 
   const fetchStatus = useCallback(async () => {
-    const { data } = await axios.get<ExecutionStatus>('/api/execution/status');
+    const { data } = await axios.get<ExecutionStatus>('/api/execution/proxy/status');
     setStatus(data.isExecuting, data.activeCount);
     return data;
   }, [setStatus]);
@@ -48,7 +48,7 @@ export function useExecution() {
   }, [fetchSessions]);
 
   const cancelSession = useCallback(async (sessionId: string) => {
-    const { data } = await axios.post(`/api/execution/cancel/${encodeURIComponent(sessionId)}`);
+    const { data } = await axios.post(`/api/execution/${encodeURIComponent(sessionId)}/cancel`);
     await fetchSessions();
     return data;
   }, [fetchSessions]);

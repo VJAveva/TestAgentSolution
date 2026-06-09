@@ -88,15 +88,15 @@ export default function SessionList() {
                 <div className="h-1 rounded-full bg-bg-surface mb-1.5 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${barColor}`}
-                    style={{ width: `${Math.min(100, s.progressPercent)}%` }}
+                    style={{ width: `${Math.min(100, s.progressPercent ?? 0)}%` }}
                   />
                 </div>
 
                 {/* Stats */}
                 <div className="flex items-center gap-2 text-[10px] text-text-muted font-mono">
-                  <span>{s.progressPercent.toFixed(0)}%</span>
-                  <span>{s.completedActions}/{s.totalActions}</span>
-                  <span className="text-acc-green">{s.passedActions}P</span>
+                  <span>{(s.progressPercent ?? 0).toFixed(0)}%</span>
+                  <span>{s.completedActions ?? 0}/{s.totalActions ?? 0}</span>
+                  <span className="text-acc-green">{s.passedActions ?? 0}P</span>
                   {s.failedActions > 0 && <span className="text-acc-red">{s.failedActions}F</span>}
                   <span className="ml-auto text-[9px]">[{s.sessionId.slice(0, 6)}]</span>
                 </div>

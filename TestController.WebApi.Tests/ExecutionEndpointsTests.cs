@@ -35,7 +35,7 @@ public class ExecutionEndpointsTests : IClassFixture<TestWebAppFactory>
         var response = await _client.GetAsync("/api/execution/status");
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-        // Verify structure — values depend on test ordering within the shared fixture
+        // Verify structure ï¿½ values depend on test ordering within the shared fixture
         Assert.True(json.TryGetProperty("isExecuting", out var isExec));
         Assert.True(isExec.ValueKind == JsonValueKind.True || isExec.ValueKind == JsonValueKind.False);
         Assert.True(json.TryGetProperty("activeCount", out var count));
@@ -81,6 +81,18 @@ public class ExecutionEndpointsTests : IClassFixture<TestWebAppFactory>
         var message = json.GetProperty("message").GetString();
         Assert.NotNull(message);
         Assert.Contains("Triggered", message);
+    }
+
+    [Fact]
+    public async Task TriggerAll_Should_ExcludeDisabledItems_When_IsEnabledFalse()
+    {
+        var response = await _client.PostAsync("/api/execution/trigger-all", null);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        var triggered = json.GetProperty("triggered");
+        var tags = triggered.EnumerateArray().Select(t => t.GetString()).ToList();
+
+        Assert.DoesNotContain("DisabledBuild", tags);
     }
 
     // ?????????????????????????????????????????????????????????????????
@@ -140,7 +152,7 @@ public class ExecutionEndpointsTests : IClassFixture<TestWebAppFactory>
     [Fact]
     public async Task TriggerEvent_Should_ReturnBadRequest_When_IndexNegative()
     {
-        // Negative index — the route constraint is {eventIndex:int} so -1 is valid int
+        // Negative index ï¿½ the route constraint is {eventIndex:int} so -1 is valid int
         var response = await _client.PostAsync("/api/execution/trigger-event/TestBuild/-1", null);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

@@ -1,6 +1,7 @@
 using Grpc.Core;
 using TestAgentGrpc.Clients;
 using TestAgentGrpc.Services;
+using TestControllerGrpc.Services;
 using Microsoft.Extensions.Options;
 
 namespace TestAgentGrpc;
@@ -104,6 +105,9 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
             _audit.Log("RegistrationFailed", severity: "Warning",
                 detail: $"Initial registration failed: {regError}",
                 controller: _settings.ControllerAddress);
+            CrashDumpHelper.AppendCrashLog(
+                $"[Lifecycle] Initial registration FAILED — will retry. " +
+                $"Machine={Environment.MachineName}, Agent={_settings.AgentName}, Error={regError}");
         }
 
         // Start heartbeat loop (will silently fail if controller unreachable)
@@ -121,7 +125,8 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         _executor.StateChanged -= OnStateChanged;
         _executor.SetState(AgentState.Inactive);
 
-        _cts?.Cancel();
+        try { _cts?.Cancel(); }
+        catch (ObjectDisposedException) { }
 
         // Wait for background tasks to finish gracefully
         try { if (_heartbeatTask is not null) await _heartbeatTask.WaitAsync(ct); } catch { }
@@ -192,11 +197,39 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                                 detail: $"Lost connection after {consecutiveFailures} consecutive failures. Last error: {regError}");
                         }
 
-                        continue; // Skip heartbeat — can't send to a controller we're not registered with
+                        // Still publish metrics to local subscribers (Agent Monitor)
+                        // even when controller is unreachable
+                        var regFailMetrics = _metrics.Collect();
+                        _broadcaster.Publish(new ExecutionEvent
+                        {
+                            ExecutionId = "",
+                            AgentName   = _settings.AgentName,
+                            Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+                            EventType   = ExecutionEventType.EventHeartbeat,
+                            AgentState  = _executor.CurrentState,
+                            Metrics     = regFailMetrics,
+                            Detail      = $"CPU {regFailMetrics.CpuUsagePct}% | Mem {regFailMetrics.MemoryUsedMb}MB | Disk {regFailMetrics.DiskFreeGb}GB free",
+                        });
+
+                        continue; // Skip controller heartbeat — not registered
                     }
                 }
 
                 var sysMetrics = _metrics.Collect();
+
+                // Always publish to local event subscribers (Agent Monitor)
+                // regardless of controller heartbeat outcome
+                _broadcaster.Publish(new ExecutionEvent
+                {
+                    ExecutionId = "",
+                    AgentName   = _settings.AgentName,
+                    Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+                    EventType   = ExecutionEventType.EventHeartbeat,
+                    AgentState  = _executor.CurrentState,
+                    Metrics     = sysMetrics,
+                    Detail      = $"CPU {sysMetrics.CpuUsagePct}% | Mem {sysMetrics.MemoryUsedMb}MB | Disk {sysMetrics.DiskFreeGb}GB free",
+                });
+
                 await _controller.SendHeartbeatAsync(_executor.CurrentState, sysMetrics, ct);
                 consecutiveFailures = 0;
                 heartbeatCount++;
@@ -208,17 +241,6 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                     _audit.Log("HeartbeatAcked",
                         detail: $"Heartbeat #{heartbeatCount}, CPU {sysMetrics.CpuUsagePct}%, Mem {sysMetrics.MemoryUsedMb}MB");
                 }
-
-                _broadcaster.Publish(new ExecutionEvent
-                {
-                    ExecutionId = "",
-                    AgentName   = _settings.AgentName,
-                    Timestamp   = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
-                    EventType   = ExecutionEventType.EventHeartbeat,
-                    AgentState  = _executor.CurrentState,
-                    Metrics     = sysMetrics,
-                    Detail      = $"CPU {sysMetrics.CpuUsagePct}% | Mem {sysMetrics.MemoryUsedMb}MB | Disk {sysMetrics.DiskFreeGb}GB free",
-                });
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -231,12 +253,27 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
                 _audit.Log("HeartbeatFailed", severity: "Warning",
                     detail: errorDetail, controller: _settings.ControllerAddress);
 
+                // Write to crash log so gRPC failures are always visible in agent_crash.log
+                CrashDumpHelper.AppendCrashLog(
+                    $"[Heartbeat] FAIL #{consecutiveFailures}: {errorDetail}");
+
                 if (consecutiveFailures >= 3 && !controllerLost)
                 {
                     controllerLost = true;
                     _audit.Log("ControllerLost", severity: "Error",
                         controller: _settings.ControllerAddress,
                         detail: $"Lost connection after {consecutiveFailures} consecutive heartbeat failures. Last error: {errorDetail}");
+                    CrashDumpHelper.AppendCrashLog(
+                        $"[ControllerLost] Connection lost after {consecutiveFailures} failures. " +
+                        $"Controller={_settings.ControllerAddress}, Error={errorDetail}");
+                }
+
+                // Reset gRPC channel after 5 consecutive failures to force DNS re-resolution
+                if (consecutiveFailures == 5)
+                {
+                    _controller.ResetChannel();
+                    CrashDumpHelper.AppendCrashLog(
+                        "[gRPC] Channel reset triggered after 5 consecutive heartbeat failures");
                 }
 
                 _logger.LogWarning(ex, "Heartbeat iteration failed (consecutive: {Count})", consecutiveFailures);

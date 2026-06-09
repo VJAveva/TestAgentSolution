@@ -1,9 +1,10 @@
 using System.Collections.Concurrent;
-using System.Collections.Concurrent;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
 using TestController.Api.Hubs;
+using TestController.Api.Security;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -21,6 +22,7 @@ public record TriggerRequest
 
 [ApiController]
 [Route("api/execution")]
+[Authorize(Policy = SecurityPolicies.User)]
 public class ExecutionController : ControllerBase
 {
     private readonly ExecutionSessionManager _sessionManager;
@@ -29,9 +31,16 @@ public class ExecutionController : ControllerBase
     private readonly IHubContext<ControllerHub> _hub;
     private readonly AgentLockManager _lockManager;
     private readonly IRealtimeNotifier _notifier;
+    private readonly IAppLogger _appLogger;
+    private readonly ISessionOwnershipChecker _ownershipChecker;
+    private readonly ISecurityAuditLogger _auditLogger;
+    private readonly IEventAggregator _events;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Broadcast timeout to prevent slow SignalR clients from blocking request handlers.</summary>
+    private static readonly TimeSpan BroadcastTimeout = TimeSpan.FromSeconds(5);
 
     public ExecutionController(
         ExecutionSessionManager sessionManager,
@@ -39,7 +48,11 @@ public class ExecutionController : ControllerBase
         IVocabularyMonitor vocabMonitor,
         IHubContext<ControllerHub> hub,
         AgentLockManager lockManager,
-        IRealtimeNotifier notifier)
+        IRealtimeNotifier notifier,
+        IAppLogger appLogger,
+        ISessionOwnershipChecker ownershipChecker,
+        ISecurityAuditLogger auditLogger,
+        IEventAggregator events)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -47,6 +60,10 @@ public class ExecutionController : ControllerBase
         _hub = hub;
         _lockManager = lockManager;
         _notifier = notifier;
+        _appLogger = appLogger;
+        _ownershipChecker = ownershipChecker;
+        _auditLogger = auditLogger;
+        _events = events;
     }
 
     /// <summary>GET /api/execution/sessions � list active sessions.</summary>
@@ -99,6 +116,144 @@ public class ExecutionController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// GET /api/execution/demo-sessions – returns fake sessions for dashboard UI testing.
+    /// Use this when no real pipeline is running to verify the dashboard renders correctly.
+    /// </summary>
+    [HttpGet("demo-sessions")]
+    public IActionResult GetDemoSessions()
+    {
+        var now = DateTime.UtcNow;
+
+        var active = new[]
+        {
+            new
+            {
+                sessionId = "demo01",
+                watchItemTag = "Deploy.WebApi",
+                userId = "developer1",
+                source = "WebClient",
+                status = "Running",
+                startedUtc = now.AddMinutes(-2).ToString("o"),
+                elapsed = "02:15",
+                lockedAgents = new[] { "Agent-01", "Agent-02", "Agent-03" },
+                buildNumber = "2026.05.04.1",
+                totalActions = 8,
+                completedActions = 5,
+                passedActions = 5,
+                failedActions = 0,
+                progressPercent = 62,
+                agents = new object[]
+                {
+                    new
+                    {
+                        agentName = "Agent-01", status = "Success", completedCount = 3, totalCount = 3, progressPercent = 100,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "45s" },
+                            new { tag = "Run Smoke Tests", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\smoke.cmd", status = "Success", exitCode = 0, duration = "30s" },
+                            new { tag = "Reboot", actionType = "RunRemoteCommand", agentName = "Agent-01", command = "shutdown /r /t 0", status = "Success", exitCode = 0, duration = "60s" },
+                        }
+                    },
+                    new
+                    {
+                        agentName = "Agent-02", status = "Executing", completedCount = 1, totalCount = 3, progressPercent = 33,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-02", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "48s" },
+                            new { tag = "Run Integration", actionType = "RunRemoteCommand", agentName = "Agent-02", command = @"\\server\integration.cmd", status = "Running", progressPercent = 65 },
+                            new { tag = "Email: Results", actionType = "SendMail", agentName = "Agent-02", command = "qa-team@company.com", status = "Pending" },
+                        }
+                    },
+                    new
+                    {
+                        agentName = "Agent-03", status = "Executing", completedCount = 1, totalCount = 2, progressPercent = 50,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-03", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "52s" },
+                            new { tag = "Run Perf Suite", actionType = "RunRemoteCommand", agentName = "Agent-03", command = @"\\server\perf.cmd", status = "Running", progressPercent = 30 },
+                        }
+                    },
+                }
+            }
+        };
+
+        var history = new[]
+        {
+            new
+            {
+                sessionId = "demo02",
+                watchItemTag = "Nightly.FullSuite",
+                userId = "scheduler",
+                source = "WebClient",
+                status = "Failed",
+                startedUtc = now.AddMinutes(-16).ToString("o"),
+                elapsed = "15:42",
+                lockedAgents = new[] { "Agent-04", "Agent-05" },
+                buildNumber = "2026.05.03.7",
+                totalActions = 6,
+                completedActions = 5,
+                passedActions = 4,
+                failedActions = 1,
+                progressPercent = 100,
+                agents = new object[]
+                {
+                    new
+                    {
+                        agentName = "Agent-04", status = "Success", completedCount = 3, totalCount = 3, progressPercent = 100,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-04", command = @"\\nightly\install.cmd", status = "Success", exitCode = 0, duration = "01:10" },
+                            new { tag = "Run Unit Tests", actionType = "RunRemoteCommand", agentName = "Agent-04", command = "dotnet test", status = "Success", exitCode = 0, duration = "08:30" },
+                            new { tag = "Collect Results", actionType = "RunCommand", agentName = "Agent-04", command = @"copy *.trx \\results", status = "Success", exitCode = 0, duration = "5s" },
+                        }
+                    },
+                    new
+                    {
+                        agentName = "Agent-05", status = "Failed", completedCount = 2, totalCount = 3, progressPercent = 67,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-05", command = @"\\nightly\install.cmd", status = "Success", exitCode = 0, duration = "01:15" },
+                            new { tag = "Run E2E Tests", actionType = "RunRemoteCommand", agentName = "Agent-05", command = @"\\nightly\e2e.cmd", status = "Failed", exitCode = 1, errorMessage = "3 test cases failed: LoginTest, PaymentTest, CheckoutTest", duration = "12:05" },
+                            new { tag = "Cleanup", actionType = "RunRemoteCommand", agentName = "Agent-05", command = @"\\nightly\cleanup.cmd", status = "Skipped" },
+                        }
+                    },
+                }
+            },
+            new
+            {
+                sessionId = "demo03",
+                watchItemTag = "Build.QuickVerify",
+                userId = "ci-bot",
+                source = "WebClient",
+                status = "Success",
+                startedUtc = now.AddMinutes(-4).ToString("o"),
+                elapsed = "03:20",
+                lockedAgents = new[] { "Agent-01" },
+                buildNumber = "2026.05.04.3",
+                totalActions = 2,
+                completedActions = 2,
+                passedActions = 2,
+                failedActions = 0,
+                progressPercent = 100,
+                agents = new object[]
+                {
+                    new
+                    {
+                        agentName = "Agent-01", status = "Success", completedCount = 2, totalCount = 2, progressPercent = 100,
+                        actions = new object[]
+                        {
+                            new { tag = "Install Build", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\install.cmd", status = "Success", exitCode = 0, duration = "40s" },
+                            new { tag = "Quick BVT", actionType = "RunRemoteCommand", agentName = "Agent-01", command = @"\\server\bvt.cmd", status = "Success", exitCode = 0, duration = "02:30" },
+                        }
+                    },
+                }
+            },
+        };
+
+        return Ok(new { active, history });
+    }
+
     /// <summary>GET /api/execution/{sessionId} � detailed session info.</summary>
     [HttpGet("{sessionId}")]
     public IActionResult GetSession(string sessionId)
@@ -129,10 +284,10 @@ public class ExecutionController : ControllerBase
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
 
         if (watchItem == null)
-            return NotFound(new { error = $"WatchItem '{watchItemTag}' not found" });
+            return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
 
         if (watchItem.Events.Count == 0)
-            return BadRequest(new { error = $"WatchItem '{watchItemTag}' has no events" });
+            return BadRequest(ApiErrorFactory.BadRequest($"WatchItem '{watchItemTag}' has no events"));
 
         var evt = eventType is not null
             ? watchItem.Events.FirstOrDefault(e =>
@@ -140,7 +295,7 @@ public class ExecutionController : ControllerBase
             : watchItem.Events[0];
 
         if (evt == null)
-            return BadRequest(new { error = $"Event type '{eventType}' not found on WatchItem '{watchItemTag}'" });
+            return BadRequest(ApiErrorFactory.BadRequest($"Event type '{eventType}' not found on WatchItem '{watchItemTag}'"));
 
         // Build parameters (needed for agent variable resolution)
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -199,7 +354,7 @@ public class ExecutionController : ControllerBase
         lock (tagLock)
         {
             if (_sessionManager.HasActiveExecution(watchItemTag))
-                return Conflict(new { error = $"WatchItem '{watchItemTag}' is already running" });
+                return Conflict(ApiErrorFactory.Conflict($"WatchItem '{watchItemTag}' is already running"));
 
             // Try to lock all agents atomically
             sessionId = Guid.NewGuid().ToString("N")[..12];
@@ -248,6 +403,7 @@ public class ExecutionController : ControllerBase
                 evt.Children.ToList(),
                 sessionId);
             session.UserId = userId;
+            session.OwnerSid = _ownershipChecker.GetUserSid(HttpContext.User);
             session.Source = source;
             session.LockedAgents = requiredAgents.ToArray();
         }
@@ -259,7 +415,9 @@ public class ExecutionController : ControllerBase
                 var lines = parameters
                     .Where(kvp => kvp.Key.StartsWith('_'))
                     .Select(kvp => $"{kvp.Key},{kvp.Value}");
-                await System.IO.File.WriteAllLinesAsync(paramFile, lines);
+                var tempFile = paramFile + ".tmp";
+                await System.IO.File.WriteAllLinesAsync(tempFile, lines);
+                System.IO.File.Move(tempFile, paramFile, overwrite: true);
             }
             catch { /* best effort */ }
         }
@@ -292,6 +450,9 @@ public class ExecutionController : ControllerBase
                     _ => "Success",
                 };
 
+                _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, finalState,
+                    completedSession?.SucceededCount ?? 0, completedSession?.FailedCount ?? 0, completedSession?.TotalActions ?? 0));
+
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -301,10 +462,12 @@ public class ExecutionController : ControllerBase
                     failed = completedSession?.FailedCount ?? 0,
                     total = completedSession?.TotalActions ?? 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
-                });
+                }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             catch (OperationCanceledException)
             {
+                _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, "Cancelled", 0, 0, 0));
+
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -312,10 +475,12 @@ public class ExecutionController : ControllerBase
                     state = "Cancelled",
                     passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
-                });
+                }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             catch (Exception ex)
             {
+                _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, "Failed", 0, 0, 0));
+
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -324,15 +489,19 @@ public class ExecutionController : ControllerBase
                     error = ex.Message,
                     passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
-                });
+                }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             finally
             {
-                // CRITICAL: Always release locks
-                _lockManager.ReleaseSession(sessionId);
-                BroadcastLockChange("Pipeline completed");
+                // Release locks only if not already released (e.g., by cancel endpoint)
+                var released = _lockManager.ReleaseSession(sessionId);
+                if (released > 0)
+                    BroadcastLockChange("Pipeline completed");
             }
         });
+
+        // Notify both SignalR clients and in-process subscribers (FleetVM)
+        _events.Publish(new ExecutionStartedEvent(sessionId, watchItemTag, evt.Type, source));
 
         await _hub.Clients.Group("global").SendAsync("ExecutionStarted", new
         {
@@ -343,7 +512,7 @@ public class ExecutionController : ControllerBase
             source,
             userId,
             lockedAgents = requiredAgents,
-        });
+        }, new CancellationTokenSource(BroadcastTimeout).Token);
 
         return Accepted(new
         {
@@ -360,7 +529,7 @@ public class ExecutionController : ControllerBase
             return Ok(new { builds = Array.Empty<object>() });
 
         if (!System.IO.Directory.Exists(basePath))
-            return NotFound(new { error = $"Path not found: {basePath}" });
+            return NotFound(ApiErrorFactory.NotFound($"Path not found: {basePath}"));
 
         var builds = System.IO.Directory.GetDirectories(basePath)
             .Select(d => new
@@ -405,7 +574,7 @@ public class ExecutionController : ControllerBase
         var watchItem = config?.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
         if (watchItem == null)
-            return NotFound(new { error = "WatchItem not found" });
+            return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
 
         var parameters = LoadParametersForWatchItem(watchItem);
         var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
@@ -461,18 +630,13 @@ public class ExecutionController : ControllerBase
     [HttpGet("{sessionId}/recent-logs")]
     public IActionResult GetRecentLogs(string sessionId, [FromQuery] int count = 200)
     {
-        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
-
         var session = _sessionManager.GetSession(sessionId);
         if (session == null)
-            return NotFound(new { error = "Session not found" });
+            return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found"));
 
-        if (source != "WPF" &&
-            !string.IsNullOrEmpty(userId) &&
-            !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
+        if (!_ownershipChecker.CanAccessSession(HttpContext.User, session))
         {
-            return StatusCode(403, new { error = "Not your session", sessionOwner = session.UserId });
+            return StatusCode(403, ApiErrorFactory.Forbidden("Cannot access another user's session"));
         }
 
         var logs = session.GetRecentLogs(count);
@@ -514,28 +678,36 @@ public class ExecutionController : ControllerBase
 
     // ?? Cancel endpoints ????????????????????????????????????????????
 
-    /// <summary>POST /api/execution/cancel � cancel all running sessions.</summary>
+    /// <summary>POST /api/execution/cancel – cancel all running sessions.</summary>
     [HttpPost("cancel")]
     public async Task<IActionResult> CancelAll()
     {
-        // Snapshot active session IDs before cancellation moves them to history
-        var activeSessionIds = _sessionManager.GetActiveSessions()
-            .Select(s => s.SessionId).ToList();
+        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
+
+        // Snapshot active sessions (ID + tag) before cancellation moves them to history
+        var activeSessions = _sessionManager.GetActiveSessions()
+            .Select(s => new { s.SessionId, s.WatchItemTag }).ToList();
 
         var cancelledTags = _sessionManager.CancelAll();
 
-        // Release locks for the actual cancelled sessions
-        foreach (var sid in activeSessionIds)
-            _lockManager.ReleaseSession(sid);
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"CancelAll: actor={userId}, source={source}, cancelled={cancelledTags.Count} session(s): [{string.Join(", ", activeSessions.Select(s => s.SessionId))}]");
 
-        foreach (var tag in cancelledTags)
+        // Release locks for the actual cancelled sessions
+        foreach (var s in activeSessions)
+            _lockManager.ReleaseSession(s.SessionId);
+
+        // Notify per-session with sessionId so WebClient can correlate
+        foreach (var s in activeSessions.Where(a => cancelledTags.Contains(a.WatchItemTag)))
         {
             await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
             {
-                watchItemTag = tag,
+                sessionId = s.SessionId,
+                watchItemTag = s.WatchItemTag,
                 state = "Cancelled",
                 timestamp = DateTime.UtcNow.ToString("o"),
-            });
+            }, new CancellationTokenSource(BroadcastTimeout).Token);
         }
 
         if (cancelledTags.Count > 0)
@@ -548,32 +720,29 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/{sessionId}/cancel � cancel a specific session (ownership enforced).</summary>
+    /// <summary>POST /api/execution/{sessionId}/cancel — cancel a specific session (ownership enforced).</summary>
     [HttpPost("{sessionId}/cancel")]
     public async Task<IActionResult> CancelSession(string sessionId)
     {
-        var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "";
+        var userId = _ownershipChecker.GetUserSid(HttpContext.User);
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
 
         var session = _sessionManager.GetSession(sessionId);
-        if (session == null)
-            return NotFound(new { error = "Session not found or not running" });
+        if (session == null || session.State != SessionState.Running)
+            return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found or not running"));
 
-        // Ownership check: WebClient users can only cancel their own sessions
-        if (source != "WPF" &&
-            !string.IsNullOrEmpty(userId) &&
-            !string.Equals(session.UserId, userId, StringComparison.OrdinalIgnoreCase))
+        // Ownership check: only session owner or admin can cancel
+        if (!_ownershipChecker.CanAccessSession(HttpContext.User, session))
         {
-            return StatusCode(403, new
-            {
-                error = "Cannot cancel another user's session",
-                sessionOwner = session.UserId,
-                yourId = userId,
-            });
+            _auditLogger.LogAuthorization(userId, "CancelSession", sessionId, "Denied");
+            return StatusCode(403, ApiErrorFactory.Forbidden("Cannot cancel another user's session"));
         }
 
         var cancelled = _sessionManager.CancelSession(sessionId);
-        if (!cancelled) return NotFound(new { error = "Session not found or not running" });
+        if (!cancelled) return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found or not running"));
+
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"CancelSession: actor={userId}, source={source}, sessionId={sessionId}, pipeline={session.WatchItemTag}");
 
         _lockManager.ReleaseSession(sessionId);
         BroadcastLockChange($"Session {sessionId} cancelled");
@@ -582,26 +751,33 @@ public class ExecutionController : ControllerBase
         {
             sessionId,
             timestamp = DateTime.UtcNow.ToString("o"),
-        });
+        }, new CancellationTokenSource(BroadcastTimeout).Token);
 
         return Ok(new { message = "Cancellation requested", cancelledBy = userId });
     }
 
     // ?? Force-release endpoints (admin only) ?????????????????????????
 
-    /// <summary>POST /api/execution/force-release/{agentName} � admin force-release a single agent.</summary>
+    /// <summary>POST /api/execution/force-release/{agentName} — admin force-release a single agent.</summary>
     [HttpPost("force-release/{agentName}")]
+    [Authorize(Policy = SecurityPolicies.Admin)]
     public IActionResult ForceReleaseAgent(string agentName)
     {
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
-        if (source != "WPF")
-            return StatusCode(403, new { error = "Only WPF Controller admin can force-release agents" });
+        var userId = _ownershipChecker.GetUserSid(HttpContext.User);
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
 
         var currentLock = _lockManager.GetLock(agentName);
         if (currentLock == null)
-            return NotFound(new { error = $"Agent '{agentName}' is not locked" });
+            return NotFound(ApiErrorFactory.NotFound($"Agent '{agentName}' is not locked"));
 
         _lockManager.ForceRelease(agentName);
+
+        _auditLogger.LogAdminAction(userId, "ForceReleaseAgent", agentName,
+            $"previousSession={currentLock.SessionId}, previousUser={currentLock.UserId}");
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"ForceReleaseAgent: actor={userId}, source={source}, agent={agentName}, " +
+            $"previousSession={currentLock.SessionId}, previousPipeline={currentLock.WatchItemTag}, previousUser={currentLock.UserId}");
+
         BroadcastLockChange($"Force-released: {agentName}");
 
         return Ok(new
@@ -611,15 +787,20 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>POST /api/execution/force-release-all � admin emergency release all locks.</summary>
+    /// <summary>POST /api/execution/force-release-all — admin emergency release all locks.</summary>
     [HttpPost("force-release-all")]
+    [Authorize(Policy = SecurityPolicies.Admin)]
     public IActionResult ForceReleaseAll()
     {
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
-        if (source != "WPF")
-            return StatusCode(403, new { error = "Admin only" });
+        var userId = _ownershipChecker.GetUserSid(HttpContext.User);
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
 
         var count = _lockManager.ForceReleaseAll();
+
+        _auditLogger.LogAdminAction(userId, "ForceReleaseAll", "all-agents", $"releasedCount={count}");
+        _appLogger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, "Audit",
+            $"ForceReleaseAll: actor={userId}, source={source}, releasedCount={count}");
+
         BroadcastLockChange("All locks force-released");
 
         return Ok(new { message = $"Released {count} agent locks" });
@@ -641,7 +822,10 @@ public class ExecutionController : ControllerBase
                 Duration = FormatDuration(DateTime.UtcNow - l.LockedAtUtc),
             }).ToList();
 
-        _ = _notifier.NotifyAgentLocksChanged(new AgentLocksChangedEvent
+        // Publish to event aggregator so WPF FleetVM (and SignalRNotifier) both receive it.
+        // Previously only called _notifier directly, which sent to SignalR but never
+        // notified the in-process FleetVM — causing agent cards to stay green.
+        _events.Publish(new AgentLocksChangedEvent
         {
             Locks = locks,
             Reason = reason,
@@ -654,6 +838,27 @@ public class ExecutionController : ControllerBase
         if (d.TotalMinutes >= 1) return $"{d.Minutes}m {d.Seconds}s";
         return $"{d.Seconds}s";
     }
+
+    /// <summary>Maps SessionState enum to WebClient-expected status strings.</summary>
+    private static string MapSessionStatus(SessionState state) => state switch
+    {
+        SessionState.Running         => "Running",
+        SessionState.Completed       => "Success",
+        SessionState.PartialFailure  => "Failed",
+        SessionState.Failed          => "Failed",
+        _                            => "Running",
+    };
+
+    /// <summary>Maps ActionOutcome enum to WebClient-expected status strings.</summary>
+    private static string MapActionStatus(ActionOutcome outcome) => outcome switch
+    {
+        ActionOutcome.Success    => "Success",
+        ActionOutcome.Failed     => "Failed",
+        ActionOutcome.Terminated => "Failed",
+        ActionOutcome.TimedOut   => "Failed",
+        ActionOutcome.Unknown    => "Pending",
+        _                        => "Pending",
+    };
 
     private static Dictionary<string, string> LoadParametersForWatchItem(WatchItemConfig watchItem)
     {
@@ -694,7 +899,7 @@ public class ExecutionController : ControllerBase
         watchItemTag = s.WatchItemTag,
         userId = s.UserId,
         source = s.Source,
-        status = s.State.ToString(),
+        status = MapSessionStatus(s.State),
         startedUtc = s.StartedUtc.ToString("o"),
         elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
         lockedAgents = s.LockedAgents,
@@ -722,10 +927,12 @@ public class ExecutionController : ControllerBase
                 actionType = act.ActionType,
                 agentName = act.AgentName,
                 command = act.Command,
-                status = act.Outcome.ToString(),
+                status = MapActionStatus(act.Outcome),
                 exitCode = act.ExitCode,
                 errorMessage = act.ErrorMessage,
                 duration = act.Duration.ToString(@"mm\:ss"),
+                startedUtc = act.StartedUtc.ToString("o"),
+                durationSeconds = (int)act.Duration.TotalSeconds,
             }),
         }),
     };

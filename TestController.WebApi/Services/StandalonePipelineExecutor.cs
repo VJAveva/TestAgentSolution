@@ -60,15 +60,15 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
             {
                 case ActionType.RunRemoteCommand:
                     if (attempt == 1)
-                        Log("Action", $"RunRemoteCommand ? {resolved.AgentName}: {resolved.Command} {resolved.Parameters}");
+                        Log("Action", $"RunRemoteCommand \u2192 {resolved.AgentName}: {SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters)}");
                     else
-                        Log("Retry", $"RunRemoteCommand ? {resolved.AgentName} (attempt {attempt})");
+                        Log("Retry", $"RunRemoteCommand \u2192 {resolved.AgentName} (attempt {attempt})");
                     result = await _dispatcher.ExecuteRemoteCommandAsync(action, ctx, ct);
                     break;
 
                 case ActionType.RunCommand:
                     if (attempt == 1)
-                        Log("Action", $"RunCommand (local): {resolved.Command} {resolved.Parameters}");
+                        Log("Action", $"RunCommand (local): {SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters)}");
                     else
                         Log("Retry", $"RunCommand (local) (attempt {attempt})");
                     result = await _dispatcher.ExecuteLocalCommandAsync(action, ctx, ct);
@@ -87,16 +87,16 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
             if (result.Success)
             {
                 if (attempt > 1)
-                    Log("Retry", $"? Succeeded on attempt {attempt} of {maxAttempts}");
+                    Log("Retry", $"\u2713 Succeeded on attempt {attempt} of {maxAttempts}");
                 else
-                    Log("Action", $"? Success (exit={result.ExitCode})");
+                    Log("Action", $"\u2713 Success (exit={result.ExitCode})");
                 return true;
             }
 
             if (attempt < maxAttempts && ShouldRetry(result, retryExitCodes))
             {
                 var agentCtx = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
-                Log("Action", $"? Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} — will retry");
+                Log("Action", $"\u2717 Failed on {agentCtx} (exit={result.ExitCode}): {result.ErrorMessage} \u2014 will retry");
                 continue;
             }
 
@@ -106,19 +106,19 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
         // All attempts exhausted
         {
             var agentInfo = string.IsNullOrEmpty(resolved.AgentName) ? "Controller" : resolved.AgentName;
-            var cmdInfo = $"{resolved.Command} {resolved.Parameters}".Trim();
-            if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "…";
+            var cmdInfo = SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters).Trim();
+            if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "\u2026";
 
             if (maxAttempts > 1)
-                Log("Action", $"? FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
+                Log("Action", $"\u2717 FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
             else
-                Log("Action", $"? FAILED on {agentInfo}: {cmdInfo}");
+                Log("Action", $"\u2717 FAILED on {agentInfo}: {cmdInfo}");
 
             Log("Action", $"  Exit code: {result.ExitCode}");
-            Log("Action", $"  Error: {result.ErrorMessage}");
+            Log("Action", $"  Error: {SecurityRedactor.Redact(result.ErrorMessage)}");
         }
 
-        OnNodeFailed(action, result.ExitCode, result.ErrorMessage);
+        OnNodeFailed(action, result.ExitCode, SecurityRedactor.Redact(result.ErrorMessage) ?? string.Empty);
         return action.FailAndContinue;
     }
 

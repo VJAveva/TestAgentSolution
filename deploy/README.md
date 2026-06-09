@@ -16,6 +16,10 @@ Batch files for deploying the **TestControllerGrpc** (Controller) and **TestAgen
 | `deploy-agent.bat`      | Build and deploy an Agent to a single node               |
 | `deploy-webapi.bat`     | Build React frontend + WebApi and deploy to IIS          |
 | `deploy-all.bat`        | Orchestrate full deployment (1 Controller + N Agents + WebApi) |
+| `Validate-DeployManifest.ps1` | Validate artifact checksums and proto compatibility |
+| `Invoke-PreDeployCheck.ps1`   | Pre-deployment safety check (active sessions, locks)  |
+| `Invoke-SmokeTest.ps1`        | Post-deployment smoke test (fleet, SignalR, capabilities) |
+| `Invoke-LogCleanup.ps1`       | Log/audit retention cleanup (configurable retention days) |
 
 ---
 

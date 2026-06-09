@@ -2,15 +2,21 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
+             xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels.Converters"
              xmlns:spec="clr-namespace:TestControllerGrpc.ViewModels.Converters.Spec"
-             StartupUri="Views/MainWindow.xaml">
+             >
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/DarkTheme.xaml" />
+                <ResourceDictionary Source="Views/Styles/DesignTokens.xaml" />
+                <ResourceDictionary Source="Views/Styles/Typography.xaml" />
+                <ResourceDictionary Source="Views/Styles/ControlStyles.xaml" />
                 <ResourceDictionary Source="Views/Styles/ExecutionDashboardStyles.xaml" />
                 <!-- Spec design tokens (BgCanvasBrush, TextInfoBrush, FontSans, RadiusMd, PulseAnim, ?) -->
                 <ResourceDictionary Source="Views/Styles/SpecTokens.xaml" />
+                <!-- TreeView spec: pills, Material icons, file pills, status dots -->
+                <ResourceDictionary Source="Views/Styles/TreeViewSpec.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Converters for the Execution Dashboard view -->
@@ -18,6 +24,11 @@
             <vm:RunningToVisibleConverter x:Key="RunningToVisible"/>
             <vm:NullToCollapsedConverter  x:Key="NullToCollapsed"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <BooleanToVisibilityConverter x:Key="BoolVis"/>
+            <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
+            <vm:ZeroToVisibleConverter x:Key="ZeroToVis"/>
+            <vm:LatencyToBrushConverter x:Key="LatencyToBrush"/>
+            <vm:StatusToDotBrushConverter x:Key="StatusToDotBrush"/>
 
             <!-- Spec-aligned converters (Section 10.2 of the dashboard spec) -->
             <spec:ActionStatusToBgConverter        x:Key="ActionStatusToBg"/>

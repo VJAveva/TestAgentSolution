@@ -1,4 +1,5 @@
 import { useRef, useMemo, useEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pause, Play, Trash2 } from 'lucide-react';
 import { useExecutionStore } from '../../stores/executionStore';
 
@@ -9,7 +10,7 @@ export default function LiveLogger() {
   const clearLogs = useExecutionStore(s => s.clearLogs);
   const sessionFilter = useExecutionStore(s => s.logSessionFilter);
   const setSessionFilter = useExecutionStore(s => s.setLogSessionFilter);
-  const endRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   // Derive unique session IDs for the filter bar
   const sessionIds = useMemo(() => {
@@ -25,11 +26,19 @@ export default function LiveLogger() {
     return logs.filter(e => e.sessionId === sessionFilter || !e.sessionId);
   }, [logs, sessionFilter]);
 
+  const virtualizer = useVirtualizer({
+    count: filteredLogs.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 24,
+    overscan: 20,
+  });
+
+  // Auto-scroll to bottom when not paused
   useEffect(() => {
-    if (!isPaused) {
-      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!isPaused && filteredLogs.length > 0) {
+      virtualizer.scrollToIndex(filteredLogs.length - 1);
     }
-  }, [filteredLogs.length, isPaused]);
+  }, [filteredLogs.length, isPaused, virtualizer]);
 
   return (
     <div className="flex flex-col h-full">
@@ -72,28 +81,42 @@ export default function LiveLogger() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto bg-bg-panel rounded-lg border border-bdr p-2 font-mono text-xs leading-5">
+      <div
+        ref={parentRef}
+        className="flex-1 overflow-auto bg-bg-panel rounded-lg border border-bdr p-2 font-mono text-xs leading-5"
+      >
         {filteredLogs.length === 0 && <p className="text-text-muted">No log entries yet. Trigger an execution to see live output.</p>}
-        {filteredLogs.map((entry, i) => {
-          const color =
-            entry.severity === 'error' || entry.kind === 'stderr' ? 'text-acc-red'
-            : entry.severity === 'success' ? 'text-acc-green'
-            : entry.severity === 'warning' ? 'text-acc-yellow'
-            : 'text-text-primary';
-          return (
-            <div key={i} className={`${color} whitespace-pre-wrap break-all`}>
-              <span className="text-text-muted mr-2">
-                {new Date(entry.timestamp).toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </span>
-              {entry.sessionId && (
-                <span className="text-accent/60 mr-1">[{entry.sessionId.slice(0, 6)}]</span>
-              )}
-              {entry.agent && <span className="text-acc-mauve mr-1">[{entry.agent}]</span>}
-              {entry.message}
-            </div>
-          );
-        })}
-        <div ref={endRef} />
+        {filteredLogs.length > 0 && (
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+            {virtualizer.getVirtualItems().map(virtualRow => {
+              const entry = filteredLogs[virtualRow.index];
+              const color =
+                entry.severity === 'error' || entry.kind === 'stderr' ? 'text-acc-red'
+                : entry.severity === 'success' ? 'text-acc-green'
+                : entry.severity === 'warning' ? 'text-acc-yellow'
+                : 'text-text-primary';
+              return (
+                <div
+                  key={virtualRow.index}
+                  className={`${color} whitespace-pre-wrap break-all absolute top-0 left-0 w-full`}
+                  style={{
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <span className="text-text-muted mr-2">
+                    {new Date(entry.timestamp).toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                  {entry.sessionId && (
+                    <span className="text-accent/60 mr-1">[{entry.sessionId.slice(0, 6)}]</span>
+                  )}
+                  {entry.agent && <span className="text-acc-mauve mr-1">[{entry.agent}]</span>}
+                  {entry.message}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

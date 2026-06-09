@@ -18,10 +18,20 @@ public sealed partial class MainViewModel
         var dlg = new OpenFolderDialog
         {
             Title = "Select Build Folder",
-            InitialDirectory = string.IsNullOrEmpty(basePath) ? "" : basePath,
+            InitialDirectory = string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath) ? "" : basePath,
         };
 
-        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            if (dlg.ShowDialog() != true) return;
+        }
+        catch (Exception ex) when (ex is System.IO.FileNotFoundException || ex is System.IO.DirectoryNotFoundException)
+        {
+            // Network path unreachable ï¿½ retry without InitialDirectory
+            AddLog($"Initial directory unreachable ({basePath}), opening default location. Error: {ex.Message}", LogSeverity.Warning);
+            dlg = new OpenFolderDialog { Title = "Select Build Folder" };
+            if (dlg.ShowDialog() != true) return;
+        }
 
         var selectedPath = dlg.FolderName;
         var folderName = Path.GetFileName(selectedPath.TrimEnd('\\', '/'));
@@ -32,6 +42,15 @@ public sealed partial class MainViewModel
             ActiveEditNode.BuildBasePath = parentPath + "\\";
         ActiveEditNode.BuildNumberField = folderName;
         ActiveEditNode.DropLocationField = selectedPath;
+
+        // Update per-pipeline build display
+        ActiveEditNode.LastBuildNumber = folderName;
+        ActiveEditNode.LastDropLocation = selectedPath;
+        if (ActiveEditNode.ModelObject is WatchItemConfig wiModel)
+        {
+            wiModel.LastBuildNumber = folderName;
+            wiModel.LastDropLocation = selectedPath;
+        }
 
         // Find the Initialize node's parameter file under this WatchItem
         string? paramFile = FindInitializeParameterFile(ActiveEditNode);
@@ -74,7 +93,7 @@ public sealed partial class MainViewModel
                     }
                 }
 
-                // Add keys if not found — default to comma (canonical format)
+                // Add keys if not found ï¿½ default to comma (canonical format)
                 var delimiter = lines.Any(l => l.Contains(',')) ? "," : ",";
                 if (!bnFound) lines.Add($"_BuildNumber{delimiter}{folderName}");
                 if (!dlFound) lines.Add($"_DropLocation{delimiter}{selectedPath}");
@@ -97,7 +116,7 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// Recursively searches the subtree to find the first Initialize node's ParameterFile path.
-    /// Works at any nesting depth (WatchItem ? Event ? ActionGroup ? … ? Initialize).
+    /// Works at any nesting depth (WatchItem ? Event ? ActionGroup ? ï¿½ ? Initialize).
     /// </summary>
     private static string? FindInitializeParameterFile(TreeNodeViewModel node)
     {
@@ -158,7 +177,7 @@ public sealed partial class MainViewModel
                     }
                 }
 
-                // Add keys if not found — detect existing delimiter style
+                // Add keys if not found ï¿½ detect existing delimiter style
                 var delimiter = lines.Any(l => l.Contains(',')) ? "," : ",";
                 if (!bnFound) lines.Add($"{bnKey}{delimiter}{folderName}");
                 if (!dlFound) lines.Add($"{dlKey}{delimiter}{selectedPath}");

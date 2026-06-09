@@ -35,21 +35,35 @@
                 </Button>
                 <StackPanel Orientation="Horizontal">
                     <!-- Connection indicator -->
-                    <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Margin="0,0,4,0" VerticalAlignment="Center">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
-                                <Setter Property="Fill" Value="#F9E2AF" />
+                                <Setter Property="Fill" Value="{DynamicResource AccYellow}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ConnectionStatusText}" Value="Connected">
-                                        <Setter Property="Fill" Value="#A6E3A1" />
+                                        <Setter Property="Fill" Value="{DynamicResource AccGreen}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding ConnectionStatusText}" Value="Reconnecting">
-                                        <Setter Property="Fill" Value="#F9E2AF" />
+                                        <Setter Property="Fill" Value="{DynamicResource AccYellow}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- HC glyph fallback (visible only in High Contrast) -->
+                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10"
+                               FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource HcGlyphFg}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="&#xE783;" /> <!-- Warning -->
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConnectionStatusText}" Value="Connected">
+                                        <Setter Property="Text" Value="&#xE73E;" /> <!-- Checkmark -->
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock Text="{Binding MonitorAgentName}" FontWeight="Bold"
                                Foreground="{DynamicResource TextP}" FontSize="13" VerticalAlignment="Center" />
                     <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,0,0"
@@ -66,13 +80,62 @@
             </DockPanel>
         </Border>
 
+        <!-- Health metrics strip -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="10,6"
+                BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasMetrics}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Foreground="{DynamicResource TextS}" FontSize="10" VerticalAlignment="Center"
+                           Margin="0,0,12,0" Text="HEALTH" FontWeight="SemiBold" />
+                <!-- CPU -->
+                <TextBlock FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"
+                           Foreground="{DynamicResource TextS}" Text="CPU" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}"
+                           Text="{Binding CpuUsagePct, StringFormat='{}{0:F1}%'}" />
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
+                           FontSize="11" VerticalAlignment="Center" Text="MEM" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0:F0} / {1:F0} MB">
+                            <Binding Path="MemoryUsedMb" />
+                            <Binding Path="MemoryTotalMb" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
+                           FontSize="11" VerticalAlignment="Center" Text="DISK FREE" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}"
+                           Text="{Binding DiskFreeGb, StringFormat='{}{0:F1} GB'}" />
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
+                           FontSize="11" VerticalAlignment="Center" Text="PROCS" />
+                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           Foreground="{DynamicResource Accent}"
+                           Text="{Binding ActiveProcessCount}" />
+                <TextBlock Foreground="{DynamicResource TextS}" Margin="16,0,0,0"
+                           FontSize="10" VerticalAlignment="Center" FontStyle="Italic"
+                           Text="{Binding LastHeartbeatTime, StringFormat='Last: {0}'}" />
+            </StackPanel>
+        </Border>
+
         <!-- Action history grid -->
         <DataGrid ItemsSource="{Binding ActionHistory}" AutoGenerateColumns="False"
                   IsReadOnly="True" Background="Transparent"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   BorderThickness="0" CanUserSortColumns="True"
                   Foreground="{DynamicResource TextP}" FontSize="11.5"
-                  RowBackground="Transparent" AlternatingRowBackground="#08FFFFFF"
+                  RowBackground="Transparent" AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
                   Margin="6">
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">

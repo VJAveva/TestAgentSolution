@@ -129,12 +129,12 @@ public sealed class ExecutionTracker
 
         private void Archive()
         {
-            // Build proto record
+            // Build proto record — redact command arguments for safe persistence
             var record = new ExecutionRecord
             {
                 ExecutionId  = _executionId,
                 Command      = _command,
-                Arguments    = _arguments,
+                Arguments    = SecurityRedactor.Redact(_arguments) ?? _arguments,
                 Started      = Timestamp.FromDateTime(_startedUtc),
                 Finished     = Timestamp.FromDateTime(_finishedUtc ?? DateTime.UtcNow),
                 ExitCode     = _exitCode,

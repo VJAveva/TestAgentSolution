@@ -44,6 +44,16 @@ public interface IActionPipelineExecutor
     Task ExecuteEventTrackedAsync(string watchItemTag, EventConfig evt, PipelineExecutionContext ctx, CancellationToken ct);
 
     /// <summary>
+    /// Executes an ActionGroup's children with session tracking and snapshot isolation.
+    /// </summary>
+    Task<bool> ExecuteGroupTrackedAsync(string watchItemTag, ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct);
+
+    /// <summary>
+    /// Executes a single Action with session tracking.
+    /// </summary>
+    Task<bool> ExecuteSingleActionTrackedAsync(string watchItemTag, ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct);
+
+    /// <summary>
     /// Re-executes only the actions that failed in a previous session,
     /// using the same resolved parameters from the original run.
     /// </summary>

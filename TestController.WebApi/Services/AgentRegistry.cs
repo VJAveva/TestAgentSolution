@@ -19,7 +19,13 @@ public sealed class AgentRegistry
             var name = child["Name"];
             var address = child["Address"];
             if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(address))
-                _agents[name] = new AgentEntry(name, address);
+            {
+                var entry = new AgentEntry(name, address);
+                // Auto-resolve hostname from the address URL
+                if (Uri.TryCreate(address, UriKind.Absolute, out var uri))
+                    entry.Hostname = uri.Host;
+                _agents[name] = entry;
+            }
         }
     }
 
@@ -54,6 +60,7 @@ public sealed class AgentEntry
 
     public string Name { get; }
     public string Address { get; }
+    public string? Hostname { get; set; }
     public string Status { get; set; } = "Unknown";
     public string? LastStatusDetail { get; set; }
     public DateTime? LastCheckedUtc { get; set; }

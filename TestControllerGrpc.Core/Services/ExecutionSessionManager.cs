@@ -1,11 +1,14 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
 
 /// <summary>
-/// Manages the lifecycle of execution sessions � tracks active and completed
+/// Manages the lifecycle of execution sessions — tracks active and completed
 /// pipeline runs, records per-action results, and supports retry of failed actions.
+/// Optionally persists session snapshots to disk so the dashboard can recover
+/// execution state after a crash (e.g. UIAutomationCore stack overflow).
 /// </summary>
 public sealed class ExecutionSessionManager
 {
@@ -15,6 +18,9 @@ public sealed class ExecutionSessionManager
     private const int MaxHistory = 50;
 
     private readonly IEventAggregator? _events;
+    private readonly string? _persistPath;
+    private readonly object _persistLock = new();
+    private long _lastPersistTicks;
 
     /// <summary>
     /// Default ctor for legacy/test code paths that don't need event publishing.
@@ -27,6 +33,17 @@ public sealed class ExecutionSessionManager
     /// finish so the dashboard can update without polling.
     /// </summary>
     public ExecutionSessionManager(IEventAggregator events) { _events = events; }
+
+    /// <summary>
+    /// Full DI ctor with persistence path. Sessions are persisted to the
+    /// given file path and restored on construction (crash recovery).
+    /// </summary>
+    public ExecutionSessionManager(IEventAggregator events, string persistPath)
+    {
+        _events = events;
+        _persistPath = persistPath;
+        RestoreFromDisk();
+    }
 
     /// <summary>
     /// Begins a new execution session and tracks it as active.
@@ -54,6 +71,7 @@ public sealed class ExecutionSessionManager
             SnapshotNodes = snapshotNodes
         };
         _active[session.SessionId] = session;
+        PersistToDisk();
         return session;
     }
 
@@ -69,7 +87,7 @@ public sealed class ExecutionSessionManager
             AgentName: result.AgentName ?? "Controller",
             NodeTag: result.ActionTag,
             ActionType: result.ActionType,
-            Command: result.Command,
+            Command: SecurityRedactor.Redact(result.Command) ?? string.Empty,
             Status: "Running"));
     }
 
@@ -84,11 +102,19 @@ public sealed class ExecutionSessionManager
             AgentName: result.AgentName ?? "Controller",
             NodeTag: result.ActionTag,
             ActionType: result.ActionType,
-            Command: result.Command,
+            Command: SecurityRedactor.Redact(result.Command) ?? string.Empty,
             Status: MapOutcome(result.Outcome),
             ExitCode: result.ExitCode,
-            ErrorMessage: result.ErrorMessage,
+            ErrorMessage: SecurityRedactor.Redact(result.ErrorMessage),
             Duration: result.DurationText));
+
+        // Throttled persist: at most once per 5 seconds during execution
+        var now = DateTime.UtcNow.Ticks;
+        if (now - Interlocked.Read(ref _lastPersistTicks) > TimeSpan.TicksPerSecond * 5)
+        {
+            Interlocked.Exchange(ref _lastPersistTicks, now);
+            PersistToDisk();
+        }
     }
 
     private static string MapOutcome(ActionOutcome outcome) => outcome switch
@@ -112,12 +138,22 @@ public sealed class ExecutionSessionManager
                     ? SessionState.Failed
                     : SessionState.PartialFailure;
 
+            // Populate LockedAgents from action results so per-agent history
+            // filtering in the Monitor view can find sessions for each agent.
+            session.LockedAgents = session.ActionResults
+                .Select(r => r.AgentName)
+                .Where(a => !string.IsNullOrEmpty(a))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+
             lock (_historyLock)
             {
                 _history.Insert(0, session);
                 while (_history.Count > MaxHistory)
                     _history.RemoveAt(_history.Count - 1);
             }
+
+            PersistToDiskSync();
         }
     }
 
@@ -188,6 +224,8 @@ public sealed class ExecutionSessionManager
             while (_history.Count > MaxHistory)
                 _history.RemoveAt(_history.Count - 1);
         }
+
+        PersistToDiskSync();
         return true;
     }
 
@@ -213,6 +251,232 @@ public sealed class ExecutionSessionManager
                 }
             }
         }
+
+        if (cancelledTags.Count > 0)
+            PersistToDiskSync();
         return cancelledTags;
+    }
+
+    /// <summary>Returns history loaded from disk (for dashboard recovery after crash).</summary>
+    public IReadOnlyList<PersistedSession> GetPersistedHistory()
+    {
+        if (string.IsNullOrEmpty(_persistPath) || !File.Exists(_persistPath))
+            return Array.Empty<PersistedSession>();
+
+        try
+        {
+            var json = File.ReadAllText(_persistPath);
+            return JsonSerializer.Deserialize<PersistedSession[]>(json) ?? Array.Empty<PersistedSession>();
+        }
+        catch { return Array.Empty<PersistedSession>(); }
+    }
+
+    // ── Persistence ──────────────────────────────────────────────────────
+
+    private void PersistToDisk()
+    {
+        if (string.IsNullOrEmpty(_persistPath)) return;
+
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            lock (_persistLock)
+            {
+                try
+                {
+                    var dir = Path.GetDirectoryName(_persistPath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                        Directory.CreateDirectory(dir);
+
+                    List<PersistedSession> snapshot;
+                    lock (_historyLock)
+                    {
+                        snapshot = _history.Select(ToPersistedSession).ToList();
+                    }
+
+                    // Also snapshot active sessions (for crash recovery)
+                    foreach (var active in _active.Values)
+                        snapshot.Add(ToPersistedSession(active));
+
+                    var json = JsonSerializer.Serialize(snapshot,
+                        new JsonSerializerOptions { WriteIndented = true });
+
+                    var tempPath = _persistPath + ".tmp";
+                    File.WriteAllText(tempPath, json);
+                    File.Move(tempPath, _persistPath, overwrite: true);
+                }
+                catch
+                {
+                    // Persistence failure is non-fatal
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Synchronous persist for session-terminal events (complete, cancel).
+    /// Guarantees data is on disk before the method returns.
+    /// </summary>
+    private void PersistToDiskSync()
+    {
+        if (string.IsNullOrEmpty(_persistPath)) return;
+
+        lock (_persistLock)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(_persistPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                List<PersistedSession> snapshot;
+                lock (_historyLock)
+                {
+                    snapshot = _history.Select(ToPersistedSession).ToList();
+                }
+
+                foreach (var active in _active.Values)
+                    snapshot.Add(ToPersistedSession(active));
+
+                var json = JsonSerializer.Serialize(snapshot,
+                    new JsonSerializerOptions { WriteIndented = true });
+
+                var tempPath = _persistPath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _persistPath, overwrite: true);
+            }
+            catch
+            {
+                // Persistence failure is non-fatal
+            }
+        }
+    }
+
+    private void RestoreFromDisk()
+    {
+        if (string.IsNullOrEmpty(_persistPath) || !File.Exists(_persistPath))
+            return;
+
+        try
+        {
+            var json = File.ReadAllText(_persistPath);
+            var entries = JsonSerializer.Deserialize<PersistedSession[]>(json);
+            if (entries == null) return;
+
+            lock (_historyLock)
+            {
+                foreach (var entry in entries)
+                {
+                    // Sessions that were "Running" when we crashed are now dead
+                    var state = entry.State == nameof(SessionState.Running)
+                        ? SessionState.Failed
+                        : Enum.TryParse<SessionState>(entry.State, out var s) ? s : SessionState.Failed;
+
+                    var session = new ExecutionSession
+                    {
+                        SessionId = entry.SessionId,
+                        WatchItemTag = entry.WatchItemTag,
+                        EventType = entry.EventType,
+                        UserId = entry.UserId,
+                        Source = entry.Source,
+                        LockedAgents = entry.LockedAgents ?? Array.Empty<string>(),
+                        ResolvedParameters = entry.ResolvedParameters ?? new(),
+                        State = state,
+                        CompletedUtc = DateTime.TryParse(entry.CompletedUtc, null,
+                            System.Globalization.DateTimeStyles.RoundtripKind, out var dt)
+                            ? dt : DateTime.UtcNow,
+                    };
+
+                    // Restore action results
+                    foreach (var ar in entry.ActionResults ?? [])
+                    {
+                        var actionResult = new ActionExecutionResult
+                        {
+                            ActionTag = ar.ActionTag,
+                            ActionType = ar.ActionType,
+                            AgentName = ar.AgentName,
+                            Command = ar.Command,
+                            Outcome = Enum.TryParse<ActionOutcome>(ar.Outcome, out var o) ? o : ActionOutcome.Unknown,
+                            ExitCode = ar.ExitCode,
+                            ErrorMessage = ar.ErrorMessage,
+                            Duration = TimeSpan.TryParse(ar.Duration, out var dur) ? dur : TimeSpan.Zero,
+                            StartedUtc = DateTime.TryParse(ar.StartedUtc, null,
+                                System.Globalization.DateTimeStyles.RoundtripKind, out var adt)
+                                ? adt : DateTime.UtcNow,
+                        };
+                        session.AddResult(actionResult);
+
+                        // Also populate per-agent summaries for dashboard rendering
+                        session.TrackAgentAction(actionResult);
+                    }
+
+                    _history.Add(session);
+                }
+
+                while (_history.Count > MaxHistory)
+                    _history.RemoveAt(_history.Count - 1);
+            }
+        }
+        catch
+        {
+            // Restore failure is non-fatal; start fresh
+        }
+    }
+
+    private static PersistedSession ToPersistedSession(ExecutionSession s) => new()
+    {
+        SessionId = s.SessionId,
+        WatchItemTag = s.WatchItemTag,
+        EventType = s.EventType,
+        StartedUtc = s.StartedUtc.ToString("o"),
+        CompletedUtc = s.CompletedUtc?.ToString("o"),
+        State = s.State.ToString(),
+        UserId = s.UserId,
+        Source = s.Source,
+        LockedAgents = s.LockedAgents,
+        ResolvedParameters = new Dictionary<string, string>(s.ResolvedParameters),
+        ActionResults = s.ActionResults.Select(a => new PersistedActionResult
+        {
+            ActionTag = a.ActionTag,
+            ActionType = a.ActionType,
+            AgentName = a.AgentName,
+            Command = a.Command,
+            Outcome = a.Outcome.ToString(),
+            ExitCode = a.ExitCode,
+            ErrorMessage = a.ErrorMessage,
+            Duration = a.Duration.ToString(),
+            StartedUtc = a.StartedUtc.ToString("o"),
+            Sequence = a.Sequence,
+        }).OrderBy(a => a.Sequence).ToArray(),
+    };
+
+    /// <summary>Flat DTO for JSON persistence of an execution session.</summary>
+    public record PersistedSession
+    {
+        public string SessionId { get; init; } = "";
+        public string WatchItemTag { get; init; } = "";
+        public string EventType { get; init; } = "";
+        public string StartedUtc { get; init; } = "";
+        public string? CompletedUtc { get; init; }
+        public string State { get; init; } = "";
+        public string UserId { get; init; } = "";
+        public string Source { get; init; } = "";
+        public string[] LockedAgents { get; init; } = [];
+        public Dictionary<string, string> ResolvedParameters { get; init; } = new();
+        public PersistedActionResult[] ActionResults { get; init; } = [];
+    }
+
+    /// <summary>Flat DTO for JSON persistence of an action result.</summary>
+    public record PersistedActionResult
+    {
+        public string ActionTag { get; init; } = "";
+        public string ActionType { get; init; } = "";
+        public string? AgentName { get; init; }
+        public string Command { get; init; } = "";
+        public string Outcome { get; init; } = "";
+        public int? ExitCode { get; init; }
+        public string? ErrorMessage { get; init; }
+        public string Duration { get; init; } = "";
+        public string StartedUtc { get; init; } = "";
+        public long Sequence { get; init; }
     }
 }

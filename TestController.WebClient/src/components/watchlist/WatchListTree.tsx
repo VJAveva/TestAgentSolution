@@ -3,6 +3,7 @@ import { useWatchListStore } from '../../stores/watchlistStore';
 import { apiFetch } from '../../lib/api';
 import { logCatch } from '../../lib/logger';
 import type { TreeNode, NodeKind } from '../../types/api';
+import type { AgentLockInfo } from '../../types/agentWorkspace';
 import { ChevronDown, ChevronRight, Eye, Zap, FolderTree, Play, Settings, Link2, FileText, List } from 'lucide-react';
 
 const kindIcon: Record<NodeKind, React.ReactNode> = {
@@ -17,6 +18,49 @@ const kindIcon: Record<NodeKind, React.ReactNode> = {
   Template:     <FileText size={14} className="text-acc-mauve" />,
 };
 
+/** Action-type badge config: maps NodeKind to badge label + color class */
+const kindBadge: Partial<Record<NodeKind, { label: string; cls: string }>> = {
+  Event:       { label: 'EVT',  cls: 'border-[#A78BFA] text-[#A78BFA] bg-[#A78BFA]/20' },
+  ActionGroup: { label: 'SEQ',  cls: 'border-[#38BDF8] text-[#38BDF8] bg-[#38BDF8]/20' },
+  Initialize:  { label: 'INIT', cls: 'border-[#2DD4BF] text-[#2DD4BF] bg-[#2DD4BF]/20' },
+  Ref:         { label: 'REF',  cls: 'border-[#FBBF24] text-[#FBBF24] bg-[#FBBF24]/20' },
+};
+
+/** Determine badge for Action nodes (RMT vs cmd) */
+function getActionBadge(node: TreeNode): { label: string; cls: string } | null {
+  if (node.nodeKind !== 'Action') return null;
+  const model = node.model as { type?: string } | undefined;
+  if (model?.type === 'RunRemoteCommand') {
+    return { label: 'RMT', cls: 'border-[#FB7185] text-[#FB7185] bg-[#FB7185]/20' };
+  }
+  return { label: 'cmd', cls: 'border-[#94A3B8] text-[#94A3B8] bg-[#94A3B8]/20' };
+}
+
+/** Get PAR badge for parallel action groups */
+function getGroupBadge(node: TreeNode): { label: string; cls: string } | null {
+  if (node.nodeKind !== 'ActionGroup') return null;
+  const model = node.model as { executionType?: string } | undefined;
+  if (model?.executionType === 'Parallel') {
+    return { label: 'PAR', cls: 'border-[#818CF8] text-[#818CF8] bg-[#818CF8]/20' };
+  }
+  return kindBadge.ActionGroup!;
+}
+
+function NodeBadge({ node }: { node: TreeNode }) {
+  const badge = node.nodeKind === 'Action'
+    ? getActionBadge(node)
+    : node.nodeKind === 'ActionGroup'
+      ? getGroupBadge(node)
+      : kindBadge[node.nodeKind] ?? null;
+
+  if (!badge) return null;
+  return (
+    <span className={`shrink-0 rounded-sm border px-1 py-0 font-mono text-[9px] uppercase leading-tight ${badge.cls}`}>
+      {badge.label}
+    </span>
+  );
+}
+
 const statusDot: Record<string, string> = {
   Idle:    '',
   Running: 'bg-accent animate-pulse',
@@ -28,11 +72,11 @@ export default function WatchListTree() {
   const treeRoots = useWatchListStore(s => s.treeRoots);
   const loading = useWatchListStore(s => s.loading);
   const error = useWatchListStore(s => s.error);
-  const [locks, setLocks] = useState<any[]>([]);
+  const [locks, setLocks] = useState<AgentLockInfo[]>([]);
 
   // Load initial lock state
   useEffect(() => {
-    apiFetch<{ locks: any[] }>('/api/execution/locks')
+    apiFetch<{ locks: AgentLockInfo[] }>('/api/execution/locks')
       .then(data => setLocks(data.locks || []))
       .catch(logCatch('WatchListTree', 'fetchLocks'));
   }, []);
@@ -76,9 +120,9 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
   return (
     <div>
       <div
-        className={`flex items-center gap-1 py-0.5 pr-2 cursor-pointer text-xs transition-colors
+        className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer text-xs transition-colors
           ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}`}
-        style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
+        style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
         onClick={() => selectNode(node)}
       >
         {/* Expand/collapse toggle */}
@@ -103,6 +147,16 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
         {/* Icon + label */}
         {kindIcon[node.nodeKind]}
         <span className="truncate">{node.displayText}</span>
+
+        {/* Action-type badge */}
+        <NodeBadge node={node} />
+
+        {/* Child count annotation */}
+        {hasChildren && (
+          <span className="shrink-0 text-[10px] text-text-muted ml-auto mr-1">
+            {node.children.length} {node.children.length === 1 ? 'item' : 'items'}
+          </span>
+        )}
 
         {/* Lock indicator for WatchItem nodes */}
         {node.nodeKind === 'WatchItem' && (() => {

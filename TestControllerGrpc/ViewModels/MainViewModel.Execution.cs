@@ -15,7 +15,7 @@ public sealed partial class MainViewModel
     private bool CanTriggerEvent => SelectedNode?.NodeKind == NodeKinds.Event;
 
     /// <summary>Trigger a single Event node's pipeline.</summary>
-    [RelayCommand(CanExecute = nameof(CanTriggerEvent))] 
+    [RelayCommand(CanExecute = nameof(CanTriggerEvent), AllowConcurrentExecutions = true)] 
     private async Task TriggerEvent()
     {
         if (SelectedNode?.ModelObject is not EventConfig ev) return;
@@ -55,12 +55,21 @@ public sealed partial class MainViewModel
             if (!locked)
             {
                 var conflictMsg = string.Join("\n",
-                    conflicts.Select(c => $"  {c.AgentName} — locked by {c.UserId} ({c.WatchItemTag})"));
-                AddLog($"Cannot start '{tag}' — agents are busy:\n{conflictMsg}", LogSeverity.Warning);
-                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                    conflicts.Select(c => $"  {c.AgentName} ï¿½ locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{tag}' ï¿½ agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
-            }
-        }
+            }            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Event execution: {tag}",
+            });        }
 
         eventNode.SetStatusRecursive("Running");
         eventNode.PropagateStatusUp();
@@ -70,15 +79,18 @@ public sealed partial class MainViewModel
 
         try
         {
-            await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
+            await _executor.ExecuteEventTrackedAsync(tag, ev, ctx, session.Cts.Token);
             eventNode.ExecutionStatus = "Success";
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event completed: {ev.Type}", LogSeverity.Success);
-            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success", 0, 0, 0));
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
-            eventNode.SetFailed("Cancelled by user");
+            eventNode.CancelWithDescendants();
             eventNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Event cancelled: {ev.Type}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
@@ -88,13 +100,24 @@ public sealed partial class MainViewModel
             _logger.LogError(ex, "Event execution failed: {EventType}", ev.Type);
             eventNode.SetFailed(ex.Message);
             eventNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Event failed: {ev.Type} ï¿½ {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
         finally
         {
             _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Event completed: {tag}",
+            });
             CompleteSession(session);
         }
     }
@@ -102,7 +125,7 @@ public sealed partial class MainViewModel
     private bool CanTriggerWatchItem => SelectedNode?.NodeKind == NodeKinds.WatchItem;
 
     /// <summary>Trigger ALL events on the selected WatchItem.</summary>
-    [RelayCommand(CanExecute = nameof(CanTriggerWatchItem))]
+    [RelayCommand(CanExecute = nameof(CanTriggerWatchItem), AllowConcurrentExecutions = true)]
     private async Task TriggerWatchItem()
     {
         if (SelectedNode?.ModelObject is not WatchItemConfig wi) return;
@@ -129,12 +152,21 @@ public sealed partial class MainViewModel
             if (!locked)
             {
                 var conflictMsg = string.Join("\n",
-                    conflicts.Select(c => $"  {c.AgentName} — locked by {c.UserId} ({c.WatchItemTag})"));
-                AddLog($"Cannot start '{wi.Tag}' — agents are busy:\n{conflictMsg}", LogSeverity.Warning);
-                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                    conflicts.Select(c => $"  {c.AgentName} ï¿½ locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{wi.Tag}' ï¿½ agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
-            }
-        }
+            }            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"WatchItem execution: {wi.Tag}",
+            });        }
 
         wiNode.SetStatusRecursive("Running");
         wiNode.PropagateStatusUp();
@@ -154,6 +186,7 @@ public sealed partial class MainViewModel
                     WatchItemPath = wi.Path,
                     TriggerFileName = $"[ManualTrigger:{ev.Type}]",
                     SessionId = session.SessionId,
+                    Parameters = parameters,
                 };
                 var evNode = wiNode.Children.FirstOrDefault(c =>
                     ReferenceEquals(c.ModelObject, ev));
@@ -161,7 +194,7 @@ public sealed partial class MainViewModel
 
                 try
                 {
-                    await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
+                    await _executor.ExecuteEventTrackedAsync(wi.Tag, ev, ctx, session.Cts.Token);
                     if (evNode is not null)
                     {
                         evNode.ExecutionStatus = "Success";
@@ -176,7 +209,7 @@ public sealed partial class MainViewModel
                         evNode.SetFailed(ex.Message);
                         evNode.PropagateStatusUp();
                     }
-                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} — {ex.Message}", LogSeverity.Error);
+                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} ï¿½ {ex.Message}", LogSeverity.Error);
                 }
             }
             wiNode.ExecutionStatus = allSuccess ? "Success" : "Failed";
@@ -184,11 +217,14 @@ public sealed partial class MainViewModel
             AddLog($"[{session.SessionId}] WatchItem {(allSuccess ? "completed" : "completed with errors")}: {wi.Tag}",
                 allSuccess ? LogSeverity.Success : LogSeverity.Error);
             if (!allSuccess) ScrollLogToLastError();
-            _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, allSuccess ? "Success" : "Failed", 0, 0, 0));
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(wi.Tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, allSuccess ? "Success" : "Failed",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
-            wiNode.SetFailed("Cancelled by user");
+            wiNode.CancelWithDescendants();
             wiNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] WatchItem cancelled: {wi.Tag}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, wi.Tag, "Cancelled", 0, 0, 0));
@@ -196,6 +232,17 @@ public sealed partial class MainViewModel
         finally
         {
             _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"WatchItem completed: {wi.Tag}",
+            });
             CompleteSession(session);
         }
     }
@@ -217,8 +264,8 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Cancel a specific pipeline session.
     /// Phase 1.12: funnels through <c>CancelSessionRequestEvent</c> so every
-    /// cancel request — from the tree context menu, the multi-session
-    /// dashboard, or any future caller — flows through the single handler
+    /// cancel request ï¿½ from the tree context menu, the multi-session
+    /// dashboard, or any future caller ï¿½ flows through the single handler
     /// in <c>MainViewModel.cs</c> that owns the <c>PipelineSession</c> CTS.
     /// </summary>
     [RelayCommand]
@@ -242,23 +289,32 @@ public sealed partial class MainViewModel
     /// Trigger ALL WatchItems in parallel.
     /// Each WatchItem gets its own PipelineSession and runs concurrently.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems))]
+    [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems), AllowConcurrentExecutions = true)]
     private async Task TriggerAllWatchItems()
     {
         if (_config.WatchItems.Count == 0) { AddLog("No WatchItems to execute"); return; }
 
         WriteBackAll();
 
-        WatchListRoot?.SetStatusRecursive("Running");
-
         var enabledItems = _config.WatchItems.Where(wi => wi.IsEnabled).ToList();
-        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) — parallel");
+
+        // Only mark enabled WatchItem nodes as Running; disabled items stay Idle
+        if (WatchListRoot is not null)
+        {
+            WatchListRoot.ExecutionStatus = "Running";
+            foreach (var wi in enabledItems)
+            {
+                var node = WatchListRoot.Children.FirstOrDefault(c => ReferenceEquals(c.ModelObject, wi));
+                node?.SetStatusRecursive("Running");
+            }
+        }
+        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) ï¿½ parallel");
 
         var tasks = enabledItems.Select(async wi =>
         {
             if (IsWatchItemRunning(wi.Tag))
             {
-                AddLog($"WatchItem '{wi.Tag}' is already running — skipping");
+                AddLog($"WatchItem '{wi.Tag}' is already running â€” skipping");
                 return true;
             }
 
@@ -266,10 +322,43 @@ public sealed partial class MainViewModel
             var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
                 ReferenceEquals(c.ModelObject, wi));
 
+            // Acquire agent locks so Fleet cards turn blue during execution
+            var parameters = wiNode != null
+                ? CollectInitializeParameters(wiNode)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+            if (requiredAgents.Count > 0)
+            {
+                var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+                var (locked, conflicts) = _lockManager.TryLockAgents(
+                    requiredAgents, session.SessionId, wi.Tag, wpfUser, "WPF");
+                if (!locked)
+                {
+                    var conflictMsg = string.Join(", ",
+                        conflicts.Select(c => $"{c.AgentName}â†{c.UserId}"));
+                    AddLog($"Cannot start '{wi.Tag}' â€” agents busy: {conflictMsg}", LogSeverity.Warning);
+                    await Application.Current!.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
+                    return true; // skip this WatchItem, not a failure of the batch
+                }
+                _events.Publish(new AgentLocksChangedEvent
+                {
+                    Locks = _lockManager.GetAllLocks()
+                        .Select(l => new AgentLockInfo
+                        {
+                            AgentName = l.AgentName, SessionId = l.SessionId,
+                            WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                            Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                        }).ToList(),
+                    Reason = $"TriggerAll execution: {wi.Tag}",
+                });
+            }
+
             await Application.Current!.Dispatcher.InvokeAsync(() =>
             {
                 if (wiNode is not null) wiNode.SetStatusRecursive("Running");
             });
+
+            _events.Publish(new ExecutionStartedEvent(session.SessionId, wi.Tag, "All", "WPF"));
 
             var wiSuccess = true;
             try
@@ -283,15 +372,16 @@ public sealed partial class MainViewModel
                         WatchItemPath = wi.Path,
                         TriggerFileName = $"[ManualTriggerAll:{ev.Type}]",
                         SessionId = session.SessionId,
+                        Parameters = parameters,
                     };
                     try
                     {
-                        await _executor.ExecuteEventAsync(ev, ctx, session.Cts.Token);
+                        await _executor.ExecuteEventTrackedAsync(wi.Tag, ev, ctx, session.Cts.Token);
                     }
                     catch (Exception ex)
                     {
                         wiSuccess = false;
-                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} — {ex.Message}", LogSeverity.Error);
+                        AddLog($"[{session.SessionId}] Event failed: {wi.Tag}/{ev.Type} â€” {ex.Message}", LogSeverity.Error);
                     }
                 }
 
@@ -304,6 +394,9 @@ public sealed partial class MainViewModel
                         wiNode.PropagateStatusUp();
                     }
                 });
+
+                _events.Publish(new ExecutionCompletedEvent(
+                    session.SessionId, wi.Tag, wiSuccess ? "Success" : "Failed", 0, 0, 0));
             }
             catch (OperationCanceledException)
             {
@@ -311,10 +404,24 @@ public sealed partial class MainViewModel
                 {
                     if (wiNode is not null) wiNode.SetFailed("Cancelled");
                 });
+                _events.Publish(new ExecutionCompletedEvent(
+                    session.SessionId, wi.Tag, "Cancelled", 0, 0, 0));
             }
             finally
             {
-                Application.Current?.Dispatcher.Invoke(() => CompleteSession(session));
+                _lockManager.ReleaseSession(session.SessionId);
+                _events.Publish(new AgentLocksChangedEvent
+                {
+                    Locks = _lockManager.GetAllLocks()
+                        .Select(l => new AgentLockInfo
+                        {
+                            AgentName = l.AgentName, SessionId = l.SessionId,
+                            WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                            Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                        }).ToList(),
+                    Reason = $"TriggerAll completed: {wi.Tag}",
+                });
+                await Application.Current!.Dispatcher.InvokeAsync(() => CompleteSession(session));
             }
 
             return wiSuccess;
@@ -333,7 +440,7 @@ public sealed partial class MainViewModel
     private bool CanExecuteGroup => SelectedNode?.NodeKind == NodeKinds.ActionGroup;
 
     /// <summary>Execute a single ActionGroup and its children.</summary>
-    [RelayCommand(CanExecute = nameof(CanExecuteGroup))]
+    [RelayCommand(CanExecute = nameof(CanExecuteGroup), AllowConcurrentExecutions = true)]
     private async Task ExecuteGroup()
     {
         if (SelectedNode?.ModelObject is not ActionGroupConfig ag) return;
@@ -357,33 +464,81 @@ public sealed partial class MainViewModel
             SessionId = session.SessionId,
         };
 
+        // Acquire agent locks so Registry/Monitor reflect live status
+        var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters);
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start group '{ag.Tag}' \u2014 agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                return;
+            }
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Group execution: {ag.Tag}",
+            });
+        }
+
         var groupNode = SelectedNode;
         groupNode.SetStatusRecursive("Running");
         groupNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered ActionGroup: {ag.Tag}");
 
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, $"Group:{ag.Tag}", "WPF"));
+
         try
         {
-            await _executor.ExecuteGroupAsync(ag, ctx, session.Cts.Token);
+            await _executor.ExecuteGroupTrackedAsync(tag, ag, ctx, session.Cts.Token);
             groupNode.ExecutionStatus = "Success";
             groupNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] ActionGroup completed: {ag.Tag}", LogSeverity.Success);
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
-            groupNode.SetFailed("Cancelled by user");
+            groupNode.CancelWithDescendants();
             groupNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] ActionGroup cancelled: {ag.Tag}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
         }
         catch (Exception ex)
         {
             groupNode.SetFailed(ex.Message);
             groupNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} ï¿½ {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
         finally
         {
+            _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Group completed: {ag.Tag}",
+            });
             CompleteSession(session);
         }
     }
@@ -391,7 +546,7 @@ public sealed partial class MainViewModel
     private bool CanExecuteSingleAction => SelectedNode?.NodeKind == NodeKinds.Action;
 
     /// <summary>Execute a single Action node.</summary>
-    [RelayCommand(CanExecute = nameof(CanExecuteSingleAction))]
+    [RelayCommand(CanExecute = nameof(CanExecuteSingleAction), AllowConcurrentExecutions = true)]
     private async Task ExecuteSingleAction()
     {
         if (SelectedNode?.ModelObject is not ActionConfig action) return;
@@ -415,33 +570,81 @@ public sealed partial class MainViewModel
             SessionId = session.SessionId,
         };
 
+        // Acquire agent lock so Registry/Monitor reflect live status
+        var requiredAgents = AgentResolver.ExtractAgentNames(action, ctx.Parameters);
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start action '{action.ResolvedTag}' \u2014 agent is busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                return;
+            }
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Action execution: {action.ResolvedTag}",
+            });
+        }
+
         var actionNode = SelectedNode;
         actionNode.ExecutionStatus = "Running";
         actionNode.PropagateStatusUp();
-        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} — {action.Command}");
+        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} ï¿½ {action.Command}");
+
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, $"Action:{action.ResolvedTag}", "WPF"));
 
         try
         {
-            await _executor.ExecuteSingleActionAsync(action, ctx, session.Cts.Token);
+            await _executor.ExecuteSingleActionTrackedAsync(tag, action, ctx, session.Cts.Token);
             actionNode.ExecutionStatus = "Success";
             actionNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Action completed: {action.Command}", LogSeverity.Success);
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
         }
         catch (OperationCanceledException)
         {
-            actionNode.SetFailed("Cancelled by user");
+            actionNode.CancelWithDescendants();
             actionNode.PropagateStatusUp();
             AddLog($"[{session.SessionId}] Action cancelled: {action.Command}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
         }
         catch (Exception ex)
         {
             actionNode.SetFailed(ex.Message);
             actionNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] Action failed: {action.Command} — {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Action failed: {action.Command} ï¿½ {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
         finally
         {
+            _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Action completed: {action.ResolvedTag}",
+            });
             CompleteSession(session);
         }
     }

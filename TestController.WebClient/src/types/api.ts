@@ -52,6 +52,7 @@ export interface ActionConfig {
   failAndContinue: boolean;
   isReboot: boolean;
   order: string;
+  tag: string;
   userName: string;
   password: string;
   from: string;
@@ -193,6 +194,8 @@ export interface TrendReport {
   builds: BuildTrendEntry[];
   weeklySummaries: PeriodSummary[];
   monthlySummaries: PeriodSummary[];
+  goodThreshold: number;
+  warningThreshold: number;
 }
 
 export interface BuildTrendEntry {
@@ -290,4 +293,68 @@ export interface TreeNode {
   isExpanded: boolean;
   depth: number;
   model?: WatchItemConfig | EventConfig | ActionNode | TemplateConfig;
+}
+
+// ── Failure Analysis models ─────────────────────────────────────────
+
+export type FailurePattern = 'None' | 'SystemicRegression' | 'CascadingFailures' | 'FlakyTest' | 'ChronicFailure' | 'Resolved' | 'NewFailure';
+
+export interface FailureSignature {
+  buildName: string;
+  failedStepIndex: number;
+  failedStepName: string;
+  errorType: string;
+  normalizedMessage: string;
+  topStackFrame: string;
+  agent: string;
+  duration: string;
+}
+
+export interface TestExecutionRecord {
+  buildName: string;
+  buildDate: string;
+  outcome: string;
+  duration: string;
+  errorMessage: string;
+  agent: string;
+}
+
+export interface FailureAnalysisReport {
+  testCaseName: string;
+  pattern: FailurePattern;
+  verdict: string;
+  confidence: number;
+  consecutiveFailures: number;
+  totalBuildsAnalyzed: number;
+  totalFailures: number;
+  flakeRate: number;
+  lastPassBuild?: string;
+  firstFailBuild?: string;
+  allSignaturesMatch: boolean;
+  suggestedAction: string;
+  signatures: FailureSignature[];
+  history: TestExecutionRecord[];
+}
+
+// ── Execution Log models ────────────────────────────────────────────
+
+export interface MergedLogLine {
+  timestamp: string;
+  source: string;
+  severity: string;
+  message: string;
+}
+
+export interface ExecutionLogReport {
+  buildName: string;
+  testCaseName: string;
+  outcome: string;
+  agent: string;
+  startTime: string;
+  endTime: string;
+  duration: string;
+  failedStepIndex: number;
+  errorMessage: string;
+  stackTrace: string;
+  mergedTimeline: MergedLogLine[];
 }

@@ -126,7 +126,12 @@ public sealed class SignalRExecutionFeed : IExecutionFeed
         SetState(FeedConnectionState.Connecting);
 
         _conn = new HubConnectionBuilder()
-            .WithUrl(_hubUri)
+            .WithUrl(_hubUri, options =>
+            {
+                // Pass Windows credentials for Negotiate (Domain/Local) auth modes.
+                // In None mode this is harmless; in Token mode the hub uses bearer tokens instead.
+                options.UseDefaultCredentials = true;
+            })
             .WithAutomaticReconnect(new[]
             {
                 TimeSpan.Zero,
@@ -163,16 +168,28 @@ public sealed class SignalRExecutionFeed : IExecutionFeed
                 dto.SessionId ?? "", dto.Status ?? "Completed",
                 dto.CompletedUtc ?? DateTime.UtcNow))));
 
-        _conn.On<LogEntriesDto>("LogEntries", dto =>
+        // Subscribe to individual log entries (server sends "LogEntry" singular)
+        _conn.On<LogEntryDto>("LogEntry", dto =>
             Raise(() =>
             {
-                if (dto.Entries is null || dto.Entries.Count == 0) return;
-                var batch = dto.Entries.Select(e => new LogEntryMessage(
-                    e.Timestamp ?? DateTime.UtcNow,
-                    e.SessionId ?? "", e.SessionName ?? "",
-                    e.AgentName ?? "", e.Severity ?? "Info",
-                    e.Message ?? "")).ToList();
-                LogsAppended?.Invoke(this, batch);
+                var entry = new LogEntryMessage(
+                    dto.Timestamp ?? DateTime.UtcNow,
+                    dto.SessionId ?? "", dto.SessionName ?? "",
+                    dto.AgentName ?? "", dto.Severity ?? "Info",
+                    dto.Message ?? "");
+                LogsAppended?.Invoke(this, [entry]);
+            }));
+
+        // Also subscribe to AgentOutput so stdout/stderr flows into the log
+        _conn.On<AgentOutputDto>("AgentOutput", dto =>
+            Raise(() =>
+            {
+                var entry = new LogEntryMessage(
+                    DateTime.UtcNow,
+                    dto.SessionId ?? "", "",
+                    dto.AgentName ?? "", dto.Kind == "stderr" ? "Error" : "Info",
+                    dto.Line ?? "");
+                LogsAppended?.Invoke(this, [entry]);
             }));
 
         _conn.Reconnecting += err =>
@@ -288,11 +305,6 @@ public sealed class SignalRExecutionFeed : IExecutionFeed
         public DateTime? CompletedUtc { get; set; }
     }
 
-    private sealed class LogEntriesDto
-    {
-        public List<LogEntryDto>? Entries { get; set; }
-    }
-
     private sealed class LogEntryDto
     {
         public DateTime? Timestamp { get; set; }
@@ -301,5 +313,13 @@ public sealed class SignalRExecutionFeed : IExecutionFeed
         public string? AgentName { get; set; }
         public string? Severity { get; set; }
         public string? Message { get; set; }
+    }
+
+    private sealed class AgentOutputDto
+    {
+        public string? SessionId { get; set; }
+        public string? AgentName { get; set; }
+        public string? Line { get; set; }
+        public string? Kind { get; set; }
     }
 }

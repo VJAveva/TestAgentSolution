@@ -1,23 +1,45 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 import { SessionCard } from './SessionCard';
 import { LogPanel } from './LogPanel';
 import { StatsBar } from './StatsBar';
+import { apiFetch } from '../../lib/api';
+import { logCatch } from '../../lib/logger';
 
 export default function ExecutionDashboard() {
   const {
     activeSessions, completedSessions,
-    state, selectSession
+    state, dispatch, selectSession
   } = useExecutionDashboard();
 
   const [splitPercent, setSplitPercent] = useState(60);
   const [showCompleted, setShowCompleted] = useState(false);
   const [filterText, setFilterText] = useState('');
 
+  // Auto-show completed sessions when no active sessions exist
+  useEffect(() => {
+    if (activeSessions.length === 0 && completedSessions.length > 0) {
+      setShowCompleted(true);
+    }
+  }, [activeSessions.length, completedSessions.length]);
+
+  const loadDemoData = useCallback(() => {
+    apiFetch<{ active: any[]; history: any[] }>('/api/execution/demo-sessions')
+      .then(data => {
+        const all = [
+          ...(data.active || []),
+          ...(data.history || []),
+        ];
+        dispatch({ type: 'SET_SESSIONS', sessions: all });
+        setShowCompleted(true);
+      })
+      .catch(logCatch('ExecutionDashboard', 'loadDemoData'));
+  }, [dispatch]);
+
   const filteredActive = activeSessions.filter(s =>
     !filterText ||
-    s.watchItemTag.toLowerCase().includes(filterText.toLowerCase()) ||
-    s.userId.toLowerCase().includes(filterText.toLowerCase())
+    (s.watchItemTag || '').toLowerCase().includes(filterText.toLowerCase()) ||
+    (s.userId || '').toLowerCase().includes(filterText.toLowerCase())
   );
 
   return (
@@ -34,6 +56,13 @@ export default function ExecutionDashboard() {
           onChange={e => setFilterText(e.target.value)}
           className="flex-1 bg-bg-surface text-text-primary text-xs border border-bdr rounded px-2 py-1 focus:outline-none focus:border-accent"
         />
+        <button
+          onClick={loadDemoData}
+          className="text-xs px-3 py-1 rounded border border-accent/30 text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+          title="Load demo data to test the dashboard UI"
+        >
+          &#9654; Demo
+        </button>
         <button
           onClick={() => setShowCompleted(!showCompleted)}
           className={`text-xs px-3 py-1 rounded border transition-colors ${

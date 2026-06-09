@@ -12,7 +12,7 @@
 
     <!-- Backgrounds -->
     <SolidColorBrush x:Key="BgCanvas"       Color="#111418"/>
-    <SolidColorBrush x:Key="BgCard"         Color="#1A1F26"/>
+    <SolidColorBrush x:Key="DashBgCard"      Color="#1A1F26"/>
     <SolidColorBrush x:Key="BgCardElevated" Color="#222831"/>
     <SolidColorBrush x:Key="BgChip"         Color="#2A313C"/>
 
@@ -49,28 +49,9 @@
     <system:Double x:Key="FontXxl" xmlns:system="clr-namespace:System;assembly=mscorlib">28</system:Double>
 
     <!-- ???????????????????????????????????????????????????????????????????????
-         LEGACY COLOR KEYS (used by existing dashboard XAML)
+         LEGACY COLOR KEYS — now defined in theme dictionaries
+         (Dark/Light/HighContrast) for proper theme switching.
          ??????????????????????????????????????????????????????????????????? -->
-    <!-- Color scheme (dark-theme tuned) -->
-    <SolidColorBrush x:Key="StatusRunningBg" Color="#1A3A5C"/>
-    <SolidColorBrush x:Key="StatusRunningFg" Color="#4D9CF5"/>
-    <SolidColorBrush x:Key="StatusSuccessBg" Color="#1A3D2A"/>
-    <SolidColorBrush x:Key="StatusSuccessFg" Color="#22C55E"/>
-    <SolidColorBrush x:Key="StatusFailedBg"  Color="#3D1A1A"/>
-    <SolidColorBrush x:Key="StatusFailedFg"  Color="#EF4444"/>
-    <SolidColorBrush x:Key="StatusWarningBg" Color="#3D2E0A"/>
-    <SolidColorBrush x:Key="StatusWarningFg" Color="#F59E0B"/>
-    <SolidColorBrush x:Key="StatusIdleBg"    Color="#1E2130"/>
-    <SolidColorBrush x:Key="StatusIdleFg"    Color="#6B7280"/>
-    <SolidColorBrush x:Key="DashboardBg"     Color="#0F1119"/>
-    <SolidColorBrush x:Key="CardBg"          Color="#171B27"/>
-    <SolidColorBrush x:Key="CardBorder"      Color="#2A2F45"/>
-    <SolidColorBrush x:Key="AgentColumnBg"   Color="#131620"/>
-    <SolidColorBrush x:Key="RowBorder"       Color="#1E2235"/>
-    <SolidColorBrush x:Key="TextPrimary"     Color="#E4E6F0"/>
-    <SolidColorBrush x:Key="TextSecondary"   Color="#9099B8"/>
-    <SolidColorBrush x:Key="TextDim"         Color="#5E6580"/>
-    <SolidColorBrush x:Key="MonoFont"        Color="#06B6D4"/>
 
     <!-- Action pill base style -->
     <Style x:Key="ActionPillBase" TargetType="Border">
@@ -85,20 +66,20 @@
         <Border ToolTip="{Binding Tooltip}">
             <Border.Style>
                 <Style TargetType="Border" BasedOn="{StaticResource ActionPillBase}">
-                    <Setter Property="Background"  Value="{StaticResource StatusIdleBg}"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+                    <Setter Property="Background"  Value="{DynamicResource StatusIdleBg}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}"/>
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding Status}" Value="Running">
-                            <Setter Property="Background"  Value="{StaticResource StatusRunningBg}"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource StatusRunningFg}"/>
+                            <Setter Property="Background"  Value="{DynamicResource StatusRunningBg}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource StatusRunningFg}"/>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Status}" Value="Success">
-                            <Setter Property="Background"  Value="{StaticResource StatusSuccessBg}"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource StatusSuccessFg}"/>
+                            <Setter Property="Background"  Value="{DynamicResource StatusSuccessBg}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource StatusSuccessFg}"/>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Status}" Value="Failed">
-                            <Setter Property="Background"  Value="{StaticResource StatusFailedBg}"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource StatusFailedFg}"/>
+                            <Setter Property="Background"  Value="{DynamicResource StatusFailedBg}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -108,16 +89,16 @@
                            VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Status}" Value="Running">
-                                    <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusRunningFg}"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="Success">
-                                    <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                    <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -127,16 +108,16 @@
                            VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Status}" Value="Running">
-                                    <Setter Property="Foreground" Value="{StaticResource StatusRunningFg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusRunningFg}"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="Success">
-                                    <Setter Property="Foreground" Value="{StaticResource StatusSuccessFg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusSuccessFg}"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="Failed">
-                                    <Setter Property="Foreground" Value="{StaticResource StatusFailedFg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -229,7 +210,7 @@
 
     <!-- Metric card (5 across the header) -->
     <Style x:Key="MetricCardStyle" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource BgCard}"/>
+        <Setter Property="Background" Value="{StaticResource DashBgCard}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="6"/>

@@ -10,6 +10,53 @@
  *   useEffect(() => { fetchBuilds().catch(err => logError('BuildList', 'fetchBuilds', err)); }, []);
  */
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface AppLogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  category: string;
+  message: string;
+  data?: unknown;
+  correlationId?: string;
+}
+
+type Listener = () => void;
+
+let nextId = 1;
+let entries: AppLogEntry[] = [];
+let listeners: Set<Listener> = new Set();
+
+function emit() {
+  listeners.forEach(l => l());
+}
+
+export const appLogger = {
+  log(level: LogLevel, category: string, message: string, data?: unknown, correlationId?: string) {
+    entries = [...entries, { id: String(nextId++), timestamp: new Date().toISOString(), level, category, message, data, correlationId }];
+    emit();
+  },
+  debug(category: string, message: string, data?: unknown) { appLogger.log('debug', category, message, data); },
+  info(category: string, message: string, data?: unknown) { appLogger.log('info', category, message, data); },
+  warn(category: string, message: string, data?: unknown) { appLogger.log('warn', category, message, data); },
+  error(category: string, message: string, data?: unknown, correlationId?: string) { appLogger.log('error', category, message, data, correlationId); },
+  subscribe(listener: Listener) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  },
+  getEntries() { return entries; },
+  counts(): Record<LogLevel, number> {
+    const c: Record<LogLevel, number> = { debug: 0, info: 0, warn: 0, error: 0 };
+    for (const e of entries) c[e.level]++;
+    return c;
+  },
+  clear() {
+    entries = [];
+    emit();
+  },
+};
+
 interface ApiError {
   status?: number;
   error?: string;
@@ -38,11 +85,13 @@ export function logError(scope: string, action: string, err: unknown): void {
     : '';
   const detail = e?.detail ?? e?.error ?? e?.message ?? String(err);
 
-  // Single, consistent line ? easy to grep in the console:
-  //   [ERR] [BuildList:fetchBuilds] [cid=ab12cd34] 500 GET /api/results/builds ? reason
-  console.error(
-    `[ERR] [${scope}:${action}] [cid=${cid}] ${status}${url ? ` ${url}` : ''} ? ${detail}`,
-    err);
+  const message = `[${scope}:${action}] ${status}${url ? ` ${url}` : ''} \u2014 ${detail}`;
+
+  // Write to appLogger so AppLogPanel can display it
+  appLogger.error(scope, message, err, cid);
+
+  // Also write to console for dev tools
+  console.error(`[ERR] [cid=${cid}] ${message}`, err);
 
   // Optional: POST to a server-side ingestion endpoint for centralized logs.
   // Disabled by default to avoid request loops if the server itself is down.

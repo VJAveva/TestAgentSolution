@@ -81,7 +81,7 @@ public sealed class AgentEventRelayService : BackgroundService
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Shutdown — expected
+            // Shutdown ï¿½ expected
         }
         catch (Exception ex)
         {
@@ -100,19 +100,19 @@ public sealed class AgentEventRelayService : BackgroundService
                 await _notifier.NotifyAgentOutput(new
                 {
                     agentName,
-                    line = evt.OutputLine,
+                    line = SecurityRedactor.Redact(evt.OutputLine),
                     kind,
                     timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
                     severity = kind == "stderr" ? "Error" : "Info",
                     category = "Output",
-                    message = $"[{agentName}:{kind}] {evt.OutputLine}",
+                    message = $"[{agentName}:{kind}] {SecurityRedactor.Redact(evt.OutputLine)}",
                 });
                 break;
 
             case ExecutionEventType.EventStarted:
                 await _notifier.NotifyLogEntry(new PipelineLogEntry(
                     DateTime.Now, "AgentStream",
-                    $"[{agentName}] Started: {evt.Command} {evt.Arguments}"));
+                    $"[{agentName}] Started: {SecurityRedactor.RedactCommandLine(evt.Command, evt.Arguments)}"));
                 break;
 
             case ExecutionEventType.EventCompleted:
@@ -124,7 +124,7 @@ public sealed class AgentEventRelayService : BackgroundService
             case ExecutionEventType.EventFailed:
                 await _notifier.NotifyLogEntry(new PipelineLogEntry(
                     DateTime.Now, "AgentStream",
-                    $"[{agentName}] Failed: {evt.ErrorMessage}"));
+                    $"[{agentName}] Failed: {SecurityRedactor.Redact(evt.ErrorMessage)}"));
                 break;
 
             case ExecutionEventType.EventStateChanged:

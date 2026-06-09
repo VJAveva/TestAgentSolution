@@ -1,0 +1,6 @@
+{
+    "chat.agent.maxRequests": 100,
+    "chat.tools.terminal.autoApprove": {
+        "dotnet build": true
+    }
+}

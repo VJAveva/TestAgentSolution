@@ -25,6 +25,7 @@ public sealed partial class AgentInfoViewModel : ObservableObject
     [ObservableProperty] private string _detailLine = "";
     [ObservableProperty] private string _errorDetail = "";       // detailed failure reason
     [ObservableProperty] private bool   _isDiagnosing = false;   // spinner state
+    [ObservableProperty] private int    _latencyMs = -1;         // round-trip latency; -1 = not measured
 
     partial void OnConnectionStatusChanged(string value)
     {
@@ -57,9 +58,10 @@ public sealed partial class AgentInfoViewModel : ObservableObject
     /// <summary>Format a one-line summary for display.</summary>
     public void UpdateDetailLine()
     {
+        var latencyPart = LatencyMs >= 0 ? $"  Latency: {LatencyMs}ms" : "";
         DetailLine = ConnectionStatus switch
         {
-            "Online" => $"{AgentState}  |  CPU: {CpuUsage}  Mem: {MemoryUsage}  Disk: {DiskFree}",
+            "Online" => $"{AgentState}  |  CPU: {CpuUsage}  Mem: {MemoryUsage}  Disk: {DiskFree}{latencyPart}",
             "Testing" => "Connecting...",
             "Offline" => string.IsNullOrEmpty(ErrorDetail) ? "Unreachable" : ErrorDetail,
             "Error" => string.IsNullOrEmpty(ErrorDetail) ? "Connection error" : ErrorDetail,

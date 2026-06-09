@@ -28,12 +28,14 @@ service TestAgentService {
   rpc GetLastExitCode    (google.protobuf.Empty) returns (ExitCodeReply);
   rpc GetLastError       (google.protobuf.Empty) returns (ErrorReply);
   rpc TerminateExecution (google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc ForceReady         (google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc RunCommandStreamed (RunCommandRequest)     returns (stream ExecutionEvent);
   rpc SubscribeAgentEvents (google.protobuf.Empty) returns (stream ExecutionEvent);
   rpc GetExecutionHistory (ExecutionHistoryRequest) returns (ExecutionHistoryReply);
   rpc GetAgentSnapshot (google.protobuf.Empty) returns (AgentSnapshot);
   rpc GetAuditLog (AuditLogRequest) returns (AuditLogReply);
   rpc GetConnectionHealth (ConnectionHealthRequest) returns (ConnectionHealthReply);
+  rpc ReloadCommandPolicy (google.protobuf.Empty) returns (CommandPolicyReply);
 }
 
 // =============================================================================
@@ -66,9 +68,8 @@ message RunCommandRequest {
   string password        = 7;
   string completion_check_command = 8;
   int32  completion_poll_interval_seconds = 9;
-  bool   enable_install_log = 10;
-  int32  install_log_poll_seconds = 11;
-  string install_log_root = 12;
+  reserved 10, 11, 12; // formerly enable_install_log / install_log_poll_seconds / install_log_root
+  string caller_role    = 13; // "Admin" or "User" — used for command policy bypass
 }
 
 message RunCommandReply {
@@ -127,6 +128,7 @@ message ResourceMetrics {
   double memory_total_mb      = 3;
   double disk_free_gb         = 4;
   int32  active_process_count = 5;
+  string os_description       = 6;
 }
 
 message HeartbeatRequest {
@@ -177,6 +179,8 @@ message AgentSnapshot {
   int32           executions_completed = 8;
   int32           executions_failed    = 9;
   google.protobuf.Timestamp agent_started = 10;
+  string          agent_version        = 11;
+  repeated string capabilities         = 12;
 }
 
 // =============================================================================
@@ -227,4 +231,16 @@ message ConnectionHealthReply {
   bool   event_stream_active                     = 12;
   string last_disconnect_reason                  = 13;
   google.protobuf.Duration last_downtime_duration = 14;
+}
+
+// =============================================================================
+// Command Policy
+// =============================================================================
+
+message CommandPolicyReply {
+  bool   success           = 1;
+  string mode              = 2;  // Current mode: Disabled, AuditOnly, Enforce
+  int32  allowlist_count   = 3;
+  int32  blocklist_count   = 4;
+  string message           = 5;
 }

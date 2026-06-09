@@ -4,14 +4,14 @@ export function StatsBar() {
   const { activeSessions } = useExecutionDashboard();
 
   const totalAgents = activeSessions
-    .reduce((sum, s) => sum + s.agents.length, 0);
+    .reduce((sum, s) => sum + (s.agents || []).length, 0);
   const totalPassed = activeSessions
-    .reduce((sum, s) => sum + s.passedActions, 0);
+    .reduce((sum, s) => sum + (s.passedActions ?? 0), 0);
   const totalFailed = activeSessions
-    .reduce((sum, s) => sum + s.failedActions, 0);
+    .reduce((sum, s) => sum + (s.failedActions ?? 0), 0);
   const overallProgress = activeSessions.length > 0
     ? Math.round(activeSessions
-        .reduce((sum, s) => sum + s.progressPercent, 0)
+        .reduce((sum, s) => sum + (s.progressPercent ?? 0), 0)
         / activeSessions.length)
     : 0;
 

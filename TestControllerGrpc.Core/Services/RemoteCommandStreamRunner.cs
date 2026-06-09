@@ -54,6 +54,7 @@ public static class RemoteCommandStreamRunner
     /// Receives (agentName, command, elapsed).
     /// </param>
     /// <param name="progressInterval">How often to fire <paramref name="onProgressTick"/>. Defaults to 5 minutes.</param>
+    /// <param name="correlationId">Optional correlation ID propagated to the agent via gRPC metadata for end-to-end tracing.</param>
     public static async Task<RemoteCommandStreamResult> StreamAsync(
         TestAgentService.TestAgentServiceClient client,
         string agentName,
@@ -61,11 +62,16 @@ public static class RemoteCommandStreamRunner
         CancellationToken ct,
         Action<string, string, string>? outputReceived = null,
         Action<string, string, TimeSpan>? onProgressTick = null,
-        TimeSpan? progressInterval = null)
+        TimeSpan? progressInterval = null,
+        string? correlationId = null)
     {
         var request = BuildRequest(resolved);
 
-        using var call = client.RunCommandStreamed(request, cancellationToken: ct);
+        var headers = new Grpc.Core.Metadata();
+        if (!string.IsNullOrEmpty(correlationId))
+            headers.Add("x-correlation-id", correlationId);
+
+        using var call = client.RunCommandStreamed(request, headers: headers, cancellationToken: ct);
 
         int exitCode = 0;
         string errorMessage = "";
@@ -81,24 +87,25 @@ public static class RemoteCommandStreamRunner
             switch (evt.EventType)
             {
                 case ExecutionEventType.EventStdoutLine:
-                    outputReceived?.Invoke(agentName, evt.OutputLine, "stdout");
+                    outputReceived?.Invoke(agentName, SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty, "stdout");
                     break;
                 case ExecutionEventType.EventStderrLine:
-                    outputReceived?.Invoke(agentName, evt.OutputLine, "stderr");
-                    stderrLines.Add(evt.OutputLine);
+                    var stderrLine = SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty;
+                    outputReceived?.Invoke(agentName, stderrLine, "stderr");
+                    stderrLines.Add(stderrLine);
                     if (stderrLines.Count > StderrTailCapacity)
                         stderrLines.RemoveAt(0);
                     break;
                 case ExecutionEventType.EventProgress:
                     outputReceived?.Invoke(agentName,
-                        $"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}", "info");
+                        SecurityRedactor.Redact($"Progress: {evt.ProgressPct:F0}% \u2014 {evt.Detail}") ?? string.Empty, "info");
                     break;
                 case ExecutionEventType.EventCompleted:
                     exitCode = evt.ExitCode;
                     receivedCompleted = true;
                     break;
                 case ExecutionEventType.EventFailed:
-                    errorMessage = evt.ErrorMessage;
+                    errorMessage = SecurityRedactor.Redact(evt.ErrorMessage) ?? string.Empty;
                     exitCode = -1;
                     break;
             }

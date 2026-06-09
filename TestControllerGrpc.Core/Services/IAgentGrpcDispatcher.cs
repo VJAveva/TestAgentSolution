@@ -32,7 +32,7 @@ public interface IAgentGrpcDispatcher : IDisposable
     /// </summary>
     Task<List<DiagnosticStep>> DiagnoseAgentAsync(string agentName, CancellationToken ct = default);
 
-    /// <summary>Quick ping — checks if GetState responds within 3 seconds.</summary>
+    /// <summary>Quick ping ï¿½ checks if GetState responds within 3 seconds.</summary>
     Task<bool> PingAsync(string agentName, CancellationToken ct = default);
 
     /// <summary>Executes a RunRemoteCommand on the specified agent.</summary>
@@ -55,4 +55,14 @@ public interface IAgentGrpcDispatcher : IDisposable
 
     /// <summary>Gets the health states for all registered agents.</summary>
     IReadOnlyDictionary<string, AgentHealthState> GetAllAgentHealth();
+
+    /// <summary>Returns true if the given agent currently has a streaming command in progress.</summary>
+    bool IsAgentExecuting(string agentName);
+
+    /// <summary>
+    /// Resets the gRPC channel for a given agent by disposing the old connection and
+    /// creating a new one. Returns true if the new channel is reachable (ping succeeds).
+    /// Blocked during active execution to prevent stream interference.
+    /// </summary>
+    Task<bool> ResetChannelAsync(string agentName);
 }

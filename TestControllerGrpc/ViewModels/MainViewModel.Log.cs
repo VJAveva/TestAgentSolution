@@ -17,7 +17,7 @@ public sealed partial class MainViewModel
     {
         LogFilterTag = "";
         LogFilterAgent = "";
-        LogFilterSession = "";
+        LogFilterSession = "All";
         LogLevelFilter = "All";
         LogSearchText = "";
         IsRegexSearch = false;
@@ -37,7 +37,7 @@ public sealed partial class MainViewModel
             }
             catch
             {
-                // Invalid regex � fall back to plain text
+                // Invalid regex � fall back to plain text
                 _searchRegex = null;
             }
         }
@@ -49,7 +49,7 @@ public sealed partial class MainViewModel
     {
         var hasTagFilter = !string.IsNullOrWhiteSpace(LogFilterTag);
         var hasAgentFilter = !string.IsNullOrWhiteSpace(LogFilterAgent);
-        var hasSessionFilter = !string.IsNullOrWhiteSpace(LogFilterSession);
+        var hasSessionFilter = !string.IsNullOrWhiteSpace(LogFilterSession) && LogFilterSession != "All";
         var hasSearchFilter = !string.IsNullOrWhiteSpace(LogSearchText);
         var hasSeverityFilter = LogLevelFilter != "All";
         var errorsOnly = ShowErrorsOnly;
@@ -77,9 +77,13 @@ public sealed partial class MainViewModel
             SearchMatchCount = FilteredLogEntries.Count;
         else
             SearchMatchCount = 0;
+
+        // Update copy button label to reflect current filter state
+        OnPropertyChanged(nameof(CopyButtonLabel));
+        OnPropertyChanged(nameof(HasActiveLogFilters));
     }
 
-    /// <summary>Pure filter predicate � no field access, fully parameterized for thread safety.</summary>
+    /// <summary>Pure filter predicate � no field access, fully parameterized for thread safety.</summary>
     private static bool PassesFilter(LogEntryViewModel entry,
         bool hasTagFilter, bool hasAgentFilter, bool hasSessionFilter,
         bool hasSearchFilter, bool hasSeverityFilter,
@@ -152,22 +156,38 @@ public sealed partial class MainViewModel
         bool hasTagFilter, bool hasAgentFilter, bool hasSearchFilter, bool hasSeverityFilter)
     {
         return PassesFilter(entry, hasTagFilter, hasAgentFilter,
-            !string.IsNullOrWhiteSpace(LogFilterSession),
+            !string.IsNullOrWhiteSpace(LogFilterSession) && LogFilterSession != "All",
             hasSearchFilter, hasSeverityFilter,
             ShowErrorsOnly, IsRegexSearch, _searchRegex,
             LogFilterTag, LogFilterAgent, LogFilterSession, LogSearchText, LogLevelFilter);
     }
 
-    /// <summary>Copy all log entries to clipboard.</summary>
+    /// <summary>Copy log entries to clipboard. Copies filtered view when filters are active.</summary>
     [RelayCommand]
     private void CopyLog()
     {
+        var source = HasActiveLogFilters ? FilteredLogEntries : LogEntries;
         var sb = new StringBuilder();
-        foreach (var e in LogEntries)
+        foreach (var e in source)
             sb.AppendLine(e.FullText);
         if (sb.Length > 0)
             Clipboard.SetText(sb.ToString());
     }
+
+    /// <summary>Whether any log filter is currently applied.</summary>
+    public bool HasActiveLogFilters =>
+        (!string.IsNullOrWhiteSpace(LogFilterTag)) ||
+        (!string.IsNullOrWhiteSpace(LogFilterAgent)) ||
+        (!string.IsNullOrWhiteSpace(LogFilterSession) && LogFilterSession != "All") ||
+        (LogLevelFilter != "All") ||
+        (!string.IsNullOrWhiteSpace(LogSearchText)) ||
+        ShowErrorsOnly;
+
+    /// <summary>Dynamic button label: shows count when filters are active.</summary>
+    public string CopyButtonLabel =>
+        HasActiveLogFilters
+            ? $"Copy Filtered ({FilteredLogEntries.Count})"
+            : "Copy All";
 
     /// <summary>Copy only failed/error log entries to clipboard.</summary>
     [RelayCommand]
@@ -192,7 +212,7 @@ public sealed partial class MainViewModel
         LogWarningCount = 0;
         SearchMatchCount = 0;
         AvailableSessionIds.Clear();
-        AvailableSessionIds.Add("");
+        AvailableSessionIds.Add("All");
     }
 
     /// <summary>Toggle the log panel collapsed/expanded state.</summary>
@@ -269,6 +289,29 @@ public sealed partial class MainViewModel
         IsAgentPanePinned = true;
     }
 
+    // ── Tree pane dock commands ─────────────────────────────────────
+
+    /// <summary>Toggle pin/auto-hide for the tree (WatchList) pane.</summary>
+    [RelayCommand]
+    private void ToggleTreePanePin()
+    {
+        IsTreePanePinned = !IsTreePanePinned;
+    }
+
+    /// <summary>Hide the tree pane (restore via ribbon or Ctrl+1).</summary>
+    [RelayCommand]
+    private void HideTreePane()
+    {
+        IsTreePanePinned = false;
+    }
+
+    /// <summary>Show and pin the tree pane.</summary>
+    [RelayCommand]
+    private void ShowTreePane()
+    {
+        IsTreePanePinned = true;
+    }
+
     /// <summary>Export log entries to a file (text, log, or CSV).</summary>
     [RelayCommand]
     private void ExportLog()
@@ -303,6 +346,8 @@ public sealed partial class MainViewModel
     private void AddLog(string msg, LogSeverity severity = LogSeverity.Info,
         string sessionId = "", string agentName = "", string watchItemTag = "")
     {
+        msg = TestControllerGrpc.Services.SecurityRedactor.Redact(msg) ?? string.Empty;
+
         // Auto-detect severity from message content when using default
         if (severity == LogSeverity.Info)
         {
@@ -372,7 +417,7 @@ public sealed partial class MainViewModel
 
             if (lastError is not null)
             {
-                // Signal the view to scroll � uses the existing auto-scroll mechanism
+                // Signal the view to scroll � uses the existing auto-scroll mechanism
                 // by temporarily ensuring the item is the last visible entry
                 ScrollToLogEntry?.Invoke(lastError);
             }

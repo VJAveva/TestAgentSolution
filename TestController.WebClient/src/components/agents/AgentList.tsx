@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Server, Plus, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
 import { useAgents } from '../../hooks/useAgents';
+import { isAgentOnline } from '../../lib/agentStatus';
 
 export default function AgentList() {
   const agents = useAgentStore(s => s.agents);
@@ -12,11 +13,24 @@ export default function AgentList() {
   const [showRegister, setShowRegister] = useState(false);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('http://localhost:5200');
+  const [regResult, setRegResult] = useState<{ healthy: boolean; message: string; detail: string | null } | null>(null);
+  const [regLoading, setRegLoading] = useState(false);
 
   const handleRegister = async () => {
     if (!name.trim()) return;
-    await registerAgent(name.trim(), address.trim());
-    setName(''); setAddress('http://localhost:5200'); setShowRegister(false);
+    setRegLoading(true);
+    setRegResult(null);
+    try {
+      const result = await registerAgent(name.trim(), address.trim());
+      setRegResult({ healthy: result.healthy, message: result.message, detail: result.detail });
+      if (result.healthy) {
+        setTimeout(() => { setName(''); setAddress('http://localhost:5200'); setShowRegister(false); setRegResult(null); }, 2000);
+      }
+    } catch (err: any) {
+      setRegResult({ healthy: false, message: 'Registration failed', detail: err?.response?.data ?? err?.message ?? 'Unknown error' });
+    } finally {
+      setRegLoading(false);
+    }
   };
 
   return (
@@ -40,17 +54,28 @@ export default function AgentList() {
             className="w-full bg-white/5 border border-bdr rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent"
             placeholder="Address" value={address} onChange={e => setAddress(e.target.value)}
           />
-          <button className="w-full bg-accent/20 text-accent text-xs py-1 rounded hover:bg-accent/30" onClick={handleRegister}>
-            Add Agent
+          <button
+            className="w-full bg-accent/20 text-accent text-xs py-1 rounded hover:bg-accent/30 disabled:opacity-40"
+            onClick={handleRegister}
+            disabled={regLoading}
+          >
+            {regLoading ? 'Checking…' : 'Add Agent'}
           </button>
+          {regResult && (
+            <div className={`px-2 py-1 rounded text-[10px] ${
+              regResult.healthy ? 'bg-acc-green/10 text-acc-green' : 'bg-acc-red/10 text-acc-red'
+            }`}>
+              <p>{regResult.message}</p>
+              {regResult.detail && <p className="opacity-80 mt-0.5">{regResult.detail}</p>}
+            </div>
+          )}
         </div>
       )}
 
       <div className="flex-1 overflow-auto">
         {agents.length === 0 && <p className="p-3 text-xs text-text-muted">No agents registered.</p>}
         {agents.map(a => {
-          const isOnline = ['Connected', 'Online', 'Healthy', 'AgentStateReady'].some(
-            s => a.status.toLowerCase().includes(s.toLowerCase()));
+          const isOnline = isAgentOnline(a.status);
           const isSelected = selectedAgent === a.name;
           return (
             <div

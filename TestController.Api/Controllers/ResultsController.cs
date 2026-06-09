@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using TestController.Api.Security;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -9,6 +11,7 @@ namespace TestController.Api.Controllers;
 
 [ApiController]
 [Route("api/results")]
+[Authorize(Policy = SecurityPolicies.User)]
 public class ResultsController : ControllerBase
 {
     private readonly CachedBuildResultsProvider _buildResults;
@@ -16,28 +19,35 @@ public class ResultsController : ControllerBase
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _config;
     private readonly IAppLogger _appLogger;
+    private readonly FailurePatternAnalyzer _patternAnalyzer;
+    private readonly ExecutionLogCorrelator _logCorrelator;
 
     public ResultsController(
         CachedBuildResultsProvider buildResults,
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildResultsConfig config,
-        IAppLogger appLogger)
+        IAppLogger appLogger,
+        FailurePatternAnalyzer patternAnalyzer,
+        ExecutionLogCorrelator logCorrelator)
     {
         _buildResults = buildResults;
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
         _appLogger = appLogger;
+        _patternAnalyzer = patternAnalyzer;
+        _logCorrelator = logCorrelator;
     }
 
     private string Corr => HttpContext.Items["CorrelationId"] as string ?? "";
 
     /// <summary>
-    /// GET /api/results/builds — list available builds.
+    /// GET /api/results/builds ï¿½ list available builds.
     /// </summary>
     [HttpGet("builds")]
-    public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health)
+    public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var corr = Corr;
         try
@@ -48,10 +58,20 @@ public class ResultsController : ControllerBase
             if (!string.IsNullOrEmpty(health))
                 filtered = filtered.Where(b =>
                     string.Equals(b.Health.ToString(), health, StringComparison.OrdinalIgnoreCase));
+
+            // Legacy limit param takes precedence when specified
             if (limit is > 0)
                 filtered = filtered.Take(limit.Value);
 
-            var result = filtered.Select(node => new
+            var allItems = filtered.ToList();
+            var totalCount = allItems.Count;
+
+            // Apply pagination
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 200);
+            var paged = allItems.Skip((page - 1) * pageSize).Take(pageSize);
+
+            var result = paged.Select(node => new
             {
                 buildNumber = node.BuildNumber,
                 modified = node.LatestRun ?? node.EarliestRun,
@@ -64,8 +84,8 @@ public class ResultsController : ControllerBase
             }).ToList();
 
             _appLogger.Log(LogLevel.Information, "ResultsController",
-                $"GetBuilds returned {result.Count} builds", corr);
-            return Ok(result);
+                $"GetBuilds returned {result.Count}/{totalCount} builds (page {page})", corr);
+            return Ok(new { items = result, totalCount, page, pageSize });
         }
         catch (Exception ex)
         {
@@ -76,7 +96,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/builds/{buildNumber} — parsed build results.
+    /// GET /api/results/builds/{buildNumber} ï¿½ parsed build results.
     /// </summary>
     [HttpGet("builds/{buildNumber}")]
     public IActionResult GetBuild(string buildNumber)
@@ -107,7 +127,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/builds/{buildNumber}/detail — full build detail with all test results.
+    /// GET /api/results/builds/{buildNumber}/detail ï¿½ full build detail with all test results.
     /// </summary>
     [HttpGet("builds/{buildNumber}/detail")]
     public IActionResult GetBuildDetail(
@@ -226,7 +246,7 @@ public class ResultsController : ControllerBase
         }
     }
 
-    /// <summary>GET /api/results/trends — pass rate trends.</summary>
+    /// <summary>GET /api/results/trends ï¿½ pass rate trends.</summary>
     [HttpGet("trends")]
     public IActionResult GetTrends()
     {
@@ -235,7 +255,7 @@ public class ResultsController : ControllerBase
         return Ok(trend);
     }
 
-    /// <summary>GET /api/results/flaky?builds=5 — flaky test detection.</summary>
+    /// <summary>GET /api/results/flaky?builds=5 ï¿½ flaky test detection.</summary>
     [HttpGet("flaky")]
     public IActionResult GetFlakyTests([FromQuery] int builds = 5)
     {
@@ -244,7 +264,7 @@ public class ResultsController : ControllerBase
         return Ok(alerts);
     }
 
-    /// <summary>GET /api/results/alerts — consecutive failure alerts.</summary>
+    /// <summary>GET /api/results/alerts ï¿½ consecutive failure alerts.</summary>
     [HttpGet("alerts")]
     public IActionResult GetAlerts()
     {
@@ -254,7 +274,128 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/results/invalidate/{buildNumber} — force re-parse of a specific build.
+    /// GET /api/results/analyze/{testName}?builds=10 ï¿½ failure pattern analysis for a specific test.
+    /// </summary>
+    [HttpGet("analyze/{testName}")]
+    public IActionResult AnalyzeTest(string testName, [FromQuery] int builds = 10)
+    {
+        var corr = Corr;
+        try
+        {
+            var report = _patternAnalyzer.AnalyzeTest(testName, builds);
+
+            _appLogger.Log(LogLevel.Information, "ResultsController",
+                $"AnalyzeTest '{testName}': pattern={report.Pattern}, confidence={report.Confidence}%", corr);
+
+            return Ok(new
+            {
+                testCaseName = report.TestCaseName,
+                pattern = report.Pattern.ToString(),
+                verdict = report.Verdict,
+                confidence = report.Confidence,
+                consecutiveFailures = report.ConsecutiveFailures,
+                totalBuildsAnalyzed = report.TotalBuildsAnalyzed,
+                totalFailures = report.TotalFailures,
+                flakeRate = report.FlakeRate,
+                lastPassBuild = report.LastPassBuild,
+                firstFailBuild = report.FirstFailBuild,
+                allSignaturesMatch = report.AllSignaturesMatch,
+                suggestedAction = report.SuggestedAction,
+                signatures = report.FailureSignatures.Select(s => new
+                {
+                    buildName = s.BuildName,
+                    buildDate = s.BuildDate,
+                    failedStepIndex = s.FailedStepIndex,
+                    failedStepName = s.FailedStepName,
+                    errorType = s.ErrorType,
+                    normalizedMessage = s.NormalizedMessage,
+                    topStackFrame = s.TopStackFrame,
+                    agent = s.Agent,
+                    duration = s.Duration,
+                }),
+                history = report.History.Select(h => new
+                {
+                    buildName = h.BuildName,
+                    buildDate = h.BuildDate,
+                    outcome = h.Outcome,
+                    duration = h.Duration,
+                    errorMessage = h.ErrorMessage.Length > 200
+                        ? h.ErrorMessage[..200] + "ï¿½" : h.ErrorMessage,
+                    agent = h.Agent,
+                }),
+                correlationId = corr,
+            });
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"AnalyzeTest FAILED for '{testName}': {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = "Analysis failed", detail = ex.Message, correlationId = corr });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/results/test/{testName}/compact-label ï¿½ short pattern badge label
+    /// (e.g. "REGRESSION (4x)") suitable for the QA email "Pattern" column.
+    /// </summary>
+    [HttpGet("test/{testName}/compact-label")]
+    public IActionResult GetCompactLabel(string testName, [FromQuery] int builds = 10)
+    {
+        try
+        {
+            var label = _patternAnalyzer.GetCompactLabel(testName, builds);
+            return Ok(new { testName, label });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Compact-label failed", detail = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/results/builds/{build}/test/{testName}/log?stepIndex=N
+    /// Returns merged TRX + Agent + Controller log filtered to the test's time window.
+    /// </summary>
+    [HttpGet("builds/{build}/test/{testName}/log")]
+    public IActionResult GetTestLog(
+        string build, string testName, [FromQuery] int? stepIndex = null)
+    {
+        var corr = Corr;
+        try
+        {
+            var report = _logCorrelator.BuildReport(build, testName, stepIndex);
+            if (!string.IsNullOrEmpty(report.Error))
+                return NotFound(new { error = report.Error, correlationId = corr });
+
+            return Ok(new
+            {
+                buildName = report.BuildName,
+                testCaseName = report.TestCaseName,
+                outcome = report.Outcome,
+                agent = report.Agent,
+                startTime = report.StartTime,
+                endTime = report.EndTime,
+                duration = report.Duration,
+                failedStepIndex = report.FailedStepIndex,
+                errorMessage = report.ErrorMessage,
+                stackTrace = report.StackTrace,
+                steps = report.Steps,
+                agentLogLines = report.AgentLogLines,
+                controllerLogLines = report.ControllerLogLines,
+                mergedTimeline = report.MergedTimeline,
+                correlationId = corr,
+            });
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"GetTestLog FAILED for build='{build}' test='{testName}': {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = "Log retrieval failed", detail = ex.Message, correlationId = corr });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/results/invalidate/{buildNumber} ï¿½ force re-parse of a specific build.
     /// </summary>
     [HttpPost("invalidate/{buildNumber}")]
     public IActionResult InvalidateBuild(string buildNumber)
@@ -274,7 +415,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/results/invalidate — clear the entire results cache.
+    /// POST /api/results/invalidate ï¿½ clear the entire results cache.
     /// </summary>
     [HttpPost("invalidate")]
     public IActionResult InvalidateAll()
@@ -284,7 +425,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/cache-stats — cache diagnostics.
+    /// GET /api/results/cache-stats ï¿½ cache diagnostics.
     /// </summary>
     [HttpGet("cache-stats")]
     public IActionResult GetCacheStats()
@@ -293,7 +434,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/health — diagnostic endpoint that confirms the
+    /// GET /api/results/health ï¿½ diagnostic endpoint that confirms the
     /// Results subsystem is configured correctly. Use this from production
     /// to quickly tell the difference between "API not reachable",
     /// "wrong path configured", and "path empty/no builds".

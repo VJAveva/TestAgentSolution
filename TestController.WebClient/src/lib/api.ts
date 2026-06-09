@@ -16,7 +16,7 @@ export async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const correlationId = crypto.randomUUID().slice(0, 8);
+  const correlationId = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)).slice(0, 8);
   const url = `${API_BASE}${path}`;
   const method = options?.method || 'GET';
 
@@ -42,13 +42,13 @@ export async function apiFetch<T>(
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('text/html') && path.startsWith('/api')) {
       console.error(
-        `[API] [${correlationId}] ROUTE NOT FOUND — got HTML instead of JSON. ` +
+        `[API] [${correlationId}] ROUTE NOT FOUND ï¿½ got HTML instead of JSON. ` +
         `Endpoint ${path} may not be registered. Check IIS SPA rewrite rules.`
       );
       throw {
         status: 404,
         error: 'Route not found',
-        detail: `${path} returned HTML — endpoint not registered`,
+        detail: `${path} returned HTML ï¿½ endpoint not registered`,
         correlationId,
       };
     }

@@ -61,7 +61,10 @@ public partial class ActionPillVM : ObservableObject
         {
             var lines = new List<string>();
             if (!string.IsNullOrEmpty(Command))
-                lines.Add($"Command: {Command}");
+            {
+                var resolved = TreeNodeViewModel.ResolveTokens(Command);
+                lines.Add($"Command: {resolved}");
+            }
             lines.Add($"Status: {Status}");
             if (ExitCode != 0)
                 lines.Add($"Exit code: {ExitCode}");
@@ -73,19 +76,47 @@ public partial class ActionPillVM : ObservableObject
         }
     }
 
-    partial void OnStatusChanged(string value)
+    // ── Dirty-tracking to suppress redundant cascading notifications ──
+    // The 1-second ReconcileCard tick re-applies all pill values even when
+    // unchanged.  Every OnPropertyChanged cascades through WPF's binding
+    // system and UIAutomationCore's peer tree.  With 50+ pills per session
+    // that yields thousands of synchronous stack frames per tick – enough
+    // to overflow the 1 MB default stack.  Guard each cascade with a
+    // cached-value check so it only fires on actual changes.
+    private string _cachedDisplayLabel = "";
+    private string _cachedStatusIcon = "";
+    private string _cachedTooltip = "";
+    private string _cachedKey = "";
+
+    private void RaiseDerivedIfChanged()
     {
-        OnPropertyChanged(nameof(DisplayLabel));
-        OnPropertyChanged(nameof(StatusIcon));
-        OnPropertyChanged(nameof(Tooltip));
+        var dl = DisplayLabel;
+        if (dl != _cachedDisplayLabel) { _cachedDisplayLabel = dl; OnPropertyChanged(nameof(DisplayLabel)); }
+
+        var si = StatusIcon;
+        if (si != _cachedStatusIcon)   { _cachedStatusIcon = si;  OnPropertyChanged(nameof(StatusIcon)); }
+
+        var tt = Tooltip;
+        if (tt != _cachedTooltip)      { _cachedTooltip = tt;     OnPropertyChanged(nameof(Tooltip)); }
     }
 
+    partial void OnStatusChanged(string value) => RaiseDerivedIfChanged();
+
     partial void OnProgressPercentChanged(int value)
-        => OnPropertyChanged(nameof(DisplayLabel));
+    {
+        var dl = DisplayLabel;
+        if (dl != _cachedDisplayLabel) { _cachedDisplayLabel = dl; OnPropertyChanged(nameof(DisplayLabel)); }
+    }
 
     partial void OnTagChanged(string value)
-        => OnPropertyChanged(nameof(Key));
+    {
+        var k = Key;
+        if (k != _cachedKey) { _cachedKey = k; OnPropertyChanged(nameof(Key)); }
+    }
 
     partial void OnCommandChanged(string value)
-        => OnPropertyChanged(nameof(Key));
+    {
+        var k = Key;
+        if (k != _cachedKey) { _cachedKey = k; OnPropertyChanged(nameof(Key)); }
+    }
 }

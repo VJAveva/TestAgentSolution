@@ -3,125 +3,1699 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TestController � Help &amp; Feature Guide</title>
+    <title>TestController — Complete User Guide</title>
     <style>
-        :root { --bg: #1e1e2e; --surface: #313244; --text: #cdd6f4; --accent: #89b4fa; --green: #a6e3a1; --red: #f38ba8; --mauve: #cba6f7; --peach: #fab387; --yellow: #f9e2af; }
+        :root { --bg: #1e1e2e; --surface: #313244; --card: #45475a; --text: #cdd6f4; --muted: #a6adc8; --accent: #89b4fa; --green: #a6e3a1; --red: #f38ba8; --mauve: #cba6f7; --peach: #fab387; --yellow: #f9e2af; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 40px; max-width: 960px; margin: 0 auto; }
-        h1 { color: var(--accent); margin-bottom: 8px; }
-        h2 { color: var(--green); margin: 28px 0 12px; border-bottom: 1px solid var(--surface); padding-bottom: 6px; }
-        h3 { color: var(--mauve); margin: 18px 0 8px; }
-        p, li { margin-bottom: 8px; }
-        ul { padding-left: 24px; }
-        code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 0.9em; }
-        kbd { background: var(--surface); border: 1px solid #585b70; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; padding: 40px; max-width: 1100px; margin: 0 auto; }
+        h1 { color: var(--accent); margin-bottom: 8px; font-size: 2em; }
+        h2 { color: var(--green); margin: 36px 0 16px; border-bottom: 2px solid var(--surface); padding-bottom: 8px; font-size: 1.5em; }
+        h3 { color: var(--mauve); margin: 24px 0 12px; font-size: 1.2em; }
+        h4 { color: var(--peach); margin: 16px 0 8px; font-size: 1em; }
+        p, li { margin-bottom: 10px; }
+        ul, ol { padding-left: 28px; }
+        code { background: var(--surface); padding: 2px 8px; border-radius: 4px; font-family: Consolas, monospace; font-size: 0.9em; color: var(--yellow); }
+        pre { background: var(--surface); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; font-family: Consolas, monospace; font-size: 0.9em; }
+        kbd { background: var(--card); border: 1px solid #585b70; padding: 3px 10px; border-radius: 5px; font-size: 0.85em; box-shadow: 0 2px 0 #11111b; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 0.85em; font-weight: 600; margin-right: 4px; }
         .badge-green { background: #1e3a2a; color: var(--green); }
         .badge-blue { background: #1e2a3a; color: var(--accent); }
         .badge-mauve { background: #2a1e3a; color: var(--mauve); }
         .badge-peach { background: #3a2a1e; color: var(--peach); }
-        table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-        th, td { text-align: left; padding: 8px 12px; border: 1px solid var(--surface); }
-        th { background: var(--surface); color: var(--accent); }
-        hr { border: none; border-top: 1px solid var(--surface); margin: 32px 0; }
+        .badge-red { background: #3a1e1e; color: var(--red); }
+        .badge-yellow { background: #3a3a1e; color: var(--yellow); }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        th, td { text-align: left; padding: 12px 16px; border: 1px solid var(--surface); }
+        th { background: var(--surface); color: var(--accent); font-weight: 600; }
+        tr:nth-child(even) { background: rgba(49, 50, 68, 0.3); }
+        hr { border: none; border-top: 1px solid var(--surface); margin: 40px 0; }
+        .tip { background: #1e3a2a; border-left: 4px solid var(--green); padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+        .tip::before { content: "💡 Tip: "; font-weight: 600; color: var(--green); }
+        .warning { background: #3a2a1e; border-left: 4px solid var(--peach); padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+        .warning::before { content: "⚠️ Important: "; font-weight: 600; color: var(--peach); }
+        .note { background: #1e2a3a; border-left: 4px solid var(--accent); padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+        .note::before { content: "📝 Note: "; font-weight: 600; color: var(--accent); }
+        .step { background: var(--surface); padding: 20px; border-radius: 10px; margin: 16px 0; border-left: 4px solid var(--accent); }
+        .step-num { display: inline-block; background: var(--accent); color: var(--bg); width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; margin-right: 12px; }
+        .toc { background: var(--surface); padding: 24px; border-radius: 10px; margin: 24px 0; }
+        .toc a { color: var(--accent); text-decoration: none; display: block; padding: 6px 0; }
+        .toc a:hover { text-decoration: underline; }
+        .toc-section { margin-left: 20px; }
+        .icon { font-size: 1.2em; margin-right: 8px; }
+        details { background: var(--surface); border-radius: 8px; padding: 16px; margin: 12px 0; }
+        summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: 8px 0; }
+        summary:hover { color: var(--green); }
+        .screenshot-placeholder { background: var(--card); border: 2px dashed var(--muted); padding: 40px; text-align: center; border-radius: 8px; margin: 16px 0; color: var(--muted); }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
-<h1>TestController � Help &amp; Feature Guide</h1>
-<p>Version 1.0 &mdash; WatchList Editor, Execution Engine &amp; Agent Management</p>
+<h1>🎛️ TestController — Complete User Guide</h1>
+<p style="color: var(--muted); margin-bottom: 24px;">Version 2.0 — Your Comprehensive Guide to WatchList Management, Agent Coordination & Automated Execution</p>
+
+<div class="toc">
+    <strong style="color: var(--green); font-size: 1.1em;">📚 Table of Contents</strong>
+    <div style="margin-top: 12px; column-count: 2;">
+        <a href="#intro">1. What is TestController?</a>
+        <a href="#quickstart">2. Quick Start Guide</a>
+        <a href="#interface">3. Understanding the Interface</a>
+        <a href="#agents">4. Setting Up Agents</a>
+        <a href="#watchitems">5. Creating WatchItems</a>
+        <a href="#templates">6. Working with Templates</a>
+        <a href="#execution">7. Running & Monitoring</a>
+        <a href="#troubleshooting">8. Troubleshooting</a>
+        <a href="#config">9. Configuration Reference</a>
+        <a href="#shortcuts">10. Keyboard Shortcuts</a>
+        <a href="#security">11. Security Features</a>
+        <a href="#common-issues">12. Common Execution Issues</a>
+        <a href="#grpc-config">13. gRPC Communication Setup</a>
+        <a href="#best-practices">14. Best Practices & Lessons</a>
+        <a href="#glossary">15. Glossary</a>
+    </div>
+</div>
 
 <hr>
 
-<h2>Getting Started</h2>
-<p>TestController manages <strong>WatchLists</strong> � XML-based configurations that define:</p>
-<ul>
-    <li><strong>WatchItems</strong> � monitored folder paths with file filters</li>
-    <li><strong>Events</strong> � trigger types (Renamed, Created, Changed)</li>
-    <li><strong>Actions</strong> � commands executed when events fire (local, remote, email)</li>
-    <li><strong>Templates</strong> � reusable action pipelines referenced via <code>&lt;Ref&gt;</code></li>
-</ul>
+<h2 id="intro">1. What is TestController?</h2>
 
-<h2>Ribbon Tabs</h2>
+<p>TestController is a <strong>centralized orchestration tool</strong> that helps you automate and manage tasks across multiple computers (called "Agents"). Think of it like a conductor leading an orchestra — TestController tells each Agent what commands to run, when to run them, and monitors the results.</p>
 
-<h3><span class="badge badge-blue">HOME</span> � File &amp; CRUD</h3>
-<ul>
-    <li><strong>Open / Save / Save As</strong> � Load and save WatchList XML files</li>
-    <li><strong>Import / Export</strong> � Merge WatchItems from other files or export selections</li>
-    <li><strong>Edit XML</strong> � Open the full WatchList in the XML editor</li>
-    <li><strong>WatchList group</strong> � Add WatchItem, Event, Group, Action, Ref, Init nodes</li>
-    <li><strong>Templates group</strong> � Add/edit/delete templates (visible when Templates tab is active)</li>
-</ul>
+<h3>What Can You Do With It?</h3>
+<div class="two-col">
+    <div>
+        <h4>🎯 Automate Tasks</h4>
+        <ul>
+            <li>Run scripts on remote machines</li>
+            <li>Execute build and deployment pipelines</li>
+            <li>Trigger batch operations across servers</li>
+        </ul>
+    </div>
+    <div>
+        <h4>📊 Monitor & Control</h4>
+        <ul>
+            <li>See real-time execution status</li>
+            <li>View detailed logs from all agents</li>
+            <li>Cancel or retry failed operations</li>
+        </ul>
+    </div>
+</div>
 
-<h3><span class="badge badge-green">EXECUTION</span> � Run &amp; Control</h3>
-<ul>
-    <li><strong>Execute All</strong> � Run all enabled WatchItems</li>
-    <li><strong>Trigger Item / Event</strong> � Run selected WatchItem or Event</li>
-    <li><strong>Exec Group / Action</strong> � Run selected ActionGroup or single Action</li>
-    <li><strong>Reset Status</strong> � Clear all execution status indicators</li>
-    <li><strong>Cancel</strong> � Cancel running execution (appears only during execution)</li>
-    <li><strong>Retry Failed</strong> � Re-execute only failed actions from the last session</li>
-</ul>
-
-<h3><span class="badge badge-mauve">TOOLS</span> � Appearance &amp; Help</h3>
-<ul>
-    <li><strong>Theme</strong> � Switch between Dark, Light, and other themes</li>
-    <li><strong>Help</strong> � Opens this help file</li>
-</ul>
-
-<h2>WatchList Tree</h2>
-<p>The left panel shows the WatchList hierarchy. Right-click any node for context-sensitive actions.</p>
-<ul>
-    <li><strong>Drag &amp; drop</strong> � Reorder Action/Group/Ref nodes within the same Event</li>
-    <li><strong>Search</strong> � Use the search box above the tree to filter nodes by name or tag</li>
-    <li><strong>Status icons</strong> � Green dot = Success, Red = Failed, Blue = Running</li>
-</ul>
-
-<h2>Agent Management</h2>
-<p>The right panel manages remote agents connected via gRPC.</p>
-<ul>
-    <li><strong>Register + Test</strong> � Add an agent with name and <code>http://host:port</code> address</li>
-    <li><strong>Test / Test All</strong> � Verify agent connectivity and retrieve metrics</li>
-    <li><strong>Diagnose</strong> � Run full connectivity diagnostic (DNS, TCP, gRPC, Snapshot)</li>
-    <li><strong>Health Check</strong> � Automatic background polling every 30 seconds</li>
-    <li><strong>Self-registration</strong> � Agents can register themselves via the gRPC server</li>
-</ul>
-
-<h2>Initialize (Parameter Files)</h2>
-<p>Initialize nodes load key-value pairs from <code>.txt</code> files. Tokens like <code>[ServerName]</code> in Action commands are resolved at execution time.</p>
-<ul>
-    <li>Select an Initialize node to browse, edit, and save parameter files inline</li>
-    <li>Tokens are shown resolved in the tree display text</li>
-</ul>
-
-<h2>XML Editors</h2>
+<h3>Key Concepts</h3>
 <table>
-    <tr><th>Editor</th><th>Access</th><th>Description</th></tr>
-    <tr><td>Inline XML Editor</td><td>Toggle from center panel</td><td>Edit WatchItem or full WatchList XML with syntax highlighting</td></tr>
-    <tr><td>WatchItem XML Editor</td><td>WatchItem properties ? Edit WatchItem XML</td><td>Standalone modal editor for a single WatchItem</td></tr>
-    <tr><td>WatchList XML Editor</td><td>HOME ? Edit XML</td><td>Full WatchList XML with diff-merge support</td></tr>
-    <tr><td>Template XML Editor</td><td>Templates tab ? Edit Template XML</td><td>Edit all templates in XML</td></tr>
-</table>
-
-<h2>Execution Log</h2>
-<ul>
-    <li><strong>Filter</strong> � By Tag, Agent, Level (Info/Success/Warning/Error), or free-text search</li>
-    <li><strong>Auto-scroll</strong> � Enable/disable automatic scroll to latest entry</li>
-    <li><strong>Pause</strong> � Temporarily stop live updates</li>
-    <li><strong>Export</strong> � Save log to a text file</li>
-    <li><strong>Copy Failed</strong> � Copy only error entries to clipboard</li>
-</ul>
-
-<h2>Keyboard Shortcuts</h2>
-<table>
-    <tr><th>Shortcut</th><th>Action</th></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open WatchList file</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save WatchList</td></tr>
-    <tr><td><kbd>Delete</kbd></td><td>Delete selected node (with confirmation)</td></tr>
+    <tr>
+        <th>Term</th>
+        <th>What It Means</th>
+        <th>Example</th>
+    </tr>
+    <tr>
+        <td><span class="badge badge-blue">Controller</span></td>
+        <td>This application — the central command center</td>
+        <td>Your desktop running TestController</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-peach">Agent</span></td>
+        <td>A remote computer running the Agent service</td>
+        <td>A build server, test machine, or production server</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-green">WatchList</span></td>
+        <td>An XML file containing all your automation definitions</td>
+        <td><code>MyProject.watchlist.xml</code></td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-mauve">WatchItem</span></td>
+        <td>A single automation job (contains events and actions)</td>
+        <td>"Deploy to Production" or "Run Unit Tests"</td>
+    </tr>
 </table>
 
 <hr>
-<p style="color: #585b70; font-size: 0.85em;">TestController � 2025. Built with WPF, CommunityToolkit.Mvvm, gRPC, and AvalonEdit.</p>
+
+<h2 id="quickstart">2. Quick Start Guide</h2>
+
+<p>Follow these steps to get up and running in 5 minutes:</p>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Open TestController</strong>
+    <p style="margin-top: 8px;">Launch the application. You'll see the main window with a ribbon toolbar at the top, a tree panel on the left, and an agent panel on the right.</p>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Register Your First Agent</strong>
+    <p style="margin-top: 8px;">In the right panel (Agent Panel):</p>
+    <ol>
+        <li>Enter a friendly name (e.g., "Build Server")</li>
+        <li>Enter the agent address: <code>http://servername:5200</code></li>
+        <li>Click <span class="badge badge-green">Register + Test</span></li>
+    </ol>
+    <p>A green icon means the agent is connected! 🟢</p>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Create a WatchItem</strong>
+    <p style="margin-top: 8px;">In the ribbon, click <span class="badge badge-blue">HOME</span> tab → <strong>Add WatchItem</strong>:</p>
+    <ol>
+        <li>Give it a name (e.g., "Run Disk Cleanup")</li>
+        <li>Right-click the new WatchItem → <strong>Add Event</strong> → Choose "Manual"</li>
+        <li>Right-click the Event → <strong>Add Action</strong></li>
+        <li>Configure the action with your command</li>
+    </ol>
+</div>
+
+<div class="step">
+    <span class="step-num">4</span>
+    <strong>Run It!</strong>
+    <p style="margin-top: 8px;">Select your WatchItem in the tree, then click <span class="badge badge-green">Execute</span> in the EXECUTION tab. Watch the progress in the Execution Log panel at the bottom!</p>
+</div>
+
+<div class="tip">Save your WatchList frequently using <kbd>Ctrl</kbd>+<kbd>S</kbd>. Your configurations are stored in an XML file that you can back up, share, or version control.</div>
+
+<hr>
+
+<h2 id="interface">3. Understanding the Interface</h2>
+
+<h3>Main Window Layout</h3>
+
+<table>
+    <tr>
+        <th>Area</th>
+        <th>Location</th>
+        <th>Purpose</th>
+    </tr>
+    <tr>
+        <td><strong>Ribbon Toolbar</strong></td>
+        <td>Top</td>
+        <td>Main commands organized into tabs (HOME, EXECUTION, TOOLS)</td>
+    </tr>
+    <tr>
+        <td><strong>Health Metrics Strip</strong></td>
+        <td>Top-right</td>
+        <td>Real-time CPU, Memory, Disk usage + agent/session counts</td>
+    </tr>
+    <tr>
+        <td><strong>WatchList Tree</strong></td>
+        <td>Left panel</td>
+        <td>Hierarchical view of all your WatchItems, Events, and Actions</td>
+    </tr>
+    <tr>
+        <td><strong>Properties Panel</strong></td>
+        <td>Center</td>
+        <td>Edit details of the selected item</td>
+    </tr>
+    <tr>
+        <td><strong>Agent Panel</strong></td>
+        <td>Right panel</td>
+        <td>Manage and monitor remote agents</td>
+    </tr>
+    <tr>
+        <td><strong>Execution Log</strong></td>
+        <td>Bottom panel</td>
+        <td>Real-time log of all operations</td>
+    </tr>
+    <tr>
+        <td><strong>Status Bar</strong></td>
+        <td>Very bottom</td>
+        <td>Current file path + quick status</td>
+    </tr>
+</table>
+
+<h3>Ribbon Tabs Explained</h3>
+
+<h4><span class="badge badge-blue">HOME</span> — File Operations & Building Your WatchList</h4>
+<table>
+    <tr><th>Button</th><th>What It Does</th></tr>
+    <tr><td>Open</td><td>Load an existing WatchList XML file</td></tr>
+    <tr><td>Save / Save As</td><td>Save your current work</td></tr>
+    <tr><td>Import</td><td>Merge WatchItems from another file into your current list</td></tr>
+    <tr><td>Export</td><td>Save selected items to a separate file</td></tr>
+    <tr><td>Refresh</td><td>Reload the current file from disk</td></tr>
+    <tr><td>Add WatchItem</td><td>Create a new automation job</td></tr>
+    <tr><td>Add Event</td><td>Add a trigger to the selected WatchItem</td></tr>
+    <tr><td>Add Group</td><td>Create a container for organizing multiple actions</td></tr>
+    <tr><td>Add Action</td><td>Add a command to execute</td></tr>
+    <tr><td>Add Ref</td><td>Reference a reusable Template</td></tr>
+    <tr><td>Add Initialize</td><td>Add parameter file loading</td></tr>
+    <tr><td>Delete</td><td>Remove the selected item (with confirmation)</td></tr>
+</table>
+
+<h4><span class="badge badge-green">EXECUTION</span> — Running Your Automations</h4>
+<table>
+    <tr><th>Button</th><th>What It Does</th></tr>
+    <tr><td>Execute All</td><td>Run every WatchItem in your list</td></tr>
+    <tr><td>Trigger Item</td><td>Run only the selected WatchItem</td></tr>
+    <tr><td>Trigger Event</td><td>Run only the selected Event</td></tr>
+    <tr><td>Exec Group</td><td>Run only the selected Action Group</td></tr>
+    <tr><td>Exec Action</td><td>Run a single Action</td></tr>
+    <tr><td>Reset Status</td><td>Clear all success/failure indicators</td></tr>
+    <tr><td>Retry Failed</td><td>Re-run only the actions that failed</td></tr>
+    <tr><td>Cancel</td><td>Stop currently running operations</td></tr>
+</table>
+
+<h4><span class="badge badge-mauve">TOOLS</span> — Utilities & Panels</h4>
+<table>
+    <tr><th>Button</th><th>What It Does</th></tr>
+    <tr><td>Results Viewer</td><td>Open the test results dashboard</td></tr>
+    <tr><td>Help</td><td>Open this help guide</td></tr>
+    <tr><td>Execution Log toggle</td><td>Show/hide the log panel</td></tr>
+    <tr><td>Agent Panel toggle</td><td>Show/hide the agent panel</td></tr>
+</table>
+
+<h3>Simplified vs Full Ribbon</h3>
+<p>Toggle the <strong>Simplified</strong> switch in the ribbon to switch between:</p>
+<ul>
+    <li><strong>Simplified Mode</strong>: Compact single-row toolbar with icon buttons — great for small screens</li>
+    <li><strong>Full Ribbon Mode</strong>: Organized tabs with labeled buttons — easier to learn</li>
+</ul>
+
+<hr>
+
+<h2 id="agents">4. Setting Up Agents</h2>
+
+<h3>What is an Agent?</h3>
+<p>An Agent is the <strong>TestAgentGrpc</strong> service running on a remote computer. It receives commands from the Controller and executes them locally on that machine.</p>
+
+<h3>Adding a New Agent</h3>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Ensure the Agent Service is Running</strong>
+    <p style="margin-top: 8px;">On the target machine, the TestAgentGrpc service must be installed and running. The default port is <code>5200</code>.</p>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Register in the Controller</strong>
+    <p style="margin-top: 8px;">In the Agent Panel (right side):</p>
+    <ul>
+        <li><strong>Name</strong>: A friendly identifier (e.g., "Build-Server-01")</li>
+        <li><strong>Address</strong>: The gRPC endpoint (e.g., <code>http://buildserver:5200</code>)</li>
+    </ul>
+    <p>Click <span class="badge badge-green">Register + Test</span></p>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Verify Connection</strong>
+    <p style="margin-top: 8px;">Look for the status indicator:</p>
+    <ul>
+        <li>🟢 <strong>Green</strong> = Connected and healthy</li>
+        <li>🟡 <strong>Yellow</strong> = Connected but high load or warnings</li>
+        <li>🔴 <strong>Red</strong> = Disconnected or error</li>
+        <li>⚪ <strong>Gray</strong> = Unknown (never tested)</li>
+    </ul>
+</div>
+
+<h3>Agent Panel Features</h3>
+<table>
+    <tr><th>Button</th><th>Description</th></tr>
+    <tr>
+        <td><strong>Test</strong></td>
+        <td>Check connectivity and get current metrics from the selected agent</td>
+    </tr>
+    <tr>
+        <td><strong>Test All</strong></td>
+        <td>Test every registered agent at once</td>
+    </tr>
+    <tr>
+        <td><strong>Diagnose</strong></td>
+        <td>Run full diagnostic (DNS lookup, TCP port check, gRPC connection, system snapshot)</td>
+    </tr>
+    <tr>
+        <td><strong>Remove</strong></td>
+        <td>Unregister the selected agent</td>
+    </tr>
+</table>
+
+<h3>Self-Registration</h3>
+<p>Agents can automatically register themselves with the Controller if configured to do so. This is useful when deploying many agents — they announce themselves when they start up.</p>
+
+<div class="tip">The Controller automatically polls all registered agents every 30 seconds to update their health status.</div>
+
+<h3>Troubleshooting Agent Connections</h3>
+
+<details>
+    <summary>Agent shows Red/Disconnected</summary>
+    <ul>
+        <li>Verify the agent service is running on the remote machine</li>
+        <li>Check firewall rules allow port 5200 (or your configured port)</li>
+        <li>Ensure no network issues between Controller and Agent</li>
+        <li>Run <strong>Diagnose</strong> for detailed error information</li>
+    </ul>
+</details>
+
+<details>
+    <summary>Connection times out</summary>
+    <ul>
+        <li>The agent machine may be under heavy load</li>
+        <li>Network latency may be high — check <strong>NET</strong> metric in health strip</li>
+        <li>Try increasing timeout values in appsettings.json</li>
+    </ul>
+</details>
+
+<hr>
+
+<h2 id="watchitems">5. Creating WatchItems</h2>
+
+<h3>WatchItem Structure</h3>
+<p>A WatchItem is like a folder that contains everything needed to automate a task:</p>
+
+<pre style="color: var(--text);">
+📦 WatchItem: "Deploy to Production"
+ ├── 📁 Event: "Manual Trigger"
+ │    ├── 📋 Initialize: Load server names from file
+ │    ├── 📂 ActionGroup: "Deployment Steps"
+ │    │    ├── ⚡ Action: Stop IIS
+ │    │    ├── ⚡ Action: Copy files
+ │    │    └── ⚡ Action: Start IIS
+ │    └── 🔗 Ref: "Send Notification" (from Template)
+ └── 📁 Event: "On File Created"
+      └── ⚡ Action: Process new file
+</pre>
+
+<h3>Step-by-Step: Create Your First WatchItem</h3>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Add the WatchItem</strong>
+    <p style="margin-top: 8px;">HOME tab → Click <strong>Add WatchItem</strong> → Enter a descriptive name</p>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Add an Event (Trigger)</strong>
+    <p style="margin-top: 8px;">Right-click your WatchItem → <strong>Add Event</strong></p>
+    <p>Choose the trigger type:</p>
+    <ul>
+        <li><strong>Manual</strong>: Run only when you click Execute</li>
+        <li><strong>Created</strong>: Run when a new file appears in a folder</li>
+        <li><strong>Changed</strong>: Run when a file is modified</li>
+        <li><strong>Renamed</strong>: Run when a file is renamed</li>
+    </ul>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Add Actions</strong>
+    <p style="margin-top: 8px;">Right-click your Event → <strong>Add Action</strong> or <strong>Add Group</strong></p>
+    <p>Configure each action with:</p>
+    <ul>
+        <li><strong>Tag</strong>: Friendly name for logs</li>
+        <li><strong>Agent</strong>: Which machine runs this (or "Local" for the Controller machine)</li>
+        <li><strong>Command</strong>: The actual command to execute</li>
+        <li><strong>Arguments</strong>: Parameters passed to the command</li>
+        <li><strong>Working Directory</strong>: Where the command runs from</li>
+    </ul>
+</div>
+
+<div class="step">
+    <span class="step-num">4</span>
+    <strong>Save Your Work</strong>
+    <p style="margin-top: 8px;">Press <kbd>Ctrl</kbd>+<kbd>S</kbd> or click Save in the ribbon</p>
+</div>
+
+<h3>Action Configuration Options</h3>
+
+<table>
+    <tr>
+        <th>Field</th>
+        <th>Description</th>
+        <th>Example</th>
+    </tr>
+    <tr>
+        <td>Tag</td>
+        <td>Identifier shown in logs</td>
+        <td><code>CopyFiles</code></td>
+    </tr>
+    <tr>
+        <td>Agent</td>
+        <td>Target machine (dropdown of registered agents)</td>
+        <td><code>Build-Server-01</code></td>
+    </tr>
+    <tr>
+        <td>Command</td>
+        <td>Executable or script to run</td>
+        <td><code>robocopy</code> or <code>C:\Scripts\deploy.ps1</code></td>
+    </tr>
+    <tr>
+        <td>Arguments</td>
+        <td>Command-line arguments</td>
+        <td><code>C:\Source C:\Dest /MIR</code></td>
+    </tr>
+    <tr>
+        <td>WorkDir</td>
+        <td>Working directory for the command</td>
+        <td><code>C:\MyProject</code></td>
+    </tr>
+    <tr>
+        <td>Timeout</td>
+        <td>Maximum seconds before action is killed</td>
+        <td><code>300</code> (5 minutes)</td>
+    </tr>
+    <tr>
+        <td>ContinueOnError</td>
+        <td>If true, continue to next action even if this fails</td>
+        <td><code>true</code> or <code>false</code></td>
+    </tr>
+</table>
+
+<h3>Using Parameters (Initialize)</h3>
+<p>You can load values from a text file and use them as tokens in your commands:</p>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Create a parameter file</strong> (e.g., <code>servers.txt</code>):
+    <pre>ServerName=PROD-WEB-01
+DatabaseServer=PROD-SQL-01
+BackupPath=\\nas\backups</pre>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Add an Initialize node</strong> to your Event pointing to this file
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Use tokens in your Actions</strong>:
+    <pre>robocopy C:\Deploy \\[ServerName]\c$\inetpub /MIR</pre>
+    <p>At runtime, <code>[ServerName]</code> becomes <code>PROD-WEB-01</code></p>
+</div>
+
+<hr>
+
+<h2 id="templates">6. Working with Templates</h2>
+
+<h3>What Are Templates?</h3>
+<p>Templates are <strong>reusable action sequences</strong>. Create them once, use them everywhere via <code>&lt;Ref&gt;</code> nodes.</p>
+
+<p><strong>Example:</strong> You have 10 WatchItems that all need to send an email notification when complete. Instead of copying the same email action 10 times, create a "Send Notification" template and reference it.</p>
+
+<h3>Creating a Template</h3>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Switch to Templates Tab</strong>
+    <p style="margin-top: 8px;">In the WatchList Tree, click the <strong>Templates</strong> tab next to "WatchList"</p>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Add a Template</strong>
+    <p style="margin-top: 8px;">HOME tab → <strong>Add Template</strong> → Enter a unique name (e.g., <code>SendNotification</code>)</p>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Add Actions to the Template</strong>
+    <p style="margin-top: 8px;">Right-click the template → Add Groups and Actions as needed</p>
+</div>
+
+<h3>Using a Template (Adding a Ref)</h3>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>In Any Event</strong>
+    <p style="margin-top: 8px;">Right-click → <strong>Add Ref</strong></p>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Select the Template</strong>
+    <p style="margin-top: 8px;">Choose from the dropdown which template to reference</p>
+</div>
+
+<div class="tip">When you update a Template, all Refs automatically use the new version!</div>
+
+<hr>
+
+<h2 id="execution">7. Running & Monitoring</h2>
+
+<h3>Execution Methods</h3>
+
+<table>
+    <tr>
+        <th>Method</th>
+        <th>What It Runs</th>
+        <th>When to Use</th>
+    </tr>
+    <tr>
+        <td><span class="badge badge-green">Execute All</span></td>
+        <td>Every enabled WatchItem</td>
+        <td>Full pipeline run</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-blue">Trigger Item</span></td>
+        <td>Selected WatchItem only</td>
+        <td>Test one job</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-mauve">Trigger Event</span></td>
+        <td>Selected Event only</td>
+        <td>Test one trigger</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-peach">Exec Group</span></td>
+        <td>Selected ActionGroup only</td>
+        <td>Test a subset</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-yellow">Exec Action</span></td>
+        <td>Single selected Action</td>
+        <td>Debug one command</td>
+    </tr>
+</table>
+
+<h3>Understanding Status Icons</h3>
+<table>
+    <tr>
+        <th>Icon</th>
+        <th>Status</th>
+        <th>Meaning</th>
+    </tr>
+    <tr>
+        <td>⚪</td>
+        <td>Pending</td>
+        <td>Not yet executed</td>
+    </tr>
+    <tr>
+        <td>🔵</td>
+        <td>Running</td>
+        <td>Currently executing</td>
+    </tr>
+    <tr>
+        <td>🟢</td>
+        <td>Success</td>
+        <td>Completed without errors</td>
+    </tr>
+    <tr>
+        <td>🔴</td>
+        <td>Failed</td>
+        <td>Command returned error or timed out</td>
+    </tr>
+    <tr>
+        <td>🟡</td>
+        <td>Warning</td>
+        <td>Completed with warnings</td>
+    </tr>
+    <tr>
+        <td>⏹️</td>
+        <td>Cancelled</td>
+        <td>User cancelled execution</td>
+    </tr>
+</table>
+
+<h3>Using the Execution Log</h3>
+<p>The bottom panel shows real-time output from all actions:</p>
+
+<table>
+    <tr>
+        <th>Feature</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td><strong>Filter by Tag</strong></td>
+        <td>Show only logs from a specific action</td>
+    </tr>
+    <tr>
+        <td><strong>Filter by Agent</strong></td>
+        <td>Show only logs from a specific machine</td>
+    </tr>
+    <tr>
+        <td><strong>Filter by Level</strong></td>
+        <td>Info, Success, Warning, Error</td>
+    </tr>
+    <tr>
+        <td><strong>Search</strong></td>
+        <td>Free-text search across all logs</td>
+    </tr>
+    <tr>
+        <td><strong>Auto-scroll</strong></td>
+        <td>Automatically scroll to newest entries</td>
+    </tr>
+    <tr>
+        <td><strong>Pause</strong></td>
+        <td>Stop live updates (useful for reading)</td>
+    </tr>
+    <tr>
+        <td><strong>Export</strong></td>
+        <td>Save log to a text file</td>
+    </tr>
+    <tr>
+        <td><strong>Copy Failed</strong></td>
+        <td>Copy only error entries to clipboard</td>
+    </tr>
+    <tr>
+        <td><strong>Clear</strong></td>
+        <td>Clear all log entries</td>
+    </tr>
+</table>
+
+<h3>Health Metrics Strip</h3>
+<p>The metrics strip at the top-right shows real-time system health:</p>
+<ul>
+    <li><strong>CTRL</strong>: Overall controller health (colored dot)</li>
+    <li><strong>CPU</strong>: Controller machine CPU usage</li>
+    <li><strong>MEM</strong>: Memory usage in GB</li>
+    <li><strong>DISK</strong>: Disk space usage</li>
+    <li><strong>NET</strong>: Network latency to agents</li>
+    <li><strong>AGENTS</strong>: Online agents / Total agents</li>
+    <li><strong>SESSIONS</strong>: Active execution sessions</li>
+    <li><strong>ITEMS</strong>: WatchItems (W) and Templates (T) count</li>
+</ul>
+
+<div class="warning">If the health strip turns red and pulses, critical issues need attention (CPU > 90%, multiple agents down, etc.)</div>
+
+<hr>
+
+<h2 id="troubleshooting">8. Troubleshooting</h2>
+
+<details>
+    <summary><strong>Action fails with "Agent Unavailable"</strong></summary>
+    <div style="padding: 12px 0;">
+        <p>The Agent service is not reachable. Try:</p>
+        <ol>
+            <li>Check if the Agent service is running on the remote machine</li>
+            <li>Verify firewall allows inbound connections on port 5200</li>
+            <li>Use <strong>Diagnose</strong> in the Agent Panel for details</li>
+            <li>If the agent crashed, the Controller will auto-reboot it (if configured)</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Command times out</strong></summary>
+    <div style="padding: 12px 0;">
+        <p>The command took longer than the configured timeout. Solutions:</p>
+        <ol>
+            <li>Increase the <code>Timeout</code> value in the Action properties</li>
+            <li>Check if the command is stuck (hanging process on agent)</li>
+            <li>Review the command for infinite loops or waiting on input</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Parameters not resolving</strong></summary>
+    <div style="padding: 12px 0;">
+        <p>Tokens like <code>[ServerName]</code> appear literally instead of being replaced:</p>
+        <ol>
+            <li>Ensure an Initialize node exists in the Event with the parameter file</li>
+            <li>Check the parameter file format: <code>Key=Value</code> (one per line)</li>
+            <li>Verify the token name matches exactly (case-sensitive)</li>
+            <li>Place Initialize <strong>before</strong> the Actions that use it in the tree</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Template changes not applying</strong></summary>
+    <div style="padding: 12px 0;">
+        <p>After editing a Template, Refs might show old behavior:</p>
+        <ol>
+            <li>Save the WatchList (<kbd>Ctrl</kbd>+<kbd>S</kbd>)</li>
+            <li>Click <strong>Refresh</strong> in the HOME tab</li>
+            <li>Verify the Edit link in the Ref is pointing to the correct template</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Cannot save WatchList</strong></summary>
+    <div style="padding: 12px 0;">
+        <p>File save operations fail:</p>
+        <ol>
+            <li>Check if the file is open in another application</li>
+            <li>Verify you have write permissions to the folder</li>
+            <li>Try <strong>Save As</strong> to a different location</li>
+            <li>Check if the file is read-only</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Actions run but nothing happens</strong></summary>
+    <div style="padding: 12px 0;">
+        <p>Command executes but expected results are missing:</p>
+        <ol>
+            <li>Check the Execution Log for actual output</li>
+            <li>Verify the Working Directory is correct</li>
+            <li>Test the command manually on the Agent machine</li>
+            <li>Ensure paths and arguments are quoted if they contain spaces</li>
+        </ol>
+    </div>
+</details>
+
+<hr>
+
+<h2 id="config">9. Configuration Reference</h2>
+
+<h3>Controller Configuration (<code>appsettings.json</code>)</h3>
+<p>Located in the TestControllerGrpc folder:</p>
+
+<table>
+    <tr>
+        <th>Setting</th>
+        <th>Description</th>
+        <th>Default</th>
+    </tr>
+    <tr>
+        <td><code>VocabularyFile</code></td>
+        <td>Default WatchList file to load on startup</td>
+        <td>(none)</td>
+    </tr>
+    <tr>
+        <td><code>Controller:Timeouts:ConnectionTimeoutSeconds</code></td>
+        <td>How long to wait when connecting to an agent</td>
+        <td>30</td>
+    </tr>
+    <tr>
+        <td><code>Controller:Timeouts:PingTimeoutSeconds</code></td>
+        <td>How long to wait for a health check response</td>
+        <td>10</td>
+    </tr>
+    <tr>
+        <td><code>Controller:Timeouts:CommandTimeoutSeconds</code></td>
+        <td>Default maximum time for command execution</td>
+        <td>300</td>
+    </tr>
+    <tr>
+        <td><code>Controller:Timeouts:AutoRebootOnUnavailable</code></td>
+        <td>Automatically reboot agents that become unavailable</td>
+        <td>true</td>
+    </tr>
+    <tr>
+        <td><code>Controller:Timeouts:AutoRebootRecoverySeconds</code></td>
+        <td>Wait time after reboot before retrying</td>
+        <td>300</td>
+    </tr>
+</table>
+
+<h3>Agent Configuration (<code>appsettings.json</code>)</h3>
+<p>Located on each Agent machine in the TestAgentGrpc folder:</p>
+
+<table>
+    <tr>
+        <th>Setting</th>
+        <th>Description</th>
+        <th>Default</th>
+    </tr>
+    <tr>
+        <td><code>AgentSettings:Name</code></td>
+        <td>Display name for this agent</td>
+        <td>(machine name)</td>
+    </tr>
+    <tr>
+        <td><code>AgentSettings:GrpcPort</code></td>
+        <td>Port the agent listens on</td>
+        <td>5200</td>
+    </tr>
+    <tr>
+        <td><code>AgentSettings:HeartbeatIntervalSeconds</code></td>
+        <td>How often to report health to Controller</td>
+        <td>30</td>
+    </tr>
+    <tr>
+        <td><code>AgentSettings:MaxConcurrentCommands</code></td>
+        <td>Maximum simultaneous command executions</td>
+        <td>1</td>
+    </tr>
+    <tr>
+        <td><code>CommandPolicy:AllowedCommands</code></td>
+        <td>List of allowed executables (if restricted)</td>
+        <td>["*"]</td>
+    </tr>
+</table>
+
+<hr>
+
+<h2 id="shortcuts">10. Keyboard Shortcuts</h2>
+
+<table>
+    <tr>
+        <th>Shortcut</th>
+        <th>Action</th>
+    </tr>
+    <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>O</kbd></td>
+        <td>Open WatchList file</td>
+    </tr>
+    <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td>
+        <td>Save WatchList</td>
+    </tr>
+    <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td>
+        <td>Save As (new file)</td>
+    </tr>
+    <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>R</kbd></td>
+        <td>Refresh WatchList from disk</td>
+    </tr>
+    <tr>
+        <td><kbd>F5</kbd></td>
+        <td>Execute All WatchItems</td>
+    </tr>
+    <tr>
+        <td><kbd>Shift</kbd>+<kbd>F5</kbd></td>
+        <td>Cancel Execution</td>
+    </tr>
+    <tr>
+        <td><kbd>Delete</kbd></td>
+        <td>Delete selected node (with confirmation)</td>
+    </tr>
+    <tr>
+        <td><kbd>F1</kbd></td>
+        <td>Open this Help guide</td>
+    </tr>
+    <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td>
+        <td>Clear Execution Log</td>
+    </tr>
+    <tr>
+        <td><kbd>Escape</kbd></td>
+        <td>Close dialogs / Clear selection</td>
+    </tr>
+</table>
+
+<hr>
+
+<h2 id="security">11. Security Features</h2>
+
+<p>TestController supports multiple security modes to fit your environment — from development labs with no authentication to production environments requiring Active Directory integration and TLS encryption.</p>
+
+<h3>Authentication Modes</h3>
+
+<table>
+    <tr>
+        <th>Mode</th>
+        <th>Best For</th>
+        <th>How It Works</th>
+    </tr>
+    <tr>
+        <td><span class="badge badge-yellow">None</span></td>
+        <td>Development, isolated test labs</td>
+        <td>No authentication — all requests treated as Admin. <strong>Never use in production!</strong></td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-blue">Domain</span></td>
+        <td>Enterprise environments with Active Directory</td>
+        <td>Windows Negotiate (Kerberos/NTLM) authentication. Roles assigned by AD group membership.</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-green">Local</span></td>
+        <td>Standalone servers, workgroups</td>
+        <td>Local Windows accounts (SAM database). Admin role via local Administrators group.</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-mauve">Token</span></td>
+        <td>API automation, service accounts</td>
+        <td>Bearer token authentication. Tokens stored encrypted with DPAPI.</td>
+    </tr>
+</table>
+
+<h3>Setting Up Domain Authentication</h3>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Configure appsettings.json</strong>
+    <pre>{
+  "Security": {
+    "Mode": "Domain",
+    "Domain": {
+      "DomainName": "YOURDOMAIN",
+      "AdminGroups": ["Domain Admins", "TestController-Admins"],
+      "UserGroups": ["Domain Users", "TestController-Users"],
+      "FallbackToLocalOnDomainFailure": true,
+      "GroupCacheTtlMinutes": 15
+    }
+  }
+}</pre>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Create AD Security Groups</strong>
+    <p style="margin-top: 8px;">In Active Directory, create groups like:</p>
+    <ul>
+        <li><code>TestController-Admins</code> — Full access (execute, configure, manage agents)</li>
+        <li><code>TestController-Users</code> — Read-only access (view status, logs)</li>
+    </ul>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Add Users to Groups</strong>
+    <p style="margin-top: 8px;">Add your team members to the appropriate groups. Changes may take up to 15 minutes to propagate (configurable via <code>GroupCacheTtlMinutes</code>).</p>
+</div>
+
+<div class="tip">If the domain controller is unreachable, the system can fall back to Local mode authentication when <code>FallbackToLocalOnDomainFailure</code> is enabled.</div>
+
+<h3>Setting Up Token Authentication</h3>
+
+<p>Token mode is ideal for automation scripts and service accounts that can't use Windows authentication.</p>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Configure Token Mode</strong>
+    <pre>{
+  "Security": {
+    "Mode": "Token",
+    "Token": {
+      "TokenStorePath": "C:\\ProgramData\\TestController\\tokens.encrypted",
+      "TokenRotationDays": 90,
+      "EnforceHttps": true
+    }
+  }
+}</pre>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Generate Tokens</strong>
+    <p style="margin-top: 8px;">Use the admin endpoint to create tokens:</p>
+    <pre>POST /api/security/tokens
+{
+  "name": "BuildServer-ServiceAccount",
+  "role": "Admin",
+  "expiresInDays": 365
+}</pre>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Use in API Calls</strong>
+    <pre>Authorization: Bearer eyJhbGciOi...</pre>
+</div>
+
+<div class="warning">Always enable <code>EnforceHttps</code> in production to prevent token interception!</div>
+
+<h3>TLS/Transport Security</h3>
+
+<p>Encrypt all communication between Controller and Agents using TLS:</p>
+
+<table>
+    <tr>
+        <th>Mode</th>
+        <th>Description</th>
+        <th>When to Use</th>
+    </tr>
+    <tr>
+        <td><code>Plaintext</code></td>
+        <td>No encryption (default)</td>
+        <td>Isolated labs, development only</td>
+    </tr>
+    <tr>
+        <td><code>PlaintextAndTls</code></td>
+        <td>Both ports active (5200 + 5443)</td>
+        <td>Migration period — rolling out TLS gradually</td>
+    </tr>
+    <tr>
+        <td><code>TlsOnly</code></td>
+        <td>Only TLS connections accepted</td>
+        <td>Production environments</td>
+    </tr>
+</table>
+
+<h4>Enabling TLS on the Agent</h4>
+<pre>{
+  "AgentKestrel": {
+    "EnableTls": true,
+    "TlsPort": 5443,
+    "CertificatePath": "C:\\Certs\\agent.pfx",
+    "CertificatePassword": "your-password"
+  }
+}</pre>
+
+<h4>Enabling TLS on the Controller</h4>
+<pre>{
+  "TransportSecurity": {
+    "Mode": "TlsOnly",
+    "CertificatePath": "C:\\Certs\\controller.pfx",
+    "CertificatePassword": "your-password",
+    "ValidateServerCertificate": true
+  }
+}</pre>
+
+<h3>Mutual TLS (mTLS)</h3>
+<p>For maximum security, require both Controller and Agent to present certificates:</p>
+
+<pre>{
+  "TransportSecurity": {
+    "Mode": "TlsOnly",
+    "RequireMutualTls": true,
+    "TrustedCaThumbprint": "ABC123...",
+    "ClientCertificatePath": "C:\\Certs\\client.pfx"
+  }
+}</pre>
+
+<div class="note">With mTLS, unauthorized clients cannot connect even if they know the endpoint address. Both sides must have certificates signed by your trusted CA.</div>
+
+<h3>Security Audit Logging</h3>
+<p>All security-relevant events are logged:</p>
+<ul>
+    <li><strong>Authentication</strong> — Login attempts (success/failure), token usage</li>
+    <li><strong>Authorization</strong> — Permission checks, role evaluations</li>
+    <li><strong>Admin Actions</strong> — Agent registration, configuration changes</li>
+    <li><strong>Command Rejections</strong> — Blocked commands due to policy</li>
+</ul>
+
+<h3>Diagnostic Endpoints</h3>
+<table>
+    <tr>
+        <th>Endpoint</th>
+        <th>Auth Required</th>
+        <th>Purpose</th>
+    </tr>
+    <tr>
+        <td><code>GET /api/security/status</code></td>
+        <td>No</td>
+        <td>Current security mode and health</td>
+    </tr>
+    <tr>
+        <td><code>GET /api/security/whoami</code></td>
+        <td>User</td>
+        <td>Your current identity, roles, permissions</td>
+    </tr>
+    <tr>
+        <td><code>GET /api/security/readiness</code></td>
+        <td>Admin</td>
+        <td>Full diagnostic report (AD connectivity, cert status)</td>
+    </tr>
+    <tr>
+        <td><code>GET /healthz/ready</code></td>
+        <td>No</td>
+        <td>Infrastructure health for load balancers</td>
+    </tr>
+</table>
+
+<hr>
+
+<h2 id="common-issues">12. Common Execution Issues</h2>
+
+<p>This section covers the most frequent problems encountered during execution and how to resolve them.</p>
+
+<h3>Connection & Communication Errors</h3>
+
+<details>
+    <summary><span class="badge badge-red">UNAVAILABLE</span> — Agent Unreachable</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Actions fail with "Agent Unavailable" or "UNAVAILABLE" status</li>
+            <li>Agent shows red in the Agent Panel</li>
+            <li>Execution log shows gRPC connection errors</li>
+        </ul>
+        <p><strong>Causes & Solutions:</strong></p>
+        <table>
+            <tr><th>Cause</th><th>Solution</th></tr>
+            <tr>
+                <td>Agent service not running</td>
+                <td>Start the TestAgentGrpc service on the remote machine</td>
+            </tr>
+            <tr>
+                <td>Firewall blocking port 5200</td>
+                <td>Open inbound TCP 5200 in Windows Firewall</td>
+            </tr>
+            <tr>
+                <td>Agent crashed</td>
+                <td>Check Windows Event Log; Controller will auto-reboot if <code>AutoRebootOnUnavailable</code> is enabled</td>
+            </tr>
+            <tr>
+                <td>Network issues</td>
+                <td>Run <strong>Diagnose</strong> to check DNS and TCP connectivity</td>
+            </tr>
+        </table>
+        <div class="tip">The Controller automatically attempts to reboot unresponsive agents via Windows RPC when gRPC is down.</div>
+    </div>
+</details>
+
+<details>
+    <summary><span class="badge badge-red">DEADLINE_EXCEEDED</span> — Command Timeout</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Action shows "Deadline Exceeded" after running for some time</li>
+            <li>Command was killed before completion</li>
+        </ul>
+        <p><strong>Causes & Solutions:</strong></p>
+        <table>
+            <tr><th>Cause</th><th>Solution</th></tr>
+            <tr>
+                <td>Command takes longer than timeout</td>
+                <td>Increase <code>Timeout</code> in the Action properties</td>
+            </tr>
+            <tr>
+                <td>Command is stuck (infinite loop, waiting for input)</td>
+                <td>Fix the command to not require interactive input; add timeouts to your scripts</td>
+            </tr>
+            <tr>
+                <td>Network timeouts</td>
+                <td>Increase <code>CommandTimeoutSeconds</code> in Controller config</td>
+            </tr>
+        </table>
+    </div>
+</details>
+
+<details>
+    <summary><span class="badge badge-red">CIRCUIT_OPEN</span> — Circuit Breaker Tripped</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>All requests to an agent fail immediately</li>
+            <li>Log shows "Circuit breaker is open"</li>
+        </ul>
+        <p><strong>What's Happening:</strong></p>
+        <p>After multiple consecutive failures (50% failure rate over 30 seconds), the circuit breaker "opens" to prevent overwhelming a struggling agent.</p>
+        <p><strong>Solutions:</strong></p>
+        <ol>
+            <li>Wait for the break duration (default 15 seconds) — circuit will auto-reset</li>
+            <li>Fix the underlying agent issue (restart service, free resources)</li>
+            <li>Use <strong>Test</strong> button to manually verify agent health</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><span class="badge badge-red">CHANNEL_RESET_STORM</span> — Rapid Disconnections</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Frequent "Channel reset" messages in logs</li>
+            <li>Performance degradation</li>
+            <li>Multiple agents showing intermittent connectivity</li>
+        </ul>
+        <p><strong>Causes:</strong></p>
+        <ul>
+            <li>Network instability (packet loss, high latency)</li>
+            <li>Load balancer or proxy issues</li>
+            <li>Agent machines under heavy load</li>
+        </ul>
+        <p><strong>Solutions:</strong></p>
+        <ul>
+            <li>Check network infrastructure</li>
+            <li>Increase <code>KeepAlivePingDelaySeconds</code> and <code>KeepAlivePingTimeoutSeconds</code></li>
+            <li>Reduce concurrent sessions</li>
+            <li>Channel resets are now rate-limited (30s cooldown) to prevent storms</li>
+        </ul>
+    </div>
+</details>
+
+<h3>Authentication Errors</h3>
+
+<details>
+    <summary><span class="badge badge-yellow">HTTP 401</span> — Authentication Failed</summary>
+    <div style="padding: 12px 0;">
+        <table>
+            <tr><th>Scenario</th><th>Solution</th></tr>
+            <tr>
+                <td>Domain mode: Kerberos ticket expired</td>
+                <td>Log out and back in, or run <code>klist purge</code></td>
+            </tr>
+            <tr>
+                <td>Token mode: Invalid or expired token</td>
+                <td>Generate a new token; check expiration date</td>
+            </tr>
+            <tr>
+                <td>Wrong security mode configured</td>
+                <td>Verify <code>Security:Mode</code> matches your authentication method</td>
+            </tr>
+            <tr>
+                <td>Service Principal Name (SPN) issues</td>
+                <td>Register SPNs for service accounts: <code>setspn -S HTTP/servername domain\account</code></td>
+            </tr>
+        </table>
+    </div>
+</details>
+
+<details>
+    <summary><span class="badge badge-yellow">HTTP 403</span> — Authorization Denied</summary>
+    <div style="padding: 12px 0;">
+        <table>
+            <tr><th>Scenario</th><th>Solution</th></tr>
+            <tr>
+                <td>User not in required AD group</td>
+                <td>Add user to <code>TestController-Admins</code> or <code>TestController-Users</code></td>
+            </tr>
+            <tr>
+                <td>Group membership cached</td>
+                <td>Wait for cache expiry (<code>GroupCacheTtlMinutes</code>) or restart Controller</td>
+            </tr>
+            <tr>
+                <td>Token has insufficient role</td>
+                <td>Generate new token with correct role (Admin vs User)</td>
+            </tr>
+        </table>
+    </div>
+</details>
+
+<details>
+    <summary><span class="badge badge-yellow">HTTP 429</span> — Rate Limited</summary>
+    <div style="padding: 12px 0;">
+        <p>Too many requests in a short time. Default limits:</p>
+        <ul>
+            <li><code>RequestsPerMinute</code>: 300 (regular users)</li>
+            <li><code>AdminRequestsPerMinute</code>: 600 (admin operations)</li>
+        </ul>
+        <p><strong>Solutions:</strong></p>
+        <ul>
+            <li>Reduce polling frequency in automation scripts</li>
+            <li>Increase rate limits in configuration if legitimate traffic</li>
+            <li>Distribute load across time (don't trigger everything simultaneously)</li>
+        </ul>
+    </div>
+</details>
+
+<h3>Execution State Issues</h3>
+
+<details>
+    <summary><span class="badge badge-peach">STUCK</span> — Session Won't Complete</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Symptoms:</strong></p>
+        <ul>
+            <li>Session shows "Running" indefinitely</li>
+            <li>Cannot start new executions (lock held)</li>
+            <li>Cancel button doesn't work</li>
+        </ul>
+        <p><strong>Causes:</strong></p>
+        <ul>
+            <li>Agent crashed mid-execution</li>
+            <li>Network disconnect during command</li>
+            <li>Command process stuck on agent</li>
+        </ul>
+        <p><strong>Solutions:</strong></p>
+        <ol>
+            <li>Wait for the <strong>Stuck Execution Watchdog</strong> (runs every 60s) to auto-reset</li>
+            <li>Manually click <strong>Reset Status</strong> to clear indicators</li>
+            <li>If agent-side lock is stuck, restart the TestAgentGrpc service</li>
+            <li>Use <strong>ForceReady</strong> API endpoint for emergency reset</li>
+        </ol>
+    </div>
+</details>
+
+<details>
+    <summary><span class="badge badge-peach">DOUBLE_RELEASE</span> — Semaphore Error (Agent Crash)</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Symptom:</strong> Agent service crashes with <code>SemaphoreFullException</code></p>
+        <p><strong>Root Cause:</strong> Race condition between command cancellation and completion releasing the execution lock twice.</p>
+        <p><strong>Status:</strong> ✅ Fixed in current version. Agent now catches and ignores double-release attempts.</p>
+        <p><strong>If You Still See This:</strong> Update to the latest TestAgentGrpc build.</p>
+    </div>
+</details>
+
+<hr>
+
+<h2 id="grpc-config">13. gRPC Communication Setup</h2>
+
+<p>Proper gRPC configuration is critical for reliable Controller-Agent communication, especially for long-running pipelines.</p>
+
+<h3>Recommended Controller Configuration</h3>
+
+<pre>{
+  "Controller": {
+    "Timeouts": {
+      "TestConnectionTimeoutSeconds": 5,
+      "PingTimeoutSeconds": 3,
+      "CommandTimeoutSeconds": 14400,
+      "ChannelConnectTimeoutSeconds": 30,
+      "KeepAlivePingDelaySeconds": 60,
+      "KeepAlivePingTimeoutSeconds": 30,
+      "CircuitBreakerBreakSeconds": 15,
+      "RetryMaxAttempts": 3,
+      "RetryDelaySeconds": 2,
+      "AutoResetFailureThreshold": 10,
+      "UnavailableRecoverySeconds": 60,
+      "AutoRebootOnUnavailable": true,
+      "AutoRebootRecoverySeconds": 300
+    }
+  }
+}</pre>
+
+<h3>Timeout Settings Explained</h3>
+
+<table>
+    <tr>
+        <th>Setting</th>
+        <th>Purpose</th>
+        <th>Recommended Value</th>
+    </tr>
+    <tr>
+        <td><code>TestConnectionTimeoutSeconds</code></td>
+        <td>Quick connectivity check (Test button)</td>
+        <td>5</td>
+    </tr>
+    <tr>
+        <td><code>PingTimeoutSeconds</code></td>
+        <td>Health check ping response</td>
+        <td>3</td>
+    </tr>
+    <tr>
+        <td><code>CommandTimeoutSeconds</code></td>
+        <td>Maximum single command duration</td>
+        <td>14400 (4 hours) for long pipelines</td>
+    </tr>
+    <tr>
+        <td><code>ChannelConnectTimeoutSeconds</code></td>
+        <td>TCP connection establishment</td>
+        <td>30</td>
+    </tr>
+    <tr>
+        <td><code>KeepAlivePingDelaySeconds</code></td>
+        <td>Interval between HTTP/2 keepalive pings</td>
+        <td>60</td>
+    </tr>
+    <tr>
+        <td><code>KeepAlivePingTimeoutSeconds</code></td>
+        <td>How long to wait for ping response</td>
+        <td>30</td>
+    </tr>
+</table>
+
+<h3>Resilience Settings Explained</h3>
+
+<table>
+    <tr>
+        <th>Setting</th>
+        <th>Purpose</th>
+        <th>Recommended Value</th>
+    </tr>
+    <tr>
+        <td><code>CircuitBreakerBreakSeconds</code></td>
+        <td>How long circuit stays open after failures</td>
+        <td>15</td>
+    </tr>
+    <tr>
+        <td><code>RetryMaxAttempts</code></td>
+        <td>Automatic retry count for transient errors</td>
+        <td>3</td>
+    </tr>
+    <tr>
+        <td><code>RetryDelaySeconds</code></td>
+        <td>Base delay between retries (exponential)</td>
+        <td>2</td>
+    </tr>
+    <tr>
+        <td><code>AutoResetFailureThreshold</code></td>
+        <td>Consecutive failures before channel recreation</td>
+        <td>10</td>
+    </tr>
+    <tr>
+        <td><code>UnavailableRecoverySeconds</code></td>
+        <td>Wait time after UNAVAILABLE before retry</td>
+        <td>60</td>
+    </tr>
+    <tr>
+        <td><code>AutoRebootOnUnavailable</code></td>
+        <td>Automatically reboot crashed agents</td>
+        <td>true</td>
+    </tr>
+    <tr>
+        <td><code>AutoRebootRecoverySeconds</code></td>
+        <td>Wait time after reboot before command retry</td>
+        <td>300 (5 minutes)</td>
+    </tr>
+</table>
+
+<h3>Recommended Agent Configuration</h3>
+
+<pre>{
+  "AgentSettings": {
+    "Name": "BUILD-SERVER-01",
+    "GrpcPort": 5200,
+    "HeartbeatIntervalSeconds": 30,
+    "MaxConcurrentCommands": 1,
+    "MaxExecutionTimeoutMinutes": 480
+  },
+  "AgentKestrel": {
+    "KeepAliveTimeoutMinutes": 720,
+    "DisableMinRequestBodyDataRate": true,
+    "DisableMinResponseDataRate": true,
+    "EnableTls": false,
+    "TlsPort": 5443
+  }
+}</pre>
+
+<h3>Agent Kestrel Settings Explained</h3>
+
+<table>
+    <tr>
+        <th>Setting</th>
+        <th>Purpose</th>
+        <th>Why This Value</th>
+    </tr>
+    <tr>
+        <td><code>KeepAliveTimeoutMinutes</code></td>
+        <td>Idle connection timeout</td>
+        <td>720 (12h) — keeps connections alive for long pipelines</td>
+    </tr>
+    <tr>
+        <td><code>DisableMinRequestBodyDataRate</code></td>
+        <td>Don't kill slow incoming data</td>
+        <td>true — prevents timeout for large file uploads</td>
+    </tr>
+    <tr>
+        <td><code>DisableMinResponseDataRate</code></td>
+        <td>Don't kill slow outgoing data</td>
+        <td>true — prevents killing streaming output from long tests</td>
+    </tr>
+</table>
+
+<h3>For Long-Running Pipelines (4+ Hours)</h3>
+
+<div class="warning">Long pipelines require specific tuning to prevent false timeouts and connection drops.</div>
+
+<pre>{
+  "Controller": {
+    "Timeouts": {
+      "CommandTimeoutSeconds": 28800,
+      "KeepAlivePingDelaySeconds": 30,
+      "KeepAlivePingTimeoutSeconds": 60,
+      "AutoRebootOnUnavailable": true,
+      "AutoRebootRecoverySeconds": 300
+    }
+  }
+}</pre>
+
+<p>With these settings:</p>
+<ul>
+    <li>Commands can run up to 8 hours</li>
+    <li>Keepalive pings every 30 seconds detect dead connections faster</li>
+    <li>If the agent crashes, it's automatically rebooted and the command is retried</li>
+</ul>
+
+<hr>
+
+<h2 id="best-practices">14. Best Practices & Lessons Learned</h2>
+
+<h3>Agent Deployment</h3>
+
+<div class="two-col">
+    <div>
+        <h4>✅ Do</h4>
+        <ul>
+            <li>Run TestAgentGrpc as a Windows Service (not console)</li>
+            <li>Use a dedicated service account with minimal permissions</li>
+            <li>Deploy agents to multiple machines for redundancy</li>
+            <li>Keep agents updated to match Controller version</li>
+            <li>Monitor agent health via the health metrics strip</li>
+        </ul>
+    </div>
+    <div>
+        <h4>❌ Don't</h4>
+        <ul>
+            <li>Run agent as Administrator unless absolutely required</li>
+            <li>Disable the Stuck Execution Watchdog</li>
+            <li>Use plaintext mode in production networks</li>
+            <li>Put all workload on a single agent</li>
+            <li>Ignore yellow/red health indicators</li>
+        </ul>
+    </div>
+</div>
+
+<h3>WatchList Design</h3>
+
+<div class="two-col">
+    <div>
+        <h4>✅ Do</h4>
+        <ul>
+            <li>Use descriptive Tags for actions (shows in logs)</li>
+            <li>Set reasonable timeouts per action</li>
+            <li>Use Templates for reusable command sequences</li>
+            <li>Enable <code>ContinueOnError</code> for non-critical steps</li>
+            <li>Store WatchList files in source control</li>
+        </ul>
+    </div>
+    <div>
+        <h4>❌ Don't</h4>
+        <ul>
+            <li>Create one massive ActionGroup with 100+ actions</li>
+            <li>Hard-code server names — use Initialize parameters</li>
+            <li>Leave default timeout (may be too short)</li>
+            <li>Duplicate actions when Templates would work</li>
+            <li>Forget to save frequently</li>
+        </ul>
+    </div>
+</div>
+
+<h3>Security Best Practices</h3>
+
+<table>
+    <tr>
+        <th>Environment</th>
+        <th>Recommended Security Mode</th>
+        <th>TLS</th>
+    </tr>
+    <tr>
+        <td>Local development</td>
+        <td><code>None</code></td>
+        <td>Plaintext OK</td>
+    </tr>
+    <tr>
+        <td>Isolated test lab</td>
+        <td><code>Local</code></td>
+        <td>Plaintext OK if network is isolated</td>
+    </tr>
+    <tr>
+        <td>Corporate network</td>
+        <td><code>Domain</code></td>
+        <td>TLS recommended</td>
+    </tr>
+    <tr>
+        <td>Production / Internet-facing</td>
+        <td><code>Domain</code> or <code>Token</code></td>
+        <td>TLS required, mTLS recommended</td>
+    </tr>
+</table>
+
+<h3>Lessons from Production Incidents</h3>
+
+<details>
+    <summary><strong>Lesson 1:</strong> Always enable AutoRebootOnUnavailable</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Incident:</strong> A 4-hour pipeline failed 10 minutes before completion because the agent crashed. Without auto-reboot, the entire pipeline had to be restarted manually.</p>
+        <p><strong>Learning:</strong> With <code>AutoRebootOnUnavailable: true</code>, the Controller reboots the agent and automatically retries the failed command after recovery.</p>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Lesson 2:</strong> Don't set timeouts too short</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Incident:</strong> Build actions consistently failed at 5 minutes. Investigation showed the default timeout was 300 seconds, but builds took 7 minutes.</p>
+        <p><strong>Learning:</strong> Measure your longest-running commands and set timeouts with 50% buffer. Better to timeout rarely than constantly.</p>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Lesson 3:</strong> Test agent connectivity before big runs</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Incident:</strong> Kicked off a full deployment, but one agent had a stale DNS entry. First failure happened 30 minutes in.</p>
+        <p><strong>Learning:</strong> Click <strong>Test All</strong> in the Agent Panel before starting large executions. Fix any red agents first.</p>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Lesson 4:</strong> Use Initialize files for environment-specific values</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Incident:</strong> Commands worked in dev but failed in prod — server names were hard-coded.</p>
+        <p><strong>Learning:</strong> Use <code>[ServerName]</code> tokens resolved from Initialize files. Different environments use different parameter files.</p>
+    </div>
+</details>
+
+<details>
+    <summary><strong>Lesson 5:</strong> Monitor the health metrics strip</summary>
+    <div style="padding: 12px 0;">
+        <p><strong>Incident:</strong> Execution became slow and unreliable. Later discovered Controller machine had 95% CPU usage from unrelated processes.</p>
+        <p><strong>Learning:</strong> The health strip shows CPU, Memory, Disk, and Network. If metrics are yellow/red, address the underlying issue before executing.</p>
+    </div>
+</details>
+
+<h3>Performance Tuning Checklist</h3>
+
+<ul>
+    <li>☐ Set <code>MaxConcurrentCommands</code> based on agent CPU cores (typically 1-2)</li>
+    <li>☐ Increase <code>KeepAliveTimeoutMinutes</code> for long-running sessions</li>
+    <li>☐ Enable <code>DisableMinRequestBodyDataRate</code> and <code>DisableMinResponseDataRate</code></li>
+    <li>☐ Set appropriate <code>CommandTimeoutSeconds</code> for your longest operation</li>
+    <li>☐ Configure <code>CircuitBreakerBreakSeconds</code> based on typical recovery time</li>
+    <li>☐ Enable <code>AutoRebootOnUnavailable</code> for unattended operation</li>
+    <li>☐ Distribute workload across multiple agents</li>
+    <li>☐ Use SSD storage on agents for I/O-heavy commands</li>
+</ul>
+
+<hr>
+
+<h2 id="glossary">15. Glossary</h2>
+
+<table>
+    <tr>
+        <th>Term</th>
+        <th>Definition</th>
+    </tr>
+    <tr>
+        <td><strong>Action</strong></td>
+        <td>A single command to be executed (e.g., run a script, copy files)</td>
+    </tr>
+    <tr>
+        <td><strong>ActionGroup</strong></td>
+        <td>A container that holds multiple Actions that run in sequence</td>
+    </tr>
+    <tr>
+        <td><strong>Agent</strong></td>
+        <td>A remote computer running the TestAgentGrpc service that executes commands</td>
+    </tr>
+    <tr>
+        <td><strong>Controller</strong></td>
+        <td>This application (TestController) — the central management interface</td>
+    </tr>
+    <tr>
+        <td><strong>Event</strong></td>
+        <td>A trigger that causes Actions to run (Manual, Created, Changed, Renamed)</td>
+    </tr>
+    <tr>
+        <td><strong>gRPC</strong></td>
+        <td>The communication protocol used between Controller and Agents</td>
+    </tr>
+    <tr>
+        <td><strong>Initialize</strong></td>
+        <td>A node that loads key-value parameters from a text file</td>
+    </tr>
+    <tr>
+        <td><strong>Ref</strong></td>
+        <td>A reference to a Template (allows reusing action sequences)</td>
+    </tr>
+    <tr>
+        <td><strong>Session</strong></td>
+        <td>A single execution run — may contain multiple Actions across multiple Agents</td>
+    </tr>
+    <tr>
+        <td><strong>Template</strong></td>
+        <td>A reusable set of Actions that can be referenced from multiple WatchItems</td>
+    </tr>
+    <tr>
+        <td><strong>Token</strong></td>
+        <td>A placeholder like <code>[ServerName]</code> that gets replaced with actual values at runtime</td>
+    </tr>
+    <tr>
+        <td><strong>WatchItem</strong></td>
+        <td>A top-level automation job containing Events and their associated Actions</td>
+    </tr>
+    <tr>
+        <td><strong>WatchList</strong></td>
+        <td>An XML file containing all WatchItems and Templates for a project</td>
+    </tr>
+</table>
+
+<hr>
+
+<p style="color: var(--muted); font-size: 0.9em; text-align: center; margin-top: 40px;">
+    TestController v2.0 — Last Updated: May 2026<br>
+    Built with WPF, CommunityToolkit.Mvvm, gRPC, and AvalonEdit<br>
+    Press <kbd>F1</kbd> anytime to open this help guide
+</p>
 
 </body>
 </html>

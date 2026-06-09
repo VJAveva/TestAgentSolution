@@ -54,6 +54,20 @@ public partial class AgentRowVM : ObservableObject
             if (isTerminal && demotion)
                 return;
 
+            // Stack-overflow guard: skip the update entirely when nothing
+            // has actually changed. Each property setter fires
+            // OnPropertyChanged which cascades through WPF binding +
+            // UIAutomationCore. During the 1-sec reconcile tick this
+            // saves thousands of redundant notification storms.
+            if (existing.Status == status &&
+                existing.ExitCode == exitCode &&
+                existing.ProgressPercent == progressPercent &&
+                existing.ErrorMessage == errorMessage &&
+                existing.Duration == duration &&
+                existing.ActionType == actionType &&
+                existing.Command == command)
+                return;
+
             existing.ActionType = actionType;
             existing.Command = command;
             existing.Status = status;

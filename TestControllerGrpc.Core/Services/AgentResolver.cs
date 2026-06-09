@@ -39,6 +39,35 @@ public static class AgentResolver
         return agents.ToList();
     }
 
+    /// <summary>
+    /// Extracts agent names from a single ActionGroup (used by partial execution).
+    /// </summary>
+    public static List<string> ExtractAgentNames(
+        ActionGroupConfig group,
+        Dictionary<string, string>? parameters = null)
+    {
+        var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectFromNodes(group.Children, agents, parameters);
+        return agents.ToList();
+    }
+
+    /// <summary>
+    /// Extracts the agent name from a single Action (used by partial execution).
+    /// </summary>
+    public static List<string> ExtractAgentNames(
+        ActionConfig action,
+        Dictionary<string, string>? parameters = null)
+    {
+        var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(action.AgentName))
+        {
+            var resolved = ResolveVariable(action.AgentName, parameters);
+            if (!string.IsNullOrEmpty(resolved))
+                agents.Add(resolved);
+        }
+        return agents.ToList();
+    }
+
     private static void CollectFromNodes(
         IReadOnlyList<IActionNode> nodes,
         HashSet<string> agents,

@@ -2,6 +2,10 @@ using System.Diagnostics;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.Retry;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 using TestAgentGrpc;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -19,6 +23,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
     private readonly AgentGrpcClientManager _clientManager;
     private readonly AgentRegistry _registry;
     private readonly ILogger<StandaloneAgentDispatcher> _logger;
+    private readonly ResiliencePipeline _resilience;
 
     public event Action<string, string, string>? OutputReceived;
     public event Action<string, string>? StatusChanged;
@@ -31,6 +36,31 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         _clientManager = clientManager;
         _registry = registry;
         _logger = logger;
+        _resilience = new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = 3,
+                Delay = TimeSpan.FromSeconds(1),
+                BackoffType = DelayBackoffType.Exponential,
+                ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
+                    ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
+                OnRetry = args =>
+                {
+                    _logger.LogWarning(
+                        "Retry #{Attempt} for gRPC call after {Delay}: {Exception}",
+                        args.AttemptNumber, args.RetryDelay, args.Outcome.Exception?.Message);
+                    return default;
+                }
+            })
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+            {
+                FailureRatio = 0.5,
+                SamplingDuration = TimeSpan.FromSeconds(30),
+                MinimumThroughput = 5,
+                BreakDuration = TimeSpan.FromSeconds(30),
+            })
+            .AddTimeout(TimeSpan.FromHours(24))
+            .Build();
     }
 
     // ?? Registry operations ????????????????????????????????????????????
@@ -65,6 +95,19 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             a => new AgentHealthState { AgentName = a.Name, IsHealthy = true },
             StringComparer.OrdinalIgnoreCase);
 
+    public bool IsAgentExecuting(string agentName) => false; // WebApi doesn't run long-lived streams
+
+    public async Task<bool> ResetChannelAsync(string agentName)
+    {
+        if (!_registry.TryGet(agentName, out var entry))
+            return false;
+
+        _clientManager.RemoveChannel(entry.Address);
+        // Re-creating on next call is automatic in AgentGrpcClientManager
+        _logger.LogInformation("Channel reset for agent {Agent}", agentName);
+        return await PingAsync(agentName);
+    }
+
     // ?? Connectivity ???????????????????????????????????????????????????
 
     public async Task<(AgentSnapshot? Snapshot, string? Error)> TestConnectionAsync(
@@ -77,8 +120,8 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         {
             var client = _clientManager.GetClient(entry.Address);
             var snapshot = await client.GetAgentSnapshotAsync(new Empty(), cancellationToken: ct);
-            _registry.UpdateStatus(agentName, $"Online — {snapshot.State}");
-            StatusChanged?.Invoke(agentName, $"Online — {snapshot.State}");
+            _registry.UpdateStatus(agentName, $"Online ï¿½ {snapshot.State}");
+            StatusChanged?.Invoke(agentName, $"Online ï¿½ {snapshot.State}");
             return (snapshot, null);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
@@ -174,7 +217,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             return new ActionResult(false, -1, msg);
         }
 
-        StatusChanged?.Invoke(agentName, $"Executing: {resolved.Command}");
+        StatusChanged?.Invoke(agentName, $"Executing: {SecurityRedactor.Redact(resolved.Command)}");
         var startTimestamp = Stopwatch.GetTimestamp();
 
         // Wait for agent to become free if it's still cleaning up from a previous command.
@@ -192,17 +235,60 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
                 : CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-            // Phase 2.15 spike: shared with the WPF dispatcher. WebApi has no
-            // Polly resilience or health tracking, so we call the helper
-            // directly and only keep the policy-specific bits below.
-            var streamResult = await RemoteCommandStreamRunner.StreamAsync(
-                client, agentName, resolved, linked.Token,
-                outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k));
-
-            // Reboot handling
-            if (resolved.IsReboot)
+            // Phase 2.15 spike: shared with the WPF dispatcher. Wrapped in Polly
+            // resilience pipeline for automatic retry on transient gRPC failures.
+            var streamResult = await _resilience.ExecuteAsync(async resilienceCt =>
             {
-                StatusChanged?.Invoke(agentName, "Rebooting… waiting for agent");
+                var currentClient = _clientManager.GetClient(entry.Address);
+                return await RemoteCommandStreamRunner.StreamAsync(
+                    currentClient, agentName, resolved, resilienceCt,
+                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                    correlationId: ctx.SessionId);
+            }, linked.Token);
+
+            // If agent rejected the command because it's still busy (e.g. draining
+            // stdout from a long install), wait and retry up to 2 minutes.
+            if (streamResult.ExitCode == -1 &&
+                streamResult.ErrorMessage.Contains("busy", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Agent {Agent} rejected command (busy). Waiting for agent to become free before retrying...",
+                    agentName);
+                StatusChanged?.Invoke(agentName, "Agent busy \u2014 waiting to retry...");
+
+                for (int retryWait = 0; retryWait < 12; retryWait++)
+                {
+                    await Task.Delay(10_000, ct);
+                    try
+                    {
+                        var state = await client.GetStateAsync(new Empty(),
+                            deadline: DateTime.UtcNow.AddSeconds(5),
+                            cancellationToken: ct);
+                        if (state.State != AgentState.Running)
+                        {
+                            StatusChanged?.Invoke(agentName, "Agent free \u2014 retrying command");
+                            break;
+                        }
+                        StatusChanged?.Invoke(agentName,
+                            $"Agent still busy \u2014 waiting ({retryWait + 1}/12)");
+                    }
+                    catch (RpcException) { break; }
+                }
+
+                streamResult = await _resilience.ExecuteAsync(async resilienceCt =>
+                {
+                    var currentClient = _clientManager.GetClient(entry.Address);
+                    return await RemoteCommandStreamRunner.StreamAsync(
+                        currentClient, agentName, resolved, resilienceCt,
+                        outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+                        correlationId: ctx.SessionId);
+                }, linked.Token);
+            }
+
+            // Reboot handling: only wait if the command was actually accepted
+            if (resolved.IsReboot && streamResult.ExitCode != -1)
+            {
+                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
             }
 
@@ -221,7 +307,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         {
             if (resolved.IsReboot)
             {
-                StatusChanged?.Invoke(agentName, "Rebooting… waiting for agent");
+                StatusChanged?.Invoke(agentName, "Rebootingï¿½ waiting for agent");
                 var client = _clientManager.GetClient(entry.Address);
                 await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
                 return new ActionResult(true, 0, "Reboot completed");
@@ -240,7 +326,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 "Action TIMED OUT on {Agent} after {Elapsed}: {Command}. " +
                 "Configured timeout: {Timeout}s. Exception: {Error}",
                 agentName, elapsed.ToString(@"hh\:mm\:ss"),
-                resolved.Command, resolved.Timeout, ex.Message);
+                SecurityRedactor.Redact(resolved.Command), resolved.Timeout, SecurityRedactor.Redact(ex.Message));
 
             var detail = resolved.Timeout > 0
                 ? $"Timed out after {elapsed:hh\\:mm\\:ss} (limit: {resolved.Timeout}s). "
@@ -284,18 +370,18 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             if (process is null)
                 return new ActionResult(false, -1, "Failed to start process");
 
-            OutputReceived?.Invoke("Controller", $"PID {process.Id}: {fileName} {arguments}", "info");
+            OutputReceived?.Invoke("Controller", $"PID {process.Id}: {SecurityRedactor.RedactCommandLine(fileName, arguments)}", "info");
 
             var stdoutTask = Task.Run(async () =>
             {
                 while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
-                    OutputReceived?.Invoke("Controller", line, "stdout");
+                    OutputReceived?.Invoke("Controller", SecurityRedactor.Redact(line) ?? string.Empty, "stdout");
             }, ct);
 
             var stderrTask = Task.Run(async () =>
             {
                 while (await process.StandardError.ReadLineAsync(ct) is { } line)
-                    OutputReceived?.Invoke("Controller", line, "stderr");
+                    OutputReceived?.Invoke("Controller", SecurityRedactor.Redact(line) ?? string.Empty, "stderr");
             }, ct);
 
             await process.WaitForExitAsync(ct);
@@ -327,7 +413,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                     var output = await checkProcess.StandardOutput.ReadToEndAsync(ct);
                     await checkProcess.WaitForExitAsync(ct);
 
-                    OutputReceived?.Invoke("Controller", $"Completion check: {output.Trim()}", "info");
+                    OutputReceived?.Invoke("Controller", $"Completion check: {SecurityRedactor.Redact(output.Trim())}", "info");
 
                     if (checkProcess.ExitCode != 0 || output.Contains("DONE", StringComparison.OrdinalIgnoreCase))
                     {
@@ -341,7 +427,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             if (process.ExitCode != 0)
             {
                 var detail = ExitCodeReference.Describe(process.ExitCode);
-                var errMsg = $"Local command failed: {fileName} {arguments}. [{detail}]".TrimEnd();
+                var errMsg = $"Local command failed: {SecurityRedactor.RedactCommandLine(fileName, arguments)}. [{detail}]".TrimEnd();
                 OutputReceived?.Invoke("Controller", $"[FAIL] Exit code {process.ExitCode}: {detail}", "stderr");
                 return new ActionResult(false, process.ExitCode, errMsg);
             }
@@ -401,7 +487,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             catch (OperationCanceledException) { throw; }
         }
 
-        _logger.LogWarning("Agent {Agent} still busy after 30s — proceeding anyway", agentName);
+        _logger.LogWarning("Agent {Agent} still busy after 30s ï¿½ proceeding anyway", agentName);
     }
 
     private async Task WaitForAgentReady(
@@ -409,19 +495,36 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         TimeSpan timeout, CancellationToken ct)
     {
         var deadline = DateTime.UtcNow + timeout;
+        bool sawUnreachable = false;
+
         while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
             try
             {
-                await client.GetStateAsync(new Empty(),
+                var reply = await client.GetStateAsync(new Empty(),
                     deadline: DateTime.UtcNow.AddSeconds(10),
                     cancellationToken: ct);
-                StatusChanged?.Invoke(agentName, "Online (post-reboot)");
-                _registry.UpdateStatus(agentName, "Online");
-                return;
+
+                if (reply.State == AgentState.Ready)
+                {
+                    StatusChanged?.Invoke(agentName, "Online (post-reboot)");
+                    _registry.UpdateStatus(agentName, "Online");
+                    return;
+                }
+                // Only treat Running as "back" if we saw the agent go down first
+                if (reply.State == AgentState.Running && sawUnreachable)
+                {
+                    StatusChanged?.Invoke(agentName, "Online (post-reboot)");
+                    _registry.UpdateStatus(agentName, "Online");
+                    return;
+                }
             }
-            catch { /* agent not ready yet */ }
+            catch
+            {
+                // Agent unreachable â€” reboot is in progress
+                sawUnreachable = true;
+            }
         }
     }
 

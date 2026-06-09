@@ -3,8 +3,7 @@ import { Eye, Server, Play, BarChart3, Activity, ScrollText } from 'lucide-react
 import WatchListTree from '../watchlist/WatchListTree';
 import NodeProperties from '../watchlist/NodeProperties';
 import WatchListToolbar from '../watchlist/WatchListToolbar';
-import AgentList from '../agents/AgentList';
-import AgentDetail from '../agents/AgentDetail';
+import AgentWorkspace from '../agents/AgentWorkspace';
 import LiveLogger from '../execution/LiveLogger';
 import SessionList from '../execution/SessionList';
 import ExecutionDashboard from '../execution/ExecutionDashboard';
@@ -96,14 +95,9 @@ function WatchListPage() {
 
 function AgentsPage() {
   return (
-    <>
-      <Sidebar title="Agents">
-        <AgentList />
-      </Sidebar>
-      <main className="flex-1 overflow-auto p-4">
-        <AgentDetail />
-      </main>
-    </>
+    <main className="flex-1 overflow-hidden">
+      <AgentWorkspace />
+    </main>
   );
 }
 

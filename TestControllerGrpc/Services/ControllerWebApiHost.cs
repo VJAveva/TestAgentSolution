@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TestController.Api;
+using TestController.Api.Security;
 using TestController.Api.Services;
 using TestControllerGrpc.Models;
 
@@ -32,6 +33,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly AgentLockManager _lockManager;
     private readonly IAppLogger _appLogger;
     private readonly ILogger<ControllerWebApiHost> _logger;
+    private readonly IConfiguration _config;
     private readonly int _port;
     private WebApplication? _app;
     private Task? _serverTask;
@@ -63,13 +65,41 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _lockManager = lockManager;
         _appLogger = appLogger;
         _logger = logger;
+        _config = config;
         _port = config.GetValue<int>("WebApiPort", 5200);
     }
 
     public Task StartAsync(CancellationToken ct)
     {
+        // Fail fast if required WPF-bridge services are not wired
+        ValidateBridgedDependencies();
         _serverTask = Task.Run(() => RunServerAsync(ct), ct);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Validates that all required WPF-bridged services are non-null before starting the server.
+    /// Fail-fast prevents silent runtime failures from missing DI registrations.
+    /// </summary>
+    private void ValidateBridgedDependencies()
+    {
+        var problems = new List<string>();
+
+        if (_dispatcher is null) problems.Add(nameof(IAgentGrpcDispatcher));
+        if (_sessionManager is null) problems.Add(nameof(ExecutionSessionManager));
+        if (_executor is null) problems.Add(nameof(IActionPipelineExecutor));
+        if (_lockManager is null) problems.Add(nameof(AgentLockManager));
+        if (_events is null) problems.Add(nameof(IEventAggregator));
+        if (_appLogger is null) problems.Add(nameof(IAppLogger));
+
+        if (problems.Count > 0)
+        {
+            var msg = $"Embedded WebApi host cannot start â€” missing bridged services: {string.Join(", ", problems)}";
+            _logger.LogCritical(msg);
+            throw new InvalidOperationException(msg);
+        }
+
+        _logger.LogDebug("Embedded WebApi host dependency validation passed");
     }
 
     private async Task RunServerAsync(CancellationToken ct)
@@ -77,6 +107,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         try
         {
             var builder = WebApplication.CreateBuilder();
+
+            // Import the WPF app's configuration (so Security section is available)
+            builder.Configuration.AddConfiguration(_config);
 
             builder.WebHost.ConfigureKestrel(kestrel =>
             {
@@ -103,6 +136,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_lockManager);
             builder.Services.AddSingleton(_appLogger);
 
+            // Register security services (ISessionOwnershipChecker, ISecurityAuditLogger, auth)
+            builder.Services.AddMultiIdentitySecurity(builder.Configuration);
+
             // Use the shared API library for controllers, hub, and bridge
             builder.Services.AddControllerApi()
                 .AddJsonOptions(o =>
@@ -117,6 +153,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                 o.EnableDetailedErrors = true;
                 o.MaximumReceiveMessageSize = 128 * 1024;
             });
+            builder.Services.AddScoped<Microsoft.AspNetCore.SignalR.IHubFilter, TestController.Api.Hubs.HubExceptionFilter>();
 
             builder.Services.AddCors(options =>
             {
@@ -125,8 +162,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                     policy.WithOrigins(
                             "http://localhost:3000",
                             "http://localhost:5173",
+                            "http://localhost:8080",
                             "http://localhost:8081",
                             $"http://{Environment.MachineName}:3000",
+                            $"http://{Environment.MachineName}:8080",
                             $"http://{Environment.MachineName}:8081",
                             $"http://{Environment.MachineName}")
                         .AllowAnyHeader()
@@ -141,6 +180,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             _app = builder.Build();
 
             _app.UseCors("WebClient");
+
+            // Authentication + authorization middleware
+            _app.UseMultiIdentitySecurity();
 
             // Map shared controllers, hub, and start the SignalR bridge
             // (UseControllerApi registers RequestLoggingMiddleware)
@@ -158,7 +200,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken ct)
     {
-        _logger.LogInformation("WebApi + SignalR server stopping…");
+        _logger.LogInformation("WebApi + SignalR server stoppingï¿½");
 
         // Dispose the notifier first to unsubscribe from all events
         if (_app is not null)

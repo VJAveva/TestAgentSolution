@@ -80,6 +80,50 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(ResolvedAgentName));
     }
 
+    /// <summary>Auto-sync IsEnabled toggle back to the model (e.g. WatchItemConfig.IsEnabled).</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    private static bool _suppressIsEnabledPropagation;
+
+    partial void OnIsEnabledChanged(bool value)
+    {
+        if (ModelObject is WatchItemConfig wi)
+            wi.IsEnabled = value;
+
+        // Propagate parent → children: when WatchList root is toggled, update all WatchItem children
+        if (!_suppressIsEnabledPropagation && NodeKind == NodeKinds.WatchList)
+        {
+            _suppressIsEnabledPropagation = true;
+            try
+            {
+                foreach (var child in Children)
+                {
+                    if (child.NodeKind == NodeKinds.WatchItem)
+                        child.IsEnabled = value;
+                }
+            }
+            finally
+            {
+                _suppressIsEnabledPropagation = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes whether all WatchItem children are enabled (true), none (false), or mixed (null).
+    /// Used by UI for three-state display on the WatchList root.
+    /// </summary>
+    public bool? ComputeChildrenEnabledState()
+    {
+        if (NodeKind != NodeKinds.WatchList || Children.Count == 0) return IsEnabled;
+        var watchItems = Children.Where(c => c.NodeKind == NodeKinds.WatchItem).ToList();
+        if (watchItems.Count == 0) return IsEnabled;
+        bool allEnabled = watchItems.All(c => c.IsEnabled);
+        bool allDisabled = watchItems.All(c => !c.IsEnabled);
+        if (allEnabled) return true;
+        if (allDisabled) return false;
+        return null; // mixed
+    }
+
     // ── Tree search/filter visibility ───────────────────────────────
     [ObservableProperty] private bool _isFilterVisible = true;
 
@@ -151,6 +195,23 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         FailureMessage = message;
         ExecutionStatus = "Failed";
+    }
+
+    /// <summary>Mark this node as Cancelled and recursively cancel any descendants still showing Running.</summary>
+    public void CancelWithDescendants()
+    {
+        ExecutionStatus = "Cancelled";
+        CancelRunningDescendants();
+    }
+
+    private void CancelRunningDescendants()
+    {
+        foreach (var c in Children)
+        {
+            if (c.ExecutionStatus == "Running")
+                c.ExecutionStatus = "Cancelled";
+            c.CancelRunningDescendants();
+        }
     }
 
     /// <summary>Recursively set status on this node and all descendants.</summary>
@@ -453,7 +514,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public static TreeNodeViewModel FromAction(ActionConfig a)
     {
         var icon = ResolveCommandIcon(a.Command, a.Type);
-        var tag = DeriveActionTag(a);
+        var tag = a.ResolvedTag;
         var label = a.Type switch
         {
             ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(a.AgentName)
@@ -513,6 +574,26 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         }
     }
 
+    public void EnsureDefaultActionTag()
+    {
+        if (NodeKind != NodeKinds.Action || !string.IsNullOrWhiteSpace(Tag)) return;
+
+        var actionType = Enum.TryParse<ActionType>(ActionTypeText, out var at)
+            ? at
+            : ActionType.RunCommand;
+
+        var action = new ActionConfig
+        {
+            Type = actionType,
+            AgentName = AgentName,
+            Command = Command,
+            To = To,
+            Title = Title
+        };
+
+        Tag = action.ResolvedTag;
+    }
+
     public static TreeNodeViewModel FromInitialize(InitializeConfig init) => new()
     {
         NodeKind = NodeKinds.Initialize, NodeIcon = "i",
@@ -551,7 +632,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 ag.ExecutionType = Enum.TryParse<ExecutionMode>(ExecutionTypeText, out var am) ? am : ExecutionMode.Sequential;
                 ag.FailAndContinue = FailAndContinue; break;
             case ActionConfig a:
+                EnsureDefaultActionTag();
                 a.Type = Enum.TryParse<ActionType>(ActionTypeText, out var at) ? at : ActionType.RunCommand;
+                a.Tag = Tag;
                 a.AgentName = AgentName; a.Command = Command; a.Parameters = Parameters;
                 a.Timeout = Timeout; a.PollInterval = PollInterval;
                 a.FailAndContinue = FailAndContinue; a.IsReboot = IsReboot;
@@ -603,10 +686,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         return label.Length > 100 ? label[..100] + "\u2026" : label;
     }
 
-    /// <summary>Find the TreeNodeViewModel whose ModelObject matches the given IActionNode.</summary>
+    /// <summary>Find the TreeNodeViewModel whose ModelObject matches the given IActionNode (by NodeId or reference).</summary>
     public TreeNodeViewModel? FindByModel(object model)
     {
         if (ReferenceEquals(ModelObject, model)) return this;
+        // Match by stable NodeId so snapshot-cloned nodes resolve correctly
+        if (model is IActionNode target && ModelObject is IActionNode mine
+            && target.NodeId == mine.NodeId)
+            return this;
         foreach (var c in Children)
         {
             var found = c.FindByModel(model);

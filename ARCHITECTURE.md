@@ -1,7 +1,7 @@
 # TestAgentSolution — Architecture & System Design Document
 
-> **Version:** 1.0  
-> **Target Framework:** .NET 9 (Windows)  
+> **Version:** 1.1  
+> **Target Framework:** .NET 10 (Windows)  
 > **Transport:** gRPC over HTTP/2 (Protobuf)  
 > **Repository:** `https://github.com/VJAveva/TestAgentSolution`
 
@@ -196,7 +196,7 @@ The controller is a **WPF desktop application** that embeds an ASP.NET Core Kest
 
 | Service | Responsibility |
 |---------|----------------|
-| `AgentGrpcDispatcher` | Manages gRPC channels to agents. Dispatches `RunCommandStreamed`, `GetState`, `GetAgentSnapshot`. Handles reboot wait-for-ready loops. Also executes local commands on the controller machine. |
+| `AgentGrpcDispatcher` | Manages gRPC channels to agents. Dispatches `RunCommandStreamed`, `GetState`, `GetAgentSnapshot`. Handles reboot wait-for-ready loops. Also executes local commands on the controller machine. Tracks active executions to prevent concurrent gRPC calls on the same channel. Supports configurable timeouts via `ControllerTimeoutOptions`, automatic busy-recovery polling, `ForceReady` escalation, and auto channel reset after consecutive failures. |
 | `ActionPipelineExecutor` | Depth-first tree walker for the WatchList action tree. Handles Sequential/Parallel execution, `FailAndContinue`, `Initialize`, `Ref ? Template` expansion, `RunCommand`, `RunRemoteCommand`, `SendMail`. |
 | `FileWatcherManager` | Creates `FileSystemWatcher` instances per `WatchItem`. Maps file events (Renamed/Created/Changed) to pipeline executions. Supports hot-reload. |
 | `VocabularyMonitor` | Monitors the WatchList XML file for external changes. Debounces (500ms) and fires `ConfigReloaded` for live reload. |
@@ -242,7 +242,8 @@ Program.cs
 
 | Service | Responsibility |
 |---------|----------------|
-| `CommandExecutor` | Executes commands via `Process.Start`. Streams stdout/stderr line-by-line through `Channel<T>`. Supports cancellation, timeout, credential-based execution (`runas`), and script interpreter resolution (`.bat`?`cmd.exe`, `.ps1`?`powershell.exe`). Uses `SemaphoreSlim(1,1)` for single-execution guard. |
+| `CommandExecutor` | Executes commands via `Process.Start`. Streams stdout/stderr line-by-line through `Channel<T>`. Supports cancellation, timeout, credential-based execution (`runas`), and script interpreter resolution (`.bat`?`cmd.exe`, `.ps1`?`powershell.exe`). Uses `SemaphoreSlim(1,1)` for single-execution guard. Exposes `ForceReady()` for watchdog-initiated state recovery. |
+| `StuckExecutionWatchdog` | `BackgroundService` that polls every 60s. If agent is stuck in `Running` beyond `MaxExecutionTimeoutMinutes + WatchdogGraceMinutes`, forcibly resets state via `CommandExecutor.ForceReady()`. Nuclear fallback for when normal CTS timeout fails. |
 | `EventBroadcaster` | Multi-subscriber pub-sub hub using `Channel<T>` with `BoundedChannelOptions.DropOldest`. Non-blocking publish. Each subscriber (gRPC stream, tray UI, controller push) gets an independent channel. |
 | `ExecutionTracker` | Ring buffer of `ExecutionRecord` with full stdout/stderr capture, timing, exit codes, and outcome tracking. Queryable via `GetHistory`. |
 | `SystemMetricsCollector` | Collects CPU usage (delta-based), memory (GC info + working set), disk free space, active process count. |
@@ -522,6 +523,8 @@ Network Requirements:
 | `AgentSettings.MaxExecutionHistoryCount` | int | `200` | Ring buffer size for execution history |
 | `AgentSettings.MaxOutputLinesPerExecution` | int | `5000` | Max stdout/stderr lines captured per execution |
 | `AgentSettings.CollectSystemMetrics` | bool | `true` | Enable CPU/memory/disk collection |
+| `AgentSettings.MaxExecutionTimeoutMinutes` | int | `120` | Hard safety-net timeout for executions with no explicit timeout |
+| `AgentSettings.WatchdogGraceMinutes` | int | `5` | Grace period beyond MaxExecutionTimeoutMinutes before watchdog force-resets |
 
 ---
 
@@ -529,12 +532,12 @@ Network Requirements:
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| **Runtime** | .NET | 9.0 |
+| **Runtime** | .NET | 10.0 |
 | **Transport** | gRPC (Protobuf) | Grpc.AspNetCore 2.62, Google.Protobuf 3.26 |
 | **Server** | ASP.NET Core Kestrel | Built-in (HTTP/2) |
-| **Controller UI** | WPF | .NET 9 Windows |
-| **Agent UI** | WinForms | .NET 9 Windows |
-| **Dashboard UI** | WPF | .NET 9 Windows |
+| **Controller UI** | WPF | .NET 10 Windows |
+| **Agent UI** | WinForms | .NET 10 Windows |
+| **Dashboard UI** | WPF | .NET 10 Windows |
 | **MVVM** | CommunityToolkit.Mvvm | 8.2.2 |
 | **DI/Hosting** | Microsoft.Extensions.Hosting | 10.0.3 |
 | **XML Editor** | AvalonEdit | 6.3.0.90 |
@@ -568,3 +571,6 @@ The agent uses the same pattern: `app.RunAsync()` on a background thread, `Appli
 
 ### 8. Hot-Reload Vocabulary
 `VocabularyMonitor` watches the XML file with debounced reload (500ms). On change, it re-parses the config, tears down all `FileSystemWatcher` instances, and recreates them — enabling live configuration updates without restarting the controller.
+
+### 9. Active Execution Guard & Stuck-State Recovery
+During active `RunCommandStreamed` calls, the dispatcher tracks the agent in `_activeExecutions` and returns synthetic snapshots for health polls — preventing concurrent HTTP/2 calls from triggering GOAWAY/RST_STREAM. On the agent side, `StuckExecutionWatchdog` forcibly resets state if the normal timeout/cancellation flow fails. The controller escalates to `ForceReady` RPC after configurable busy-recovery polling, and auto-resets gRPC channels after consecutive failure thresholds.

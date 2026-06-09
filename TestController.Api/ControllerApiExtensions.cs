@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using TestController.Api.Hubs;
 using TestController.Api.Middleware;
 using TestController.Api.Services;
@@ -31,8 +31,13 @@ public static class ControllerApiExtensions
         }
 
         services.AddSingleton<CachedBuildResultsProvider>();
+        services.AddSingleton<FailurePatternAnalyzer>();
+        services.AddSingleton<ExecutionLogCorrelator>();
         services.AddSingleton<SignalRNotifier>();
         services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
+
+        // Lock recovery options: defaults are fine, hosts can override via Configure<LockRecoveryOptions>()
+        services.TryAddSingleton(Microsoft.Extensions.Options.Options.Create(new LockRecoveryOptions()));
 
         // Lock recovery: validates persisted locks against agent state on startup
         services.AddHostedService<LockRecoveryService>();
@@ -48,7 +53,7 @@ public static class ControllerApiExtensions
     /// </summary>
     public static WebApplication UseControllerApi(this WebApplication app, string hubPath = "/hubs/controller")
     {
-        // Request correlation + logging middleware — must be before controllers
+        // Request correlation + logging middleware ï¿½ must be before controllers
         app.UseMiddleware<RequestLoggingMiddleware>();
 
         app.MapControllers();

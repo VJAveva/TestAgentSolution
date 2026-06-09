@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace TestControllerGrpc.Services;
@@ -15,7 +14,7 @@ namespace TestControllerGrpc.Services;
 ///   - Only the session owner or WPF admin can release locks
 ///   - Lock state is persisted to disk and restored on startup
 ///
-/// DESIGN DECISION � SESSION-LEVEL LOCKING:
+/// DESIGN DECISION � SESSION-LEVEL LOCKING:
 ///   Locks are released at the SESSION level, never at the action level.
 ///   Even when one agent finishes early in a parallel pipeline, it stays
 ///   locked until the entire session completes. This prevents another
@@ -121,50 +120,65 @@ public sealed class AgentLockManager
     /// <summary>
     /// Releases all agents locked by a specific session.
     /// Called when a session completes, fails, or is cancelled.
+    /// Uses _atomicLock to prevent race with TryLockAgents.
     /// </summary>
     public int ReleaseSession(string sessionId)
     {
-        int released = 0;
-        foreach (var kvp in _locks)
+        lock (_atomicLock)
         {
-            if (string.Equals(kvp.Value.SessionId, sessionId,
-                StringComparison.OrdinalIgnoreCase))
+            int released = 0;
+            foreach (var kvp in _locks)
             {
-                if (_locks.TryRemove(kvp.Key, out _))
-                    released++;
+                if (string.Equals(kvp.Value.SessionId, sessionId,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    // Verify value still belongs to this session before removing
+                    if (_locks.TryGetValue(kvp.Key, out var current) &&
+                        string.Equals(current.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _locks.TryRemove(kvp.Key, out _);
+                        released++;
+                    }
+                }
             }
+            if (released > 0)
+            {
+                Interlocked.Increment(ref _version);
+                PersistToDisk();
+            }
+            return released;
         }
-        if (released > 0)
-        {
-            Interlocked.Increment(ref _version);
-            PersistToDisk();
-        }
-        return released;
     }
 
     /// <summary>Force-releases a single agent. WPF admin only.</summary>
     public bool ForceRelease(string agentName)
     {
-        if (_locks.TryRemove(agentName, out _))
+        lock (_atomicLock)
         {
-            Interlocked.Increment(ref _version);
-            PersistToDisk();
-            return true;
+            if (_locks.TryRemove(agentName, out _))
+            {
+                Interlocked.Increment(ref _version);
+                PersistToDisk();
+                return true;
+            }
+            return false;
         }
-        return false;
     }
 
     /// <summary>Force-releases all agents. WPF admin emergency reset.</summary>
     public int ForceReleaseAll()
     {
-        int count = _locks.Count;
-        _locks.Clear();
-        if (count > 0)
+        lock (_atomicLock)
         {
-            Interlocked.Increment(ref _version);
-            PersistToDisk();
+            int count = _locks.Count;
+            _locks.Clear();
+            if (count > 0)
+            {
+                Interlocked.Increment(ref _version);
+                PersistToDisk();
+            }
+            return count;
         }
-        return count;
     }
 
     /// <summary>Returns all current locks (for dashboard/API).</summary>
@@ -198,7 +212,7 @@ public sealed class AgentLockManager
     }
 
     /// <summary>
-    /// Detects orphaned locks � locks whose session is no longer active.
+    /// Detects orphaned locks � locks whose session is no longer active.
     /// </summary>
     public IReadOnlyList<AgentLock> FindOrphanedLocks(
         Func<string, bool> isSessionActive)
@@ -230,7 +244,10 @@ public sealed class AgentLockManager
     /// <summary>The file path used for lock persistence, if configured.</summary>
     public string? PersistPath => _persistPath;
 
-    // ?? Persistence ?????????????????????????????????????????????????
+    // ── Persistence ───────────────────────────────────────────────────
+
+    /// <summary>Current schema version for lock persistence format.</summary>
+    private const int PersistSchemaVersion = 1;
 
     private void PersistToDisk()
     {
@@ -246,17 +263,21 @@ public sealed class AgentLockManager
                     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                         Directory.CreateDirectory(dir);
 
-                    var snapshot = _locks.Values.Select(l => new PersistedLock
+                    var envelope = new PersistedLockEnvelope
                     {
-                        AgentName = l.AgentName,
-                        SessionId = l.SessionId,
-                        WatchItemTag = l.WatchItemTag,
-                        UserId = l.UserId,
-                        Source = l.Source,
-                        LockedAtUtc = l.LockedAtUtc.ToString("o"),
-                    }).ToArray();
+                        SchemaVersion = PersistSchemaVersion,
+                        Locks = _locks.Values.Select(l => new PersistedLock
+                        {
+                            AgentName = l.AgentName,
+                            SessionId = l.SessionId,
+                            WatchItemTag = l.WatchItemTag,
+                            UserId = l.UserId,
+                            Source = l.Source,
+                            LockedAtUtc = l.LockedAtUtc.ToString("o"),
+                        }).ToArray(),
+                    };
 
-                    var json = JsonSerializer.Serialize(snapshot,
+                    var json = JsonSerializer.Serialize(envelope,
                         new JsonSerializerOptions { WriteIndented = true });
 
                     var tempPath = _persistPath + ".tmp";
@@ -279,7 +300,22 @@ public sealed class AgentLockManager
         try
         {
             var json = File.ReadAllText(_persistPath);
-            var entries = JsonSerializer.Deserialize<PersistedLock[]>(json);
+
+            // Try new envelope format first
+            PersistedLock[]? entries = null;
+            try
+            {
+                var envelope = JsonSerializer.Deserialize<PersistedLockEnvelope>(json);
+                if (envelope?.SchemaVersion >= 1)
+                    entries = envelope.Locks;
+            }
+            catch (JsonException)
+            {
+                // Fall through to legacy format
+            }
+
+            // Fallback: legacy format (bare array of PersistedLock)
+            entries ??= JsonSerializer.Deserialize<PersistedLock[]>(json);
             if (entries == null) return;
 
             foreach (var entry in entries)
@@ -313,5 +349,11 @@ public sealed class AgentLockManager
         public string UserId { get; init; } = "";
         public string Source { get; init; } = "";
         public string LockedAtUtc { get; init; } = "";
+    }
+
+    private record PersistedLockEnvelope
+    {
+        public int SchemaVersion { get; init; }
+        public PersistedLock[] Locks { get; init; } = [];
     }
 }

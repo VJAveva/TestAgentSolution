@@ -24,7 +24,7 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
       const ag = node;
       return {
         id: nextId(), nodeKind: 'ActionGroup',
-        displayText: `[${ag.executionType}] ${ag.tag || 'Group'}`,
+        displayText: ag.tag || 'Group',
         tag: ag.tag, executionStatus: 'Idle',
         children: ag.children.map(c => buildActionNodeTree(c, depth + 1)),
         isExpanded: false, depth, model: node,
@@ -32,33 +32,36 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
     }
     case 'Action': {
       const a = node;
-      const label = a.type === 'RunRemoteCommand' && a.agentName
-        ? `Remote on '${a.agentName}' → ${a.command}`
-        : a.type === 'SendMail' ? `SendMail → ${a.to}` : a.command || 'Action';
+      const fileName = a.command ? a.command.split(/[/\\]/).pop() || a.command : '';
+      const label = a.tag
+        ? (a.agentName ? `${a.tag}:${a.agentName}` : a.tag)
+        : a.agentName
+          ? `${a.agentName} [${fileName}]`
+          : fileName || 'Action';
       return {
         id: nextId(), nodeKind: 'Action', displayText: label,
-        tag: a.order || a.command || '', executionStatus: 'Idle', children: [],
+        tag: a.tag || a.order || a.command || '', executionStatus: 'Idle', children: [],
         isExpanded: false, depth, model: node,
       };
     }
     case 'Initialize':
       return {
         id: nextId(), nodeKind: 'Initialize',
-        displayText: `Initialize: ${node.tag || node.parameterFile}`,
+        displayText: node.tag || (node.parameterFile ? node.parameterFile.split(/[/\\]/).pop()! : 'Initialize'),
         tag: node.tag, executionStatus: 'Idle', children: [],
         isExpanded: false, depth, model: node,
       };
     case 'Ref':
       return {
         id: nextId(), nodeKind: 'Ref',
-        displayText: `Ref ? ${node.templateID}`,
+        displayText: node.templateID || 'Ref',
         tag: '', executionStatus: 'Idle', children: [],
         isExpanded: false, depth, model: node,
       };
     default:
       return {
         id: nextId(), nodeKind: 'Action',
-        displayText: `Unknown (${(node as any).nodeType})`,
+        displayText: 'Unknown',
         tag: '', executionStatus: 'Idle', children: [],
         isExpanded: false, depth, model: node,
       };
@@ -74,12 +77,12 @@ function buildTree(config: WatchListConfig): TreeNode[] {
     children: config.watchItems.map((wi: WatchItemConfig) => {
       const wiNode: TreeNode = {
         id: nextId(), nodeKind: 'WatchItem',
-        displayText: `${wi.tag || 'Untitled'} (${wi.path}${wi.filter})`,
+        displayText: wi.tag || 'Untitled',
         tag: wi.tag, executionStatus: 'Idle',
         children: wi.events.map((ev: EventConfig) => {
           const evNode: TreeNode = {
             id: nextId(), nodeKind: 'Event',
-            displayText: `Event: ${ev.type} (${ev.executionType})`,
+            displayText: ev.type || 'Event',
             tag: '', executionStatus: 'Idle',
             children: ev.children.map(c => buildActionNodeTree(c, 3)),
             isExpanded: false, depth: 2, model: ev,

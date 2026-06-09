@@ -20,6 +20,11 @@ public static class WatchListXmlParser
 
         var config = new WatchListConfig { FilePath = filePath };
 
+        // Parse GlobalVariablesFile attribute from root element
+        var globalVarsAttr = root.Attribute("GlobalVariablesFile");
+        if (globalVarsAttr is not null)
+            config.GlobalVariablesFile = globalVarsAttr.Value;
+
         // Phase 3.22: detect deprecated install-log attributes once and emit a
         // single warning so users know the attributes will be silently dropped
         // on the next save.
@@ -47,6 +52,7 @@ public static class WatchListXmlParser
                 Tag = Attr(wiEl, "Tag"),
                 Path = Attr(wiEl, "Path"),
                 Filter = Attr(wiEl, "Filter", "*.*"),
+                IsEnabled = !string.Equals(Attr(wiEl, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase),
                 BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
                 DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
                 BuildBasePath = Attr(wiEl, "BuildBasePath"),
@@ -95,6 +101,7 @@ public static class WatchListXmlParser
                         FailAndContinue = AttrBool(el, "FailAndContinue"),
                         IsReboot = AttrBool(el, "IsReboot"),
                         Order = Attr(el, "Order"),
+                        Tag = Attr(el, "Tag"),
                         CompletionCheckCommand = Attr(el, "CompletionCheckCommand"),
                         CompletionPollIntervalSeconds = AttrInt(el, "CompletionPollIntervalSeconds", 30),
                         UserName = Attr(el, "UserName"),
@@ -138,6 +145,9 @@ public static class WatchListXmlParser
     {
         var root = new XElement("WatchList");
 
+        if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))
+            root.Add(new XAttribute("GlobalVariablesFile", config.GlobalVariablesFile));
+
         foreach (var wi in config.WatchItems)
         {
             var wiEl = new XElement("WatchItem",
@@ -145,6 +155,8 @@ public static class WatchListXmlParser
                 new XAttribute("Filter", wi.Filter));
             if (!string.IsNullOrEmpty(wi.Tag))
                 wiEl.Add(new XAttribute("Tag", wi.Tag));
+            if (!wi.IsEnabled)
+                wiEl.Add(new XAttribute("IsEnabled", "false"));
             AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
             AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
             AddIfNotEmpty(wiEl, "BuildBasePath", wi.BuildBasePath);
@@ -202,6 +214,7 @@ public static class WatchListXmlParser
                     if (a.FailAndContinue) aEl.Add(new XAttribute("FailAndContinue", "true"));
                     if (a.IsReboot) aEl.Add(new XAttribute("IsReboot", "true"));
                     AddIfNotEmpty(aEl, "Order", a.Order);
+                    AddIfNotEmpty(aEl, "Tag", a.Tag);
                     AddIfNotEmpty(aEl, "CompletionCheckCommand", a.CompletionCheckCommand);
                     if (a.CompletionPollIntervalSeconds != 30 && !string.IsNullOrEmpty(a.CompletionCheckCommand))
                         aEl.Add(new XAttribute("CompletionPollIntervalSeconds", a.CompletionPollIntervalSeconds));
@@ -247,6 +260,8 @@ public static class WatchListXmlParser
             attrs.Add(new XAttribute("Tag", wi.Tag));
         attrs.Add(new XAttribute("Path", wi.Path));
         attrs.Add(new XAttribute("Filter", wi.Filter));
+        if (!wi.IsEnabled)
+            attrs.Add(new XAttribute("IsEnabled", "false"));
 
         var wiEl = new XElement("WatchItem", attrs.ToArray());
         AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
@@ -274,6 +289,7 @@ public static class WatchListXmlParser
             Tag = Attr(wiEl, "Tag"),
             Path = Attr(wiEl, "Path"),
             Filter = Attr(wiEl, "Filter", "*.*"),
+            IsEnabled = !string.Equals(Attr(wiEl, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase),
             BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
             DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
             BuildBasePath = Attr(wiEl, "BuildBasePath"),

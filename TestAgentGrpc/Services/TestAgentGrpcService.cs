@@ -22,6 +22,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     private readonly SystemMetricsCollector _metrics;
     private readonly AuditLogger _audit;
     private readonly ConnectionHealthMonitor _healthMonitor;
+    private readonly EnhancedCommandPolicyEvaluator _policyEvaluator;
     private readonly AgentSettings _settings;
     private readonly ILogger<TestAgentGrpcService> _logger;
     private readonly DateTime _agentStartedUtc = DateTime.UtcNow;
@@ -33,17 +34,19 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         SystemMetricsCollector metrics,
         AuditLogger audit,
         ConnectionHealthMonitor healthMonitor,
+        EnhancedCommandPolicyEvaluator policyEvaluator,
         Microsoft.Extensions.Options.IOptions<AgentSettings> settings,
         ILogger<TestAgentGrpcService> logger)
     {
-        _executor      = executor;
-        _broadcaster   = broadcaster;
-        _tracker       = tracker;
-        _metrics       = metrics;
-        _audit         = audit;
-        _healthMonitor = healthMonitor;
-        _settings      = settings.Value;
-        _logger        = logger;
+        _executor        = executor;
+        _broadcaster     = broadcaster;
+        _tracker         = tracker;
+        _metrics         = metrics;
+        _audit           = audit;
+        _healthMonitor   = healthMonitor;
+        _policyEvaluator = policyEvaluator;
+        _settings        = settings.Value;
+        _logger          = logger;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -52,12 +55,15 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
     public override Task<StateReply> GetState(Empty request, ServerCallContext context)
     {
+        // Include hostname in response headers for auto-discovery
+        context.ResponseTrailers.Add("x-agent-hostname", Environment.MachineName);
         return Task.FromResult(new StateReply { State = _executor.CurrentState });
     }
 
     public override Task<RunCommandReply> RunCommand(RunCommandRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("RunCommand: {Cmd} {Args}", request.Command, request.Arguments);
+        _logger.LogInformation("RunCommand: {CmdLine}",
+            SecurityRedactor.RedactCommandLine(request.Command, request.Arguments));
 
         var (accepted, execId) = _executor.RunCommand(
             request.Command, request.Arguments, request.IsReboot, request.ExecutionId,
@@ -105,6 +111,13 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         return Task.FromResult(new Empty());
     }
 
+    public override Task<Empty> ForceReady(Empty request, ServerCallContext context)
+    {
+        _logger.LogWarning("ForceReady requested — forcibly resetting agent state");
+        _executor.ForceReady();
+        return Task.FromResult(new Empty());
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // NEW: Real-time execution monitoring RPCs
     // ═══════════════════════════════════════════════════════════════════
@@ -120,7 +133,12 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         IServerStreamWriter<ExecutionEvent> responseStream,
         ServerCallContext context)
     {
-        _logger.LogInformation("RunCommandStreamed: {Cmd} {Args}", request.Command, request.Arguments);
+        var correlationId = context.RequestHeaders
+            .FirstOrDefault(h => h.Key == "x-correlation-id")?.Value ?? "";
+
+        _logger.LogInformation("[{CorrelationId}] RunCommandStreamed: {CmdLine}",
+            correlationId,
+            SecurityRedactor.RedactCommandLine(request.Command, request.Arguments));
 
         // Convert timeout from seconds to milliseconds (0 = no timeout)
         var timeoutMs = request.TimeoutSeconds > 0 ? request.TimeoutSeconds * 1000 : 0;
@@ -156,7 +174,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
 
         _audit.Log("CommandReceived", source: context.Peer,
             executionId: execId, command: request.Command, arguments: request.Arguments,
-            credentials: string.IsNullOrEmpty(request.UserName) ? null : request.UserName);
+            credentials: string.IsNullOrEmpty(request.UserName) ? null : request.UserName,
+            correlationId: correlationId);
 
         // Stream events until execution completes or client disconnects
         try
@@ -213,7 +232,10 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         ExecutionHistoryRequest request, ServerCallContext context)
     {
         var reply = new ExecutionHistoryReply();
-        reply.Records.AddRange(_tracker.GetHistory().Select(r =>
+        reply.Records.AddRange(_tracker.GetHistory(
+            max: request.MaxResults,
+            filterCommand: string.IsNullOrEmpty(request.FilterCommand) ? null : request.FilterCommand
+        ).Select(r =>
         {
             var rec = new ExecutionRecord
             {
@@ -250,13 +272,26 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             ExecutionsFailed    = _tracker.FailedCount,
             AgentStarted       = Timestamp.FromDateTime(_agentStartedUtc),
             Metrics            = _metrics.Collect(),
+            AgentVersion       = typeof(TestAgentGrpcService).Assembly.GetName().Version?.ToString() ?? "0.0.0",
         };
+        snapshot.Capabilities.AddRange(AgentCapabilities);
 
         if (_executor.ExecutionStartedUtc is { } started)
             snapshot.ExecutionStarted = Timestamp.FromDateTime(DateTime.SpecifyKind(started, DateTimeKind.Utc));
 
         return Task.FromResult(snapshot);
     }
+
+    private static readonly string[] AgentCapabilities =
+    [
+        "ForceReady",
+        "TerminateExecution",
+        "StreamedOutput",
+        "ExecutionHistory",
+        "AuditLog",
+        "ConnectionHealth",
+        "CommandPolicy",
+    ];
 
     /// <summary>
     /// Returns audit log entries matching the requested date range and filters.
@@ -316,6 +351,24 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         if (_healthMonitor.DowntimeDuration is { } downtime)
             reply.LastDowntimeDuration = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(downtime);
 
+        return Task.FromResult(reply);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Command Policy Management
+    // ═══════════════════════════════════════════════════════════════════
+
+    public override Task<CommandPolicyReply> ReloadCommandPolicy(Empty request, ServerCallContext context)
+    {
+        _logger.LogInformation("ReloadCommandPolicy RPC invoked");
+        _policyEvaluator.Reload();
+
+        var reply = new CommandPolicyReply
+        {
+            Success = true,
+            Mode = _policyEvaluator.IsEnforced ? "Enforce" : _policyEvaluator.IsAuditOnly ? "AuditOnly" : "Disabled",
+            Message = "Command policy reloaded successfully"
+        };
         return Task.FromResult(reply);
     }
 }

@@ -1,5 +1,5 @@
 import React, {
-  createContext, useContext, useReducer,
+  createContext, useContext, useReducer, useState,
   useCallback, useEffect, type ReactNode, type Dispatch
 } from 'react';
 import { useConnectionStore, type SignalRStatus } from '../stores/connectionStore';
@@ -31,6 +31,7 @@ const initialState: ExecutionDashboardState = {
 // ── Actions ──
 type Action =
   | { type: 'SET_SESSIONS'; sessions: SessionSummary[] }
+  | { type: 'MERGE_LOGS'; logs: DashboardLogEntry[] }
   | { type: 'EXECUTION_STARTED'; data: any }
   | { type: 'EXECUTION_COMPLETED'; data: any }
   | { type: 'ACTION_PROGRESS'; data: any }
@@ -44,22 +45,83 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
   switch (action.type) {
     case 'SET_SESSIONS': {
       const map = new Map<string, SessionSummary>();
-      for (const s of action.sessions) map.set(s.sessionId, s);
+      for (const s of action.sessions) {
+        const session = { ...s, agents: s.agents || [] };
+
+        // Recompute progress from agent-level data when agents are present,
+        // because the top-level totalActions from the WPF controller may be
+        // incorrect (SnapshotNodes.Count only counts top-level nodes).
+        if (session.agents.length > 0) {
+          const agentTotal = session.agents
+            .reduce((sum: number, a: any) => sum + (a.totalCount ?? 0), 0);
+          const agentCompleted = session.agents
+            .reduce((sum: number, a: any) => sum + (a.completedCount ?? 0), 0);
+          if (agentTotal > 0) {
+            session.totalActions = agentTotal;
+            session.completedActions = agentCompleted;
+            session.progressPercent = Math.round(agentCompleted / agentTotal * 100);
+          }
+        }
+
+        map.set(session.sessionId, session);
+      }
       return { ...state, sessions: map };
+    }
+
+    case 'MERGE_LOGS': {
+      // Merge polled logs, avoiding duplicates by timestamp+message
+      const existing = new Set(state.logs.map(
+        (l: DashboardLogEntry) => `${l.timestamp}|${l.message}`));
+      const newEntries = action.logs.filter(
+        (l: DashboardLogEntry) => !existing.has(`${l.timestamp}|${l.message}`));
+      if (newEntries.length === 0) return state;
+      let logs = [...state.logs, ...newEntries];
+      if (logs.length > state.maxLogs) {
+        logs = logs.slice(-state.maxLogs);
+      }
+      return { ...state, logs };
     }
 
     case 'EXECUTION_STARTED': {
       const d = action.data;
+
+      // Build agent rows from pendingActions (all actions in the pipeline scope)
+      const agentMap = new Map<string, ActionExecution[]>();
+      if (Array.isArray(d.pendingActions)) {
+        for (const pa of d.pendingActions) {
+          const name = pa.agentName || 'Controller';
+          if (!agentMap.has(name)) agentMap.set(name, []);
+          agentMap.get(name)!.push({
+            tag: pa.tag || '',
+            actionType: pa.actionType || '',
+            agentName: name,
+            command: pa.command || '',
+            status: 'Pending' as ActionStatus,
+          });
+        }
+      }
+
+      const agents = Array.from(agentMap.entries()).map(([name, actions]) => ({
+        agentName: name,
+        status: 'Idle' as const,
+        actions,
+        completedCount: 0,
+        totalCount: actions.length,
+        progressPercent: 0,
+      }));
+
       const session: SessionSummary = {
         sessionId: d.sessionId,
-        watchItemTag: d.watchItemTag,
+        watchItemTag: d.watchItemTag || '',
         userId: d.userId || '',
         source: d.source || 'WebClient',
         status: 'Running',
         startedUtc: d.startTime || new Date().toISOString(),
         elapsed: '00:00',
-        agents: [],
-        totalActions: d.totalActions || 0,
+        agents: agents.length > 0 ? agents : (d.agents || []),
+        totalActions: agents.length > 0
+          ? agents.reduce((sum, a) => sum + a.totalCount, 0)
+          : (d.totalActions || 0),
         completedActions: 0,
         passedActions: 0,
         failedActions: 0,
@@ -80,8 +142,8 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
         next.set(d.sessionId, {
           ...existing,
           status: d.state as SessionStatus,
-          passedActions: d.passed ?? existing.passedActions,
-          failedActions: d.failed ?? existing.failedActions,
+          passedActions: d.passed > 0 ? d.passed : existing.passedActions,
+          failedActions: d.failed > 0 ? d.failed : existing.failedActions,
           elapsed: d.totalDuration ?? existing.elapsed,
           progressPercent: 100,
         });
@@ -148,14 +210,20 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
               duration: d.duration,
             }];
           } else if (actionIdx >= 0) {
-            agent.actions = [...agent.actions];
-            agent.actions[actionIdx] = {
-              ...agent.actions[actionIdx],
-              status: actionStatus,
-              exitCode: d.exitCode,
-              errorMessage: d.errorMessage,
-              duration: d.duration,
-            };
+            // Never downgrade a terminal status (matches WPF AgentRowVM logic)
+            const currentStatus = agent.actions[actionIdx].status;
+            const isTerminal = currentStatus === 'Success' || currentStatus === 'Failed' || currentStatus === 'Skipped';
+            const isDemotion = actionStatus === 'Running' || actionStatus === 'Pending';
+            if (!(isTerminal && isDemotion)) {
+              agent.actions = [...agent.actions];
+              agent.actions[actionIdx] = {
+                ...agent.actions[actionIdx],
+                status: actionStatus,
+                exitCode: d.exitCode,
+                errorMessage: d.errorMessage,
+                duration: d.duration,
+              };
+            }
           }
 
           // Update agent counters
@@ -262,9 +330,9 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   const [state, dispatch] = useReducer(reducer, initialState);
   const connection = useConnectionStore((s: { connection: any }) => s.connection);
 
-  // Load existing sessions on mount
-  useEffect(() => {
-    apiFetch<{ active: any[]; history: any[] }>('/api/execution/dashboard-sessions')
+  // Fetch sessions from the proxy endpoint (returns WPF controller data)
+  const fetchProxySessions = useCallback(() => {
+    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/proxy/dashboard-sessions')
       .then(data => {
         const all = [
           ...(data.active || []),
@@ -276,9 +344,60 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
         for (const s of data.active || []) {
           joinSession(connection, s.sessionId);
         }
-      })
-      .catch(logCatch('useExecutionDashboard', 'fetchSessions'));
+        return data;
+      });
   }, [connection]);
+
+  // Load existing sessions on mount
+  useEffect(() => {
+    fetchProxySessions().catch(logCatch('useExecutionDashboard', 'fetchSessions'));
+  }, [fetchProxySessions]);
+
+  // Poll the proxy endpoint so that sessions triggered from the WPF
+  // controller (whose SignalR events don't flow to this WebApi hub) still
+  // appear and update in real-time.
+  // Track active state so the interval can speed up (3s) or slow down (8s).
+  const [hasActive, setHasActive] = useState(false);
+  useEffect(() => {
+    const interval = hasActive ? 3000 : 8000;
+    const id = setInterval(() => {
+      fetchProxySessions().catch(() => {/* swallow – proxy may be down */});
+    }, interval);
+    return () => clearInterval(id);
+  }, [fetchProxySessions, hasActive]);
+
+  // Poll logs from WPF controller for active sessions.
+  // The WPF controller exposes /api/execution/{sessionId}/recent-logs which
+  // the WebApi proxies at /api/execution/proxy/logs/{sessionId}.
+  const [activeSessionIds, setActiveSessionIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (activeSessionIds.length === 0) return;
+
+    const fetchLogs = () => {
+      for (const sid of activeSessionIds) {
+        apiFetch<{ logs: DashboardLogEntry[]; sessionId: string }>(
+          `/api/execution/proxy/logs/${encodeURIComponent(sid)}`
+        )
+          .then(data => {
+            if (!data.logs || data.logs.length === 0) return;
+            const mapped: DashboardLogEntry[] = data.logs.map((l: any) => ({
+              timestamp: l.timestamp || '',
+              sessionId: data.sessionId || sid,
+              agentName: l.agentName || '',
+              category: l.category || 'log',
+              message: l.message || '',
+              severity: l.severity || 'Info',
+            }));
+            dispatch({ type: 'MERGE_LOGS', logs: mapped });
+          })
+          .catch(() => {/* proxy may be down */});
+      }
+    };
+
+    fetchLogs();
+    const id = setInterval(fetchLogs, 4000);
+    return () => clearInterval(id);
+  }, [activeSessionIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to SignalR events for dashboard-specific state
   useEffect(() => {
@@ -301,17 +420,27 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
       dispatch({ type: 'LOG_ENTRY', data });
     };
 
+    const onCancelled = (data: any) => {
+      dispatch({ type: 'EXECUTION_COMPLETED', data: { ...data, state: 'Cancelled' } });
+    };
+
     connection.on('ExecutionStarted', onStarted);
     connection.on('ExecutionCompleted', onCompleted);
+    connection.on('ExecutionCancelled', onCancelled);
     connection.on('ActionProgress', onProgress);
     connection.on('AgentOutput', onOutput);
+    connection.on('AgentOutputBatch', (batch: any[]) => {
+      for (const data of batch) onOutput(data);
+    });
     connection.on('LogEntry', onLog);
 
     return () => {
       connection.off('ExecutionStarted', onStarted);
       connection.off('ExecutionCompleted', onCompleted);
+      connection.off('ExecutionCancelled', onCancelled);
       connection.off('ActionProgress', onProgress);
       connection.off('AgentOutput', onOutput);
+      connection.off('AgentOutputBatch');
       connection.off('LogEntry', onLog);
     };
   }, [connection]);
@@ -322,6 +451,20 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     .filter((s: SessionSummary) => s.status === 'Running' || s.status === 'Queued')
     .sort((a: SessionSummary, b: SessionSummary) =>
       new Date(b.startedUtc).getTime() - new Date(a.startedUtc).getTime());
+
+  // Update polling speed and log targets when active sessions change
+  const currentHasActive = activeSessions.length > 0;
+  const currentActiveIds = activeSessions.map(s => s.sessionId);
+  useEffect(() => {
+    setHasActive(currentHasActive);
+  }, [currentHasActive]);
+  useEffect(() => {
+    setActiveSessionIds(prev => {
+      const next = currentActiveIds;
+      if (prev.length === next.length && prev.every((id, i) => id === next[i])) return prev;
+      return next;
+    });
+  }, [currentActiveIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const completedSessions = sessions
     .filter((s: SessionSummary) => s.status !== 'Running' && s.status !== 'Queued')

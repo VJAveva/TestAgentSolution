@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useWatchListStore } from '../stores/watchlistStore';
 import { useAgentStore } from '../stores/agentStore';
 import { useExecutionStore } from '../stores/executionStore';
+import { useResultsStore } from '../stores/resultsStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { getUserId } from '../lib/userIdentity';
 import type { NodeStatus, WatchListConfig } from '../types/api';
@@ -59,6 +60,10 @@ export function useSignalR(): HubConnection | null {
       }
       conn.invoke('JoinAsUser', getUserId()).catch(err =>
         console.warn('[SignalR] JoinAsUser failed:', err?.message ?? err));
+      // Request browser notification permission for background session completion alerts
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
     }).catch(err => {
       console.error(
         `[SignalR] start() failed: ${err?.message ?? err} ? retry in 30s`, err);
@@ -85,7 +90,11 @@ export function useSignalR(): HubConnection | null {
     console.log(`[SignalR] Connecting to ${hubUrl}`);
 
     const conn = new HubConnectionBuilder()
-      .withUrl(hubUrl)
+      .withUrl(hubUrl, {
+        // Pass browser credentials (cookies/NTLM) for Domain/Local auth modes.
+        // Harmless in None mode; Token mode would need a bearer token accessTokenFactory.
+        withCredentials: true,
+      })
       // Indefinite reconnect (see policy above) instead of the previous
       // 5-attempt array which gave up after ~47s and left the WebClient
       // permanently offline on any longer outage (sleep, server restart,
@@ -129,27 +138,21 @@ export function useSignalR(): HubConnection | null {
 
     // ?? ControllerHub events (matches SignalRBridge.cs broadcasts) ??
 
-    // Per-action status: fired by ActionPipelineExecutor.NodeProgress
+    // Per-action and per-group status: fired by ActionPipelineExecutor.NodeProgress.
+    // Group progress is delivered via ActionProgress with a groupTag field.
     conn.on('ActionProgress', (data: {
-      actionTag?: string; agentName?: string; command?: string; status?: string;
+      actionTag?: string; groupTag?: string; agentName?: string; command?: string; status?: string;
     }) => {
-      const tag = data.actionTag || data.command || '';
       const mapped: NodeStatus =
         data.status === 'Running' ? 'Running'
         : data.status === 'Success' ? 'Success'
         : data.status === 'Failed' ? 'Failed'
         : 'Idle';
-      useWatchListStore.getState().updateNodeStatus(tag, mapped);
-    });
-
-    // ActionGroup status
-    conn.on('GroupProgress', (data: { groupTag?: string; status?: string }) => {
+      const actionTag = data.actionTag || data.command || '';
+      if (actionTag) {
+        useWatchListStore.getState().updateNodeStatus(actionTag, mapped);
+      }
       if (data.groupTag) {
-        const mapped: NodeStatus =
-          data.status === 'Running' ? 'Running'
-          : data.status === 'Success' ? 'Success'
-          : data.status === 'Failed' ? 'Failed'
-          : 'Idle';
         useWatchListStore.getState().updateNodeStatus(data.groupTag, mapped);
       }
     });
@@ -186,6 +189,37 @@ export function useSignalR(): HubConnection | null {
         timestamp: new Date().toISOString(),
         severity: data.state === 'Success' ? 'success' : data.state === 'Failed' ? 'error' : 'warning',
       });
+
+      // Browser notification when tab is hidden so QA doesn't miss completion
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        const icon = data.state === 'Success' ? '✅' : data.state === 'Failed' ? '❌' : '⚠️';
+        new Notification(`${icon} Pipeline ${data.state}`, {
+          body: data.watchItemTag ?? data.sessionId ?? 'Unknown session',
+          tag: `execution-${data.sessionId}`,
+        });
+      }
+    });
+
+    // Single-session cancel broadcasts ExecutionCancelled (not ExecutionCompleted)
+    conn.on('ExecutionCancelled', (data: {
+      sessionId?: string; watchItemTag?: string;
+    }) => {
+      if (data.watchItemTag) {
+        useWatchListStore.getState().updateNodeStatus(data.watchItemTag, 'Idle');
+      }
+      useExecutionStore.getState().addLog({
+        message: `Execution Cancelled: ${data.watchItemTag ?? data.sessionId}`,
+        sessionId: data.sessionId,
+        timestamp: new Date().toISOString(),
+        severity: 'warning',
+      });
+    });
+
+    // Results updated: re-fetch builds list when new results are available
+    conn.on('ResultsUpdated', () => {
+      axios.get('/api/results/builds').then(({ data }) => {
+        useResultsStore.getState().setBuilds(data.items ?? []);
+      }).catch(() => {});
     });
 
     // Pipeline log entries
@@ -204,15 +238,33 @@ export function useSignalR(): HubConnection | null {
 
     // Agent output (stdout/stderr from remote agents)
     conn.on('AgentOutput', (data: {
-      agentName?: string; line?: string; kind?: string;
+      agentName?: string; line?: string; kind?: string; sessionId?: string;
     }) => {
       useExecutionStore.getState().addLog({
         message: data.line ?? '',
         agent: data.agentName,
+        sessionId: data.sessionId,
         timestamp: new Date().toISOString(),
         kind: data.kind as 'stdout' | 'stderr',
         severity: data.kind === 'stderr' ? 'error' : 'info',
       });
+    });
+
+    // Batched output (scale fix: server batches lines every 500ms)
+    conn.on('AgentOutputBatch', (batch: Array<{
+      agentName?: string; line?: string; kind?: string; sessionId?: string;
+    }>) => {
+      const store = useExecutionStore.getState();
+      for (const data of batch) {
+        store.addLog({
+          message: data.line ?? '',
+          agent: data.agentName,
+          sessionId: data.sessionId,
+          timestamp: new Date().toISOString(),
+          kind: data.kind as 'stdout' | 'stderr',
+          severity: data.kind === 'stderr' ? 'error' : 'info',
+        });
+      }
     });
 
     // Agent lifecycle
@@ -225,8 +277,13 @@ export function useSignalR(): HubConnection | null {
     conn.on('AgentStatusChanged', (data: { agentName?: string; status?: string }) => {
       if (data.agentName && data.status) useAgentStore.getState().updateStatus(data.agentName, data.status);
     });
-    conn.on('AgentHeartbeats', (_batch: unknown[]) => {
-      // Heartbeat payloads handled by agent detail components if needed
+    conn.on('AgentHeartbeats', (batch: Array<{ agentName?: string; state?: string }>) => {
+      const store = useAgentStore.getState();
+      for (const hb of batch) {
+        if (hb.agentName && hb.state) {
+          store.updateStatus(hb.agentName, hb.state);
+        }
+      }
     });
 
     // WatchList hot-reload: refetch tree when server signals config change

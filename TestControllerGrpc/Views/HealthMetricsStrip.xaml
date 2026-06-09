@@ -1,0 +1,91 @@
+<UserControl x:Class="TestControllerGrpc.Views.HealthMetricsStrip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:TestControllerGrpc.Views"
+             VerticalAlignment="Center">
+
+    <UserControl.Resources>
+        <local:HealthLevelToBrushConverter x:Key="HealthBrush" />
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+
+        <Style x:Key="MetricLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+        </Style>
+
+        <Style x:Key="MetricValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="HealthDot"
+                             Storyboard.TargetProperty="Opacity"
+                             From="1" To="0.3" Duration="0:0:0.6"
+                             AutoReverse="True" />
+        </Storyboard>
+    </UserControl.Resources>
+
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+        <!-- CPU -->
+        <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center" ToolTip="{Binding CpuTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="CPU" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding CpuHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding CpuPercent, StringFormat={}{0:F0}%}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,5" Opacity="0.5" />
+
+        <!-- Memory -->
+        <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center" ToolTip="{Binding MemoryTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="MEM" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding MemoryHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding MemoryUsedGb, StringFormat={}{0:F1} GB}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,5" Opacity="0.5" />
+
+        <!-- Disk -->
+        <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center" ToolTip="{Binding DiskTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="DISK" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding DiskHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding DiskPercent, StringFormat={}{0:F0}%}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,5" Opacity="0.5" />
+
+        <!-- Network Latency -->
+        <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center" ToolTip="{Binding NetworkTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="NET" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding NetworkHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding NetworkLatencyMs, StringFormat={}{0:F0} ms}" />
+            </TextBlock>
+        </StackPanel>
+
+        <Rectangle Width="1" Fill="{DynamicResource Bdr}" Margin="0,5" Opacity="0.5" />
+
+        <!-- Agents -->
+        <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center" ToolTip="{Binding AgentsTooltip}">
+            <TextBlock Style="{StaticResource MetricLabel}" Text="AGENTS" />
+            <TextBlock Style="{StaticResource MetricValue}"
+                       Foreground="{Binding AgentsHealth, Converter={StaticResource HealthBrush}}">
+                <Run Text="{Binding AgentsOnline, Mode=OneWay}" /><Run Text="/" Foreground="{DynamicResource TextS}" /><Run Text="{Binding AgentsTotal, Mode=OneWay}" />
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Hidden elements for pulse animation target -->
+        <Ellipse x:Name="HealthDot" Width="0" Height="0" Opacity="1" />
+
+    </StackPanel>
+</UserControl>

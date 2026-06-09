@@ -9,6 +9,7 @@ export default {
         'acc-green': '#A6E3A1',
         'acc-red': '#F38BA8',
         'acc-yellow': '#F9E2AF',
+        'acc-amber': '#F5C542',
         'acc-peach': '#FAB387',
         'acc-mauve': '#CBA6F7',
         'acc-blue': '#3B82F6',

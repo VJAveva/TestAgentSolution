@@ -15,6 +15,12 @@ public sealed class WatchListConfig
     public string FilePath { get; set; } = "";
 
     /// <summary>
+    /// Path to a global variables parameter file applied across all WatchItems.
+    /// Tokens from this file are loaded first (before per-WatchItem Initialize files).
+    /// </summary>
+    public string GlobalVariablesFile { get; set; } = "";
+
+    /// <summary>
     /// Non-fatal diagnostic messages produced during <c>WatchListXmlParser.Load</c>
     /// (e.g. deprecated attribute usage). UI hosts surface these via their
     /// log panel after a successful load. Empty for files that parse cleanly.
@@ -71,6 +77,13 @@ public interface IActionNode
 {
     [JsonIgnore]
     string NodeType { get; }
+
+    /// <summary>
+    /// Stable identity that survives deep-clone (snapshot isolation).
+    /// Used by the UI to match progress events back to tree nodes.
+    /// </summary>
+    [JsonIgnore]
+    string NodeId { get; set; }
 }
 
 // =============================================================================
@@ -80,6 +93,8 @@ public sealed class ActionGroupConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "ActionGroup";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string Tag { get; set; } = "";
     public ExecutionMode ExecutionType { get; set; } = ExecutionMode.Sequential;
     public bool FailAndContinue { get; set; }
@@ -93,6 +108,8 @@ public sealed class ActionConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "Action";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public ActionType Type { get; set; } = ActionType.RunCommand;
     public string AgentName { get; set; } = "";
     public string Command { get; set; } = "";
@@ -103,6 +120,47 @@ public sealed class ActionConfig : IActionNode
     public bool FailAndContinue { get; set; }
     public bool IsReboot { get; set; }
     public string Order { get; set; } = "";
+
+    /// <summary>
+    /// Human-readable tag for this action, displayed in the Pipeline view as the
+    /// action pill label. Resolution order: Tag → Order → generated short label.
+    /// Example: "Install WSP", "Copy files", "Reboot".
+    /// </summary>
+    public string Tag { get; set; } = "";
+
+    /// <summary>
+    /// Returns the best available display tag for this action.
+    /// Resolution: explicit Tag → explicit Order → generated short label from Command/Type.
+    /// </summary>
+    [JsonIgnore]
+    public string ResolvedTag
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Tag)) return Tag;
+            if (!string.IsNullOrWhiteSpace(Order)) return Order;
+            return GenerateShortLabel();
+        }
+    }
+
+    private string GenerateShortLabel()
+    {
+        if (Type == ActionType.SendMail)
+            return !string.IsNullOrEmpty(To) ? $"Email: {To.Split(',')[0].Trim()}" : "SendMail";
+
+        var cmd = Command;
+        if (string.IsNullOrEmpty(cmd)) return Type.ToString();
+
+        // Extract filename without extension from path-like commands
+        if (cmd.Contains('\\') || cmd.Contains('/'))
+            cmd = System.IO.Path.GetFileNameWithoutExtension(cmd);
+
+        // Trim to reasonable length
+        if (cmd.Length > 24)
+            cmd = cmd[..22] + "..";
+
+        return cmd;
+    }
 
     /// <summary>
     /// Optional command to run after the main process exits to check if child processes (e.g. msiexec)
@@ -153,6 +211,8 @@ public sealed class InitializeConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "Initialize";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string Tag { get; set; } = "";
     public string ParameterFile { get; set; } = "";
 }
@@ -164,6 +224,8 @@ public sealed class RefConfig : IActionNode
 {
     [JsonIgnore]
     public string NodeType => "Ref";
+    [JsonIgnore]
+    public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string TemplateID { get; set; } = "";
 }
 
@@ -222,6 +284,9 @@ public sealed class ExecutionSession
     /// <summary>Who triggered this session.</summary>
     public string UserId { get; set; } = "";
 
+    /// <summary>Security identifier of the session owner (SID for Windows, token ID for token mode).</summary>
+    public string OwnerSid { get; set; } = "";
+
     /// <summary>"WebClient" or "WPF".</summary>
     public string Source { get; set; } = "";
 
@@ -229,14 +294,36 @@ public sealed class ExecutionSession
     public string[] LockedAgents { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// Cancellation token source for this session. Call <see cref="RequestCancellation"/>
-    /// to signal the running pipeline to stop. The token is passed through to the executor.
+    /// Cancellation token source for this session. Prefer using <see cref="CancellationToken"/>,
+    /// <see cref="RequestCancellation"/>, and <see cref="DisposeCancellation"/> instead
+    /// of accessing the CTS directly.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public CancellationTokenSource Cts { get; } = new();
+    [Obsolete("Use CancellationToken, IsCancellationRequested, RequestCancellation(), DisposeCancellation() instead.")]
+    public CancellationTokenSource Cts => _cts;
+
+    private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>Token that pipelines should observe for cancellation requests.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public CancellationToken CancellationToken => _cts.Token;
+
+    /// <summary>Whether cancellation has been requested for this session.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsCancellationRequested => _cts.IsCancellationRequested;
 
     /// <summary>Signals cancellation to the running pipeline.</summary>
-    public void RequestCancellation() => Cts.Cancel();
+    public void RequestCancellation() => _cts.Cancel();
+
+    /// <summary>
+    /// Disposes the internal CancellationTokenSource. Call only after the session
+    /// is fully complete and no code references the token. Safe to call multiple times.
+    /// </summary>
+    public void DisposeCancellation()
+    {
+        try { _cts.Dispose(); }
+        catch (ObjectDisposedException) { }
+    }
 
     // GAP 10 fix: Thread-safe collection for parallel action groups.
     // Parallel ExecuteChildrenAsync calls RecordResult from multiple threads

@@ -35,6 +35,23 @@ public partial class SessionCardVM : ObservableObject
         _           => Status,
     };
 
+    /// <summary>
+    /// Severity rank for triage-first sorting.
+    /// Higher rank = more urgent (sorts first in descending order).
+    /// </summary>
+    public int SeverityRank => Status switch
+    {
+        "Failed"    => 100,
+        "Running" when FailedActions > 0 => 90,  // Running but has failures
+        "Running"   => 10,
+        "Cancelled" => 5,
+        "Success"   => 0,
+        _           => 5
+    };
+
+    /// <summary>Group key for triage display: "NeedsAttention" or "Normal".</summary>
+    public string AttentionGroup => SeverityRank >= 90 ? "NeedsAttention" : "Normal";
+
     public string Summary =>
         $"{Agents.Count} agents | " +
         $"{PassedActions} passed, {FailedActions} failed | " +
@@ -68,22 +85,31 @@ public partial class SessionCardVM : ObservableObject
         ProgressPercent = TotalActions > 0
             ? (int)(CompletedActions * 100.0 / TotalActions) : 0;
 
+        // Raise derived-property notifications only once at the end
+        // instead of per-counter setter (reduces cascading INPC storms).
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(StatusBadge));
+        OnPropertyChanged(nameof(SeverityRank));
+        OnPropertyChanged(nameof(AttentionGroup));
     }
 
-    partial void OnStatusChanged(string value)
+    // ── Dirty-guarded cascades ──────────────────────────────────────
+    private string _lastStatusBadge = "";
+    private string _lastSummary = "";
+
+    private void RaiseDerivedIfChanged()
     {
-        OnPropertyChanged(nameof(StatusBadge));
-        OnPropertyChanged(nameof(Summary));
+        var badge = StatusBadge;
+        if (badge != _lastStatusBadge) { _lastStatusBadge = badge; OnPropertyChanged(nameof(StatusBadge)); }
+        var sum = Summary;
+        if (sum != _lastSummary) { _lastSummary = sum; OnPropertyChanged(nameof(Summary)); }
     }
 
-    partial void OnPassedActionsChanged(int value)
-        => OnPropertyChanged(nameof(Summary));
+    partial void OnStatusChanged(string value) => RaiseDerivedIfChanged();
 
-    partial void OnFailedActionsChanged(int value)
-        => OnPropertyChanged(nameof(Summary));
+    partial void OnPassedActionsChanged(int value) => RaiseDerivedIfChanged();
 
-    partial void OnProgressPercentChanged(int value)
-        => OnPropertyChanged(nameof(Summary));
+    partial void OnFailedActionsChanged(int value) => RaiseDerivedIfChanged();
+
+    partial void OnProgressPercentChanged(int value) => RaiseDerivedIfChanged();
 }

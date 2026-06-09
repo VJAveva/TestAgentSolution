@@ -13,8 +13,9 @@ export function useAgents() {
   }, [setAgents]);
 
   const registerAgent = useCallback(async (name: string, address: string) => {
-    await axios.post('/api/agents/register', { name, address });
+    const { data } = await axios.post('/api/agents/register', { name, address });
     await fetchAgents();
+    return data as { name: string; address: string; status: string; healthy: boolean; message: string; detail: string | null };
   }, [fetchAgents]);
 
   const unregisterAgent = useCallback(async (name: string) => {

@@ -5,6 +5,8 @@ using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
+using TestControllerGrpc.Views.Dialogs;
+
 namespace TestControllerGrpc.ViewModels;
 
 // ?? Import/Export WatchItems + Templates ????????????????????????????
@@ -52,7 +54,7 @@ public sealed partial class MainViewModel
                     // Skip items that are currently executing
                     if (_sessionManager.HasActiveExecution(item.Tag))
                     {
-                        AddLog($"? Skipped '{item.Tag}' — currently executing", LogSeverity.Warning);
+                        AddLog($"? Skipped '{item.Tag}' ï¿½ currently executing", LogSeverity.Warning);
                         skipped++;
                         continue;
                     }
@@ -82,7 +84,7 @@ public sealed partial class MainViewModel
             // Update executor templates
             _executor.LoadTemplates(_config.Templates);
 
-            // INCREMENTAL tree update — insert new nodes, update replaced nodes
+            // INCREMENTAL tree update ï¿½ insert new nodes, update replaced nodes
             // WITHOUT destroying existing TreeNodeViewModels (preserves execution status)
             Application.Current?.Dispatcher.InvokeAsync(() =>
             {
@@ -113,12 +115,12 @@ public sealed partial class MainViewModel
                         }
                         else if (existingNode is null)
                         {
-                            // Brand new item — append to tree
+                            // Brand new item ï¿½ append to tree
                             var newNode = TreeNodeViewModel.FromWatchItem(item);
                             newNode.Parent = WatchListRoot;
                             WatchListRoot.Children.Add(newNode);
                         }
-                        // else: item is currently executing — already skipped above,
+                        // else: item is currently executing ï¿½ already skipped above,
                         // node stays as-is with its execution status
                     }
 
@@ -162,7 +164,14 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            AddLog($"? Import failed: {ex.Message}", LogSeverity.Error);
+            var fileName = Path.GetFileName(dlg.FileName);
+            _appLogger.Error("Import", $"Failed to import WatchItems from '{dlg.FileName}': {ex.Message}", ex);
+            AddLog($"âŒ Import failed: {ex.Message}", LogSeverity.Error);
+            ThemedMessageBox.Show(
+                $"Failed to import WatchItems from '{fileName}'.\n\n{ex.GetType().Name}: {ex.Message}",
+                "Import Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
 
@@ -264,7 +273,7 @@ public sealed partial class MainViewModel
                 if (_config.Templates.Any(e =>
                     string.Equals(e.ID, t.ID, StringComparison.OrdinalIgnoreCase)))
                 {
-                    var result = MessageBox.Show(
+                    var result = ThemedMessageBox.Show(
                         $"Template '{t.ID}' already exists. Replace it?",
                         "Duplicate Template",
                         MessageBoxButton.YesNo,

@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Models;
 
@@ -10,9 +11,9 @@ namespace TestControllerGrpc.Services;
 ///
 /// Concrete executors:
 /// <list type="bullet">
-///   <item><c>TestControllerGrpc.Services.ActionPipelineExecutor</c> (WPF host) —
+///   <item><c>TestControllerGrpc.Services.ActionPipelineExecutor</c> (WPF host) ï¿½
 ///     adds Polly resilience, smart retry, TRX parsing and SendMail.</item>
-///   <item><c>TestController.WebApi.Services.StandalonePipelineExecutor</c> (WebApi host) —
+///   <item><c>TestController.WebApi.Services.StandalonePipelineExecutor</c> (WebApi host) ï¿½
 ///     simple Local/Remote dispatch via <c>IAgentGrpcDispatcher</c>.</item>
 /// </list>
 /// Methods are <c>protected virtual</c> where useful overrides are plausible
@@ -118,12 +119,70 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
         // Link the external cancellation token with the session's own CTS so
         // both _sessionManager.CancelSession() and external cancellation work.
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.Cts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
 
         try
         {
             await ExecuteChildrenTrackedAsync(
                 snapshotChildren, evt.ExecutionType, true, ctx, session, linkedCts.Token);
+        }
+        finally
+        {
+            _sessionManager.CompleteSession(session.SessionId);
+            Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
+        }
+    }
+
+    public async Task<bool> ExecuteGroupTrackedAsync(
+        string watchItemTag, ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        var snapshotChildren = group.Children.Select(DeepCloneNode).ToList();
+        var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
+
+        var session = _sessionManager.BeginSession(
+            watchItemTag, $"Group:{group.Tag}",
+            new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
+            snapshotChildren,
+            callerSessionId);
+
+        ctx.SessionId = session.SessionId;
+        Log("Session", $"Started {session.SessionId} for {watchItemTag}:Group:{group.Tag}");
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
+
+        try
+        {
+            var success = await ExecuteChildrenTrackedAsync(
+                snapshotChildren, group.ExecutionType, group.FailAndContinue, ctx, session, linkedCts.Token);
+            return success || group.FailAndContinue;
+        }
+        finally
+        {
+            _sessionManager.CompleteSession(session.SessionId);
+            Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
+        }
+    }
+
+    public async Task<bool> ExecuteSingleActionTrackedAsync(
+        string watchItemTag, ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        var clonedAction = (ActionConfig)DeepCloneNode(action);
+        var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
+
+        var session = _sessionManager.BeginSession(
+            watchItemTag, $"Action:{action.ResolvedTag}",
+            new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
+            [clonedAction],
+            callerSessionId);
+
+        ctx.SessionId = session.SessionId;
+        Log("Session", $"Started {session.SessionId} for {watchItemTag}:Action:{action.ResolvedTag}");
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
+
+        try
+        {
+            return await ExecuteActionTrackedAsync(clonedAction, ctx, session, linkedCts.Token);
         }
         finally
         {
@@ -169,14 +228,24 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     // ?? Core recursive executor (non-tracked) ?????????????????????????????
 
+    /// <summary>Max concurrent agent operations in parallel mode to prevent ThreadPool starvation.</summary>
+    private const int MaxParallelDegree = 50;
+
     protected async Task<bool> ExecuteChildrenAsync(
         List<IActionNode> children, ExecutionMode mode, bool parentFailAndContinue,
         PipelineExecutionContext ctx, CancellationToken ct)
     {
         if (mode == ExecutionMode.Parallel)
         {
-            var tasks = children.Select(child =>
-                ExecuteNodeAsync(child, ctx, ct)).ToList();
+            // Scale fix: Bound parallelism to prevent ThreadPool starvation at 200 agents.
+            // Without this, 200 parallel Task.WhenAll calls exhaust all available threads.
+            using var gate = new SemaphoreSlim(MaxParallelDegree, MaxParallelDegree);
+            var tasks = children.Select(async child =>
+            {
+                await gate.WaitAsync(ct);
+                try { return await ExecuteNodeAsync(child, ctx, ct); }
+                finally { gate.Release(); }
+            }).ToList();
             var results = await Task.WhenAll(tasks);
             return results.All(r => r);
         }
@@ -187,7 +256,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var success = await ExecuteNodeAsync(child, ctx, ct);
             if (!success && !parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping — FailAndContinue=false");
+                Log("Pipeline", "Stopping ï¿½ FailAndContinue=false");
                 return false;
             }
         }
@@ -231,7 +300,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found ï¿½ skipping");
             return false;
         }
 
@@ -247,8 +316,14 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (mode == ExecutionMode.Parallel)
         {
-            var tasks = children.Select(child =>
-                ExecuteNodeTrackedAsync(child, ctx, session, ct)).ToList();
+            // Scale fix: Bound parallelism to prevent ThreadPool starvation at 200 agents.
+            using var gate = new SemaphoreSlim(MaxParallelDegree, MaxParallelDegree);
+            var tasks = children.Select(async child =>
+            {
+                await gate.WaitAsync(ct);
+                try { return await ExecuteNodeTrackedAsync(child, ctx, session, ct); }
+                finally { gate.Release(); }
+            }).ToList();
             var results = await Task.WhenAll(tasks);
             return results.All(r => r);
         }
@@ -259,7 +334,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct);
             if (!success && !parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping — FailAndContinue=false");
+                Log("Pipeline", "Stopping ï¿½ FailAndContinue=false");
                 return false;
             }
         }
@@ -283,10 +358,17 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
                 _                       => true,
             };
         }
+        catch (OperationCanceledException)
+        {
+            OnNodeProgress(node, "Cancelled");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Node execution error");
-            success = false;
+            OnNodeFailed(node, -1, ex.Message);
+            OnNodeProgress(node, "Failed");
+            return false;
         }
         OnNodeProgress(node, success ? "Success" : "Failed");
         return success;
@@ -298,7 +380,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found — skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found ï¿½ skipping");
             return false;
         }
 
@@ -327,7 +409,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         var result = new ActionExecutionResult
         {
-            ActionTag = !string.IsNullOrWhiteSpace(action.Order) ? action.Order : action.Command,
+            ActionTag = action.ResolvedTag,
             ActionType = action.Type.ToString(),
             AgentName = action.AgentName,
             Command = action.Command,
@@ -350,6 +432,9 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         {
             result.Outcome = ActionOutcome.Terminated;
             result.Duration = sw.Elapsed;
+            _sessionManager.RecordResult(session.SessionId, result);
+            session.TrackAgentAction(result);
+            throw; // Re-throw so callers can update tree nodes to "Cancelled"
         }
         catch (TimeoutException)
         {
@@ -392,7 +477,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     //    invocable from derived classes) ?????????????????????????????????
 
     protected void OnLogEntry(PipelineLogEntry entry) => LogEntry?.Invoke(entry);
-    protected void OnNodeProgress(IActionNode node, string status) => NodeProgress?.Invoke(node, status);
+    protected void  OnNodeProgress(IActionNode node, string status) => NodeProgress?.Invoke(node, status);
     protected void OnNodeFailed(IActionNode node, int exitCode, string error)
         => NodeFailed?.Invoke(node, exitCode, error);
 
@@ -400,15 +485,17 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected void Log(string category, string message)
     {
-        _logger.LogInformation("[{Category}] {Message}", category, message);
-        OnLogEntry(new PipelineLogEntry(DateTime.Now, category, message));
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        _logger.LogInformation("[{Category}] {Message}", category, redactedMessage);
+        OnLogEntry(new PipelineLogEntry(DateTime.Now, category, redactedMessage));
     }
 
     protected void Log(string category, string message, PipelineExecutionContext ctx)
     {
-        _logger.LogInformation("[{Category}] {Message}", category, message);
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        _logger.LogInformation("[{Category}] {Message}", category, redactedMessage);
         OnLogEntry(new PipelineLogEntry(
-            DateTime.Now, category, message,
+            DateTime.Now, category, redactedMessage,
             AgentName: null,
             SessionId: ctx.SessionId));
     }
@@ -419,11 +506,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         ActionConfig a => new ActionConfig
         {
+            NodeId = a.NodeId,
             Type = a.Type, AgentName = a.AgentName,
             Command = a.Command, Parameters = a.Parameters,
             Timeout = a.Timeout, PollInterval = a.PollInterval,
             FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
-            Order = a.Order, UserName = a.UserName, Password = a.Password,
+            Order = a.Order, Tag = a.Tag,
+            UserName = a.UserName, Password = a.Password,
             From = a.From, To = a.To, Title = a.Title, Body = a.Body,
             Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
             MaxRetries = a.MaxRetries, RetryDelaySeconds = a.RetryDelaySeconds,
@@ -433,12 +522,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         },
         ActionGroupConfig g => new ActionGroupConfig
         {
+            NodeId = g.NodeId,
             Tag = g.Tag, ExecutionType = g.ExecutionType,
             FailAndContinue = g.FailAndContinue,
             Children = g.Children.Select(DeepCloneNode).ToList()
         },
-        InitializeConfig i => new InitializeConfig { Tag = i.Tag, ParameterFile = i.ParameterFile },
-        RefConfig r => new RefConfig { TemplateID = r.TemplateID },
+        InitializeConfig i => new InitializeConfig { NodeId = i.NodeId, Tag = i.Tag, ParameterFile = i.ParameterFile },
+        RefConfig r => new RefConfig { NodeId = r.NodeId, TemplateID = r.TemplateID },
         _ => node
     };
 }

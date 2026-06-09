@@ -1,17 +1,25 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace TestAgentGrpc.Services;
 
 /// <summary>
 /// Collects system resource metrics (CPU, memory, disk) for inclusion
 /// in heartbeats and agent snapshots.
+/// Results are cached for a short TTL to avoid expensive Process.GetProcesses()
+/// calls on every poll from multiple consumers.
 /// </summary>
 public sealed class SystemMetricsCollector
 {
     private readonly ILogger<SystemMetricsCollector> _logger;
+    private readonly object _cacheLock = new();
     private DateTime _lastCpuCheck = DateTime.MinValue;
     private TimeSpan _lastCpuTotal = TimeSpan.Zero;
     private double _lastCpuPct;
+
+    private ResourceMetrics? _cachedMetrics;
+    private DateTime _cacheTimestamp = DateTime.MinValue;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(2);
 
     public SystemMetricsCollector(ILogger<SystemMetricsCollector> logger)
     {
@@ -20,7 +28,22 @@ public sealed class SystemMetricsCollector
 
     public ResourceMetrics Collect()
     {
+        lock (_cacheLock)
+        {
+            if (_cachedMetrics != null && (DateTime.UtcNow - _cacheTimestamp) < CacheTtl)
+                return _cachedMetrics;
+
+            var metrics = CollectCore();
+            _cachedMetrics = metrics;
+            _cacheTimestamp = DateTime.UtcNow;
+            return metrics;
+        }
+    }
+
+    private ResourceMetrics CollectCore()
+    {
         var metrics = new ResourceMetrics();
+        metrics.OsDescription = RuntimeInformation.OSDescription;
 
         try
         {

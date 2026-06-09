@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -13,6 +14,8 @@ using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
+
+using TestControllerGrpc.Views.Dialogs;
 
 namespace TestControllerGrpc.Views;
 
@@ -28,11 +31,25 @@ public partial class MainWindow : Window
     // ?? Drag-and-drop state ??????????????????????????????????????
     private Point _dragStartPoint;
     private TreeNodeViewModel? _draggedNode;
-    private bool _isDragging;
+    #pragma warning disable CS0414 // assigned but never read � used for drag-and-drop state tracking
+        private bool _isDragging;
+    #pragma warning restore CS0414
 
-    // ?? Dockable pane saved sizes ??????????????????????????????????
+    // ── Dockable pane saved sizes ──────────────────────────────────────────
     private GridLength _savedAgentColWidth = new(3, GridUnitType.Star);
+    private GridLength _savedTreeColWidth = new(2.5, GridUnitType.Star);
+    private GridLength _savedPropertiesColWidth = new(5, GridUnitType.Star);
     private GridLength _savedLogRowHeight = new(2, GridUnitType.Star);
+
+    // ── Panel sizing tokens (loaded from DesignTokens.xaml) ────────────────
+    private double _treePanelMinWidth = 220;
+    private double _agentPanelMinPinned = 280;
+    private double _agentPaneCollapsedWidth = 28;
+    private double _logPaneMinHeight = 120;
+    private double _logPaneCollapsedHeight = 28;
+    private double _treePanelMaxWidthPercent = 0.35;
+    private double _agentPanelMaxWidthPercent = 0.35;
+    private double _logPaneMaxHeightPercent = 0.40;
 
     // ?? System tray ??????????????????????????????????????????
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -41,6 +58,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LoadDesignTokens();
         _vm = App.Services.GetRequiredService<MainViewModel>();
         DataContext = _vm;
 
@@ -84,20 +102,11 @@ public partial class MainWindow : Window
     {
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
-            Text = "TestController",
+            Text = "TestController — Main",
             Visible = false,
         };
 
-        try
-        {
-            var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-            if (exePath != null)
-                _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-        }
-        catch
-        {
-            _trayIcon.Icon = System.Drawing.SystemIcons.Application;
-        }
+        _trayIcon.Icon = CreateControllerTrayIcon();
 
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
 
@@ -116,7 +125,7 @@ public partial class MainWindow : Window
 
             if (hasActive)
             {
-                var result = MessageBox.Show(
+                var result = ThemedMessageBox.Show(
                     "A pipeline is still running.\n\n" +
                     "Exiting will cancel all running executions.\n\n" +
                     "Continue?",
@@ -152,6 +161,27 @@ public partial class MainWindow : Window
             statusItem.Text = $"Status: {status}";
         };
         timer.Start();
+    }
+
+    /// <summary>
+    /// Creates a distinct 16x16 tray icon for the Controller (blue "TC" badge)
+    /// so it's visually distinguishable from the Execution Dashboard icon.
+    /// </summary>
+    private static System.Drawing.Icon CreateControllerTrayIcon()
+    {
+        using var bmp = new System.Drawing.Bitmap(16, 16);
+        using var g = System.Drawing.Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(System.Drawing.Color.FromArgb(30, 100, 200)); // blue background
+        using var font = new System.Drawing.Font("Segoe UI", 7f, System.Drawing.FontStyle.Bold);
+        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.White);
+        var sf = new System.Drawing.StringFormat
+        {
+            Alignment = System.Drawing.StringAlignment.Center,
+            LineAlignment = System.Drawing.StringAlignment.Center
+        };
+        g.DrawString("TC", font, brush, new System.Drawing.RectangleF(0, 0, 16, 16), sf);
+        return System.Drawing.Icon.FromHandle(bmp.GetHicon());
     }
 
     private void OnWindowClosing(object? sender, CancelEventArgs e)
@@ -282,6 +312,10 @@ public partial class MainWindow : Window
         {
             ApplyLogPaneLayout(_vm.IsLogPanePinned);
         }
+        else if (e.PropertyName == nameof(MainViewModel.IsTreePanePinned))
+        {
+            ApplyTreePaneLayout(_vm.IsTreePanePinned);
+        }
     }
 
     private void ApplyAgentPaneLayout(bool pinned)
@@ -289,19 +323,30 @@ public partial class MainWindow : Window
         if (pinned)
         {
             ColAgentPanel.Width = _savedAgentColWidth;
-            ColAgentPanel.MinWidth = 280;
+            ColAgentPanel.MinWidth = _agentPanelMinPinned;
             ColAgentSplitter.Width = GridLength.Auto;
-            ColNodeProperties.Width = new GridLength(3, GridUnitType.Star);
+            ColNodeProperties.Width = _savedPropertiesColWidth;
         }
         else
         {
             if (ColAgentPanel.Width.IsStar)
                 _savedAgentColWidth = ColAgentPanel.Width;
+            if (ColNodeProperties.Width.IsStar)
+                _savedPropertiesColWidth = ColNodeProperties.Width;
 
             ColAgentPanel.Width = GridLength.Auto;
-            ColAgentPanel.MinWidth = 28;
+            ColAgentPanel.MinWidth = _agentPaneCollapsedWidth;
             ColAgentSplitter.Width = new GridLength(0);
             ColNodeProperties.Width = new GridLength(1, GridUnitType.Star);
+
+            // Move focus to properties panel so keyboard users aren't stranded
+            Dispatcher.InvokeAsync(() =>
+            {
+                var propertiesPanel = MainContentGrid.Children
+                    .OfType<FrameworkElement>()
+                    .FirstOrDefault(c => Grid.GetColumn(c) == 2 && Grid.GetRow(c) == 0);
+                propertiesPanel?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }, System.Windows.Threading.DispatcherPriority.Input);
         }
     }
 
@@ -310,7 +355,7 @@ public partial class MainWindow : Window
         if (pinned)
         {
             RowLogPane.Height = _savedLogRowHeight;
-            RowLogPane.MinHeight = 120;
+            RowLogPane.MinHeight = _logPaneMinHeight;
         }
         else
         {
@@ -318,7 +363,78 @@ public partial class MainWindow : Window
                 _savedLogRowHeight = RowLogPane.Height;
 
             RowLogPane.Height = GridLength.Auto;
-            RowLogPane.MinHeight = 28;
+            RowLogPane.MinHeight = _logPaneCollapsedHeight;
+        }
+    }
+
+    private void ApplyTreePaneLayout(bool pinned)
+    {
+        if (pinned)
+        {
+            ColTreePanel.Width = _savedTreeColWidth;
+            ColTreePanel.MinWidth = _treePanelMinWidth;
+        }
+        else
+        {
+            if (ColTreePanel.Width.IsStar)
+                _savedTreeColWidth = ColTreePanel.Width;
+
+            ColTreePanel.Width = GridLength.Auto;
+            ColTreePanel.MinWidth = _agentPaneCollapsedWidth; // same 28px collapsed width
+
+            // Move keyboard focus to properties panel so user isn't stranded
+            Dispatcher.InvokeAsync(() =>
+            {
+                var propertiesPanel = MainContentGrid.Children
+                    .OfType<FrameworkElement>()
+                    .FirstOrDefault(c => Grid.GetColumn(c) == 2 && Grid.GetRow(c) == 0);
+                propertiesPanel?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            }, System.Windows.Threading.DispatcherPriority.Input);
+        }
+    }
+
+    // ── Design tokens ──────────────────────────────────────────────────────
+    private void LoadDesignTokens()
+    {
+        if (TryFindResource("TreePanelMinWidth") is double treePanelMin)
+            _treePanelMinWidth = treePanelMin;
+        if (TryFindResource("AgentPanelMinPinned") is double agentMin)
+            _agentPanelMinPinned = agentMin;
+        if (TryFindResource("AgentPaneCollapsedWidth") is double agentCollapsed)
+            _agentPaneCollapsedWidth = agentCollapsed;
+        if (TryFindResource("LogPaneMinHeight") is double logMin)
+            _logPaneMinHeight = logMin;
+        if (TryFindResource("LogPaneCollapsedHeight") is double logCollapsed)
+            _logPaneCollapsedHeight = logCollapsed;
+        if (TryFindResource("TreePanelMaxWidthPercent") is double treeMax)
+            _treePanelMaxWidthPercent = treeMax;
+        if (TryFindResource("AgentPanelMaxWidthPercent") is double agentMax)
+            _agentPanelMaxWidthPercent = agentMax;
+        if (TryFindResource("LogPaneMaxHeightPercent") is double logMax)
+            _logPaneMaxHeightPercent = logMax;
+    }
+
+    // ── MaxWidth / MaxHeight enforcement on resize ─────────────────────────
+    private void MainContentGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not Grid grid || grid.ActualWidth < 1 || grid.ActualHeight < 1)
+            return;
+
+        // Enforce max proportions using MaxWidth on grid columns.
+        // This avoids converting star→pixel which breaks proportional layout.
+        double maxTreeWidth = grid.ActualWidth * _treePanelMaxWidthPercent;
+        ColTreePanel.MaxWidth = _vm.IsTreePanePinned ? maxTreeWidth : double.PositiveInfinity;
+
+        double maxAgentWidth = grid.ActualWidth * _agentPanelMaxWidthPercent;
+        ColAgentPanel.MaxWidth = _vm.IsAgentPanePinned ? maxAgentWidth : double.PositiveInfinity;
+
+        // Log pane: clamp by ensuring main content row doesn't shrink below 250
+        if (_vm.IsLogPanePinned)
+        {
+            double maxLogHeight = grid.ActualHeight * _logPaneMaxHeightPercent;
+            double mainRowMinHeight = grid.ActualHeight - maxLogHeight - 4;
+            if (mainRowMinHeight > 250)
+                MainContentGrid.RowDefinitions[0].MinHeight = mainRowMinHeight;
         }
     }
 
@@ -340,7 +456,7 @@ public partial class MainWindow : Window
         if (_inlineFoldingManager is not null && _inlineFoldingStrategy is not null && _inlineEditor is not null)
         {
             try { _inlineFoldingStrategy.UpdateFoldings(_inlineFoldingManager, _inlineEditor.Document); }
-            catch (Exception) { /* XML parse errors expected during mid-edit � folding will retry on next keystroke */ }
+            catch (Exception) { /* XML parse errors expected during mid-edit � folding will retry on next keystroke */ }
         }
     }
 
@@ -358,7 +474,9 @@ public partial class MainWindow : Window
     {
         var node = WatchListTreeView.SelectedItem as TreeNodeViewModel;
         var nodeKind = node?.NodeKind;
-        if (nodeKind != _lastWatchListContextMenuNodeKind || _cachedWatchListContextMenu is null)
+        // Always rebuild for WatchItem (IsEnabled toggle is node-specific)
+        if (nodeKind != _lastWatchListContextMenuNodeKind || _cachedWatchListContextMenu is null
+            || nodeKind is "WatchItem")
         {
             _cachedWatchListContextMenu = BuildWatchListContextMenu(node);
             _lastWatchListContextMenuNodeKind = nodeKind;
@@ -382,6 +500,19 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(CreateMenuItemWithIcon("Trigger All Events", _vm.TriggerWatchItemCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
+
+            // Toggle: include/exclude this WatchItem from "Trigger All" execution
+            var enabledItem = new MenuItem
+            {
+                Header = "Include in Trigger All",
+                IsCheckable = true,
+                IsChecked = node.IsEnabled
+            };
+            var capturedNode = node;
+            enabledItem.Checked += (_, _) => capturedNode.IsEnabled = true;
+            enabledItem.Unchecked += (_, _) => capturedNode.IsEnabled = false;
+            menu.Items.Add(enabledItem);
+            menu.Items.Add(new Separator());
         }
         if (node.NodeKind is "Event")
         {
@@ -402,19 +533,30 @@ public partial class MainWindow : Window
         // ?? Add commands (context-sensitive) ??????????????????????????
         if (node.NodeKind is "WatchList")
         {
+            // Enable All / Disable All toggle for WatchList root
+            var enableAllItem = CreateMenuItemWithIcon("Enable All WatchItems", null, "\uE73E", "AccGreen");
+            enableAllItem.Click += (_, _) => node.IsEnabled = true;
+            menu.Items.Add(enableAllItem);
+
+            var disableAllItem = CreateMenuItemWithIcon("Disable All WatchItems", null, "\uE711", "AccRed");
+            disableAllItem.Click += (_, _) => node.IsEnabled = false;
+            menu.Items.Add(disableAllItem);
+            menu.Items.Add(new Separator());
+
             menu.Items.Add(CreateMenuItemWithIcon("Add WatchItem", _vm.AddWatchItemCommand, "\uE710", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems�", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
-            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems�", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems…", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML�", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML…", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(CreateMenuItemWithIcon("Edit Global Variables…", _vm.EditGlobalVariablesCommand, "\uE8A1", "AccYellow"));
         }
         else if (node.NodeKind is "WatchItem")
         {
             menu.Items.Add(CreateMenuItemWithIcon("Add Event", _vm.AddChildNodeCommand, "\uEA80", "AccYellow"));
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddActionGroupCommand, "\uE8F1", "Accent"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItemWithIcon("Export WatchItem�", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
+            menu.Items.Add(CreateMenuItemWithIcon("Export WatchItem�", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
         }
         else if (node.NodeKind is "Event" or "ActionGroup")
         {
@@ -526,6 +668,8 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "Template")
         {
+            menu.Items.Add(CreateMenuItemWithIcon("Edit Template XML…", _vm.EditSingleTemplateXmlCommand, "\uE70F", "AccMauve"));
+            menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
             menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
             menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToTemplateCommand, "\uE71B", "AccMauve"));
@@ -587,7 +731,7 @@ public partial class MainWindow : Window
 
     private static bool CanShowMoveItems(TreeNodeViewModel node)
     {
-        // Initialize is always first � no move
+        // Initialize is always first � no move
         if (node.NodeKind is "WatchList" or "TemplateList" or "Initialize") return false;
         return MainViewModel.CanMoveNode(node, -1) || MainViewModel.CanMoveNode(node, +1);
     }
@@ -718,13 +862,13 @@ public partial class MainWindow : Window
 
         if (targetNode.NodeKind is "Event" or "ActionGroup")
         {
-            // Drop INTO a container � append at end
+            // Drop INTO a container � append at end
             newParent = targetNode;
             insertIndex = newParent.Children.Count;
         }
         else
         {
-            // Drop NEXT TO a sibling � insert after the target
+            // Drop NEXT TO a sibling � insert after the target
             newParent = targetNode.Parent!;
             insertIndex = newParent.Children.IndexOf(targetNode) + 1;
         }

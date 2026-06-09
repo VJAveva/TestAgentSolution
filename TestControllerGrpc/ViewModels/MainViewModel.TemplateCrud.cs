@@ -76,6 +76,108 @@ public sealed partial class MainViewModel
         RebuildTemplateIds();
     }
 
+    /// <summary>Opens the XML editor for the currently selected individual template.</summary>
+    [RelayCommand]
+    private void EditSingleTemplateXml()
+    {
+        if (SelectedTemplateNode is null || SelectedTemplateNode.NodeKind != NodeKinds.Template) return;
+        if (SelectedTemplateNode.ModelObject is not TemplateConfig selectedTemplate) return;
+
+        WriteBackAll();
+        var xml = WatchListXmlParser.SerializeTemplateList(new List<TemplateConfig> { selectedTemplate });
+
+        var editorVm = new TemplateXmlEditorViewModel(xml);
+        editorVm.WindowTitle = $"Template XML Editor - {selectedTemplate.ID}";
+
+        var editorWindow = new Views.TemplateXmlEditorWindow(editorVm);
+        if (Application.Current.MainWindow is { } mainWindow)
+            editorWindow.Owner = mainWindow;
+
+        var result = editorWindow.ShowDialog();
+        if (result == true && editorVm.DialogAccepted)
+        {
+            try
+            {
+                var parsed = WatchListXmlParser.DeserializeTemplateList(editorVm.ResultXml);
+                if (parsed is null || parsed.Count == 0)
+                {
+                    AddLog("Template XML editor: could not parse template", LogSeverity.Error);
+                    return;
+                }
+
+                var newTemplate = parsed[0];
+
+                // Check if template ID was changed and warn about references
+                if (!string.Equals(selectedTemplate.ID, newTemplate.ID, StringComparison.OrdinalIgnoreCase))
+                {
+                    var refCount = CountTemplateReferences(selectedTemplate.ID);
+                    if (refCount > 0)
+                    {
+                        var answer = Views.Dialogs.ThemedMessageBox.Show(
+                            $"Renaming template '{selectedTemplate.ID}' to '{newTemplate.ID}' will break {refCount} Ref node(s) that reference it.\n\nContinue?",
+                            "Template Rename Warning",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning);
+                        if (answer != MessageBoxResult.Yes) return;
+                    }
+                }
+
+                // Replace in config
+                var idx = _config.Templates.IndexOf(selectedTemplate);
+                if (idx >= 0)
+                    _config.Templates[idx] = newTemplate;
+
+                // Replace in tree
+                if (SelectedTemplateNode.Parent is { } parent)
+                {
+                    var nodeIdx = parent.Children.IndexOf(SelectedTemplateNode);
+                    parent.Children.Remove(SelectedTemplateNode);
+                    var newNode = TreeNodeViewModel.FromTemplate(newTemplate);
+                    newNode.Parent = parent;
+                    if (nodeIdx >= 0 && nodeIdx <= parent.Children.Count)
+                        parent.Children.Insert(nodeIdx, newNode);
+                    else
+                        parent.Children.Add(newNode);
+                    SelectedTemplateNode = newNode;
+                }
+
+                RebuildTemplateIds();
+                _executor.LoadTemplates(_config.Templates);
+                IsDirty = true;
+                AddLog($"Template '{newTemplate.ID}' updated via XML editor", LogSeverity.Success);
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Template XML editor apply failed: {ex.Message}", LogSeverity.Error);
+            }
+        }
+    }
+
+    /// <summary>Counts how many Ref nodes in the config reference the given template ID.</summary>
+    private int CountTemplateReferences(string templateId)
+    {
+        int count = 0;
+        foreach (var wi in _config.WatchItems)
+            foreach (var ev in wi.Events)
+                count += CountRefsInChildren(ev.Children, templateId);
+        foreach (var t in _config.Templates)
+            count += CountRefsInChildren(t.Children, templateId);
+        return count;
+    }
+
+    private static int CountRefsInChildren(List<IActionNode> children, string templateId)
+    {
+        int count = 0;
+        foreach (var child in children)
+        {
+            if (child is RefConfig r && string.Equals(r.TemplateID, templateId, StringComparison.OrdinalIgnoreCase))
+                count++;
+            if (child is ActionGroupConfig ag)
+                count += CountRefsInChildren(ag.Children, templateId);
+        }
+        return count;
+    }
+
     [RelayCommand]
     private void DeleteTemplate()
     {

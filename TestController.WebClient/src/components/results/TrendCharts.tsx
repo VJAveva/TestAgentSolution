@@ -4,7 +4,7 @@ import { useResults } from '../../hooks/useResults';
 import { logCatch } from '../../lib/logger';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
 } from 'recharts';
 
 const CHART_COLORS = {
@@ -45,12 +45,17 @@ export default function TrendCharts() {
                 labelStyle={{ color: '#CDD6F4' }}
                 formatter={(v: number) => [`${v.toFixed(1)}%`, 'Pass Rate']}
               />
+              <ReferenceLine y={trends.goodThreshold} stroke={CHART_COLORS.green} strokeDasharray="6 3" strokeWidth={1.5} label={{ value: `Good ${trends.goodThreshold}%`, position: 'right', fill: CHART_COLORS.green, fontSize: 10 }} />
+              <ReferenceLine y={trends.warningThreshold} stroke={CHART_COLORS.yellow} strokeDasharray="6 3" strokeWidth={1.5} label={{ value: `Warn ${trends.warningThreshold}%`, position: 'right', fill: CHART_COLORS.yellow, fontSize: 10 }} />
               <Line type="monotone" dataKey="passRate" stroke={CHART_COLORS.blue} strokeWidth={2} dot={{ r: 3, fill: CHART_COLORS.blue }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
           <div className="flex gap-4 mt-2 text-xs text-text-muted">
             <span>{trends.builds.length} builds analyzed</span>
             <span>Avg: {(trends.builds.reduce((s, b) => s + b.passRate, 0) / trends.builds.length).toFixed(1)}%</span>
+            <span className="text-acc-green">Good: ≥{trends.goodThreshold}%</span>
+            <span className="text-acc-yellow">Warning: ≥{trends.warningThreshold}%</span>
+            <span className="text-acc-red">Bad: &lt;{trends.warningThreshold}%</span>
           </div>
         </div>
       )}

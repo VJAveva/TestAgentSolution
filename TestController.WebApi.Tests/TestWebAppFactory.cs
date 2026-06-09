@@ -1,7 +1,12 @@
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TestController.WebApi.Services;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -38,7 +43,7 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
                   <Action Type="RunCommand" Command="echo" Parameters="hello" />
                 </Event>
               </WatchItem>
-              <WatchItem Tag="DisabledBuild" Path="C:\Trigger2" Filter="trigger2.txt">
+              <WatchItem Tag="DisabledBuild" Path="C:\Trigger2" Filter="trigger2.txt" IsEnabled="false">
                 <Event Type="Renamed" ExecutionType="Sequential" />
               </WatchItem>
             </WatchList>
@@ -46,6 +51,31 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
+            // Remove ALL authentication-related registrations from the production pipeline.
+            // AddNegotiate() registers handlers that require Kestrel's IConnectionItemsFeature,
+            // which is unavailable in TestServer.
+            var authDescriptors = services
+                .Where(d =>
+                    d.ServiceType.FullName?.Contains("Authentication") == true
+                    || d.ServiceType.FullName?.Contains("Negotiate") == true
+                    || d.ImplementationType?.FullName?.Contains("Negotiate") == true
+                    || d.ImplementationType?.FullName?.Contains("TokenAuthentication") == true)
+                .ToList();
+            foreach (var d in authDescriptors)
+                services.Remove(d);
+
+            // Re-register authentication with only the test scheme
+            services.AddAuthentication(opts =>
+            {
+                opts.DefaultAuthenticateScheme = "Test";
+                opts.DefaultChallengeScheme = "Test";
+                opts.DefaultScheme = "Test";
+            }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", null);
+
+            // Replace the mode provider so AdminRoleHandler can resolve roles from claims
+            ReplaceService<TestController.Api.Security.IAuthenticationModeProvider>(services,
+                _ => new TestAuthModeProvider());
+
             // Override configuration-based services with test-friendly versions
             ReplaceService<WatchListFileService>(services, sp =>
             {
@@ -131,9 +161,75 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
         services.AddSingleton(factory);
     }
 
+    /// <summary>
+    /// Creates an HttpClient whose requests carry a non-admin (User role) identity.
+    /// Use this to test authorization-denied scenarios on Admin-only endpoints.
+    /// Sends a special header that TestAuthHandler recognizes to switch to User role.
+    /// </summary>
+    public HttpClient CreateNonAdminClient()
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", "User");
+        return client;
+    }
+
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
         try { if (Directory.Exists(TempDir)) Directory.Delete(TempDir, true); } catch { }
     }
+}
+
+/// <summary>
+/// Authentication handler that always succeeds with a test user identity.
+/// Used in integration tests to bypass Windows/Token authentication.
+/// </summary>
+internal sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+{
+    public TestAuthHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder)
+        : base(options, logger, encoder)
+    {
+    }
+
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        // Check X-Test-Role header for role override (used by CreateNonAdminClient)
+        var role = "Admin";
+        if (Request.Headers.TryGetValue("X-Test-Role", out var roleHeader))
+            role = roleHeader.ToString();
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "test-user"),
+            new Claim(ClaimTypes.Name, "TestUser"),
+            new Claim(ClaimTypes.Role, role),
+        };
+        var identity = new ClaimsIdentity(claims, "Test");
+        var principal = new ClaimsPrincipal(identity);
+        var ticket = new AuthenticationTicket(principal, "Test");
+        return Task.FromResult(AuthenticateResult.Success(ticket));
+    }
+}
+
+/// <summary>
+/// Test mode provider that resolves roles from standard ClaimTypes.Role claims.
+/// </summary>
+internal sealed class TestAuthModeProvider : TestController.Api.Security.IAuthenticationModeProvider
+{
+    public TestController.Api.Security.AuthMode Mode => TestController.Api.Security.AuthMode.Domain;
+    public bool IsHealthy => true;
+
+    public TestController.Api.Security.UserRole ResolveRole(ClaimsPrincipal user)
+    {
+        if (user.IsInRole("Admin"))
+            return TestController.Api.Security.UserRole.Admin;
+        if (user.Identity?.IsAuthenticated == true)
+            return TestController.Api.Security.UserRole.User;
+        return TestController.Api.Security.UserRole.Anonymous;
+    }
+
+    public string GetDiagnosticStatus() => "Test mode: all authenticated users are Admin";
 }

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Build Report Card — Mockup</title>
+<style>
+:root{
+  --bg-primary:#0F1119;
+  --bg-secondary:#171B27;
+  --bg-tertiary:#1F2535;
+  --border:#2A2F45;
+  --text-primary:#E4E6F0;
+  --text-secondary:#9099B8;
+  --text-tertiary:#5E6580;
+  --text-success:#22C55E;
+  --bg-success:#0E2818;
+  --text-info:#4D9CF5;
+  --bg-info:#0E1F3A;
+  --text-warning:#F59E0B;
+  --bg-warning:#2D2418;
+  --text-danger:#EF4444;
+  --bg-danger:#2D1818;
+  --font-sans:'Segoe UI','Segoe UI Web',Arial,sans-serif;
+  --font-mono:'JetBrains Mono','Consolas','Cascadia Code',monospace;
+  --radius:8px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:#0a0c12;color:var(--text-primary);padding:20px;min-height:100vh;line-height:1.4}
+.container{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+
+.card{background:var(--bg-primary);border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden}
+
+/* Hero header */
+.hero{background:linear-gradient(135deg,#1a2236 0%,#0F1119 100%);padding:22px 26px;border-bottom:0.5px solid var(--border)}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.hero-title{font-size:11px;font-weight:500;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px}
+.hero-build{font-family:var(--font-mono);font-size:24px;font-weight:500;color:var(--text-primary);margin-bottom:4px}
+.hero-meta{font-size:11px;color:var(--text-secondary);font-family:var(--font-mono)}
+.grade-block{display:flex;align-items:center;gap:14px}
+.grade-circle{width:90px;height:90px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column;border:2px solid;flex-shrink:0;border-color:var(--text-warning);background:var(--bg-warning);color:var(--text-warning)}
+.grade-letter{font-size:38px;font-weight:600;line-height:1}
+.grade-pct{font-size:10px;font-family:var(--font-mono);margin-top:2px}
+.grade-info{display:flex;flex-direction:column;gap:3px}
+.grade-status{font-size:13px;font-weight:500;color:var(--text-warning)}
+.grade-detail{font-size:10px;color:var(--text-tertiary);font-family:var(--font-mono)}
+
+/* KPI strip */
+.kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:0;border-top:0.5px solid var(--border)}
+.kpi{padding:12px 16px;border-right:0.5px solid var(--border);background:var(--bg-secondary)}
+.kpi:last-child{border-right:none}
+.kpi-label{font-size:9px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.06em;font-weight:500;margin-bottom:4px}
+.kpi-value{font-family:var(--font-mono);font-size:17px;font-weight:500}
+.kpi-sub{font-size:9px;color:var(--text-tertiary);font-family:var(--font-mono);margin-top:2px}
+
+/* Section header */
+.sec-h{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;background:var(--bg-secondary);border-bottom:0.5px solid var(--border);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-tertiary)}
+
+/* CI grid */
+.ci-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:12px}
+.ci-cell{padding:10px;background:var(--bg-secondary);border:0.5px solid var(--border);border-radius:6px}
+.ci-cell.warn{border-color:var(--text-warning);background:var(--bg-warning)}
+.ci-cell.fail{border-color:var(--text-danger);background:var(--bg-danger)}
+.ci-cell.pass{border-color:var(--text-success);background:var(--bg-success)}
+.ci-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.ci-name{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--text-primary)}
+.ci-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.ci-stat{font-size:10px;font-family:var(--font-mono);color:var(--text-secondary)}
+.ci-bar{margin-top:6px;height:3px;border-radius:2px;background:var(--bg-tertiary);overflow:hidden}
+.ci-bar-fill{height:100%}
+
+/* Agent table */
+.agent-table{width:100%;border-collapse:collapse;font-size:11px}
+.agent-table th{text-align:left;padding:8px 12px;background:var(--bg-secondary);border-bottom:0.5px solid var(--border);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-tertiary)}
+.agent-table th.right{text-align:right}
+.agent-table td{padding:9px 12px;border-bottom:0.5px solid var(--border);font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
+.agent-table td.name{color:var(--text-primary);font-weight:500}
+.agent-table td.right{text-align:right}
+.agent-table tr.warn-tint td{background:var(--bg-warning)}
+.agent-table tr.fail-tint td{background:var(--bg-danger)}
+.agent-table tr:last-child td{border-bottom:none}
+.ag-bar{width:100%;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;display:flex}
+.ag-bar > div{height:100%}
+.ag-pass{background:var(--text-success)}
+.ag-fail{background:var(--text-danger)}
+.ag-skip{background:var(--text-tertiary)}
+
+/* PSR + trend row */
+.dual-row{display:grid;grid-template-columns:3fr 2fr;gap:14px}
+.psr-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:12px}
+.psr-card{background:var(--bg-secondary);border:0.5px solid var(--border);border-radius:6px;padding:11px}
+.psr-card.warn{border-color:var(--text-warning);background:var(--bg-warning)}
+.psr-card.fail{border-color:var(--text-danger);background:var(--bg-danger)}
+.psr-card.pass{border-color:var(--text-success)}
+.psr-name{font-size:11px;font-weight:500;color:var(--text-primary);margin-bottom:4px}
+.psr-status{font-size:9px;font-family:var(--font-mono);margin-bottom:8px}
+.psr-status.pass{color:var(--text-success)}
+.psr-status.warn{color:var(--text-warning)}
+.psr-status.fail{color:var(--text-danger)}
+.psr-stat-row{display:flex;justify-content:space-between;font-size:9px;font-family:var(--font-mono);color:var(--text-secondary);padding:2px 0}
+.psr-stat-row.bad{color:var(--text-danger)}
+
+.trend{padding:16px;display:flex;flex-direction:column;gap:8px}
+.trend-bars{display:flex;align-items:flex-end;gap:6px;height:80px}
+.trend-bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}
+.trend-bar-stack{width:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;border-radius:3px;overflow:hidden}
+.tb-pass{background:var(--text-success)}
+.tb-fail{background:var(--text-danger)}
+.tb-lbl{font-size:9px;color:var(--text-tertiary);font-family:var(--font-mono)}
+.trend-caption{font-size:10px;color:var(--text-tertiary);font-family:var(--font-mono);text-align:center;margin-top:4px}
+
+/* Failures table */
+.fail-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.fail-tbl th{text-align:left;padding:9px 12px;background:var(--bg-secondary);border-bottom:0.5px solid var(--border);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-tertiary)}
+.fail-tbl td{padding:9px 12px;border-bottom:0.5px solid var(--border);font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
+.fail-tbl td.bold{color:var(--text-primary);font-weight:500}
+.fail-tbl tr:hover td{background:var(--bg-secondary)}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:500;font-family:var(--font-mono)}
+.tag-new{background:var(--bg-danger);color:var(--text-danger)}
+.tag-flaky{background:var(--bg-warning);color:var(--text-warning)}
+.tag-chronic{background:var(--bg-tertiary);color:var(--text-tertiary)}
+.tag-reg{background:#3D1A1A;color:#FCA5A5;border:0.5px solid var(--text-danger)}
+
+/* Footer */
+.footer{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-secondary);border-top:0.5px solid var(--border);font-size:10px;color:var(--text-tertiary);flex-wrap:wrap;gap:10px}
+.actions{display:flex;gap:8px}
+.btn{padding:6px 12px;border-radius:4px;font-size:11px;font-weight:500;border:0.5px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;font-family:var(--font-sans)}
+.btn-primary{background:var(--text-info);border-color:var(--text-info);color:white}
+
+.view-all{padding:9px 12px;font-size:10px;color:var(--text-info);text-align:center;border-top:0.5px solid var(--border);font-family:var(--font-mono);cursor:pointer}
+.view-all:hover{background:var(--bg-secondary)}
+
+@media (max-width: 1100px){
+  .kpi-strip{grid-template-columns:repeat(3,1fr)}
+  .ci-grid{grid-template-columns:repeat(3,1fr)}
+  .psr-grid{grid-template-columns:repeat(2,1fr)}
+  .dual-row{grid-template-columns:1fr}
+}
+@media (max-width: 700px){
+  .kpi-strip{grid-template-columns:repeat(2,1fr)}
+  .ci-grid{grid-template-columns:repeat(2,1fr)}
+  .psr-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ═════════ HERO HEADER + GRADE ═════════ -->
+<div class="card">
+<div class="hero">
+<div class="hero-top">
+<div>
+<div class="hero-title">BUILD REPORT CARD</div>
+<div class="hero-build">OAK_main_20260601.7</div>
+<div class="hero-meta">Triggered: 2026-06-01 09:14 by jenkins-ci · Duration: 4h 32m · Window: 09:14 → 13:46</div>
+</div>
+<div class="grade-block">
+<div class="grade-circle">
+<div class="grade-letter">B</div>
+<div class="grade-pct">94.3%</div>
+</div>
+<div class="grade-info">
+<div class="grade-status">Ship with caveats</div>
+<div class="grade-detail">5,659 pass / 218 fail / 123 skip</div>
+<div class="grade-detail">5 regressions · 3 flaky · 1 PSR error</div>
+<div class="grade-detail" style="margin-top:4px">vs last build: <span style="color:var(--text-danger)">↓ 1.8%</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- KPI strip -->
+<div class="kpi-strip">
+<div class="kpi">
+<div class="kpi-label">Total tests</div>
+<div class="kpi-value">6,000</div>
+<div class="kpi-sub">across 10 CIs</div>
+</div>
+<div class="kpi">
+<div class="kpi-label">Pass rate</div>
+<div class="kpi-value" style="color:var(--text-warning)">94.3%</div>
+<div class="kpi-sub">target: 98%</div>
+</div>
+<div class="kpi">
+<div class="kpi-label">Failures</div>
+<div class="kpi-value" style="color:var(--text-danger)">218</div>
+<div class="kpi-sub">in 9 of 10 CIs</div>
+</div>
+<div class="kpi">
+<div class="kpi-label">Regressions</div>
+<div class="kpi-value" style="color:var(--text-danger)">5</div>
+<div class="kpi-sub">passed yesterday</div>
+</div>
+<div class="kpi">
+<div class="kpi-label">Agents</div>
+<div class="kpi-value">10 / 10</div>
+<div class="kpi-sub">all completed</div>
+</div>
+<div class="kpi">
+<div class="kpi-label">PSR runs</div>
+<div class="kpi-value">4 / 5 <span style="color:var(--text-warning);font-size:12px">⚠</span></div>
+<div class="kpi-sub">1 failed</div>
+</div>
+</div>
+</div>
+
+<!-- ═════════ CI RESULTS GRID ═════════ -->
+<div class="card">
+<div class="sec-h">
+<span>CI Results · pass rate per Configuration Item</span>
+<span style="font-size:9px">10 CIs · click for drilldown</span>
+</div>
+<div class="ci-grid">
+<div class="ci-cell pass"><div class="ci-head"><div class="ci-name">App Server</div><div class="ci-dot" style="background:var(--text-success)"></div></div><div class="ci-stat">598 / 600 · 99.7%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:99.7%;background:var(--text-success)"></div></div></div>
+<div class="ci-cell pass"><div class="ci-head"><div class="ci-name">Historian</div><div class="ci-dot" style="background:var(--text-success)"></div></div><div class="ci-stat">596 / 600 · 99.3%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:99.3%;background:var(--text-success)"></div></div></div>
+<div class="ci-cell pass"><div class="ci-head"><div class="ci-name">Galaxy Mgmt</div><div class="ci-dot" style="background:var(--text-success)"></div></div><div class="ci-stat">593 / 600 · 98.8%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:98.8%;background:var(--text-success)"></div></div></div>
+<div class="ci-cell"><div class="ci-head"><div class="ci-name">OI Server</div><div class="ci-dot" style="background:var(--text-info)"></div></div><div class="ci-stat">579 / 600 · 96.5%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:96.5%;background:var(--text-info)"></div></div></div>
+<div class="ci-cell"><div class="ci-head"><div class="ci-name">IDE</div><div class="ci-dot" style="background:var(--text-info)"></div></div><div class="ci-stat">577 / 600 · 96.2%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:96.2%;background:var(--text-info)"></div></div></div>
+<div class="ci-cell"><div class="ci-head"><div class="ci-name">Plat-Common</div><div class="ci-dot" style="background:var(--text-info)"></div></div><div class="ci-stat">571 / 600 · 95.2%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:95.2%;background:var(--text-info)"></div></div></div>
+<div class="ci-cell warn"><div class="ci-head"><div class="ci-name">Bootstrap</div><div class="ci-dot" style="background:var(--text-warning)"></div></div><div class="ci-stat">543 / 600 · 90.5%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:90.5%;background:var(--text-warning)"></div></div></div>
+<div class="ci-cell warn"><div class="ci-head"><div class="ci-name">Security</div><div class="ci-dot" style="background:var(--text-warning)"></div></div><div class="ci-stat">537 / 600 · 89.5%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:89.5%;background:var(--text-warning)"></div></div></div>
+<div class="ci-cell fail"><div class="ci-head"><div class="ci-name">Scripting</div><div class="ci-dot" style="background:var(--text-danger)"></div></div><div class="ci-stat">521 / 600 · 86.8%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:86.8%;background:var(--text-danger)"></div></div></div>
+<div class="ci-cell fail"><div class="ci-head"><div class="ci-name">DeadBand</div><div class="ci-dot" style="background:var(--text-danger)"></div></div><div class="ci-stat">544 / 600 · 90.7%</div><div class="ci-bar"><div class="ci-bar-fill" style="width:90.7%;background:var(--text-danger)"></div></div></div>
+</div>
+</div>
+
+<!-- ═════════ AGENT TABLE ═════════ -->
+<div class="card">
+<div class="sec-h"><span>Agent Execution · 10 agents · per-agent results</span><span style="font-size:9px">click row for TRX drilldown</span></div>
+<table class="agent-table">
+<thead><tr><th>Agent</th><th>Pass / Fail / Skip distribution</th><th class="right">Pass</th><th class="right">Fail</th><th class="right">Skip</th><th class="right">Time</th><th class="right">%</th></tr></thead>
+<tbody>
+<tr><td class="name">● jvgr1</td><td><div class="ag-bar"><div class="ag-pass" style="width:98.5%"></div><div class="ag-fail" style="width:1.0%"></div><div class="ag-skip" style="width:0.5%"></div></div></td><td class="right">591</td><td class="right" style="color:var(--text-danger)">6</td><td class="right">3</td><td class="right">26m</td><td class="right" style="color:var(--text-success)">98.5%</td></tr>
+<tr><td class="name">● jvkpri</td><td><div class="ag-bar"><div class="ag-pass" style="width:97.8%"></div><div class="ag-fail" style="width:1.5%"></div><div class="ag-skip" style="width:0.7%"></div></div></td><td class="right">587</td><td class="right" style="color:var(--text-danger)">9</td><td class="right">4</td><td class="right">28m</td><td class="right" style="color:var(--text-success)">97.8%</td></tr>
+<tr><td class="name">● jvkbak</td><td><div class="ag-bar"><div class="ag-pass" style="width:96.0%"></div><div class="ag-fail" style="width:2.5%"></div><div class="ag-skip" style="width:1.5%"></div></div></td><td class="right">576</td><td class="right" style="color:var(--text-danger)">15</td><td class="right">9</td><td class="right">29m</td><td class="right" style="color:var(--text-success)">96.0%</td></tr>
+<tr class="warn-tint"><td class="name">● jvhist</td><td><div class="ag-bar"><div class="ag-pass" style="width:88.7%"></div><div class="ag-fail" style="width:8.8%"></div><div class="ag-skip" style="width:2.5%"></div></div></td><td class="right">532</td><td class="right" style="color:var(--text-danger)">53</td><td class="right">15</td><td class="right">31m</td><td class="right" style="color:var(--text-warning)">88.7%</td></tr>
+<tr><td class="name">● warmpri</td><td><div class="ag-bar"><div class="ag-pass" style="width:95.2%"></div><div class="ag-fail" style="width:3.0%"></div><div class="ag-skip" style="width:1.8%"></div></div></td><td class="right">571</td><td class="right" style="color:var(--text-danger)">18</td><td class="right">11</td><td class="right">27m</td><td class="right" style="color:var(--text-success)">95.2%</td></tr>
+<tr><td class="name">● warmbak</td><td><div class="ag-bar"><div class="ag-pass" style="width:96.5%"></div><div class="ag-fail" style="width:2.0%"></div><div class="ag-skip" style="width:1.5%"></div></div></td><td class="right">579</td><td class="right" style="color:var(--text-danger)">12</td><td class="right">9</td><td class="right">28m</td><td class="right" style="color:var(--text-success)">96.5%</td></tr>
+<tr><td class="name">● warmhist</td><td><div class="ag-bar"><div class="ag-pass" style="width:94.7%"></div><div class="ag-fail" style="width:3.5%"></div><div class="ag-skip" style="width:1.8%"></div></div></td><td class="right">568</td><td class="right" style="color:var(--text-danger)">21</td><td class="right">11</td><td class="right">30m</td><td class="right" style="color:var(--text-success)">94.7%</td></tr>
+<tr class="warn-tint"><td class="name">● jvtest8</td><td><div class="ag-bar"><div class="ag-pass" style="width:89.2%"></div><div class="ag-fail" style="width:7.5%"></div><div class="ag-skip" style="width:3.3%"></div></div></td><td class="right">535</td><td class="right" style="color:var(--text-danger)">45</td><td class="right">20</td><td class="right">32m</td><td class="right" style="color:var(--text-warning)">89.2%</td></tr>
+<tr class="fail-tint"><td class="name">● jvtest9</td><td><div class="ag-bar"><div class="ag-pass" style="width:79.8%"></div><div class="ag-fail" style="width:18.7%"></div><div class="ag-skip" style="width:1.5%"></div></div></td><td class="right">479</td><td class="right" style="color:var(--text-danger);font-weight:600">112</td><td class="right">9</td><td class="right">38m</td><td class="right" style="color:var(--text-danger);font-weight:600">79.8%</td></tr>
+<tr><td class="name">● jvtest10</td><td><div class="ag-bar"><div class="ag-pass" style="width:95.8%"></div><div class="ag-fail" style="width:2.8%"></div><div class="ag-skip" style="width:1.4%"></div></div></td><td class="right">575</td><td class="right" style="color:var(--text-danger)">17</td><td class="right">8</td><td class="right">27m</td><td class="right" style="color:var(--text-success)">95.8%</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ═════════ PSR + TREND ═════════ -->
+<div class="dual-row">
+<div class="card">
+<div class="sec-h"><span>PSR Validation · 5 customer scenarios</span><span style="font-size:9px">production-like runs</span></div>
+<div class="psr-grid">
+<div class="psr-card pass"><div class="psr-name">PSR-01 · Refinery</div><div class="psr-status pass">PASSED · 2h 14m</div><div class="psr-stat-row"><span>Tags</span><span>847</span></div><div class="psr-stat-row"><span>Throughput</span><span>5.4k/s</span></div><div class="psr-stat-row"><span>Errors</span><span>0</span></div></div>
+<div class="psr-card pass"><div class="psr-name">PSR-02 · Pharma</div><div class="psr-status pass">PASSED · 1h 58m</div><div class="psr-stat-row"><span>Tags</span><span>412</span></div><div class="psr-stat-row"><span>Throughput</span><span>3.1k/s</span></div><div class="psr-stat-row"><span>Errors</span><span>0</span></div></div>
+<div class="psr-card warn"><div class="psr-name">PSR-03 · Power Grid</div><div class="psr-status warn">PASS w/ WARN · 3h 02m</div><div class="psr-stat-row"><span>Tags</span><span>1,205</span></div><div class="psr-stat-row"><span>Throughput</span><span>4.8k/s</span></div><div class="psr-stat-row bad"><span>Warnings</span><span>14</span></div></div>
+<div class="psr-card fail"><div class="psr-name">PSR-04 · Water</div><div class="psr-status fail">FAILED · @ 0h 47m</div><div class="psr-stat-row"><span>Tags</span><span>328</span></div><div class="psr-stat-row bad"><span>Error</span><span>HistDB lock</span></div><div class="psr-stat-row bad"><span>Retried</span><span>2x · failed</span></div></div>
+<div class="psr-card pass"><div class="psr-name">PSR-05 · Mining</div><div class="psr-status pass">PASSED · 2h 31m</div><div class="psr-stat-row"><span>Tags</span><span>692</span></div><div class="psr-stat-row"><span>Throughput</span><span>4.2k/s</span></div><div class="psr-stat-row"><span>Errors</span><span>0</span></div></div>
+</div>
+</div>
+
+<div class="card">
+<div class="sec-h"><span>Pass rate · last 10 builds</span><span style="font-size:9px">trend</span></div>
+<div class="trend">
+<div class="trend-bars">
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:97%"></div><div class="tb-fail" style="height:3%"></div></div><div class="tb-lbl">.1</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:98%"></div><div class="tb-fail" style="height:2%"></div></div><div class="tb-lbl">.2</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:96%"></div><div class="tb-fail" style="height:4%"></div></div><div class="tb-lbl">.3</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:99%"></div><div class="tb-fail" style="height:1%"></div></div><div class="tb-lbl">.4</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:97%"></div><div class="tb-fail" style="height:3%"></div></div><div class="tb-lbl">.5</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:98%"></div><div class="tb-fail" style="height:2%"></div></div><div class="tb-lbl">.6</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:96%"></div><div class="tb-fail" style="height:4%"></div></div><div class="tb-lbl">.7</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:97%"></div><div class="tb-fail" style="height:3%"></div></div><div class="tb-lbl">.8</div></div>
+<div class="trend-bar"><div class="trend-bar-stack"><div class="tb-pass" style="height:96%"></div><div class="tb-fail" style="height:4%"></div></div><div class="tb-lbl">.9</div></div>
+<div class="trend-bar"><div class="trend-bar-stack" style="outline:1.5px solid var(--text-warning);outline-offset:1px"><div class="tb-pass" style="height:94%"></div><div class="tb-fail" style="height:6%"></div></div><div class="tb-lbl" style="font-weight:600;color:var(--text-warning)">★</div></div>
+</div>
+<div class="trend-caption">★ this build · ↓ 1.8% vs 10-build avg</div>
+</div>
+</div>
+</div>
+
+<!-- ═════════ TOP FAILURES ═════════ -->
+<div class="card">
+<div class="sec-h"><span>Top Failures · prioritized for triage</span><span style="font-size:9px">218 total · showing top 8</span></div>
+<table class="fail-tbl">
+<thead><tr><th style="width:32%">Test</th><th>CI</th><th>Failed On</th><th>Pattern</th><th>Owner</th><th>First Seen</th></tr></thead>
+<tbody>
+<tr><td class="bold">Scripting_DeferredLog_S04</td><td>Scripting</td><td>jvtest9, jvhist, jvtest8</td><td><span class="tag tag-reg">REGRESSION</span></td><td>scripting-team</td><td>this build</td></tr>
+<tr><td class="bold">DeadBand_StringAttr_S11</td><td>DeadBand</td><td>jvtest9, jvhist</td><td><span class="tag tag-reg">REGRESSION</span></td><td>platform-team</td><td>this build</td></tr>
+<tr><td class="bold">Security_AuthFallback_S02</td><td>Security</td><td>warmpri, jvtest8</td><td><span class="tag tag-new">NEW</span></td><td>security-team</td><td>this build</td></tr>
+<tr><td class="bold">Bootstrap_FreshInstall_S07</td><td>Bootstrap</td><td>jvtest9</td><td><span class="tag tag-new">NEW</span></td><td>install-team</td><td>this build</td></tr>
+<tr><td class="bold">OI_SimConfig_S03</td><td>OI Server</td><td>jvhist, jvtest9</td><td><span class="tag tag-flaky">FLAKY (3/5)</span></td><td>oi-team</td><td>3 builds ago</td></tr>
+<tr><td class="bold">Historian_BulkInsert_S22</td><td>Historian</td><td>jvtest8, jvtest9</td><td><span class="tag tag-flaky">FLAKY (2/5)</span></td><td>hist-team</td><td>1 build ago</td></tr>
+<tr><td class="bold">IDE_GalaxyExport_S15</td><td>IDE</td><td>warmhist</td><td><span class="tag tag-chronic">CHRONIC</span></td><td>ide-team</td><td>14 builds ago</td></tr>
+<tr><td class="bold">PlatCommon_NetReconnect_S08</td><td>Plat-Common</td><td>jvkpri, jvtest9</td><td><span class="tag tag-chronic">CHRONIC</span></td><td>platform-team</td><td>9 builds ago</td></tr>
+</tbody>
+</table>
+<div class="view-all">View all 218 failures →</div>
+</div>
+
+<!-- ═════════ FOOTER ═════════ -->
+<div class="card">
+<div class="footer">
+<div>Report generated 2026-06-01 13:48 · Auto-distributes Mon/Wed/Fri 14:00 UTC</div>
+<div class="actions">
+<button class="btn">Export PDF</button>
+<button class="btn">Copy link</button>
+<button class="btn btn-primary">Email to owners</button>
+</div>
+</div>
+</div>
+
+</div>
+</body>
+</html>

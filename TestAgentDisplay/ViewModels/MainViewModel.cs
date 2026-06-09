@@ -347,6 +347,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             var agent = Agents.FirstOrDefault(a => a.Address == address);
             agent?.HandleEvent(evt);
         });
+
+        // Auto-refresh history when a command finishes so the grid stays current
+        if (evt.EventType is ExecutionEventType.EventCompleted
+            or ExecutionEventType.EventFailed
+            or ExecutionEventType.EventTerminated)
+        {
+            _ = RefreshHistoryForAgentAsync(address);
+        }
+    }
+
+    private async Task RefreshHistoryForAgentAsync(string address)
+    {
+        var hist = await _connectionManager.GetHistoryAsync(address);
+        if (hist is null) return;
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            var agent = Agents.FirstOrDefault(a => a.Address == address);
+            agent?.ApplyHistory(hist);
+        });
     }
 
     private void OnConnectionChanged(string address, bool connected)

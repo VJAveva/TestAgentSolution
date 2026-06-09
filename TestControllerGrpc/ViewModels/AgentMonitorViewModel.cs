@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Grpc.Core;
@@ -10,7 +12,7 @@ using System.Windows;
 namespace TestControllerGrpc.ViewModels;
 
 /// <summary>
-/// ViewModel for the Agent Monitor window � connects to a single agent's
+/// ViewModel for the Agent Monitor window � connects to a single agent's
 /// <c>SubscribeAgentEvents</c> gRPC stream and displays live execution activity.
 /// </summary>
 public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposable
@@ -24,6 +26,17 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _connectionStatusText = "Connecting";
     [ObservableProperty] private string _liveActionName = "";
 
+    // ── Health metrics from heartbeat ─────────────────────────────────
+    [ObservableProperty] private double _cpuUsagePct;
+    [ObservableProperty] private double _memoryUsedMb;
+    [ObservableProperty] private double _memoryTotalMb;
+    [ObservableProperty] private double _diskFreeGb;
+    [ObservableProperty] private int _activeProcessCount;
+    [ObservableProperty] private string _osDescription = "";
+    [ObservableProperty] private string _lastHeartbeatTime = "";
+    [ObservableProperty] private bool _hasMetrics;
+
+    private const int MaxActionHistory = 200;
     public ObservableCollection<AgentActionRow> ActionHistory { get; } = new();
 
     public AgentMonitorViewModel(string agentName, string agentAddress)
@@ -39,16 +52,27 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
         _cts = new CancellationTokenSource();
         try
         {
+            var handler = new SocketsHttpHandler
+            {
+                EnableMultipleHttp2Connections = true,
+                ConnectTimeout = TimeSpan.FromSeconds(5),
+                KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+                KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
+            };
+
+            // Enable TLS when address uses HTTPS
+            if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                handler.SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                };
+            }
+
             _channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
             {
-                HttpHandler = new SocketsHttpHandler
-                {
-                    EnableMultipleHttp2Connections = true,
-                    ConnectTimeout = TimeSpan.FromSeconds(5),
-                    KeepAlivePingDelay = TimeSpan.FromSeconds(30),
-                    KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
-                    KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
-                },
+                HttpHandler = handler,
                 DisposeHttpClient = true,
             });
 
@@ -71,11 +95,22 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                     ConnectionStatusText = "Connected";
                     if (!string.IsNullOrWhiteSpace(snapshot.CurrentCommand))
                         LiveActionName = snapshot.CurrentCommand;
+                    if (snapshot.Metrics is not null)
+                    {
+                        CpuUsagePct = snapshot.Metrics.CpuUsagePct;
+                        MemoryUsedMb = snapshot.Metrics.MemoryUsedMb;
+                        MemoryTotalMb = snapshot.Metrics.MemoryTotalMb;
+                        DiskFreeGb = snapshot.Metrics.DiskFreeGb;
+                        ActiveProcessCount = snapshot.Metrics.ActiveProcessCount;
+                        OsDescription = snapshot.Metrics.OsDescription ?? "";
+                        HasMetrics = true;
+                        LastHeartbeatTime = DateTime.Now.ToString("HH:mm:ss");
+                    }
                 });
             }
             catch
             {
-                // Snapshot not available � proceed to streaming
+                // Snapshot not available � proceed to streaming
             }
 
             // Load recent execution history so the monitor shows past activities
@@ -121,7 +156,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
             }
             catch
             {
-                // History not available � proceed with live streaming only
+                // History not available � proceed with live streaming only
             }
 
             // Stream reconnect loop
@@ -183,6 +218,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                     StatusColor = "#9399B2",
                 };
                 ActionHistory.Insert(0, _currentAction);
+                TrimActionHistory();
                 break;
 
             case TestAgentGrpc.ExecutionEventType.EventStarted:
@@ -203,6 +239,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                         StatusColor = "#F9E2AF",
                     };
                     ActionHistory.Insert(0, _currentAction);
+                    TrimActionHistory();
                 }
                 LiveActionName = cmd;
                 MonitorAgentState = "Running";
@@ -268,8 +305,25 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
                     TestAgentGrpc.AgentState.Running => "Running",
                     _ => "Inactive"
                 };
+                if (evt.Metrics is not null)
+                {
+                    CpuUsagePct = evt.Metrics.CpuUsagePct;
+                    MemoryUsedMb = evt.Metrics.MemoryUsedMb;
+                    MemoryTotalMb = evt.Metrics.MemoryTotalMb;
+                    DiskFreeGb = evt.Metrics.DiskFreeGb;
+                    ActiveProcessCount = evt.Metrics.ActiveProcessCount;
+                    OsDescription = evt.Metrics.OsDescription ?? "";
+                    HasMetrics = true;
+                }
+                LastHeartbeatTime = DateTime.Now.ToString("HH:mm:ss");
                 break;
         }
+    }
+
+    private void TrimActionHistory()
+    {
+        while (ActionHistory.Count > MaxActionHistory)
+            ActionHistory.RemoveAt(ActionHistory.Count - 1);
     }
 
     [RelayCommand]

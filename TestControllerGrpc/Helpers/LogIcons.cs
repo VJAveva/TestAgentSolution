@@ -16,9 +16,9 @@ public static class LogIcons
     public const string Info    = "\u2139";   // ?
 
     // ?? Diagnostic / workflow ???????????????????????????????????????
-    public const string Diagnose  = "\uD83D\uDD0D"; // ??  (surrogate pair, renders in WPF)
-    public const string Arrow     = "\u2192";        // ?
-    public const string Heartbeat = "\u2764";        // ?
+    public const string Diagnose  = "\u2315"; // ? (telephone recorder / search — BMP safe)
+    public const string Arrow     = "\u2192"; // ?
+    public const string Heartbeat = "\u2764"; // ?
 
     /// <summary>Returns the appropriate icon for a diagnostic step result.</summary>
     public static string ForDiagnosticStep(bool passed, bool isFatal)
