@@ -188,7 +188,7 @@ public class SessionPersistenceTests : IDisposable
         Assert.Equal("dev1", entry.UserId);
         Assert.Equal("WebClient", entry.Source);
         Assert.Equal("PartialFailure", entry.State);
-        Assert.Equal(new[] { "Agent-01", "Agent-02" }, entry.LockedAgents);
+        Assert.Equal(new[] { "Agent-01", "Agent-02" }, entry.LockedAgents.OrderBy(a => a).ToArray());
         Assert.NotNull(entry.CompletedUtc);
         Assert.Equal(2, entry.ActionResults.Length);
 

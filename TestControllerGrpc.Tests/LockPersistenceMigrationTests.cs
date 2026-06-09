@@ -22,6 +22,17 @@ public class LockPersistenceMigrationTests : IDisposable
         if (File.Exists(_tempPath + ".tmp")) File.Delete(_tempPath + ".tmp");
     }
 
+    private bool WaitForPersistFile(int timeoutMs = 5000)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (File.Exists(_tempPath)) return true;
+            Thread.Sleep(50);
+        }
+        return false;
+    }
+
     [Fact]
     public void RestoreFromLegacyFormat_LoadsLocks()
     {
@@ -90,7 +101,7 @@ public class LockPersistenceMigrationTests : IDisposable
         Assert.True(locked);
 
         // Wait for async persist to complete
-        Thread.Sleep(200);
+        Assert.True(WaitForPersistFile(), "Lock persistence file was not written in time.");
 
         // Load fresh instance from same file
         var manager2 = new AgentLockManager(_tempPath);

@@ -37,7 +37,7 @@ public sealed class AgentHardeningTests : IDisposable
     {
         var opts = new AgentKestrelOptions();
 
-        Assert.Equal(240, opts.KeepAliveTimeoutMinutes);
+        Assert.Equal(720, opts.KeepAliveTimeoutMinutes);
         Assert.True(opts.DisableMinRequestBodyDataRate);
         Assert.True(opts.DisableMinResponseDataRate);
         Assert.True(opts.WarnOnPlaintextHttp2);
