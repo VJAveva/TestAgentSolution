@@ -25,6 +25,8 @@ public record BuildNode
 public record UseCaseNode
 {
     public string UseCaseName { get; init; } = "";
+    /// <summary>The agent/machine that executed this use case (derived from TRX metadata).</summary>
+    public string Agent { get; init; } = "";
     public TimeSpan Duration { get; init; }
     public int Total { get; init; }
     public int Passed { get; init; }

@@ -52,6 +52,27 @@ public class BuildReportHtmlGenerator
         if (label == "RESOLVED")                                      return ("#D6F5D6", "#005C00");
         return ("#FFFFFF", "#64748b");
     }
+
+    /// <summary>
+    /// Maps internal pattern labels to the email classification scheme: Critical, New, Flaky.
+    /// Returns (classification, bgColor) for inline pill rendering.
+    /// </summary>
+    private static (string classification, string bgColor) GetEmailClassification(string patternLabel)
+    {
+        if (patternLabel.StartsWith("REGRESSION", StringComparison.Ordinal) ||
+            patternLabel.StartsWith("CHRONIC", StringComparison.Ordinal) ||
+            patternLabel.StartsWith("CASCADING", StringComparison.Ordinal))
+            return ("Critical", "#b91c1c");
+
+        if (patternLabel == "NEW FAILURE")
+            return ("New", "#b45309");
+
+        if (patternLabel.StartsWith("FLAKY", StringComparison.Ordinal))
+            return ("Flaky", "#6d28d9");
+
+        // Default to New when history is unavailable
+        return ("New", "#b45309");
+    }
     private static string Timestamp() => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
     // ?? Shared CSS blocks ???????????????????????????????????????????
@@ -557,23 +578,24 @@ function navigateFail(dir){
 
     /// <summary>
     /// Generates an Outlook-compatible HTML email report for a build's results.
-    /// Uses table-based layout (no CSS grid/flexbox) for maximum email client compatibility.
+    /// Redesigned: 600px container, emerald theme, compact metrics strip,
+    /// Agent column, progress bars, failure classification pills (Critical/New/Flaky).
     /// </summary>
-    public string GenerateEmailHtml(BuildNode build, string product, string machineName,
-        string buildPath, string reportLink = "")
+    public string GenerateEmailHtml(BuildNode build, string product, string controllerNode,
+        string buildPath, string reportLink = "", string component = "", string testType = "")
     {
         var sb = new StringBuilder();
         var passRate = build.PassRate;
-        var isPassing = passRate >= GoodThreshold;
-        var badgeColor = isPassing ? "#2ecc71" : passRate >= WarningThreshold ? "#f59e0b" : "#e74c3c";
-        var badgeText = isPassing ? "&#x2714; Passed" : "&#x2718; Failed";
-        var passBarWidth = (int)Math.Round(passRate);
-        var failBarWidth = 100 - passBarWidth;
+        var isPassing = build.FailedTests == 0;
+        var statusText = isPassing ? "PASSED" : "FAILED";
+        var statusColor = isPassing ? "#15803d" : "#b91c1c";
+        var passRateColor = isPassing ? "#15803d" : "#b91c1c";
 
-        var failedUseCases = build.UseCases
-            .Where(u => u.Failed > 0)
-            .OrderBy(u => u.PassRate)
-            .ToList();
+        // Derive component/testType defaults
+        if (string.IsNullOrWhiteSpace(component)) component = "TestAgent CI";
+        if (string.IsNullOrWhiteSpace(testType)) testType = "Functional Test";
+        var title = $"{Enc(product)} \u2014 {Enc(testType)}";
+        var runDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
 
         var allUseCases = build.UseCases
             .OrderByDescending(u => u.Failed)
@@ -581,167 +603,173 @@ function navigateFail(dir){
             .ThenBy(u => u.UseCaseName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // Preheader text (hidden)
+        var preheader = $"{Enc(product)} \u2014 {Enc(testType)} \u00B7 {passRate:F0}% pass \u00B7 {build.FailedTests} failure{(build.FailedTests == 1 ? "" : "s")} \u00B7 Build {Enc(build.BuildNumber)}";
+
         sb.AppendLine("<!DOCTYPE html>");
-        sb.AppendLine("<html lang=\"en\"><head><meta charset=\"utf-8\"><title>TestAgent CI Results</title></head>");
-        sb.AppendLine("<body style=\"margin:0;padding:0;background-color:#f0f2f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;\">");
+        sb.AppendLine("<html lang=\"en\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\">");
+        sb.AppendLine("<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"x-apple-disable-message-reformatting\">");
+        sb.AppendLine($"<title>{Enc(component)} CI Results</title>");
+        sb.AppendLine("<!--[if mso]><style>table, td, div, h1, h2, p, span { font-family:'Segoe UI',Calibri,Arial,sans-serif !important; }</style><![endif]-->");
+        sb.AppendLine("</head>");
+        sb.AppendLine("<body style=\"margin:0;padding:0;background-color:#eef0f3;font-family:'Segoe UI',Calibri,Arial,sans-serif;\">");
+
+        // Hidden preheader
+        sb.AppendLine($"<div style=\"display:none;max-height:0;overflow:hidden;mso-hide:all;\">{preheader}</div>");
 
         // Outer wrapper
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#f0f2f5;padding:24px 0;\"><tr><td align=\"center\">");
+        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color:#eef0f3;\"><tr><td align=\"center\" style=\"padding:20px 12px;\">");
 
-        // Main card
-        sb.AppendLine("<table role=\"presentation\" width=\"920\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);overflow:hidden;\">");
+        // MSO width fix
+        sb.AppendLine("<!--[if mso]><table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td><![endif]-->");
 
-        // === HEADER BANNER ===
-        sb.AppendLine("<tr><td style=\"background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:0;\">");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">");
-        sb.AppendLine("<tr><td style=\"padding:28px 36px 12px 36px;\">");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
-        sb.AppendLine("<td><span style=\"font-size:13px;font-weight:600;letter-spacing:2px;color:#64ffda;text-transform:uppercase;\">TestAgent CI</span></td>");
-        sb.AppendLine($"<td align=\"right\"><span style=\"display:inline-block;background-color:{badgeColor};color:#fff;font-size:13px;font-weight:700;padding:5px 16px;border-radius:20px;letter-spacing:1px;text-transform:uppercase;\">{badgeText}</span></td>");
-        sb.AppendLine("</tr></table></td></tr>");
-        sb.AppendLine("<tr><td style=\"padding:4px 36px 24px 36px;\">");
-        sb.AppendLine("<h1 style=\"margin:0;font-size:26px;font-weight:700;color:#ffffff;line-height:1.3;\">Use Case Execution Results</h1>");
-        sb.AppendLine("<p style=\"margin:6px 0 0 0;font-size:14px;color:#a0aec0;\">Functional test run completed &bull; Results summary below</p>");
-        sb.AppendLine("</td></tr></table></td></tr>");
+        // Main 600px container
+        sb.AppendLine("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:600px;max-width:600px;background-color:#ffffff;border:1px solid #d8dce1;\">");
 
-        // === RUN METADATA ===
-        sb.AppendLine("<tr><td style=\"padding:24px 36px 0 36px;\">");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#f8f9fb;border-radius:8px;border:1px solid #e8ecf1;\">");
-        sb.AppendLine("<tr><td style=\"padding:16px 20px;\">");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
-        sb.AppendLine("<td width=\"50%\" style=\"vertical-align:top;\">");
-        sb.AppendLine("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\">");
-        sb.AppendLine($"<tr><td style=\"padding-bottom:10px;\"><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Test Run</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{Enc(machineName)}</span></td></tr>");
-        sb.AppendLine($"<tr><td><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Product</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{Enc(product)}</span></td></tr>");
-        sb.AppendLine("</table></td>");
-        sb.AppendLine("<td width=\"50%\" style=\"vertical-align:top;\">");
-        sb.AppendLine("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\">");
-        sb.AppendLine($"<tr><td style=\"padding-bottom:10px;\"><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Build Info</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{Enc(build.BuildNumber)}</span></td></tr>");
-        sb.AppendLine($"<tr><td><span style=\"font-size:11px;font-weight:600;color:#8895a7;text-transform:uppercase;letter-spacing:0.8px;\">Run Date</span><br/><span style=\"font-size:14px;font-weight:600;color:#2d3748;\">{DateTime.Now:yyyy-MM-dd HH:mm:ss}</span></td></tr>");
-        sb.AppendLine("</table></td>");
-        sb.AppendLine("</tr></table></td></tr></table></td></tr>");
-
-        // === OVERALL SUMMARY KPI ===
-        sb.AppendLine("<tr><td style=\"padding:24px 36px 0 36px;\">");
-        sb.AppendLine("<h2 style=\"margin:0 0 14px 0;font-size:16px;font-weight:700;color:#1a202c;border-bottom:2px solid #e2e8f0;padding-bottom:8px;\">Overall Summary</h2>");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
-        AppendEmailKpiCard(sb, $"{passRate:F1}%", "Pass Rate", passRate >= GoodThreshold ? "#f0fdf4" : "#fef2f2",
-            passRate >= GoodThreshold ? "#bbf7d0" : "#fecaca", passRate >= GoodThreshold ? "#16a34a" : "#dc2626",
-            passRate >= GoodThreshold ? "#4ade80" : "#f87171");
-        AppendEmailKpiCard(sb, build.TotalTests.ToString(), "Total Tests", "#eff6ff", "#bfdbfe", "#2563eb", "#60a5fa");
-        AppendEmailKpiCard(sb, build.PassedTests.ToString(), "Passed", "#f0fdf4", "#bbf7d0", "#16a34a", "#4ade80");
-        AppendEmailKpiCard(sb, build.FailedTests.ToString(), "Failed", "#fef2f2", "#fecaca", "#dc2626", "#f87171");
-        sb.AppendLine("</tr></table>");
-
-        // Progress bar
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-top:14px;\"><tr><td>");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-radius:6px;overflow:hidden;background-color:#fee2e2;\"><tr>");
-        sb.AppendLine($"<td width=\"{passBarWidth}%\" style=\"background-color:#22c55e;height:10px;border-radius:6px 0 0 6px;\"></td>");
-        sb.AppendLine($"<td width=\"{failBarWidth}%\" style=\"background-color:#ef4444;height:10px;border-radius:0 6px 6px 0;\"></td>");
-        sb.AppendLine("</tr></table></td></tr>");
-        sb.AppendLine("<tr><td style=\"padding-top:4px;\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
-        sb.AppendLine($"<td style=\"font-size:11px;color:#6b7280;\">Timeout: <strong>{build.TimeoutTests}</strong></td>");
-        sb.AppendLine($"<td align=\"right\" style=\"font-size:11px;color:#6b7280;\">Duration: <strong>{build.TotalDuration:hh\\:mm\\:ss}</strong></td>");
-        sb.AppendLine("</tr></table></td></tr></table></td></tr>");
-
-        // === USE CASE RESULTS TABLE ===
-        sb.AppendLine("<tr><td style=\"padding:28px 36px 0 36px;\">");
-        var tableTitle = failedUseCases.Count > 0
-            ? $"Use Case Results ({failedUseCases.Count} with failures)"
-            : "Use Case Results (All Passed)";
-        sb.AppendLine($"<h2 style=\"margin:0 0 14px 0;font-size:16px;font-weight:700;color:#1a202c;border-bottom:2px solid #e2e8f0;padding-bottom:8px;\">{tableTitle}</h2>");
-
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;\">");
+        // === HEADER (deep emerald band) ===
+        sb.AppendLine("<tr><td bgcolor=\"#0F5132\" style=\"background-color:#0F5132;padding:22px 28px;border-bottom:3px solid #3FB950;\">");
+        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
+        // Eyebrow + Status pill
         sb.AppendLine("<tr>");
-        sb.AppendLine("<td style=\"background-color:#1e293b;padding:10px 14px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.8px;\">Use Case</td>");
-        sb.AppendLine("<td width=\"70\" align=\"center\" style=\"background-color:#1e293b;padding:10px 8px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;\">Pass %</td>");
-        sb.AppendLine("<td width=\"120\" style=\"background-color:#1e293b;padding:10px 8px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;\">Progress</td>");
-        sb.AppendLine("<td width=\"50\" align=\"center\" style=\"background-color:#1e293b;padding:10px 8px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;\">Pass</td>");
-        sb.AppendLine("<td width=\"50\" align=\"center\" style=\"background-color:#1e293b;padding:10px 8px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;\">Fail</td>");
-        sb.AppendLine("<td width=\"50\" align=\"center\" style=\"background-color:#1e293b;padding:10px 8px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;\">N/E</td>");
-        sb.AppendLine("<td width=\"80\" align=\"center\" style=\"background-color:#1e293b;padding:10px 8px;font-size:12px;font-weight:700;color:#e2e8f0;text-transform:uppercase;\">Duration</td>");
+        sb.AppendLine($"<td style=\"font-size:12px;font-weight:700;letter-spacing:1.5px;color:#86EFAC;text-transform:uppercase;\">{Enc(component)}</td>");
+        sb.AppendLine($"<td align=\"right\"><span style=\"background-color:{statusColor};color:#ffffff;font-size:12px;font-weight:700;padding:3px 12px;letter-spacing:0.5px;\">{statusText}</span></td>");
+        sb.AppendLine("</tr>");
+        // Title
+        sb.AppendLine($"<tr><td colspan=\"2\" style=\"padding-top:10px;font-size:21px;font-weight:700;color:#ffffff;line-height:1.25;\">{title}</td></tr>");
+        // Meta line
+        sb.AppendLine("<tr><td colspan=\"2\" style=\"padding-top:8px;font-size:12px;color:#b7e4c7;line-height:1.5;\">");
+        sb.AppendLine($"Build <strong style=\"color:#ffffff;\">{Enc(build.BuildNumber)}</strong>");
+        sb.AppendLine($"&nbsp;&middot;&nbsp; Controller <strong style=\"color:#ffffff;\">{Enc(controllerNode)}</strong>");
+        sb.AppendLine($"&nbsp;&middot;&nbsp; {runDate}");
+        sb.AppendLine("</td></tr>");
+        sb.AppendLine("</table></td></tr>");
+
+        // === COMPACT METRICS ROW ===
+        sb.AppendLine("<tr><td style=\"padding:18px 28px 4px 28px;\">");
+        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f8f9fb\" style=\"background-color:#f8f9fb;border:1px solid #e5e7eb;\">");
+        sb.AppendLine("<tr>");
+        // Pass Rate
+        sb.AppendLine($"<td align=\"center\" style=\"padding:14px 4px;border-right:1px solid #e5e7eb;\"><div style=\"font-size:22px;font-weight:700;color:{passRateColor};line-height:1;\">{passRate:F0}%</div><div style=\"font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;padding-top:5px;\">Pass Rate</div></td>");
+        // Total
+        sb.AppendLine($"<td align=\"center\" style=\"padding:14px 4px;border-right:1px solid #e5e7eb;\"><div style=\"font-size:22px;font-weight:700;color:#1f2937;line-height:1;\">{build.TotalTests}</div><div style=\"font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;padding-top:5px;\">Total</div></td>");
+        // Passed
+        sb.AppendLine($"<td align=\"center\" style=\"padding:14px 4px;border-right:1px solid #e5e7eb;\"><div style=\"font-size:22px;font-weight:700;color:#15803d;line-height:1;\">{build.PassedTests}</div><div style=\"font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;padding-top:5px;\">Passed</div></td>");
+        // Failed
+        sb.AppendLine($"<td align=\"center\" style=\"padding:14px 4px;border-right:1px solid #e5e7eb;\"><div style=\"font-size:22px;font-weight:700;color:#b91c1c;line-height:1;\">{build.FailedTests}</div><div style=\"font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;padding-top:5px;\">Failed</div></td>");
+        // Duration
+        sb.AppendLine($"<td align=\"center\" style=\"padding:14px 4px;\"><div style=\"font-size:16px;font-weight:700;color:#1f2937;line-height:1;padding-top:4px;\">{build.TotalDuration:hh\\:mm\\:ss}</div><div style=\"font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;padding-top:6px;\">Duration</div></td>");
+        sb.AppendLine("</tr></table></td></tr>");
+
+        // === USE CASE RESULTS TABLE (emerald header, Agent first + Progress column) ===
+        sb.AppendLine("<tr><td style=\"padding:18px 28px 0 28px;\">");
+        sb.AppendLine("<div style=\"font-size:13px;font-weight:700;color:#14532d;text-transform:uppercase;letter-spacing:0.6px;padding-bottom:8px;\">Use Case Results</div>");
+        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border:1px solid #cbe9d3;\">");
+        // Table header
+        sb.AppendLine("<tr bgcolor=\"#0F5132\">");
+        sb.AppendLine("<td style=\"padding:8px 10px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;letter-spacing:0.4px;\">Agent</td>");
+        sb.AppendLine("<td style=\"padding:8px 6px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;letter-spacing:0.4px;\">Use Case</td>");
+        sb.AppendLine("<td align=\"center\" style=\"padding:8px 4px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;\">Pass %</td>");
+        sb.AppendLine("<td style=\"padding:8px 6px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;\">Progress</td>");
+        sb.AppendLine("<td align=\"center\" style=\"padding:8px 4px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;\">Pass</td>");
+        sb.AppendLine("<td align=\"center\" style=\"padding:8px 4px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;\">Fail</td>");
+        sb.AppendLine("<td align=\"center\" style=\"padding:8px 4px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;\">N/E</td>");
+        sb.AppendLine("<td align=\"right\" style=\"padding:8px 10px;font-size:10px;font-weight:700;color:#d1fae5;text-transform:uppercase;\">Duration</td>");
         sb.AppendLine("</tr>");
 
+        int rowIdx = 0;
         foreach (var uc in allUseCases)
         {
-            var rowBg = uc.Failed > 0 && uc.PassRate < 50 ? "background-color:#fef2f2;" : "";
-            var rateColor = uc.PassRate >= GoodThreshold ? "#16a34a" : uc.PassRate >= WarningThreshold ? "#f59e0b" : "#dc2626";
-            var ucPassWidth = uc.Total > 0 ? (int)Math.Round(uc.PassRate) : 0;
-            var ucFailWidth = 100 - ucPassWidth;
+            var rowBg = rowIdx % 2 == 1 ? " bgcolor=\"#fbfcfd\"" : "";
+            var rateColor = uc.PassRate >= 100.0 ? "#15803d" : uc.PassRate >= GoodThreshold ? "#15803d" : uc.PassRate >= WarningThreshold ? "#b45309" : "#b91c1c";
+            var passWidth = uc.Total > 0 ? (int)Math.Round(uc.PassRate) : 0;
+            var failWidth = 100 - passWidth;
+            var agentName = !string.IsNullOrWhiteSpace(uc.Agent) ? uc.Agent : controllerNode;
+            var failColor = uc.Failed > 0 ? "font-weight:700;color:#b91c1c;" : "color:#1f2937;";
 
-            sb.AppendLine($"<tr style=\"{rowBg}\">");
-            sb.AppendLine($"<td style=\"padding:10px 14px;font-size:13px;color:#334155;border-bottom:1px solid #f1f5f9;\">{Enc(uc.UseCaseName)}</td>");
-            sb.AppendLine($"<td align=\"center\" style=\"padding:10px 8px;font-size:13px;font-weight:600;color:{rateColor};border-bottom:1px solid #f1f5f9;\">{uc.PassRate:F1}%</td>");
-            sb.AppendLine("<td style=\"padding:10px 8px;border-bottom:1px solid #f1f5f9;\">");
-            sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-radius:4px;overflow:hidden;\"><tr>");
-            sb.AppendLine($"<td width=\"{ucPassWidth}%\" style=\"background-color:#22c55e;height:8px;\"></td>");
-            sb.AppendLine($"<td width=\"{ucFailWidth}%\" style=\"background-color:#ef4444;height:8px;\"></td>");
+            sb.AppendLine($"<tr{rowBg}>");
+            sb.AppendLine($"<td style=\"padding:9px 10px;font-size:12px;font-weight:600;color:#374151;border-top:1px solid #eef0f3;\">{Enc(agentName)}</td>");
+            sb.AppendLine($"<td style=\"padding:9px 6px;font-size:12px;color:#1f2937;border-top:1px solid #eef0f3;\">{Enc(uc.UseCaseName)}</td>");
+            sb.AppendLine($"<td align=\"center\" style=\"padding:9px 4px;font-size:12px;font-weight:700;color:{rateColor};border-top:1px solid #eef0f3;\">{uc.PassRate:F1}%</td>");
+            // Progress bar (nested table with bgcolor for Outlook)
+            sb.AppendLine("<td style=\"padding:9px 6px;border-top:1px solid #eef0f3;\">");
+            sb.AppendLine("<table role=\"presentation\" width=\"60\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>");
+            if (passWidth > 0)
+                sb.AppendLine($"<td width=\"{passWidth}%\" bgcolor=\"#22c55e\" style=\"background-color:#22c55e;height:7px;line-height:7px;font-size:0;\">&nbsp;</td>");
+            if (failWidth > 0)
+                sb.AppendLine($"<td width=\"{failWidth}%\" bgcolor=\"#ef4444\" style=\"background-color:#ef4444;height:7px;line-height:7px;font-size:0;\">&nbsp;</td>");
             sb.AppendLine("</tr></table></td>");
-            sb.AppendLine($"<td align=\"center\" style=\"padding:10px 8px;font-size:13px;font-weight:600;color:#334155;border-bottom:1px solid #f1f5f9;\">{uc.Passed}</td>");
-            var failColor = uc.Failed > 0 ? "#dc2626" : "#334155";
-            var failWeight = uc.Failed > 0 ? "700" : "400";
-            sb.AppendLine($"<td align=\"center\" style=\"padding:10px 8px;font-size:13px;font-weight:{failWeight};color:{failColor};border-bottom:1px solid #f1f5f9;\">{uc.Failed}</td>");
-            sb.AppendLine($"<td align=\"center\" style=\"padding:10px 8px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9;\">{uc.NotExecuted}</td>");
-            sb.AppendLine($"<td align=\"center\" style=\"padding:10px 8px;font-size:12px;color:#64748b;font-family:'Courier New',monospace;border-bottom:1px solid #f1f5f9;\">{uc.Duration:hh\\:mm\\:ss}</td>");
+            sb.AppendLine($"<td align=\"center\" style=\"padding:9px 4px;font-size:12px;color:#1f2937;border-top:1px solid #eef0f3;\">{uc.Passed}</td>");
+            sb.AppendLine($"<td align=\"center\" style=\"padding:9px 4px;font-size:12px;{failColor}border-top:1px solid #eef0f3;\">{uc.Failed}</td>");
+            sb.AppendLine($"<td align=\"center\" style=\"padding:9px 4px;font-size:12px;color:#9ca3af;border-top:1px solid #eef0f3;\">{uc.NotExecuted}</td>");
+            sb.AppendLine($"<td align=\"right\" style=\"padding:9px 10px;font-size:11px;color:#6b7280;border-top:1px solid #eef0f3;\">{uc.Duration:hh\\:mm\\:ss}</td>");
             sb.AppendLine("</tr>");
+            rowIdx++;
         }
         sb.AppendLine("</table></td></tr>");
 
-        // === FAILED TESTS DETAIL ===
+        // === FAILED TESTS TABLE (red theme + Type classification) ===
         if (build.AllFailedTests.Count > 0)
         {
-            sb.AppendLine("<tr><td style=\"padding:28px 36px 0 36px;\">");
-            sb.AppendLine($"<h2 style=\"margin:0 0 14px 0;font-size:16px;font-weight:700;color:#dc2626;border-bottom:2px solid #fecaca;padding-bottom:8px;\">Failed Tests ({build.AllFailedTests.Count})</h2>");
-            sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #fecaca;border-radius:8px;overflow:hidden;\">");
-            sb.AppendLine("<tr>");
-            sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Test Name</td>");
-            sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Use Case</td>");
-            sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Pattern</td>");
-            sb.AppendLine("<td style=\"background-color:#7f1d1d;padding:10px 14px;font-size:12px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Error</td>");
+            sb.AppendLine("<tr><td style=\"padding:18px 28px 0 28px;\">");
+            sb.AppendLine($"<div style=\"font-size:13px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:0.6px;padding-bottom:8px;\">Failed Tests ({build.AllFailedTests.Count})</div>");
+            sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border:1px solid #f0c4c4;\">");
+            sb.AppendLine("<tr bgcolor=\"#7f1d1d\">");
+            sb.AppendLine("<td style=\"padding:8px 12px;font-size:11px;font-weight:700;color:#fecaca;text-transform:uppercase;letter-spacing:0.5px;\">Test</td>");
+            sb.AppendLine("<td align=\"center\" style=\"padding:8px 6px;font-size:11px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Set</td>");
+            sb.AppendLine("<td align=\"center\" style=\"padding:8px 6px;font-size:11px;font-weight:700;color:#fecaca;text-transform:uppercase;\">Type</td>");
+            sb.AppendLine("<td style=\"padding:8px 12px;font-size:11px;font-weight:700;color:#fecaca;text-transform:uppercase;letter-spacing:0.5px;\">Error</td>");
             sb.AppendLine("</tr>");
 
             foreach (var t in build.AllFailedTests.Take(30))
             {
                 var errText = TruncateError(t.ErrorMessage);
                 var patternLabel = GetPatternLabel(t.TestName);
-                var (patBg, patColor) = GetPatternBadgeColors(patternLabel);
-                sb.AppendLine("<tr style=\"background-color:#fef2f2;\">");
-                sb.AppendLine($"<td style=\"padding:8px 14px;font-size:12px;font-weight:600;color:#991b1b;border-bottom:1px solid #fecaca;\">{Enc(t.TestName)}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 14px;font-size:12px;color:#64748b;border-bottom:1px solid #fecaca;\">{Enc(t.UseCaseName)}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 14px;font-size:11px;font-weight:700;text-align:center;border-bottom:1px solid #fecaca;background:{patBg};color:{patColor};\">{Enc(patternLabel)}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 14px;font-size:11px;color:#991b1b;font-family:'Courier New',monospace;border-bottom:1px solid #fecaca;\">{Enc(errText)}</td>");
+                var (classification, pillBg) = GetEmailClassification(patternLabel);
+
+                sb.AppendLine("<tr bgcolor=\"#fef6f6\">");
+                sb.AppendLine($"<td style=\"padding:8px 12px;font-size:12px;font-weight:600;color:#991b1b;border-top:1px solid #f3d1d1;\">{Enc(t.TestName)}</td>");
+                sb.AppendLine($"<td align=\"center\" style=\"padding:8px 6px;font-size:12px;color:#6b7280;border-top:1px solid #f3d1d1;\">{Enc(t.UseCaseName)}</td>");
+                sb.AppendLine($"<td align=\"center\" style=\"padding:8px 6px;border-top:1px solid #f3d1d1;\"><span style=\"background-color:{pillBg};color:#ffffff;font-size:10px;font-weight:700;padding:2px 8px;text-transform:uppercase;letter-spacing:0.4px;\">{classification}</span></td>");
+                sb.AppendLine($"<td style=\"padding:8px 12px;font-size:12px;color:#991b1b;border-top:1px solid #f3d1d1;\">{Enc(errText)}</td>");
                 sb.AppendLine("</tr>");
             }
 
             if (build.AllFailedTests.Count > 30)
             {
-                sb.AppendLine($"<tr><td colspan=\"4\" style=\"padding:10px 14px;font-size:12px;color:#64748b;text-align:center;\">... and {build.AllFailedTests.Count - 30} more failed tests</td></tr>");
+                sb.AppendLine($"<tr><td colspan=\"4\" style=\"padding:10px 12px;font-size:12px;color:#64748b;text-align:center;border-top:1px solid #f3d1d1;\">... and {build.AllFailedTests.Count - 30} more failed tests</td></tr>");
             }
             sb.AppendLine("</table></td></tr>");
+
+            // === FAILURE CLASSIFICATION LEGEND ===
+            sb.AppendLine("<tr><td style=\"padding:16px 28px 0 28px;\">");
+            sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f8f9fb\" style=\"background-color:#f8f9fb;border:1px solid #e5e7eb;\">");
+            sb.AppendLine("<tr><td style=\"padding:14px 16px;\">");
+            sb.AppendLine("<div style=\"font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.6px;padding-bottom:10px;\">Failure Classification</div>");
+            sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
+            // Critical
+            sb.AppendLine("<tr><td width=\"16\" valign=\"top\" style=\"padding:0 0 8px 0;\"><span style=\"display:inline-block;width:10px;height:10px;background-color:#b91c1c;\"></span></td>");
+            sb.AppendLine("<td style=\"padding:0 0 8px 0;font-size:12px;color:#374151;line-height:1.5;\"><strong style=\"color:#b91c1c;\">Critical</strong> &mdash; fails consistently across runs; a confirmed product defect that blocks the use case.</td></tr>");
+            // New
+            sb.AppendLine("<tr><td width=\"16\" valign=\"top\" style=\"padding:0 0 8px 0;\"><span style=\"display:inline-block;width:10px;height:10px;background-color:#b45309;\"></span></td>");
+            sb.AppendLine("<td style=\"padding:0 0 8px 0;font-size:12px;color:#374151;line-height:1.5;\"><strong style=\"color:#b45309;\">New</strong> &mdash; passed in the previous build but failed in this one; a likely regression to triage first.</td></tr>");
+            // Flaky
+            sb.AppendLine("<tr><td width=\"16\" valign=\"top\" style=\"padding:0;\"><span style=\"display:inline-block;width:10px;height:10px;background-color:#6d28d9;\"></span></td>");
+            sb.AppendLine("<td style=\"padding:0;font-size:12px;color:#374151;line-height:1.5;\"><strong style=\"color:#6d28d9;\">Flaky</strong> &mdash; passes and fails intermittently with no code change; unstable test or timing-sensitive.</td></tr>");
+            sb.AppendLine("</table></td></tr></table></td></tr>");
         }
 
         // === FOOTER ===
-        sb.AppendLine("<tr><td style=\"padding:28px 36px 0 36px;\">");
-        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#f8f9fb;border-radius:8px;border:1px solid #e8ecf1;\"><tr><td style=\"padding:16px 20px;\">");
-        sb.AppendLine("<p style=\"margin:0 0 6px 0;font-size:13px;font-weight:700;color:#475569;\">TestAgent CI Functional Test Results Completed</p>");
-        sb.AppendLine($"<p style=\"margin:0 0 10px 0;font-size:13px;color:#64748b;line-height:1.6;\">Product = <strong>{Enc(product)}</strong> | Build = <strong>{Enc(build.BuildNumber)}</strong><br/>Path = <span style=\"font-family:'Courier New',monospace;font-size:12px;color:#475569;\">{Enc(buildPath)}</span></p>");
-
-        if (!string.IsNullOrEmpty(reportLink))
-        {
-            sb.AppendLine("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\"><tr><td>");
-            sb.AppendLine($"<a href=\"{Enc(reportLink)}\" style=\"display:inline-block;background-color:#2563eb;color:#ffffff;font-size:13px;font-weight:600;padding:8px 20px;border-radius:6px;text-decoration:none;\">&#128196; View Full Report</a>");
-            sb.AppendLine("</td></tr></table>");
-        }
+        sb.AppendLine("<tr><td style=\"padding:18px 28px 22px 28px;\">");
+        sb.AppendLine("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-top:1px solid #e5e7eb;\">");
+        sb.AppendLine("<tr><td style=\"padding-top:14px;font-size:12px;color:#6b7280;line-height:1.6;\">");
+        sb.AppendLine($"Results path: <span style=\"font-family:Consolas,'Courier New',monospace;font-size:11px;color:#374151;\">{Enc(buildPath)}</span><br>");
+        sb.AppendLine($"Automated notification &middot; {Enc(product)} QA");
         sb.AppendLine("</td></tr></table></td></tr>");
 
-        // Copyright
-        sb.AppendLine("<tr><td style=\"padding:28px 36px;\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:1px solid #e2e8f0;\"><tr><td style=\"padding-top:16px;\">");
-        sb.AppendLine("<p style=\"margin:0;font-size:12px;color:#94a3b8;line-height:1.5;\">This is an automated notification from <strong style=\"color:#64748b;\">TestAgent CI</strong>.</p>");
-        sb.AppendLine($"<p style=\"margin:10px 0 0 0;font-size:11px;color:#cbd5e1;\">&copy; {DateTime.Now.Year} TestAgent &bull; AVEVA System Platform QA</p>");
-        sb.AppendLine("</td></tr></table></td></tr>");
-
-        // Close tables
-        sb.AppendLine("</table></td></tr></table></body></html>");
+        // Close main container + MSO fix + outer wrapper
+        sb.AppendLine("</table>");
+        sb.AppendLine("<!--[if mso]></td></tr></table><![endif]-->");
+        sb.AppendLine("</td></tr></table></body></html>");
 
         return sb.ToString();
     }

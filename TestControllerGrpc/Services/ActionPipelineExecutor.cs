@@ -214,8 +214,14 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                         var reportLink = ctx.Parameters.GetValueOrDefault("_ReportLink")
                             ?? ctx.Parameters.GetValueOrDefault("ReportLink")
                             ?? "";
+                        var component = ctx.Parameters.GetValueOrDefault("_Component")
+                            ?? ctx.Parameters.GetValueOrDefault("Component")
+                            ?? "";
+                        var testType = ctx.Parameters.GetValueOrDefault("_TestType")
+                            ?? ctx.Parameters.GetValueOrDefault("TestType")
+                            ?? "";
 
-                        body = _htmlGenerator.GenerateEmailHtml(buildNode, product, machine, buildPath, reportLink);
+                        body = _htmlGenerator.GenerateEmailHtml(buildNode, product, machine, buildPath, reportLink, component, testType);
                         isHtml = true;
                         Log("SendMail", $"Generated results email from: {resultsPath} ({buildNode.TotalTests} tests, {buildNode.PassRate:F1}% pass rate)");
                     }
