@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
+    <ProjectReference Include="..\TestController.Persistence\TestController.Persistence.csproj" />
   </ItemGroup>
 
 </Project>

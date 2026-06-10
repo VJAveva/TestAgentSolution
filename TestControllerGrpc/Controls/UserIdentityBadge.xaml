@@ -1,0 +1,34 @@
+<UserControl x:Class="TestControllerGrpc.Controls.UserIdentityBadge"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Renders user identity badge in top chrome.
+        Handles all variants: Administrator, SeniorManager, Engineer, Guest, Observer, Default user.
+        Default user gets a dashed border per design spec.
+    -->
+    <Border x:Name="BadgeBorder" CornerRadius="4" Padding="8,4" Margin="4,0"
+            BorderThickness="1"
+            BorderBrush="{Binding BadgeBorderBrush}"
+            Background="{Binding BadgeBackground}">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsDefaultUser}" Value="True">
+                        <Setter Property="BorderBrush" Value="#FF9399B2"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <!-- Dashed border for Default user -->
+                        <Setter Property="Tag" Value="Dashed"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding RoleIcon}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBlock Text="{Binding DisplayName}" FontSize="11" VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+            <TextBlock Text="{Binding RoleLabel}" FontSize="10" VerticalAlignment="Center"
+                       Margin="6,0,0,0" Opacity="0.7"
+                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+        </StackPanel>
+    </Border>
+</UserControl>

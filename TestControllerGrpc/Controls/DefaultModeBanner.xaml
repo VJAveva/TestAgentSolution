@@ -1,0 +1,22 @@
+<UserControl x:Class="TestControllerGrpc.Controls.DefaultModeBanner"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Fixed (non-dismissible) banner at top of main window.
+        Visible only in Default mode. Per 02_Implementation_Roadmap.md Phase 0.5 Risks:
+        "Banner is fixed (not dismissible) by design — it is the discoverability anchor for the upgrade path."
+    -->
+    <Border Background="#33F9E2AF" BorderBrush="#FFF9E2AF" BorderThickness="0,0,0,1"
+            Padding="12,6" Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}}">
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
+                       FontSize="12" Foreground="#FFF9E2AF">
+                <Run Text="⚠"/>
+                <Run Text=" Default Mode"/>
+                <Run Text=" — " Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <Run Text="No authentication required. WPF has full access. Go to Settings to enable Secured mode."
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </TextBlock>
+        </DockPanel>
+    </Border>
+</UserControl>

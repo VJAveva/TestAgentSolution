@@ -88,6 +88,9 @@ builder.Services.AddSingleton<IActionPipelineExecutor>(sp => new StandalonePipel
     sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>()));
 builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
+// RBAC feature (identity, authorization, audit, persistence)
+builder.Services.AddRbacFeature(builder.Configuration);
+
 // Multi-identity security framework: authentication + authorization + audit
 builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 

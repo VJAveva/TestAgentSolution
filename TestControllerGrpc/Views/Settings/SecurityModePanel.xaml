@@ -1,0 +1,78 @@
+<UserControl x:Class="TestControllerGrpc.Views.Settings.SecurityModePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.Settings">
+    <UserControl.Resources>
+        <Style x:Key="ModeCard" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <TextBlock Text="Security Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"
+                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+        <TextBlock Text="Controls whether authentication and authorization are enforced."
+                   FontSize="12" Margin="0,0,0,16" Opacity="0.7"
+                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+        <!-- Side-by-side mode cards -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Default Mode Card -->
+            <Border Grid.Column="0" Style="{StaticResource ModeCard}"
+                    BorderBrush="{Binding IsDefaultMode, Converter={StaticResource BoolToActiveBorderBrush}, FallbackValue=#FF585B70}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Default Mode" FontWeight="SemiBold" FontSize="14"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <Border Background="#FFA6E3A1" CornerRadius="4" Padding="4,2" Margin="8,0,0,0"
+                                Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="ACTIVE" FontSize="10" FontWeight="Bold" Foreground="#FF1E1E2E"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Text="No login required. WPF has full access. Web Client is read-only (Observer)."/>
+                    <Button Content="Switch to Secured mode…" Margin="0,16,0,0"
+                            Command="{Binding OpenWizardCommand}"
+                            Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}}"
+                            IsEnabled="{Binding IsSwitching, Converter={StaticResource InverseBool}}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Secured Mode Card -->
+            <Border Grid.Column="1" Style="{StaticResource ModeCard}"
+                    BorderBrush="{Binding IsSecuredMode, Converter={StaticResource BoolToActiveBorderBrush}, FallbackValue=#FF585B70}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Secured Mode" FontWeight="SemiBold" FontSize="14"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <Border Background="#FF89B4FA" CornerRadius="4" Padding="4,2" Margin="8,0,0,0"
+                                Visibility="{Binding IsSecuredMode, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="ACTIVE" FontSize="10" FontWeight="Bold" Foreground="#FF1E1E2E"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Text="Full RBAC enforcement. Users must authenticate. Role-based permissions apply."/>
+                    <Button Content="Disable RBAC…" Margin="0,16,0,0"
+                            Command="{Binding OpenDisableDialogCommand}"
+                            Visibility="{Binding IsSecuredMode, Converter={StaticResource BoolToVisibility}}"
+                            IsEnabled="{Binding IsSwitching, Converter={StaticResource InverseBool}}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Status message -->
+        <TextBlock Text="{Binding StatusMessage}" Margin="0,12,0,0" FontSize="12"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   Visibility="{Binding StatusMessage, Converter={StaticResource StringToVisibility}}"/>
+    </StackPanel>
+</UserControl>

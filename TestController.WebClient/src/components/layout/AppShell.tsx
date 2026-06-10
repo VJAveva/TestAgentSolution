@@ -15,9 +15,12 @@ import BuildDetail from '../results/BuildDetail';
 import TrendCharts from '../results/TrendCharts';
 import Sidebar from './Sidebar';
 import ConnectionStatus from './ConnectionStatus';
+import DefaultModeBanner from '../header/DefaultModeBanner';
+import UserIdentityBadge from '../header/UserIdentityBadge';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useAgents } from '../../hooks/useAgents';
 import { useExecution } from '../../hooks/useExecution';
+import { useSystemModeStore } from '../../stores/systemModeStore';
 
 type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results';
 
@@ -35,12 +38,14 @@ export default function AppShell() {
   const { fetchConfig } = useWatchList();
   const { fetchAgents } = useAgents();
   const { fetchSessions } = useExecution();
+  const fetchMode = useSystemModeStore((s) => s.fetchMode);
 
   useEffect(() => {
+    fetchMode().catch(err => console.error('Failed to load system mode:', err));
     fetchConfig().catch(err => console.error('Failed to load watchlist:', err));
     fetchAgents().catch(err => console.error('Failed to load agents:', err));
     fetchSessions().catch(err => console.error('Failed to load execution sessions:', err));
-  }, [fetchConfig, fetchAgents, fetchSessions]);
+  }, [fetchMode, fetchConfig, fetchAgents, fetchSessions]);
 
   return (
     <div className="flex flex-col h-screen bg-bg">
@@ -61,10 +66,14 @@ export default function AppShell() {
             </button>
           ))}
         </nav>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <UserIdentityBadge />
           <ConnectionStatus />
         </div>
       </header>
+
+      {/* Default Mode Banner — fixed, non-dismissible */}
+      <DefaultModeBanner />
 
       {/* Tab content */}
       <div className="flex flex-1 overflow-hidden">

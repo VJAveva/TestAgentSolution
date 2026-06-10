@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TestController.Api;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
@@ -81,8 +82,11 @@ public partial class App : Application
             {
                 log.SetMinimumLevel(LogLevel.Information);
             })
-            .ConfigureServices(services =>
+            .ConfigureServices((ctx, services) =>
             {
+                // RBAC feature (identity, authorization, audit, persistence)
+                services.AddRbacFeature(ctx.Configuration);
+
                 services.AddSingleton<IEventAggregator, EventAggregator>();
                 services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
                 services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
@@ -124,6 +128,14 @@ public partial class App : Application
 
                 services.AddSingleton<MainViewModel>();
                 services.AddSingleton<ExecutionHistoryPanelVM>();
+
+                // Phase 0.5: SystemMode client + Settings ViewModel
+                services.AddHttpClient("SystemMode", client =>
+                {
+                    client.BaseAddress = new Uri("http://localhost:5000");
+                });
+                services.AddSingleton<SystemModeClient>();
+                services.AddSingleton<ViewModels.Settings.SecurityModeViewModel>();
 
                 // Health threshold settings (operator-configurable)
                 services.AddSingleton(sp =>

@@ -36,6 +36,7 @@
     <ProjectReference Include="..\TestController.WebApi\TestController.WebApi.csproj" />
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
     <ProjectReference Include="..\TestController.Api\TestController.Api.csproj" />
+    <ProjectReference Include="..\TestController.Persistence\TestController.Persistence.csproj" />
   </ItemGroup>
 
 </Project>

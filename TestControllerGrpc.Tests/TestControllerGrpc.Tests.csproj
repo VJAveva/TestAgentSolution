@@ -34,6 +34,7 @@
     <ProjectReference Include="..\TestAgentGrpc\TestAgentGrpc.csproj">
       <Aliases>AgentAlias</Aliases>
     </ProjectReference>
+    <ProjectReference Include="..\TestController.Persistence\TestController.Persistence.csproj" />
   </ItemGroup>
 
 </Project>

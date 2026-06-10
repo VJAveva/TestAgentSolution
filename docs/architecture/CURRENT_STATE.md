@@ -195,3 +195,79 @@ No Cake/MSBuild custom targets. Build uses `dotnet publish` with `win-x64`, self
 7. **`App.Services` static accessor:** WPF controller uses a static `App.Services` for service location in places DI can't reach. Breaking this breaks window construction.
 
 8. **`ExecutionSessionManager.cs~RF*.TMP` files:** Leftover temp files from VS refactoring exist in the repo. They are harmless but should not be deleted (may contain in-progress work).
+
+## RBAC Feature (Phase 0 complete — 2026-06-10)
+
+### New Public Interfaces in TestControllerGrpc.Core
+- `IUserContext` — identity flowing through every gRPC request (UserId, Username, Email, Role, ClientKind, AssignedPipelineIds)
+- `IAuthorizationService` — `CanAsync(user, permission, resourceId?)` with Default-mode short-circuit
+- `IAuditWriter` — fire-and-forget audit writer
+
+### New Enums
+- `Role` (Administrator/SeniorManager/Engineer/Guest)
+- `ClientKind` (Wpf/Web/Cli)
+- `Permission` (19 entries — see 01_System_Design.md §3.1)
+
+### New Project
+- `TestController.Persistence` — EF Core + SQLite, references TestControllerGrpc.Core
+  - DbContext: `OrchestratorDbContext`
+  - Tables: Users, Sessions, PipelineAssignments, AuditEntries
+  - Mode: SQLite WAL via PRAGMA in OnConfiguring
+  - Migrations location: TestController.Persistence/Migrations/
+  - Initial admin seeded in 0001_SeedAdmin
+
+### New DI Registration
+- `TestController.Api/RbacFeatureExtensions.cs` exposes `AddRbacFeature(this IServiceCollection)`
+- Called from both `TestControllerGrpc/App.xaml.cs` and `TestController.WebApi/Program.cs`
+- Adds: `IAuthorizationService`, `ISessionStore`, `IAuditWriter`, `SessionAuthInterceptor`,
+  `AuditLoggingInterceptor`, `AuditDrainWorker` (hosted), `AuthService`, `SystemModeGrpcService`
+
+### Configuration
+- `RBAC:Enabled` boolean in appsettings.json — defaults to false (Default mode)
+- Modified at runtime via `IWritableOptions<RbacOptions>` (writes back to appsettings.json)
+
+### Coexists With
+- `AddMultiIdentitySecurity()` — still active for REST endpoints with NTLM/API-key/roles
+- `AgentLockManager` — still active for per-execution-session agent locking
+
+Append a new section to docs/architecture/CURRENT_STATE.md:
+
+## RBAC Feature (Phase 0.5 complete — YYYY-MM-DD)
+
+### New WPF Views
+- Views/Settings/SettingsView.xaml — Settings tab in MainWindow
+- Views/Settings/SecurityModePanel.xaml — Mockup 10 implementation
+- Views/Settings/InitialAdminWizard.xaml — Default→Secured flow
+- Views/Settings/DisableRbacConfirmDialog.xaml — Secured→Default flow
+- Controls/DefaultModeBanner.xaml — fixed, non-dismissible
+- Controls/UserIdentityBadge.xaml — handles all 6 variants
+
+### New WPF ViewModels
+- ViewModels/Settings/SecurityModeViewModel.cs (CommunityToolkit.Mvvm)
+
+### New WPF Services
+- Services/SystemModeClient.cs — REST + SignalR for mode operations
+
+### New Web Stores
+- src/stores/systemModeStore.ts — Zustand, exposes fetchMode() and onModeChanged()
+
+### New Web Components
+- src/components/header/DefaultModeBanner.tsx
+- src/components/header/UserIdentityBadge.tsx (6 variants)
+- src/components/common/DisabledTriggerButton.tsx
+- src/signalr/SystemModeEvents.ts (with reconnect poll fallback)
+
+### New REST Endpoints
+- GET /api/system/mode
+- POST /api/system/mode/secured
+- POST /api/system/mode/default
+
+### New SignalR Events
+- SystemModeChanged — broadcast to all clients on mode flip
+
+### Integration Points
+- AppShell.tsx now wires systemModeStore + SignalR subscription on mount
+- useSignalR.ts now subscribes to SystemModeChanged events
+- MainWindow.xaml has new Settings tab
+
+Output: only the diff to append. Do not regenerate the whole file.
