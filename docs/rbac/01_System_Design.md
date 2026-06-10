@@ -92,25 +92,57 @@ The system is layered. Each layer has one job. Dependencies flow downward only.
 
 ## 2. Component Inventory
 
-### 2.1 Server-side projects (target solution layout)
+### 2.1 Server-side projects — actual layout (from codebase audit)
+
+The earlier draft of this section proposed a clean four-layer architecture (`ControlNode.Core/Infrastructure/Application/Api`). The codebase audit (`docs/architecture/CURRENT_STATE.md`) revealed the actual project structure is different and pragmatic. The RBAC feature grafts onto the existing structure with one new project; it does not restructure the solution.
 
 ```
 TestAgentSolution/
-├── src/
-│   ├── ControlNode.Core/                — domain entities, value types, enums, interfaces
-│   ├── ControlNode.Infrastructure/      — EF Core context, repositories, lock registry
-│   ├── ControlNode.Application/         — use case handlers, validators, mappers
-│   ├── ControlNode.Api/                 — gRPC service definitions, RPC handlers, interceptors,
-│   │                                       background workers (composition root)
-│   └── ControlNode.WebClient/           — React SPA (existing, enhanced)
-├── tests/
-│   ├── ControlNode.Core.Tests/
-│   ├── ControlNode.Application.Tests/
-│   └── ControlNode.Api.Tests/            — integration tests via TestServer
-└── proto/                                — gRPC service definitions (source of truth)
+├── TestControllerGrpc.Core/                — EXISTING shared library
+│   ├── Identity/          (NEW folder)     — IUserContext, Role, ClientKind, User, DefaultUser, etc.
+│   ├── Authorization/     (NEW folder)     — Permission, AuthDecision, IAuthorizationService
+│   ├── Audit/             (NEW folder)     — AuditEntry, IAuditWriter
+│   ├── Configuration/     (NEW folder)     — RbacOptions, WritableOptions
+│   ├── Protos/            (EXISTING)       — auth.proto added next to test_agent.proto
+│   └── …existing types (WatchListConfig, IActionPipelineExecutor, IAppLogger, etc.)
+│
+├── TestController.Persistence/             — NEW project (only structural addition)
+│   ├── OrchestratorDbContext.cs            — EF Core + SQLite
+│   ├── Configurations/                     — entity type configurations
+│   ├── Migrations/                         — EF Core migrations
+│   ├── Identity/SessionStore.cs, PasswordHasher.cs
+│   ├── Authorization/AuthorizationService.cs   (includes Default mode short-circuit)
+│   └── Audit/QueuedAuditWriter.cs, AuditDrainWorker.cs
+│
+├── TestController.Api/                     — EXISTING shared ASP.NET Core library
+│   ├── Interceptors/      (NEW folder)     — SessionAuthInterceptor, AuditLoggingInterceptor
+│   ├── Services/          (NEW folder)     — AuthGrpcService, SystemModeGrpcService
+│   ├── SystemMode/        (NEW folder)     — RbacModeTransitionService
+│   ├── RbacFeatureExtensions.cs (NEW)      — AddRbacFeature() extension method, called from both hosts
+│   └── …existing AddMultiIdentitySecurity(), AddControllerApi(), controllers, hubs
+│
+├── TestControllerGrpc/                     — EXISTING WPF Controller host
+│   └── App.xaml.cs                         — calls AddRbacFeature() in DI setup (surgical diff)
+│
+├── TestController.WebApi/                  — EXISTING standalone web host
+│   └── Program.cs                          — calls AddRbacFeature() in DI setup (surgical diff)
+│
+├── TestController.WebClient/               — EXISTING React SPA (Vite + Zustand + SignalR)
+│
+├── TestControllerGrpc.Tests/Rbac/  (NEW folder)  — unit tests for Core + Persistence
+└── TestController.WebApi.Tests/Rbac/  (NEW folder) — integration tests for Api
 ```
 
-The dependency rule: **Core has no references**; Infrastructure and Application depend on Core; Api depends on all three. WebClient consumes the generated TypeScript stubs from `proto/`.
+**Dependency rule:**
+- `TestControllerGrpc.Core` has no project references — it stays the dependency-free domain layer.
+- `TestController.Persistence` (new) references `TestControllerGrpc.Core` only.
+- `TestController.Api` references `TestControllerGrpc.Core` and `TestController.Persistence`.
+- Both hosts (`TestControllerGrpc`, `TestController.WebApi`) reference all three.
+- `TestController.WebClient` consumes generated TypeScript stubs from the proto files in `TestControllerGrpc.Core/Protos/`.
+
+**Why this differs from the original 4-layer design:**
+
+The original design assumed greenfield Core/Infrastructure/Application/Api separation. The actual codebase merges Application + Infrastructure pragmatically — `TestController.Persistence` plays both roles (DbContext + repositories + service implementations like `AuthorizationService`). This is fine: the Application layer in the original design was thin (just handlers that wrapped repository calls), and the team's convention favors fewer projects over strict layer enforcement. The dependency rule still holds; nothing references Core's domain types from outside.
 
 ### 2.2 Key types added by this work
 
@@ -207,6 +239,28 @@ public async Task<TriggerPipelineResponse> TriggerPipelineAsync(
     // … business logic …
 }
 ```
+
+### 3.4 Default Mode Short-Circuit
+
+`CanAsync` checks a global `RBAC:Enabled` flag *before* evaluating role-based rules. When the flag is `false` (Default mode), the method returns immediately based on `user.ClientKind`:
+
+```csharp
+if (!_options.CurrentValue.RBAC.Enabled)
+{
+    if (user.ClientKind == ClientKind.Wpf)
+        return AuthDecision.Allow("default-mode-wpf");
+    if (user.ClientKind == ClientKind.Web && IsReadPermission(permission))
+        return AuthDecision.Allow("default-mode-web-read");
+    return AuthDecision.Deny("default-mode-web-readonly");
+}
+// normal RBAC evaluation continues below
+```
+
+Where `IsReadPermission(p) => p is Pipeline_View or Report_View`.
+
+In Default mode the `SessionAuthInterceptor` skips token validation entirely and injects a synthetic `IUserContext` (`DefaultUser.ForClient(clientKind)`) so that downstream handlers see a normal user context without any branching. The Permission enum itself does not change between modes — only the evaluation.
+
+Full design including switch flows, audit semantics, and migration in `05_Default_Mode_Design.md`.
 
 ---
 

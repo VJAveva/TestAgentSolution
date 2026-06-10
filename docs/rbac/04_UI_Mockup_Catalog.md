@@ -29,6 +29,7 @@ A quick lookup so engineers can find the visuals for their phase without reading
 | Phase | Phase name | Mockups |
 |---|---|---|
 | 0 | Identity & AuthZ foundations | — (no user-visible UI) |
+| 0.5 | Default Mode UX | Mockup 10 (Security mode switch), Mockup 11 (Default mode in action) |
 | 1 | User management | Mockup 1 (Login), Mockup 2 (Post-login identity), Mockup 7 (User management) |
 | 2 | Pipeline trigger + cancel + AuthZ | — (reuses existing pipeline list UI, applies role filtering) |
 | 3 | Lock coordination integration | Mockup 3 (Web triggers, WPF observes), Mockup 4 (WPF triggers, Web observes), Mockup 6 (Conflict dialog), Mockup 9 (Force-release reason capture) |
@@ -344,6 +345,72 @@ A quick lookup so engineers can find the visuals for their phase without reading
 - Transition to enabled state happens reactively when both validation conditions are satisfied
 
 **Cross-references**: Mockup 6 (the conflict dialog the user came from); `Pipeline_Lock_Coordination_Spec.md` §10.3; `01_System_Design.md` §3.1 (`Pipeline_ForceRelease` permission); `02_Implementation_Roadmap.md` Phase 3.
+
+---
+
+### Mockup 10 — Security Mode Switch (Settings Panel)
+
+**Delivered by Phase 0.5** (Default Mode UX).
+
+**Satisfies**: the operational-mode decision from `00_Master_Plan.md` §3.7 and the full design in `05_Default_Mode_Design.md`.
+
+**Visual summary**: WPF Settings page with a "Security mode" section showing two side-by-side cards. The currently active mode (Default in the rendered example) has a 2px info-blue border, blue-tinted background, and an "ACTIVE" pill in the top-right. Each card has a header icon (lock-open for Default, shield-lock for Secured), a one-sentence description, an "In this mode:" bulleted list of concrete behaviors, and a target-audience hint. Below the cards is a yellow "Switching to Secured mode will:" panel listing all five side-effects of the switch. The action buttons at the bottom are Cancel and "Switch to Secured mode…" (ellipsis = opens the initial-Admin wizard).
+
+**Key design decisions**:
+
+| Decision | Why |
+|---|---|
+| Side-by-side cards with explicit "ACTIVE" indicator | Self-documenting comparison. The colored border + background + pill make the active mode unmistakable. |
+| Each card lists "In this mode:" bullets | Concrete behaviors, not marketing copy. The Admin reading this knows exactly what will change. |
+| Audience hint at the bottom of each card ("Suitable for lab environments…" / "Suitable for production…") | Helps the Admin self-categorize before they commit. |
+| Yellow side-effects panel below the cards | Surfaces *every* consequence of the switch before the click. Per UX principle: no surprises after destructive/elevated actions. |
+| Ellipsis on the primary button | Convention — triggers the wizard, not an immediate flip. |
+| WPF user badge shows "Default user" with dashed border + user icon | Same treatment as the Guest badge in Mockup 2 — visually distinct from any authenticated identity. |
+| No Users / Audit log tabs in this header | Default mode has no user management to access. Audit entries are still written server-side; they just aren't viewable in the UI without an Admin role. |
+
+**Implementation details**:
+
+- The card layout is a CSS grid `grid-template-columns: 1fr 1fr; gap: 12px;`.
+- The "ACTIVE" pill is positioned absolutely in the top-right of the card.
+- The switch action calls `SystemModeGrpcService.SwitchToSecuredAsync` (after the wizard) or `SwitchToDefaultAsync` (after the DISABLE RBAC confirmation).
+- The Secured → Default direction shows a different (more severe) warning panel with a confirmation field that requires typing the literal string `DISABLE RBAC` before the submit button enables.
+- The transition itself is atomic on the server via `IRbacModeTransitionService` (see `05_Default_Mode_Design.md` §8 and §9).
+
+**Cross-references**: Mockup 11 (what the system looks like in Default mode); `05_Default_Mode_Design.md` (full design, switch flows, audit semantics).
+
+---
+
+### Mockup 11 — Default Mode In Action (WPF + Web)
+
+**Delivered by Phase 0.5.**
+
+**Satisfies**: the "no auth, single operator, read-only Web" experience from `05_Default_Mode_Design.md`.
+
+**Visual summary**: two stacked frames showing the same running pipeline from both clients in Default mode. **WPF top half**: persistent amber Default-mode banner across the top with a "Settings →" deep-link chip; standard app header with no Users / Audit log tabs and the "Default user" badge (dashed border + user icon); enabled Trigger / Cancel / Retry buttons; tree view showing a running pipeline with the normal blue "Running" badge (no lock UI because WPF is the only writer). **Web Client bottom half**: standard header with "Observer · Read only" badge (dashed border + eye icon); disabled Trigger button with no-cursor styling; "Live log" and "Dashboard" actions enabled; tree view showing the same running pipeline with the amber "Locked by Default user (WPF)" badge.
+
+**Key design decisions**:
+
+| Decision | Why |
+|---|---|
+| Persistent amber banner across the top of WPF | Constant visual reminder. The Admin always knows the system is in Default mode and there's a one-click escape via "Settings →". The banner is fixed (not dismissible) by design — it is the discoverability anchor. |
+| "Default user" badge uses dashed border + user icon | Same visual treatment as the Guest badge in Mockup 2. Communicates "not a real authenticated identity" through the same vocabulary the rest of the app uses. |
+| No lock badges on WPF running pipelines | WPF is the sole writer in Default mode; there is nothing to coordinate with. The blue "Running · 05:23" badge reflects "the system is running this" rather than "you've locked it from others". |
+| Web Client tabs: "All pipelines" instead of "My pipelines" | Engineers don't exist in Default mode; everyone (every Observer) sees everything. |
+| Observer badge with eye icon and dashed border | Visually distinct from any authenticated role badge (Admin blue, Engineer teal, Guest gray). The dashed border + eye icon == "not a real user". |
+| Trigger button visibly disabled (45% opacity, no-cursor) | Stays present so users understand the feature exists; hover tooltip explains why it's unavailable ("Trigger is unavailable in Default mode…"). Hidden buttons make users wonder if they're missing a permission they don't know about; disabled-with-explanation is clearer. |
+| "Locked by Default user (WPF)" badge on Web | Reuses the same amber lock badge component from Mockup 3/4 with the Default user identity. The Web Client renders it from the same SignalR `PipelineLockAcquired` payload as in Secured mode — no special-casing. |
+| Live log + Dashboard buttons enabled | The whole point — Web is observational, not actionable. All read affordances stay fully functional. |
+| Footer hints explain restrictions and the path to Secured | First-time Web users won't be confused about why Trigger is disabled; the hint also markets the upgrade path. |
+
+**Implementation details**:
+
+- The synthetic Default user has a stable `UserId = 00000000-0000-0000-0000-000000000001` so the audit log correlates Default-mode actions across the entire lifetime of the install.
+- The `LockRegistry` works unchanged — when WPF triggers a pipeline, the lock is acquired with `Owner = { UserId: "00000000-…-0001", DisplayName: "Default user", ClientKind: Wpf }`. SignalR broadcasts the lock event normally; Web Client renders the badge from the payload.
+- The `Pipeline_ForceRelease` permission is implicitly always allowed for the Default user from WPF, so opening a second WPF window and clicking Cancel "just works" with no conflict dialog (Mockup 6) or reason-capture dialog (Mockup 9).
+- The Web Client's disabled Trigger button is gated client-side by the `capabilities[]` list returned from `/api/me` (which in Default mode is `["Pipeline_View", "Report_View"]` only). The server-side `AuthorizationService.CanAsync` independently enforces this — clicking the disabled button via dev tools still returns `PermissionDenied` with reason `default-mode-web-readonly`.
+- The amber banner is implemented as a single component (`DefaultModeBanner.xaml`) that renders only when `RBAC:Enabled = false`. The "Settings →" chip is a navigation shortcut.
+
+**Cross-references**: Mockup 10 (the Settings panel that controls this mode); Mockup 3 / 4 (Secured-mode equivalents that show what changes when RBAC is on); `05_Default_Mode_Design.md` §3 (synthetic user), §5 (lock model in Default mode), §7 (full UI difference table).
 
 ---
 

@@ -35,8 +35,10 @@ It is **not** a single sprint, a single release, or a single PR. It must be deco
 |---|---|---|---|
 | 00 | `Master_Plan.md` (this file) | Navigation, decisions, top-down summary | Everyone |
 | 01 | `System_Design.md` | Architecture, components, sequence flows, concrete schema | Engineers, tech reviewers |
-| 02 | `Implementation_Roadmap.md` | 11 phases with exit criteria and dependencies | Engineering managers, planners |
+| 02 | `Implementation_Roadmap.md` | 12 phases with exit criteria and dependencies | Engineering managers, planners |
 | 03 | `Integration_With_Lock_Spec.md` | How this reconciles with `Pipeline_Lock_Coordination_Spec.md` | Engineers working on either feature |
+| 04 | `UI_Mockup_Catalog.md` | Per-mockup design rationale paired to phases | UI engineers, designers |
+| 05 | `Default_Mode_Design.md` | The no-auth operational mode + mode-switch flows | Engineers, ops |
 
 **Recommended reading order:**
 
@@ -131,6 +133,22 @@ Microsoft Teams, in-app, and SMS are deferred. The Notification Dispatcher (§7.
 **Decision: Same SQLite database file, dedicated indexed table, 12-month retention via a scheduled job.**
 
 A separate log-aggregation system (Seq, Splunk, Elastic) is overkill for an internal QA tool with the expected volume. If audit query performance degrades or volume exceeds expectations, the architecture supports moving the audit store behind the existing `IAuditWriter` interface to a different backing technology (or a separate SQLite file) without changing call sites.
+
+### 3.7 — Operational Mode (Default vs Secured)
+
+**Decision: support two operational modes — Default (no auth, single-operator) and Secured (full RBAC). New installs start in Default. Upgrade to Secured is a one-click Settings flow.**
+
+This decision was not in the original SRS — it surfaced during design review as the path to (a) preserve the current pre-RBAC behavior of the application, (b) give operators a usable system in <30 seconds from install, and (c) let small/lab teams skip RBAC entirely without losing the option to enable it later.
+
+**Default mode**: No login screens. WPF runs all actions as a synthetic "Default user". Web Client is read-only (sees pipelines, tree, live logs, dashboard; cannot trigger). Lock badges show `Locked by Default user (WPF)` on running pipelines. Audit log captures everything with the Default user as actor.
+
+**Secured mode**: Full RBAC as designed across `00`-`04`. Login required on both clients. Four roles, per-pipeline assignments, lock badges show real user identity.
+
+**Toggle mechanism**: A single boolean `RBAC:Enabled` in `appsettings.json`, flipped by the WPF Settings UI. Switching Default → Secured launches an initial-Admin-creation wizard. Switching Secured → Default requires typing `DISABLE RBAC` to confirm. Both transitions are live (no service restart).
+
+**Permission catalog is identical in both modes.** Only `IAuthorizationService.CanAsync` short-circuits when RBAC is off (allow all from WPF, allow read-only from Web, deny writes from Web). This means feature code is written once, no per-mode branching, and every feature in Phases 0-10 must work in both modes (enforced by the test matrix).
+
+Full design in `05_Default_Mode_Design.md`. Mockups 10 and 11 in `04_UI_Mockup_Catalog.md`. Implementation lands in Phase 0 (mechanics, ~2 days of the 2-week phase) and Phase 0.5 (UX, 1-week mini-phase between Phase 0 and Phase 1).
 
 ---
 

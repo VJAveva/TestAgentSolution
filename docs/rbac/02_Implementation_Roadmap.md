@@ -29,6 +29,9 @@ A phase is **done** when every exit criterion passes in a staging environment wi
    Phase 0  (Identity & AuthZ foundations)
        │
        ▼
+   Phase 0.5 (Default mode UX)  ── 5 engineer-days
+       │
+       ▼
    Phase 1  (User management)
        │
        ▼
@@ -71,11 +74,22 @@ Phases 3, 4, 5, 7, 8, 9 can run in parallel teams **after** their prerequisites 
 - `IAuditWriter` + a write-only implementation (fire-and-forget channel + background drain)
 - A seed migration that inserts **one** Administrator user with a known initial password
 - gRPC service `LoginAsync` / `LogoutAsync` (no UI yet — exercised by integration tests)
+- **Default mode mechanics (cheap, ~2 days of the phase budget):**
+  - `RbacOptions` strongly-typed config bound to `appsettings.json` (`RBAC:Enabled` flag)
+  - `IWritableOptions<RbacOptions>` that flips the flag at runtime and persists back to `appsettings.json`
+  - `DefaultUser` static class with a stable UUID (`00000000-0000-0000-0000-000000000001`)
+  - `SyntheticUserContext` implementation of `IUserContext`
+  - `SessionAuthInterceptor` reads `RBAC:Enabled` — when false, skips token validation and injects `DefaultUser.ForClient(clientKind)`
+  - `AuthorizationService.CanAsync` short-circuit (per `01_System_Design.md` §3.4): in Default mode return Allow for WPF, Allow for Web read, Deny for Web write
+  - `IRbacModeTransitionService` with `SwitchToSecuredAsync` and `SwitchToDefaultAsync`
+  - `SystemModeGrpcService` exposing Get / SwitchToSecured / SwitchToDefault RPCs
+  - `SystemModeBroadcaster` raising `SystemModeChanged` on the SignalR hub
 - Two integration tests:
   - Login with valid creds returns a token
   - RPC with no token returns `Unauthenticated`
   - RPC with token but lacking permission returns `PermissionDenied`
   - Audit entries written for both allow and deny
+  - **Default mode tests** (with `RBAC:Enabled = false` fixture): RPC without token succeeds from WPF, RPC from Web with write permission returns `PermissionDenied` with reason `default-mode-web-readonly`
 
 ### Out of scope
 
@@ -86,41 +100,54 @@ Phases 3, 4, 5, 7, 8, 9 can run in parallel teams **after** their prerequisites 
 ### Files to create
 
 ```
-ControlNode.Core/Identity/IUserContext.cs
-ControlNode.Core/Identity/Role.cs
-ControlNode.Core/Identity/ClientKind.cs
-ControlNode.Core/Authorization/Permission.cs
-ControlNode.Core/Authorization/AuthDecision.cs
-ControlNode.Core/Authorization/IAuthorizationService.cs
-ControlNode.Core/Identity/User.cs
-ControlNode.Core/Identity/PipelineAssignment.cs
-ControlNode.Core/Audit/AuditEntry.cs
-ControlNode.Core/Audit/IAuditWriter.cs
+TestControllerGrpc.Core/Identity/IUserContext.cs
+TestControllerGrpc.Core/Identity/Role.cs
+TestControllerGrpc.Core/Identity/ClientKind.cs
+TestControllerGrpc.Core/Authorization/Permission.cs
+TestControllerGrpc.Core/Authorization/AuthDecision.cs
+TestControllerGrpc.Core/Authorization/IAuthorizationService.cs
+TestControllerGrpc.Core/Identity/User.cs
+TestControllerGrpc.Core/Identity/PipelineAssignment.cs
+TestControllerGrpc.Core/Identity/DefaultUser.cs
+TestControllerGrpc.Core/Identity/SyntheticUserContext.cs
+TestControllerGrpc.Core/Audit/AuditEntry.cs
+TestControllerGrpc.Core/Audit/IAuditWriter.cs
+TestControllerGrpc.Core/Configuration/RbacOptions.cs
+TestControllerGrpc.Core/Configuration/WritableOptions.cs
 
-ControlNode.Infrastructure/Persistence/ControlNodeDbContext.cs
-ControlNode.Infrastructure/Persistence/Configurations/UserConfiguration.cs
-ControlNode.Infrastructure/Persistence/Configurations/SessionConfiguration.cs
-ControlNode.Infrastructure/Persistence/Configurations/PipelineAssignmentConfiguration.cs
-ControlNode.Infrastructure/Persistence/Configurations/AuditEntryConfiguration.cs
-ControlNode.Infrastructure/Persistence/Migrations/0000_Initial.cs
-ControlNode.Infrastructure/Persistence/Migrations/0001_SeedAdmin.cs
+TestController.Persistence/TestController.Persistence.csproj           (NEW project; only structural addition)
+TestController.Persistence/OrchestratorDbContext.cs
+TestController.Persistence/Configurations/UserConfiguration.cs
+TestController.Persistence/Configurations/SessionConfiguration.cs
+TestController.Persistence/Configurations/PipelineAssignmentConfiguration.cs
+TestController.Persistence/Configurations/AuditEntryConfiguration.cs
+TestController.Persistence/Migrations/0000_Initial.cs
+TestController.Persistence/Migrations/0001_SeedAdmin.cs
 
-ControlNode.Infrastructure/Identity/SessionStore.cs
-ControlNode.Infrastructure/Identity/PasswordHasher.cs
-ControlNode.Infrastructure/Authorization/AuthorizationService.cs
-ControlNode.Infrastructure/Audit/QueuedAuditWriter.cs
-ControlNode.Infrastructure/Audit/AuditDrainWorker.cs
+TestController.Persistence/Identity/SessionStore.cs
+TestController.Persistence/Identity/PasswordHasher.cs
+TestController.Persistence/Authorization/AuthorizationService.cs
+TestController.Persistence/Audit/QueuedAuditWriter.cs
+TestController.Persistence/Audit/AuditDrainWorker.cs
 
-ControlNode.Api/Interceptors/SessionAuthInterceptor.cs
-ControlNode.Api/Interceptors/AuditLoggingInterceptor.cs
-ControlNode.Api/Services/AuthGrpcService.cs
-ControlNode.Api/Program.cs                            (DI wiring)
+TestController.Api/Interceptors/SessionAuthInterceptor.cs
+TestController.Api/Interceptors/AuditLoggingInterceptor.cs
+TestController.Api/Services/AuthGrpcService.cs
+TestController.Api/Services/SystemModeGrpcService.cs
+TestController.Api/SystemMode/RbacModeTransitionService.cs
+TestController.Api/RbacFeatureExtensions.cs                            (new extension method AddRbacFeature())
 
-ControlNode.Api.Tests/Phase0/LoginTests.cs
-ControlNode.Api.Tests/Phase0/AuthInterceptorTests.cs
-ControlNode.Api.Tests/Phase0/AuthorizationServiceTests.cs
+Surgical diffs:
+  TestControllerGrpc/App.xaml.cs                                       (call AddRbacFeature() in DI setup)
+  TestController.WebApi/Program.cs                                     (call AddRbacFeature() in DI setup)
+  TestControllerGrpc.csproj, TestController.WebApi.csproj              (reference TestController.Persistence)
 
-proto/auth.proto
+TestControllerGrpc.Core/Protos/auth.proto                              (next to existing test_agent.proto)
+
+TestControllerGrpc.Tests/Rbac/LoginTests.cs
+TestControllerGrpc.Tests/Rbac/AuthInterceptorTests.cs
+TestControllerGrpc.Tests/Rbac/AuthorizationServiceTests.cs
+TestController.WebApi.Tests/Rbac/AuthE2ETests.cs
 ```
 
 ### Exit criteria
@@ -155,6 +182,77 @@ proto/auth.proto
 ### Estimated effort
 
 **2 engineer-weeks.** Both engineers full-time. Roughly 60% backend, 40% test infrastructure.
+
+---
+
+## Phase 0.5 — Default Mode UX (one-week mini-phase)
+
+**Goal**: ship the Default mode user experience so the system is usable end-to-end without any RBAC setup. Switching to Secured mode is a one-click flow from Settings.
+
+**Why this is a separate mini-phase**: Phase 0 builds the mechanics (config flag, synthetic user, authz short-circuit). Phase 0.5 builds the visible UI on top so an out-of-box install is productive. Phase 1 (User management) only makes sense once a customer has chosen to switch to Secured mode — so 0.5 logically sits between them.
+
+### Scope
+
+- WPF Settings page with the Security mode panel (Mockup 10)
+- WPF persistent Default-mode banner at top of main window (Mockup 11 top half)
+- WPF top chrome Default-user badge (dashed border + user icon)
+- Web Client Observer badge in top chrome (dashed border + eye icon)
+- Web Client trigger button disabled treatment with tooltip ("Trigger is unavailable in Default mode…")
+- Web Client lock badge rendering for "Locked by Default user (WPF)" — same component used for real user lock badges, no special-casing
+- Initial-Admin-creation wizard (Default → Secured switch)
+- DISABLE RBAC confirmation modal (Secured → Default switch)
+- `SystemModeChanged` SignalR event handler — both clients reload to the appropriate state on mode flip
+
+### Out of scope
+
+- Real RBAC features (Phase 1 onward)
+- Network-restriction warning ("you're in Default mode and exposed on a public IP") — deferred
+
+### Files to create
+
+```
+ControlNode.WpfClient/Views/Settings/SettingsView.xaml(.cs)
+ControlNode.WpfClient/Views/Settings/SecurityModePanel.xaml(.cs)
+ControlNode.WpfClient/ViewModels/Settings/SecurityModeViewModel.cs
+ControlNode.WpfClient/Views/Settings/InitialAdminWizard.xaml(.cs)
+ControlNode.WpfClient/Views/Settings/DisableRbacConfirmDialog.xaml(.cs)
+ControlNode.WpfClient/Controls/DefaultModeBanner.xaml(.cs)
+ControlNode.WpfClient/Controls/UserIdentityBadge.xaml(.cs)   (handles Admin / Engineer / SrMgr / Guest / Default user)
+ControlNode.WpfClient/Services/SystemModeClient.cs           (calls SystemModeGrpcService)
+
+ControlNode.WebClient/src/components/header/DefaultModeBanner.tsx   (only renders banner if needed in future)
+ControlNode.WebClient/src/components/header/UserIdentityBadge.tsx   (handles Admin/Engineer/SrMgr/Guest/Observer/Default user)
+ControlNode.WebClient/src/hooks/useSystemMode.ts
+ControlNode.WebClient/src/components/common/DisabledTriggerButton.tsx
+ControlNode.WebClient/src/signalr/SystemModeEvents.ts
+
+ControlNode.Api.Tests/Phase0_5/ModeSwitchE2ETests.cs
+```
+
+### Exit criteria
+
+- [ ] Fresh install opens WPF directly to the main view with the Default-mode banner visible
+- [ ] WPF can trigger, cancel, retry without restriction; audit entries show Default user as actor
+- [ ] Web Client visits `controller.aveva.local` and lands on the All pipelines view with Observer badge
+- [ ] Web Client Trigger button visibly disabled with tooltip; clicking it has no effect
+- [ ] When WPF triggers a pipeline, Web Client receives `PipelineLockAcquired` and renders "Locked by Default user (WPF)" badge within 2 seconds
+- [ ] Settings > Security mode shows both modes side by side with Default mode marked ACTIVE
+- [ ] Clicking "Switch to Secured mode…" opens the initial-Admin wizard
+- [ ] Completing the wizard: flag flips, login screen appears in WPF, Web Client reloads to login screen, in-flight pipelines continue running (now owned by the new Admin)
+- [ ] From Secured mode, Admin can navigate to Settings > Security mode and switch back via DISABLE RBAC confirmation
+- [ ] All Phase 0 tests still pass with `RBAC:Enabled = false` fixture
+
+### Risks
+
+| Risk | Mitigation |
+|---|---|
+| `SystemModeChanged` event arrives at WebClient but the SignalR reconnect happens during the auth middleware reload, missing the event | Web Client also polls `/api/system/mode` on reconnect; whichever wins triggers the reload. |
+| Operator clicks "Switch to Secured mode" without realizing all current Web Client users will lose access | Wizard's confirmation panel lists this as a side-effect. |
+| Default mode banner becomes annoying noise for operators who plan to stay in Default forever | Banner is fixed (not dismissible) by design — it is the discoverability anchor for the upgrade path. Operator handbook documents this. |
+
+### Estimated effort
+
+**5 engineer-days** (one engineer-week with 1 engineer, or 2-3 days with 2 engineers working in parallel on WPF + Web).
 
 ---
 
@@ -592,35 +690,37 @@ The exit criteria from `Pipeline_Lock_Coordination_Spec.md` Section 13 (testing 
 ### Sequential team (2 engineers, no parallelization)
 
 ```
-Phase 0  ───┐ 2w
-Phase 1  ────┐ 3w
-Phase 2  ─────┐ 3w
-Phase 3  ──────┐ 2w   (locks)
-Phase 4  ───────┐ 2w   (retry)
-Phase 5  ────────┐ 1w   (bulk)
-Phase 6  ─────────┐ 1w   (enable/disable)
-Phase 7  ──────────┐ 2w   (reads + guest)
-Phase 8  ───────────┐ 3w   (notifications)
-Phase 9  ────────────┐ 3w   (reports)
-Phase 10 ─────────────┐ 2w   (audit + hardening)
-                       ▼
-                   Total: 24 weeks
+Phase 0    ───┐ 2w
+Phase 0.5  ────┐ 1w   (Default mode UX)
+Phase 1    ─────┐ 3w
+Phase 2    ──────┐ 3w
+Phase 3    ───────┐ 2w   (locks)
+Phase 4    ────────┐ 2w   (retry)
+Phase 5    ─────────┐ 1w   (bulk)
+Phase 6    ──────────┐ 1w   (enable/disable)
+Phase 7    ───────────┐ 2w   (reads + guest)
+Phase 8    ────────────┐ 3w   (notifications)
+Phase 9    ─────────────┐ 3w   (reports)
+Phase 10   ──────────────┐ 2w   (audit + hardening)
+                          ▼
+                      Total: 25 weeks
 ```
 
 ### Parallelized team (5-6 engineers, recommended)
 
 ```
-Phase 0  ──── 2w
-Phase 1, 7   ──── 3w     (User mgmt + read paths run in parallel)
-Phase 2      ──── 3w
+Phase 0       ──── 2w
+Phase 0.5     ──── 1w     (Default mode UX, can overlap with start of Phase 1)
+Phase 1, 7    ──── 3w     (User mgmt + read paths run in parallel)
+Phase 2       ──── 3w
 Phase 3, 4, 5, 6   ──── 2w (all four parallel after Phase 2)
-Phase 8, 9   ──── 3w     (notifications + reports parallel)
-Phase 10     ──── 2w     (the closer)
+Phase 8, 9    ──── 3w     (notifications + reports parallel)
+Phase 10      ──── 2w     (the closer)
                  ▼
-            Total: 15 weeks
+            Total: 16 weeks
 ```
 
-The 9-week saving comes from running 3, 4, 5, 6 in parallel (which all depend only on Phase 2) and running 8, 9 in parallel after Phase 7.
+The savings come from running 3, 4, 5, 6 in parallel (which all depend only on Phase 2) and running 8, 9 in parallel after Phase 7. Phase 0.5 can overlap with the first few days of Phase 1 since Phase 1 starts on server-side User management work before any UI is needed.
 
 ---
 
