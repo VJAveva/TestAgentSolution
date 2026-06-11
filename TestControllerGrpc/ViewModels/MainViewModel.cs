@@ -58,6 +58,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>When true, ribbon collapses to a single compact toolbar row.</summary>
     [ObservableProperty] private bool _isSimplifiedLayout;
 
+    // ── Users tab visibility (Phase 1b) ─────────────────────────────
+    /// <summary>True when the current user has User_Create capability (Admin in Secured mode).</summary>
+    [ObservableProperty] private bool _isUsersTabVisible;
+
     // ── Inline XML Editor state ─────────────────────────────────────
     [ObservableProperty] private bool _isXmlEditorOpen;
     [ObservableProperty] private string _xmlEditorText = "";

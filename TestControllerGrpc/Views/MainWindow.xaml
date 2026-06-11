@@ -1790,6 +1790,15 @@
                             </ScrollViewer>
                         </Border>
                     </TabItem>
+
+                    <!-- ─── USERS TAB (Admin only — visible when User_Create capability present) ─── -->
+                    <TabItem Header="USERS" x:Name="UsersTab"
+                             Visibility="{Binding IsUsersTabVisible, Converter={StaticResource BoolToVisConverter}}">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="0">
+                            <views:UserManagementPage x:Name="UserManagementContent"
+                                xmlns:views="clr-namespace:TestControllerGrpc.Views.Admin"/>
+                        </Border>
+                    </TabItem>
                 </TabControl>
             </Grid>
         </Border>

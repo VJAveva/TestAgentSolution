@@ -5,7 +5,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TestController.Api;
+using TestControllerGrpc.Configuration;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
@@ -137,6 +139,17 @@ public partial class App : Application
                 services.AddSingleton<SystemModeClient>();
                 services.AddSingleton<ViewModels.Settings.SecurityModeViewModel>();
 
+                // Phase 1a: Auth client + Login ViewModels
+                services.AddSingleton<AuthClient>();
+                services.AddTransient<ViewModels.Login.LoginViewModel>();
+                services.AddTransient<ViewModels.Login.ChangePasswordViewModel>();
+
+                // Phase 1b: User management
+                services.AddSingleton<UserManagementClient>();
+                services.AddSingleton<ViewModels.Admin.UserManagementViewModel>();
+                services.AddTransient<ViewModels.Admin.AddUserDialogViewModel>();
+                services.AddTransient<ViewModels.Admin.AssignPipelinesDialogViewModel>();
+
                 // Health threshold settings (operator-configurable)
                 services.AddSingleton(sp =>
                 {
@@ -165,8 +178,20 @@ public partial class App : Application
 
         Services = _host.Services;
 
-        var mainWindow = new Views.MainWindow();
-        mainWindow.Show();
+        // Phase 1a: post-login routing.
+        // Default mode (RBAC:Enabled=false) → go straight to MainWindow.
+        // Secured mode → show LoginPage first.
+        var rbacOptions = Services.GetRequiredService<IOptionsMonitor<RbacOptions>>();
+        if (rbacOptions.CurrentValue.Enabled)
+        {
+            var loginPage = new Views.Login.LoginPage();
+            loginPage.Show();
+        }
+        else
+        {
+            var mainWindow = new Views.MainWindow();
+            mainWindow.Show();
+        }
 
         // Observe host startup so any RpcException / hosted-service failure
         // is logged instead of escaping as an unobserved task exception

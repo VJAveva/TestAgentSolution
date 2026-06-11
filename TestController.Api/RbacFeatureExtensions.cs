@@ -69,6 +69,7 @@ public static class RbacFeatureExtensions
 
         // Services
         services.AddSingleton<AuthService>();
+        services.AddSingleton<UserService>();
         services.AddSingleton<RbacModeTransitionService>();
         services.AddSingleton<Hubs.SystemModeBroadcaster>();
 

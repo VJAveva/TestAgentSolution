@@ -271,3 +271,59 @@ Append a new section to docs/architecture/CURRENT_STATE.md:
 - MainWindow.xaml has new Settings tab
 
 Output: only the diff to append. Do not regenerate the whole file.
+Append a new section to docs/architecture/CURRENT_STATE.md:
+
+## RBAC Feature (Phase 1a complete — 2026-06-11)
+
+### New REST Endpoints (TestController.Api)
+- GET /api/auth/me — returns current user + capabilities
+- POST /api/auth/login — username + password → session token
+- POST /api/auth/guest — anonymous short-lived session
+- POST /api/auth/logout — revokes server session
+- POST /api/auth/change-password — current + new password
+
+### New Static Catalog
+- TestController.Api/PermissionCatalog.cs — role → permissions[] mapping
+  used by /api/auth/me to populate the capabilities list
+
+### New WPF
+- Views/LoginPage.xaml + LoginViewModel
+- Views/ChangePasswordPage.xaml + ChangePasswordViewModel
+- Services/AuthClient.cs — HTTP client, in-memory token only
+- App.xaml.cs routing: Default → MainWindow; Secured → LoginPage first
+
+### New Web
+- src/stores/authStore.ts — Zustand, token in sessionStorage
+- src/views/LoginView.tsx — login form + Continue as Guest
+- src/views/ChangePasswordView.tsx — first-login forced change
+- src/App.tsx route guard: Default → AppShell, Secured+unauth → LoginView,
+Append a new section to docs/architecture/CURRENT_STATE.md:
+
+## RBAC Feature (Phase 1a complete — YYYY-MM-DD)
+
+### New REST Endpoints (TestController.Api)
+- GET /api/auth/me — returns current user + capabilities
+- POST /api/auth/login — username + password → session token
+- POST /api/auth/guest — anonymous short-lived session
+- POST /api/auth/logout — revokes server session
+- POST /api/auth/change-password — current + new password
+
+### New Static Catalog
+- TestController.Api/PermissionCatalog.cs — role → permissions[] mapping
+  used by /api/auth/me to populate the capabilities list
+
+### New WPF
+- Views/LoginPage.xaml + LoginViewModel
+- Views/ChangePasswordPage.xaml + ChangePasswordViewModel
+- Services/AuthClient.cs — HTTP client, in-memory token only
+- App.xaml.cs routing: Default → MainWindow; Secured → LoginPage first
+
+### New Web
+- src/stores/authStore.ts — Zustand, token in sessionStorage
+- src/views/LoginView.tsx — login form + Continue as Guest
+- src/views/ChangePasswordView.tsx — first-login forced change
+- src/App.tsx route guard: Default → AppShell, Secured+unauth → LoginView,
+  mustChangePassword → ChangePasswordView
+- UserIdentityBadge now reads from useAuthStore in Secured mode
+
+Output only the diff to append.

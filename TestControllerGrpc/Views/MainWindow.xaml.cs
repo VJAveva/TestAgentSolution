@@ -62,6 +62,15 @@ public partial class MainWindow : Window
         _vm = App.Services.GetRequiredService<MainViewModel>();
         DataContext = _vm;
 
+        // Phase 1b: Users tab visible only for Admin (User_Create capability)
+        var authClient = App.Services.GetRequiredService<AuthClient>();
+        _vm.IsUsersTabVisible = authClient.CurrentUser?.Capabilities?.Contains("User_Create") == true;
+        authClient.AuthStateChanged += () =>
+        {
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+                _vm.IsUsersTabVisible = authClient.CurrentUser?.Capabilities?.Contains("User_Create") == true);
+        };
+
         Loaded += OnWindowLoaded;
 
         WatchListTreeView.SelectedItemChanged += OnWatchListSelectionChanged;

@@ -1,0 +1,76 @@
+<UserControl x:Class="TestControllerGrpc.Views.Admin.UserDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+        <StackPanel Visibility="{Binding SelectedUser, Converter={StaticResource NullToCollapsedConverter}}">
+            <!-- Header -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                <Border Width="40" Height="40" CornerRadius="20" Background="#2274ACEA" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding SelectedUser.Username[0]}" FontSize="16" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SelectedUser.Username}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                    <TextBlock Text="{Binding SelectedUser.Email}" FontSize="11"
+                               Foreground="{DynamicResource TextSecondary}"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Metadata grid -->
+            <Border BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0" Padding="0,12,0,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Role" FontSize="11" Foreground="{DynamicResource TextSecondary}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedUser.Role}" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextPrimary}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Status" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" FontSize="11" Foreground="{DynamicResource TextPrimary}" Margin="0,4,0,0"
+                               Text="{Binding SelectedUser.IsActive, Converter={StaticResource BoolToActiveTextConverter}}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Created" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedUser.CreatedUtc, StringFormat='{}{0:yyyy-MM-dd}'}" FontSize="11" Foreground="{DynamicResource TextPrimary}" Margin="0,4,0,0"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Pipelines" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextPrimary}" Margin="0,4,0,0">
+                        <TextBlock.Text>
+                            <Binding Path="SelectedUser.PipelineCount" StringFormat="{}{0} assigned"/>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </Grid>
+            </Border>
+
+            <!-- Quick actions -->
+            <TextBlock Text="Quick actions" FontSize="12" FontWeight="Medium"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,16,0,8"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button Content="Manage pipelines" Padding="10,6" FontSize="11" Margin="0,0,8,0"
+                        Background="#2274ACEA" Foreground="{DynamicResource TextPrimary}"/>
+                <Button Content="Reset password" Padding="10,6" FontSize="11" Margin="0,0,8,0"
+                        Command="{Binding ResetPasswordCommand}"
+                        Background="#22F0B070" Foreground="{DynamicResource TextPrimary}"/>
+                <Button Content="Delete user" Padding="10,6" FontSize="11"
+                        Command="{Binding DeleteUserCommand}"
+                        Background="#22F87171" Foreground="#F87171"/>
+            </StackPanel>
+
+            <!-- Error display -->
+            <TextBlock Text="{Binding ErrorMessage}" FontSize="11" Foreground="#F87171" Margin="0,12,0,0"
+                       Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisConverter}}"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

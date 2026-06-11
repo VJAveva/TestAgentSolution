@@ -1,4 +1,5 @@
 import { useSystemModeStore } from '../../stores/systemModeStore';
+import { useAuthStore } from '../../stores/authStore';
 
 type RoleVariant = 'Administrator' | 'SeniorManager' | 'Engineer' | 'Guest' | 'Observer' | 'Default';
 
@@ -20,15 +21,45 @@ const roleConfig: Record<RoleVariant, { icon: string; label: string; color: stri
  * User identity badge in the header chrome.
  * Handles all role variants: Admin, SrMgr, Engineer, Guest, Observer, Default user.
  * In Default mode, renders as Observer (Web Client) with dashed border.
+ * In Secured mode, populated from authStore (real user data via /api/auth/me).
  */
 export default function UserIdentityBadge({ role, displayName }: UserIdentityBadgeProps) {
   const isDefault = useSystemModeStore((s) => s.isDefault);
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   // In Default mode, Web Client always shows as Observer
-  const effectiveRole: RoleVariant = isDefault ? 'Observer' : (role ?? 'Default');
-  const effectiveName = isDefault ? 'Observer' : (displayName ?? 'User');
+  if (isDefault) {
+    const config = roleConfig.Observer;
+    return (
+      <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${config.color} ${config.bg}`}>
+        <span className="text-xs">{config.icon}</span>
+        <span className="text-xs text-text-primary font-medium">Observer</span>
+        <span className="text-[10px] text-text-secondary opacity-70">{config.label}</span>
+      </div>
+    );
+  }
+
+  // Secured mode: use real user data from authStore if available
+  const effectiveRole: RoleVariant = isAuthenticated && user
+    ? (user.role as RoleVariant) ?? 'Default'
+    : (role ?? 'Default');
+  const effectiveName = isAuthenticated && user
+    ? user.displayName
+    : (displayName ?? 'User');
 
   const config = roleConfig[effectiveRole] ?? roleConfig.Default;
+
+  // Guest variant: show dashed border and expiry hint
+  if (user?.isGuest) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-dashed border-gray-400 bg-transparent">
+        <span className="text-xs">👁</span>
+        <span className="text-xs text-text-primary font-medium">Guest</span>
+        <span className="text-[10px] text-text-secondary opacity-70">Read only · expires in 60 min</span>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${config.color} ${config.bg}`}>

@@ -1,0 +1,51 @@
+<Window x:Class="TestControllerGrpc.Views.Admin.AssignPipelinesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Assign Pipelines" Height="450" Width="400"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{DynamicResource WindowBg}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}">
+                <TextBlock.Text>
+                    <Binding Path="Username" StringFormat="Assign pipelines to {0}"/>
+                </TextBlock.Text>
+            </TextBlock>
+            <TextBlock Text="Check pipelines to assign; uncheck to revoke." FontSize="11"
+                       Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Pipeline checkboxes -->
+        <ListBox Grid.Row="1" ItemsSource="{Binding Pipelines}" BorderThickness="1"
+                 BorderBrush="{DynamicResource BorderDefault}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding PipelineId}"
+                              FontSize="12" Margin="4,3"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Error -->
+        <TextBlock Grid.Row="2" Text="{Binding ErrorMessage}" FontSize="11" Foreground="#F87171"
+                   Margin="0,8,0,0" TextWrapping="Wrap"
+                   Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisConverter}}"/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Cancel" Padding="12,8" FontSize="12" Margin="0,0,8,0" IsCancel="True"/>
+            <Button Content="Save" Padding="12,8" FontSize="12" FontWeight="Medium"
+                    Command="{Binding SaveCommand}"
+                    Background="#74ACEA" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</Window>
