@@ -1,21 +1,24 @@
-import { useSystemModeStore } from '../../stores/systemModeStore';
+import { useCan, useDisabledReason } from '../../hooks/useCapabilities';
 
 interface DisabledTriggerButtonProps {
-  /** Original onClick handler (only called when mode is secured). */
+  /** Original onClick handler (only called when permission is granted). */
   onTrigger?: () => void;
   label?: string;
   className?: string;
+  /** Pipeline tag for resource-scoped permission check. */
+  pipelineTag?: string;
 }
 
 /**
- * Trigger button that is visibly disabled (greyed out) in Default mode.
- * The button renders but is non-interactive, with a tooltip explaining why.
- * Per design: button is disabled, NOT hidden — maintains UI discoverability.
+ * Trigger button that disables based on capability checks.
+ * Tooltip explains WHY the button is disabled (Default mode, role, assignment).
+ * Per Mockup 4 and Mockup 11 tooltip copy.
  */
-export default function DisabledTriggerButton({ onTrigger, label = 'Trigger', className = '' }: DisabledTriggerButtonProps) {
-  const isDefault = useSystemModeStore((s) => s.isDefault);
+export default function DisabledTriggerButton({ onTrigger, label = 'Trigger', className = '', pipelineTag }: DisabledTriggerButtonProps) {
+  const allowed = useCan('Pipeline_Trigger', pipelineTag);
+  const reason = useDisabledReason('Pipeline_Trigger', pipelineTag);
 
-  if (isDefault) {
+  if (!allowed) {
     return (
       <div className="relative group inline-block">
         <button
@@ -26,7 +29,7 @@ export default function DisabledTriggerButton({ onTrigger, label = 'Trigger', cl
         </button>
         {/* Tooltip */}
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded bg-bg-ribbon border border-bdr text-xs text-text-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-          Trigger is unavailable in Default mode. Switch to Secured mode to enable pipeline triggering from the Web Client.
+          {reason}
         </div>
       </div>
     );

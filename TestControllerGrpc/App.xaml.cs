@@ -144,6 +144,10 @@ public partial class App : Application
                 services.AddTransient<ViewModels.Login.LoginViewModel>();
                 services.AddTransient<ViewModels.Login.ChangePasswordViewModel>();
 
+                // Phase 2b: Capability gating for WPF UI
+                services.AddSingleton<CurrentUserHolder>();
+                services.AddSingleton<CapabilityChecker>();
+
                 // Phase 1b: User management
                 services.AddSingleton<UserManagementClient>();
                 services.AddSingleton<ViewModels.Admin.UserManagementViewModel>();

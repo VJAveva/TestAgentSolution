@@ -136,7 +136,7 @@ public class AuthClient
         }
     }
 
-    private async Task FetchMeAsync()
+    public async Task FetchMeAsync()
     {
         if (_token is null) return;
 
@@ -172,4 +172,5 @@ public sealed record AuthUserInfo(
     string ClientKind,
     List<string> Capabilities,
     bool MustChangePassword,
-    bool IsGuest);
+    bool IsGuest,
+    List<string> AssignedPipelineIds);

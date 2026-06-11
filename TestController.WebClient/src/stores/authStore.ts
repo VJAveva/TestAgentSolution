@@ -10,6 +10,7 @@ export interface AuthUser {
   capabilities: string[];
   mustChangePassword: boolean;
   isGuest: boolean;
+  assignedPipelineIds: string[];
 }
 
 interface AuthState {

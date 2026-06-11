@@ -71,6 +71,14 @@ public partial class MainWindow : Window
                 _vm.IsUsersTabVisible = authClient.CurrentUser?.Capabilities?.Contains("User_Create") == true);
         };
 
+        // Refresh Default-mode banner on live mode switch
+        var systemMode = App.Services.GetService<SystemModeClient>();
+        if (systemMode is not null)
+        {
+            systemMode.ModeChanged += _ =>
+                Application.Current?.Dispatcher.InvokeAsync(() => _vm.IsDefaultMode = !systemMode.IsSecuredMode);
+        }
+
         Loaded += OnWindowLoaded;
 
         WatchListTreeView.SelectedItemChanged += OnWatchListSelectionChanged;

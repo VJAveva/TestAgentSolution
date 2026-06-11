@@ -58,7 +58,8 @@ public class AuthController : ControllerBase
             ClientKind: user.ClientKind.ToString(),
             Capabilities: capabilities,
             MustChangePassword: false, // resolved post-login; /me is called after login
-            IsGuest: user.GuestId is not null
+            IsGuest: user.GuestId is not null,
+            AssignedPipelineIds: user.AssignedPipelineIds.ToList()
         ));
     }
 
@@ -141,7 +142,8 @@ public sealed record MeResponse(
     string ClientKind,
     List<string> Capabilities,
     bool MustChangePassword,
-    bool IsGuest);
+    bool IsGuest,
+    List<string> AssignedPipelineIds);
 
 public sealed record LoginRequest(string Username, string Password);
 public sealed record LoginResponse(string Token, string Role, bool MustChangePassword);

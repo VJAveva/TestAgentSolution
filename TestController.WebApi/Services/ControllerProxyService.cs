@@ -122,6 +122,29 @@ public sealed class ControllerProxyService : IDisposable
     }
 
     public void Dispose() => _http.Dispose();
+
+    /// <summary>
+    /// Forwards a POST request to the WPF controller with the caller's Authorization header.
+    /// Phase 2a: ensures the controller-side authz sees the original user, not the proxy's identity.
+    /// </summary>
+    public async Task<HttpResponseMessage?> ForwardPostAsync(string path, string? authorizationHeader)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}{path}");
+            if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+            return await _http.SendAsync(request);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogDebug("Controller proxy forward unavailable: {Message}", ex.Message);
+            return null;
+        }
+    }
 }
 
 // Response DTOs for deserialization

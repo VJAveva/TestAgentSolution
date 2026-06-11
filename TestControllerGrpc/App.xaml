@@ -23,6 +23,9 @@
             <vm:DashboardPercentToWidthConverter x:Key="PercentToWidth"/>
             <vm:RunningToVisibleConverter x:Key="RunningToVisible"/>
             <vm:NullToCollapsedConverter  x:Key="NullToCollapsed"/>
+            <vm:NullToCollapsedConverter  x:Key="NullToCollapsedConverter"/>
+            <vm:BoolToActiveTextConverter x:Key="BoolToActiveTextConverter"/>
+            <vm:NonEmptyToVisibilityConverter x:Key="StringToVisConverter"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
             <BooleanToVisibilityConverter x:Key="BoolVis"/>
             <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>

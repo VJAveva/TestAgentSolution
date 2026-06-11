@@ -73,6 +73,10 @@ public static class RbacFeatureExtensions
         services.AddSingleton<RbacModeTransitionService>();
         services.AddSingleton<Hubs.SystemModeBroadcaster>();
 
+        // Phase 2a: Pipeline authorization
+        services.AddSingleton<PipelineAuthorizationGuard>();
+        services.AddSingleton<PipelineService>();
+
         return services;
     }
 }

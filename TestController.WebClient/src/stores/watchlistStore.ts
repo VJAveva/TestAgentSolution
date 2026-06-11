@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { WatchListConfig, TreeNode, NodeStatus, WatchItemConfig, EventConfig, ActionNode, TemplateConfig } from '../types/api';
+import { useAuthStore } from './authStore';
+import { useSystemModeStore } from './systemModeStore';
 
 interface WatchListState {
   config: WatchListConfig | null;
@@ -153,3 +155,39 @@ export const useWatchListStore = create<WatchListState>((set) => ({
   updateNodeStatus: (tag, status) =>
     set((s) => ({ treeRoots: updateStatusRecursive(s.treeRoots, tag, status as NodeStatus) })),
 }));
+
+/**
+ * Derived selector: filtered WatchItem nodes based on user role + assignments.
+ * Engineers in Secured mode see only assigned pipelines; everyone else sees all.
+ * Does NOT store a second copy — derives from existing store state.
+ */
+export function useFilteredWatchItems(): { items: TreeNode[]; label: string } {
+  const treeRoots = useWatchListStore((s) => s.treeRoots);
+  const user = useAuthStore((s) => s.user);
+  const mode = useSystemModeStore((s) => s.mode);
+
+  const watchListRoot = treeRoots[0];
+  if (!watchListRoot) return { items: [], label: '' };
+
+  const allItems = watchListRoot.children;
+  const total = allItems.length;
+
+  // Default mode, Admin, SrMgr, Guest, or no user → show all
+  if (
+    mode === 'default' ||
+    !user ||
+    user.role === 'Administrator' ||
+    user.role === 'SeniorManager' ||
+    user.role === 'Guest'
+  ) {
+    return { items: allItems, label: '' };
+  }
+
+  // Engineer in Secured mode: filter by assignment
+  const assigned = user.assignedPipelineIds ?? [];
+  const filtered = allItems.filter((node) => assigned.includes(node.tag));
+  return {
+    items: filtered,
+    label: `Showing ${filtered.length} of ${total} pipelines`,
+  };
+}

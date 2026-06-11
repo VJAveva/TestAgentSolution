@@ -3,6 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.Settings">
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <vm:BoolToActiveBorderBrushConverter x:Key="BoolToActiveBorderBrush"/>
+        <vm:InverseBoolConverter x:Key="InverseBool"/>
+        <vm:StringToVisibilityConverter x:Key="StringToVisibility"/>
         <Style x:Key="ModeCard" TargetType="Border">
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="20"/>
@@ -33,7 +37,7 @@
                         <TextBlock Text="Default Mode" FontWeight="SemiBold" FontSize="14"
                                    Foreground="{DynamicResource TextPrimaryBrush}"/>
                         <Border Background="#FFA6E3A1" CornerRadius="4" Padding="4,2" Margin="8,0,0,0"
-                                Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}}">
+                                Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
                             <TextBlock Text="ACTIVE" FontSize="10" FontWeight="Bold" Foreground="#FF1E1E2E"/>
                         </Border>
                     </StackPanel>
@@ -42,7 +46,7 @@
                                Text="No login required. WPF has full access. Web Client is read-only (Observer)."/>
                     <Button Content="Switch to Secured mode…" Margin="0,16,0,0"
                             Command="{Binding OpenWizardCommand}"
-                            Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}}"
+                            Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"
                             IsEnabled="{Binding IsSwitching, Converter={StaticResource InverseBool}}"/>
                 </StackPanel>
             </Border>
@@ -55,7 +59,7 @@
                         <TextBlock Text="Secured Mode" FontWeight="SemiBold" FontSize="14"
                                    Foreground="{DynamicResource TextPrimaryBrush}"/>
                         <Border Background="#FF89B4FA" CornerRadius="4" Padding="4,2" Margin="8,0,0,0"
-                                Visibility="{Binding IsSecuredMode, Converter={StaticResource BoolToVisibility}}">
+                                Visibility="{Binding IsSecuredMode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
                             <TextBlock Text="ACTIVE" FontSize="10" FontWeight="Bold" Foreground="#FF1E1E2E"/>
                         </Border>
                     </StackPanel>
@@ -64,7 +68,7 @@
                                Text="Full RBAC enforcement. Users must authenticate. Role-based permissions apply."/>
                     <Button Content="Disable RBAC…" Margin="0,16,0,0"
                             Command="{Binding OpenDisableDialogCommand}"
-                            Visibility="{Binding IsSecuredMode, Converter={StaticResource BoolToVisibility}}"
+                            Visibility="{Binding IsSecuredMode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"
                             IsEnabled="{Binding IsSwitching, Converter={StaticResource InverseBool}}"/>
                 </StackPanel>
             </Border>

@@ -59,10 +59,21 @@ export async function apiFetch<T>(
         `[API] [${correlationId}] ${response.status} ${url} (${elapsed}ms)`,
         body
       );
+
+      // Phase 2c: 403 handling — show toast + refresh stale capabilities
+      if (response.status === 403) {
+        const { useAuthDeniedToast } = await import('../components/common/AuthDeniedToast');
+        const { useAuthStore } = await import('../stores/authStore');
+        useAuthDeniedToast.getState().show(body.error || 'Permission denied');
+        // Fire-and-forget: refresh capabilities so UI rebinds
+        useAuthStore.getState().fetchMe().catch(() => {});
+      }
+
       throw {
         status: response.status,
         error: body.error || response.statusText,
         detail: body.detail,
+        reasonCode: body.reasonCode,
         correlationId: body.correlationId || correlationId,
       };
     }

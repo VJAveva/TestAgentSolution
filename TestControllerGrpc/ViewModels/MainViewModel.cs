@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
@@ -37,7 +38,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IEventAggregator _events;
     private readonly AgentLockManager _lockManager;
     private readonly HealthThresholdSettings _healthThresholds;
+    private readonly TestController.Api.Services.PipelineAuthorizationGuard _pipelineGuard;
+    private readonly Services.AuthClient _authClient;
+    private readonly Services.CapabilityChecker _capabilityChecker;
+    private readonly Services.CurrentUserHolder _currentUserHolder;
     private readonly System.Windows.Threading.DispatcherTimer _sessionElapsedTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _assignmentRefreshTimer;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
@@ -252,6 +258,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<TreeNodeViewModel> TreeRoots { get; } = new();
     public ObservableCollection<TreeNodeViewModel> TemplateRoots { get; } = new();
 
+    // ── Pipeline filter (Phase 2b) ──────────────────────────────────
+    /// <summary>
+    /// "Showing N of M pipelines" for Engineers in Secured mode; empty otherwise.
+    /// </summary>
+    [ObservableProperty] private string _pipelineFilterLabel = "";
+
     // ── High-performance log collections (GAP 1 + 4 fix) ────────────
     // RangeObservableCollection supports batch Add/Remove with single
     // Reset notification, reducing WPF layout passes from O(n) to O(1).
@@ -291,7 +303,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
         BuildResultsViewModel buildResultsVM, IAppLogger appLogger,
         IEventAggregator events, AgentLockManager lockManager,
-        HealthThresholdSettings healthThresholds)
+        HealthThresholdSettings healthThresholds,
+        TestController.Api.Services.PipelineAuthorizationGuard pipelineGuard,
+        Services.AuthClient authClient,
+        Services.CapabilityChecker capabilityChecker,
+        Services.CurrentUserHolder currentUserHolder)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -303,9 +319,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _events = events;
         _lockManager = lockManager;
         _healthThresholds = healthThresholds;
+        _pipelineGuard = pipelineGuard;
+        _authClient = authClient;
+        _capabilityChecker = capabilityChecker;
+        _currentUserHolder = currentUserHolder;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher);
+
+        // Phase 2b: subscribe to capability changes for CanExecute + filtering
+        _capabilityChecker.CapabilitiesChanged += OnCapabilitiesChanged;
+        _authClient.AuthStateChanged += OnAuthStateChanged;
+
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
         _executor.NodeProgress += OnNodeProgress;
@@ -395,6 +420,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 if (session is not null)
                     AddLog($"[{session.SessionId}] Cancellation requested from dashboard for {session.WatchItemTag}");
             })));
+
+        // Phase 2b: Assignment refresh timer (60s) — re-pulls /api/auth/me
+        _assignmentRefreshTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(60)
+        };
+        _assignmentRefreshTimer.Tick += async (_, _) =>
+        {
+            if (_currentUserHolder.IsSecuredMode && _authClient.IsAuthenticated)
+                await RefreshUserAssignmentsAsync();
+        };
+        _assignmentRefreshTimer.Start();
+
+        // Initialize Default-mode banner state
+        RefreshDefaultModeState();
     }
 
     /// <summary>Creates the single WatchList + TemplateList root nodes on startup.</summary>
@@ -405,6 +445,93 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TreeRoots.Add(TreeNodeViewModel.FromWatchList(_config));
         TemplateRoots.Clear();
         TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+    }
+
+    // ── Phase 2b: Pipeline filtering + capability refresh ───────────
+
+    /// <summary>
+    /// Refreshes WatchItem node visibility based on the current user's assignments.
+    /// Engineers in Secured mode see only assigned pipelines; everyone else sees all.
+    /// Toggles IsFilterVisible on individual nodes (preserves expansion state).
+    /// </summary>
+    private void RefreshFilteredPipelines()
+    {
+        if (WatchListRoot is null) return;
+
+        var children = WatchListRoot.Children;
+        var total = children.Count;
+
+        if (!_currentUserHolder.IsSecuredMode
+            || _currentUserHolder.User.Roles.FirstOrDefault() is var role
+               && (string.Equals(role, Identity.Role.Administrator.ToString(), StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(role, Identity.Role.SeniorManager.ToString(), StringComparison.OrdinalIgnoreCase)
+                   || role is null))
+        {
+            // Show all
+            foreach (var child in children)
+                child.IsFilterVisible = true;
+            PipelineFilterLabel = "";
+            return;
+        }
+
+        // Engineer in Secured mode: filter by assignment
+        var assigned = _currentUserHolder.User.AssignedPipelineIds;
+        var visibleCount = 0;
+        foreach (var child in children)
+        {
+            var tag = (child.ModelObject as WatchItemConfig)?.Tag ?? "";
+            var visible = assigned.Contains(tag);
+            child.IsFilterVisible = visible;
+            if (visible) visibleCount++;
+        }
+        PipelineFilterLabel = $"Showing {visibleCount} of {total} pipelines";
+    }
+
+    /// <summary>Handles CapabilitiesChanged from background thread.</summary>
+    private void OnCapabilitiesChanged()
+    {
+        if (Application.Current?.Dispatcher is { } dispatcher)
+        {
+            if (dispatcher.CheckAccess())
+            {
+                RefreshFilteredPipelines();
+                NotifyExecutionCanExecuteChanged();
+                RefreshDefaultModeState();
+            }
+            else
+            {
+                dispatcher.Invoke(() =>
+                {
+                    RefreshFilteredPipelines();
+                    NotifyExecutionCanExecuteChanged();
+                    RefreshDefaultModeState();
+                });
+            }
+        }
+    }
+
+    /// <summary>Handles AuthClient.AuthStateChanged — updates CurrentUserHolder.</summary>
+    private void OnAuthStateChanged()
+    {
+        var info = _authClient.CurrentUser;
+        if (info is not null)
+            _currentUserHolder.SetUser(info);
+        else
+            _currentUserHolder.Clear();
+    }
+
+    /// <summary>Re-pulls /api/auth/me to refresh assignments.</summary>
+    private async Task RefreshUserAssignmentsAsync()
+    {
+        try
+        {
+            // FetchMeAsync refreshes CurrentUser which fires AuthStateChanged
+            await _authClient.FetchMeAsync();
+        }
+        catch
+        {
+            // Best-effort; next timer tick will retry
+        }
     }
 
     /// <summary>Called once after window layout completes to ensure WatchList root is active.</summary>
@@ -468,6 +595,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _watcherManager.TriggerFired -= OnTriggerFired;
         _watcherManager.TriggerMetadataParsed -= OnTriggerMetadataParsed;
         _watcherManager.TriggerParametersLoaded -= OnTriggerParametersLoaded;
+        _capabilityChecker.CapabilitiesChanged -= OnCapabilitiesChanged;
+        _authClient.AuthStateChanged -= OnAuthStateChanged;
 
         // Dispose event aggregator subscriptions (replaces static event unsubscription)
         foreach (var sub in _subscriptions) sub.Dispose();
@@ -479,6 +608,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Stop the multi-session dashboard's refresh timer + event subscriptions.
         _sessionElapsedTimer.Stop();
+        _assignmentRefreshTimer.Stop();
         ExecutionDashboard?.Dispose();
         HealthMetrics?.Dispose();
         AgentWorkspace?.Dispose();

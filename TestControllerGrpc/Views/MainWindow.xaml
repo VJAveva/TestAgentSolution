@@ -6,6 +6,7 @@
         xmlns:views="clr-namespace:TestControllerGrpc.Views"
         xmlns:aw="clr-namespace:TestControllerGrpc.Views.AgentWorkspace"
         xmlns:panels="clr-namespace:TestControllerGrpc.Views.Panels"
+        xmlns:controls="clr-namespace:TestControllerGrpc.Controls"
         Title="TestController  -  WatchList Editor"
         Height="900" Width="1400" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
@@ -797,6 +798,12 @@
 
     <DockPanel>
         <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- DEFAULT MODE BANNER (visible only when RBAC disabled)     -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <controls:DefaultModeBanner DockPanel.Dock="Top"
+            Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolVis}}" />
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
         <!-- RIBBON                                                    -->
         <!-- ═══════════════════════════════════════════════════════════ -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource RibbonBg}"
@@ -810,6 +817,9 @@
                 <!-- Status + Active Sessions (right column) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                             HorizontalAlignment="Right" Margin="8,0">
+                    <!-- User Identity Badge -->
+                    <controls:UserIdentityBadge VerticalAlignment="Center" Margin="0,0,12,0" />
+
                     <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource AccGreen}"
                                FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
 
@@ -1786,17 +1796,50 @@
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnYellow}" Command="{Binding OpenSettingsCommand}"
+                                                    ToolTip="Open Security Mode settings">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE72E;" Foreground="{DynamicResource AccYellow}" />
+                                                    <TextBlock Text="Security" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="Security" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                             </ScrollViewer>
                         </Border>
                     </TabItem>
 
-                    <!-- ─── USERS TAB (Admin only — visible when User_Create capability present) ─── -->
-                    <TabItem Header="USERS" x:Name="UsersTab"
-                             Visibility="{Binding IsUsersTabVisible, Converter={StaticResource BoolToVisConverter}}">
-                        <Border Background="{DynamicResource RibbonTabBg}" Padding="0">
-                            <views:UserManagementPage x:Name="UserManagementContent"
-                                xmlns:views="clr-namespace:TestControllerGrpc.Views.Admin"/>
+                    <!-- ─── ADMIN TAB (visible when User_Create capability present) ─── -->
+                    <TabItem Header="ADMIN" x:Name="AdminTab"
+                             Visibility="{Binding IsUsersTabVisible, Converter={StaticResource BoolVis}}">
+                        <Border Background="{DynamicResource RibbonTabBg}" Padding="6,6" ClipToBounds="True">
+                            <ScrollViewer Style="{StaticResource RibbonScrollViewer}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding OpenUserManagementCommand}"
+                                                    ToolTip="Open User Management">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE77B;" Foreground="{DynamicResource AccMauve}" />
+                                                    <TextBlock Text="Users" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="User Management" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </TabItem>
                 </TabControl>

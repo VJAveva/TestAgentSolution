@@ -1,0 +1,42 @@
+<Window x:Class="TestControllerGrpc.Views.Dialogs.AuthorizationDeniedDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Permission Denied"
+        Height="240" Width="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource WindowBg}">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header with shield icon -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="24"
+                       Foreground="#F0B070" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <TextBlock Text="Permission Denied" FontSize="18" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextP}" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Message body -->
+        <TextBlock Grid.Row="1" Text="{Binding Message}" TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextS}" FontSize="13"
+                   Margin="0,0,0,12"/>
+
+        <!-- Refresh hint -->
+        <TextBlock Grid.Row="2" Text="Refreshing your permissions…"
+                   Foreground="{DynamicResource TextS}" FontSize="11"
+                   FontStyle="Italic" Margin="0,0,0,16"
+                   Visibility="{Binding IsRefreshing, Converter={StaticResource BoolVis}}"/>
+
+        <!-- OK button -->
+        <Button Grid.Row="3" Content="OK" Width="80" HorizontalAlignment="Right"
+                Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"
+                BorderBrush="{DynamicResource Bdr}" Padding="12,6" Cursor="Hand"
+                Click="OnOkClick"/>
+    </Grid>
+</Window>

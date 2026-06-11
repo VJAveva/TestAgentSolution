@@ -2,7 +2,9 @@ using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Helpers;
+using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
@@ -12,7 +14,33 @@ namespace TestControllerGrpc.ViewModels;
 // ?? Execution: Trigger, Execute, Cancel, Reset, Retry ???????????????
 public sealed partial class MainViewModel
 {
-    private bool CanTriggerEvent => SelectedNode?.NodeKind == NodeKinds.Event;
+    /// <summary>
+    /// Resolves the current IUserContext for authorization checks.
+    /// In Default mode, returns the synthetic Default WPF user.
+    /// In Secured mode, builds context from AuthClient.CurrentUser.
+    /// </summary>
+    private IUserContext GetCurrentUserContext()
+    {
+        var authUser = _authClient.CurrentUser;
+        if (authUser is null)
+            return DefaultUser.ForClient(ClientKind.Wpf);
+
+        return new SyntheticUserContext(
+            userId: authUser.UserId,
+            displayName: authUser.DisplayName,
+            clientKind: ClientKind.Wpf,
+            roles: [authUser.Role]);
+    }
+
+    private bool CanTriggerEvent
+    {
+        get
+        {
+            if (SelectedNode?.NodeKind != NodeKinds.Event) return false;
+            var tag = (SelectedNode.Parent?.ModelObject as WatchItemConfig)?.Tag;
+            return _capabilityChecker.Can(Permission.Pipeline_Trigger, tag);
+        }
+    }
 
     /// <summary>Trigger a single Event node's pipeline.</summary>
     [RelayCommand(CanExecute = nameof(CanTriggerEvent), AllowConcurrentExecutions = true)] 
@@ -27,6 +55,18 @@ public sealed partial class MainViewModel
         if (IsWatchItemRunning(tag))
         {
             AddLog($"WatchItem '{tag}' is already running");
+            return;
+        }
+
+        // Phase 2a: Authorization guard — runs before lock acquisition
+        try
+        {
+            await _pipelineGuard.AuthorizeAsync(GetCurrentUserContext(), Permission.Pipeline_Trigger, tag);
+        }
+        catch (PipelineAuthorizationDeniedException ex)
+        {
+            AddLog($"Trigger denied for '{tag}': {ex.Message}", LogSeverity.Warning);
+            ShowAuthorizationDeniedDialog(ex.Message);
             return;
         }
 
@@ -122,7 +162,15 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanTriggerWatchItem => SelectedNode?.NodeKind == NodeKinds.WatchItem;
+    private bool CanTriggerWatchItem
+    {
+        get
+        {
+            if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return false;
+            var tag = (SelectedNode.ModelObject as WatchItemConfig)?.Tag;
+            return _capabilityChecker.Can(Permission.Pipeline_Trigger, tag);
+        }
+    }
 
     /// <summary>Trigger ALL events on the selected WatchItem.</summary>
     [RelayCommand(CanExecute = nameof(CanTriggerWatchItem), AllowConcurrentExecutions = true)]
@@ -133,6 +181,18 @@ public sealed partial class MainViewModel
         if (IsWatchItemRunning(wi.Tag))
         {
             AddLog($"WatchItem '{wi.Tag}' is already running");
+            return;
+        }
+
+        // Phase 2a: Authorization guard — runs before lock acquisition
+        try
+        {
+            await _pipelineGuard.AuthorizeAsync(GetCurrentUserContext(), Permission.Pipeline_Trigger, wi.Tag);
+        }
+        catch (PipelineAuthorizationDeniedException ex)
+        {
+            AddLog($"Trigger denied for '{wi.Tag}': {ex.Message}", LogSeverity.Warning);
+            ShowAuthorizationDeniedDialog(ex.Message);
             return;
         }
 
@@ -247,14 +307,29 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanCancelExecution => ActiveSessions.Any(s => s.Status == "Running");
+    private bool CanCancelExecution =>
+        ActiveSessions.Any(s => s.Status == "Running")
+        && _capabilityChecker.Can(Permission.Pipeline_Cancel);
 
     /// <summary>Cancel all running executions.</summary>
     [RelayCommand(CanExecute = nameof(CanCancelExecution))]
-    private void CancelExecution()
+    private async Task CancelExecution()
     {
+        var userContext = GetCurrentUserContext();
         foreach (var session in ActiveSessions.Where(s => s.Status == "Running").ToList())
         {
+            // Phase 2a: Authorize cancel per pipeline
+            try
+            {
+                await _pipelineGuard.AuthorizeAsync(userContext, Permission.Pipeline_Cancel, session.WatchItemTag);
+            }
+            catch (PipelineAuthorizationDeniedException ex)
+            {
+                AddLog($"Cancel denied for '{session.WatchItemTag}': {ex.Message}", LogSeverity.Warning);
+                ShowAuthorizationDeniedDialog(ex.Message);
+                continue;
+            }
+
             session.Cancel();
             AddLog($"[{session.SessionId}] Cancellation requested for {session.WatchItemTag}");
         }
@@ -283,7 +358,9 @@ public sealed partial class MainViewModel
         AddLog("Execution status reset");
     }
 
-    private bool CanTriggerAllWatchItems => SelectedNode?.NodeKind == NodeKinds.WatchList;
+    private bool CanTriggerAllWatchItems =>
+        SelectedNode?.NodeKind == NodeKinds.WatchList
+        && _capabilityChecker.Can(Permission.Pipeline_Trigger);
 
     /// <summary>
     /// Trigger ALL WatchItems in parallel.
@@ -797,5 +874,23 @@ public sealed partial class MainViewModel
         node.ApplyToModel();
         node.RefreshDisplayText();
         AddLog($"Changed ExecutionType of '{node.DisplayText}' to {newMode}");
+    }
+
+    // ── Phase 2b: Authorization denied dialog ───────────────────────
+
+    /// <summary>
+    /// Shows the AuthorizationDeniedDialog on the UI thread.
+    /// Triggers a background /api/auth/me refresh to update assignments.
+    /// </summary>
+    private void ShowAuthorizationDeniedDialog(string message)
+    {
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            var dialog = new Views.Dialogs.AuthorizationDeniedDialog(message, _authClient)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            dialog.ShowDialog();
+        });
     }
 }

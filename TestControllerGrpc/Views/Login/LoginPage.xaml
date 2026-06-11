@@ -2,11 +2,18 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.Login"
+        xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels.Settings"
         Title="Test Controller — Sign In"
         Height="420" Width="380"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="{DynamicResource WindowBg}">
+
+    <Window.Resources>
+        <conv:InverseBoolConverter x:Key="InvertBoolConverter"/>
+        <conv:StringToVisibilityConverter x:Key="StringToVisConverter"/>
+        <vm:BoolToSignInTextConverter x:Key="BoolToSignInTextConverter"/>
+    </Window.Resources>
 
     <Grid Margin="32">
         <StackPanel VerticalAlignment="Center">

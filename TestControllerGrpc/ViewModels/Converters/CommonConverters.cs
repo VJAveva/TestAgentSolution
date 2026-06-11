@@ -132,6 +132,18 @@ public sealed class NonEmptyToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
+/// Converts a boolean IsActive flag to "Active" or "Inactive" text.
+/// </summary>
+public sealed class BoolToActiveTextConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? "Active" : "Inactive";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
+/// <summary>
 /// Converts an integer greater than zero to Visible, zero or less to Collapsed.
 /// </summary>
 public sealed class IntToVisibilityConverter : IValueConverter
