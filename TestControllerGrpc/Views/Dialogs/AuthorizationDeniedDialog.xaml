@@ -31,7 +31,7 @@
         <TextBlock Grid.Row="2" Text="Refreshing your permissions…"
                    Foreground="{DynamicResource TextS}" FontSize="11"
                    FontStyle="Italic" Margin="0,0,0,16"
-                   Visibility="{Binding IsRefreshing, Converter={StaticResource BoolVis}}"/>
+                   Visibility="{Binding IsRefreshing, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}"/>
 
         <!-- OK button -->
         <Button Grid.Row="3" Content="OK" Width="80" HorizontalAlignment="Right"

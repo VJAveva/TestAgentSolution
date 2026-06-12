@@ -801,7 +801,7 @@
         <!-- DEFAULT MODE BANNER (visible only when RBAC disabled)     -->
         <!-- ═══════════════════════════════════════════════════════════ -->
         <controls:DefaultModeBanner DockPanel.Dock="Top"
-            Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolVis}}" />
+            Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}" />
 
         <!-- ═══════════════════════════════════════════════════════════ -->
         <!-- RIBBON                                                    -->

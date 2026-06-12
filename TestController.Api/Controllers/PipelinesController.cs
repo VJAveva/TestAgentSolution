@@ -38,7 +38,10 @@ public class PipelinesController : ControllerBase
 
         try
         {
-            await _pipelineService.AuthorizeTriggerAsync(user, pipelineId, ct);
+            var conflictDto = await _pipelineService.AuthorizeTriggerAsync(user, pipelineId, ct);
+            if (conflictDto is not null)
+                return Conflict(new { error = "pipeline-locked", @lock = conflictDto });
+
             return Ok(new { message = $"Trigger authorized for pipeline '{pipelineId}'." });
         }
         catch (PipelineAuthorizationDeniedException ex)

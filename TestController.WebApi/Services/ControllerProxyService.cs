@@ -124,6 +124,52 @@ public sealed class ControllerProxyService : IDisposable
     public void Dispose() => _http.Dispose();
 
     /// <summary>
+    /// Forwards a GET request to the WPF controller with the caller's Authorization header.
+    /// Phase 3a: used by lock proxy endpoints.
+    /// </summary>
+    public async Task<HttpResponseMessage?> ForwardGetAsync(string path, string? authorizationHeader)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}{path}");
+            if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+            return await _http.SendAsync(request);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogDebug("Controller proxy forward GET unavailable: {Message}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Forwards a DELETE request to the WPF controller with the caller's Authorization header.
+    /// Phase 3a: used by lock proxy endpoints.
+    /// </summary>
+    public async Task<HttpResponseMessage?> ForwardDeleteAsync(string path, string? authorizationHeader)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Delete, $"{_baseUrl}{path}");
+            if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+            return await _http.SendAsync(request);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogDebug("Controller proxy forward DELETE unavailable: {Message}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Forwards a POST request to the WPF controller with the caller's Authorization header.
     /// Phase 2a: ensures the controller-side authz sees the original user, not the proxy's identity.
     /// </summary>

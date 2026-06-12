@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
                     xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
+                    xmlns:controls="clr-namespace:TestControllerGrpc.Controls"
                     xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels.Converters">
 
     <!--
@@ -100,6 +101,7 @@
                 <ColumnDefinition Width="Auto" /> <!-- Pill(s) -->
                 <ColumnDefinition Width="Auto" /> <!-- File pill -->
                 <ColumnDefinition Width="Auto" /> <!-- Status spinner -->
+                <ColumnDefinition Width="Auto" /> <!-- Lock badge -->
                 <ColumnDefinition Width="*" />    <!-- Spacer -->
                 <ColumnDefinition Width="Auto" /> <!-- Count badge -->
             </Grid.ColumnDefinitions>
@@ -561,8 +563,13 @@
                 </mi:MaterialIcon>
             </Grid>
 
-            <!-- ── Column 7: Child Count Badge ── -->
-            <Border Grid.Column="7"
+            <!-- ── Column 6: Lock Badge (Phase 3b) ── -->
+            <controls:LockBadge Grid.Column="6" DataContext="{Binding LockBadge}"
+                                Visibility="{Binding IsVisible, FallbackValue=Collapsed,
+                                    Converter={StaticResource BoolVis}}" />
+
+            <!-- ── Column 8: Child Count Badge ── -->
+            <Border Grid.Column="8"
                     Visibility="{Binding Children.Count, Converter={StaticResource NonZeroVis}}">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource CountBadgeStyle}">

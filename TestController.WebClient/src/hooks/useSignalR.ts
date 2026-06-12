@@ -8,6 +8,7 @@ import { useResultsStore } from '../stores/resultsStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { getUserId } from '../lib/userIdentity';
 import { registerSystemModeEvents } from '../signalr/SystemModeEvents';
+import { registerLockEvents } from '../signalr/LockEvents';
 import type { NodeStatus, WatchListConfig } from '../types/api';
 
 /** Tracks joined sessions for auto-rejoin after reconnect. */
@@ -306,6 +307,9 @@ export function useSignalR(): HubConnection | null {
 
     // Register SystemModeChanged handler for live mode switching
     registerSystemModeEvents(conn);
+
+    // Register pipeline lock event handlers for lock coordination
+    registerLockEvents(conn);
 
     connRef.current = conn;
     tryStart(conn);

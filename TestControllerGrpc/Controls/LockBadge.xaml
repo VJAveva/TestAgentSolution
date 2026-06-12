@@ -1,0 +1,50 @@
+<UserControl x:Class="TestControllerGrpc.Controls.LockBadge"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF">
+    <!--
+        Lock badge for WatchItem tree rows.
+        Amber variant: other-owner lock. Blue variant: own-run elapsed timer.
+        Per docs/rbac/04_UI_Mockup_Catalog.md Mockups 3, 4.
+    -->
+    <UserControl.Style>
+        <Style TargetType="UserControl">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsVisible, FallbackValue=False}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Style>
+
+    <Grid>
+        <!-- Amber badge: locked by other user -->
+        <Border CornerRadius="3" Padding="4,2" Margin="4,0,0,0"
+                VerticalAlignment="Center"
+                Background="#33F0B070" BorderBrush="#FFF0B070" BorderThickness="1"
+                Visibility="{Binding IsLockedByOther, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}">
+            <StackPanel Orientation="Horizontal">
+                <mi:MaterialIcon Kind="Lock" Width="12" Height="12"
+                                 Foreground="#FFF0B070" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding OwnerLabel, FallbackValue=''}"
+                           FontSize="10.5" Foreground="#FFF0B070"
+                           VerticalAlignment="Center" Margin="3,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Blue badge: your run with elapsed timer -->
+        <Border CornerRadius="3" Padding="4,2" Margin="4,0,0,0"
+                VerticalAlignment="Center"
+                Background="#3374ACEA" BorderBrush="#FF74ACEA" BorderThickness="1"
+                Visibility="{Binding IsLockedByMe, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}">
+            <StackPanel Orientation="Horizontal">
+                <mi:MaterialIcon Kind="Play" Width="12" Height="12"
+                                 Foreground="#FF74ACEA" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding ElapsedText, FallbackValue=''}"
+                           FontSize="10.5" Foreground="#FF74ACEA"
+                           VerticalAlignment="Center" Margin="3,0,0,0" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,116 @@
+<Window x:Class="TestControllerGrpc.Views.Dialogs.ForceReleaseReasonDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
+        Title="Take Over Pipeline"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" SizeToContent="Height" Width="460"
+        Background="{DynamicResource WindowBgBrush}">
+    <!--
+        Force-Release Reason Dialog — Mockup 9.
+        Deliberately high-friction: reason + affirmation required.
+    -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /> <!-- Warning header -->
+            <RowDefinition Height="Auto" /> <!-- Side-effects panel -->
+            <RowDefinition Height="Auto" /> <!-- Reason textarea -->
+            <RowDefinition Height="Auto" /> <!-- Counter -->
+            <RowDefinition Height="Auto" /> <!-- Affirmation checkbox -->
+            <RowDefinition Height="Auto" /> <!-- Error message -->
+            <RowDefinition Height="Auto" /> <!-- Actions -->
+        </Grid.RowDefinitions>
+
+        <!-- Warning header -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <mi:MaterialIcon Kind="Alert" Width="24" Height="24" Foreground="#FFF0B070"
+                             VerticalAlignment="Center" />
+            <StackPanel Margin="8,0,0,0">
+                <TextBlock Text="Take over and revert" FontSize="15" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextDefaultBrush}" />
+                <TextBlock Text="This action cannot be undone" FontSize="11"
+                           Foreground="{DynamicResource TextDimBrush}" Margin="0,2,0,0" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Side-effects panel -->
+        <Border Grid.Row="1" CornerRadius="4" Padding="10" Margin="0,8,0,12"
+                Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="This action will:" FontSize="11" FontWeight="SemiBold"
+                           Foreground="#FFF0B070" Margin="0,0,0,4" />
+                <TextBlock FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
+                    <Run Text="• Cancel the current run and revert any partial changes" /><LineBreak />
+                    <Run Text="• Notify the current owner of the takeover" /><LineBreak />
+                    <Run Text="• Record this action in the audit log with your reason" /><LineBreak />
+                    <Run Text="• Acquire the pipeline lock for your session" />
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- Reason textarea -->
+        <TextBox Grid.Row="2" MinHeight="80" MaxHeight="140"
+                 TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                 Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}"
+                 FontSize="12" Padding="8"
+                 Background="{DynamicResource InputBgBrush}"
+                 Foreground="{DynamicResource TextDefaultBrush}"
+                 BorderBrush="{DynamicResource BorderDimBrush}">
+            <TextBox.ToolTip>
+                <TextBlock Text="Explain why you are taking over this pipeline..." />
+            </TextBox.ToolTip>
+        </TextBox>
+
+        <!-- Character counter -->
+        <TextBlock Grid.Row="3" Margin="0,4,0,8" FontSize="10.5" HorizontalAlignment="Right"
+                   Text="{Binding CharacterCounter, FallbackValue='0 / 10 minimum'}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding CanSubmit}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource SPassedBrush}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Affirmation checkbox -->
+        <CheckBox Grid.Row="4" Margin="0,0,0,12"
+                  IsChecked="{Binding IsAffirmationChecked}"
+                  Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12">
+            <TextBlock Text="{Binding AffirmationLabel, FallbackValue='I confirm this action'}"
+                       TextWrapping="Wrap" />
+        </CheckBox>
+
+        <!-- Error message -->
+        <TextBlock Grid.Row="5" Margin="0,0,0,8"
+                   Text="{Binding ErrorMessage, FallbackValue=''}"
+                   Foreground="{DynamicResource SFailedBrush}" FontSize="11"
+                   Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}, FallbackValue=Collapsed}"
+                   TextWrapping="Wrap" />
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" MinWidth="80" IsCancel="True"
+                    Style="{DynamicResource SecondaryButtonStyle}" Margin="0,0,8,0" />
+            <Button Content="Take over and revert" MinWidth="160"
+                    Command="{Binding SubmitCommand}"
+                    IsEnabled="{Binding CanSubmit, FallbackValue=False}">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Setter Property="Background" Value="#FFF0B070" />
+                        <Setter Property="Foreground" Value="#FF1A1A1A" />
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                        <Style.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>

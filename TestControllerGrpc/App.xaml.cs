@@ -89,6 +89,9 @@ public partial class App : Application
                 // RBAC feature (identity, authorization, audit, persistence)
                 services.AddRbacFeature(ctx.Configuration);
 
+                // Phase 3a: Pipeline lock (controller-host only — WebApi proxies via ControllerProxyService)
+                services.AddControllerLockServices(ctx.Configuration);
+
                 services.AddSingleton<IEventAggregator, EventAggregator>();
                 services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
                 services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
@@ -147,6 +150,10 @@ public partial class App : Application
                 // Phase 2b: Capability gating for WPF UI
                 services.AddSingleton<CurrentUserHolder>();
                 services.AddSingleton<CapabilityChecker>();
+
+                // Phase 3b: Lock conflict dialog ViewModels
+                services.AddTransient<ViewModels.LockConflictDialogViewModel>();
+                services.AddTransient<ViewModels.ForceReleaseReasonDialogViewModel>();
 
                 // Phase 1b: User management
                 services.AddSingleton<UserManagementClient>();

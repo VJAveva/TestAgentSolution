@@ -38,7 +38,7 @@
         <!-- Error display -->
         <TextBlock Grid.Row="3" Text="{Binding DisableError}" Foreground="#FFF38BA8"
                    FontSize="12" TextWrapping="Wrap" Margin="0,8,0,8"
-                   Visibility="{Binding DisableError, Converter={StaticResource StringToVisibility}}"/>
+                   Visibility="{Binding DisableError, Converter={StaticResource StringToVisConverter}, FallbackValue=Collapsed}"/>
 
         <!-- Buttons -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">

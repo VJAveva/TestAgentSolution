@@ -341,6 +341,7 @@ app.MapOpenApi();
 app.MapGroup("/api/watchlist").MapWatchListEndpoints().RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/agents").MapAgentEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/execution").MapExecutionEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api").MapLockEndpoints().RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 app.MapGroup("/api/tokens").MapTokenManagementEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);

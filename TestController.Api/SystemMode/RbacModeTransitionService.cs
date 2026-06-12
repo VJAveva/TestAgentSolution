@@ -5,6 +5,7 @@ using TestController.Persistence.Identity;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Configuration;
 using TestControllerGrpc.Identity;
+using TestControllerGrpc.Locking;
 
 namespace TestController.Api.SystemMode;
 
@@ -19,19 +20,22 @@ public sealed class RbacModeTransitionService
     private readonly ISessionStore _sessionStore;
     private readonly PasswordHasher _passwordHasher;
     private readonly IAuditWriter _auditWriter;
+    private readonly ILockRegistry? _lockRegistry;
 
     public RbacModeTransitionService(
         IDbContextFactory<OrchestratorDbContext> dbFactory,
         IWritableOptions<RbacOptions> writableOptions,
         ISessionStore sessionStore,
         PasswordHasher passwordHasher,
-        IAuditWriter auditWriter)
+        IAuditWriter auditWriter,
+        ILockRegistry? lockRegistry = null)
     {
         _dbFactory = dbFactory;
         _writableOptions = writableOptions;
         _sessionStore = sessionStore;
         _passwordHasher = passwordHasher;
         _auditWriter = auditWriter;
+        _lockRegistry = lockRegistry;
     }
 
     /// <summary>
@@ -77,6 +81,13 @@ public sealed class RbacModeTransitionService
 
             // Flip the flag
             _writableOptions.Update(opts => opts.Enabled = true);
+
+            // Phase 3a: Rewrite lock owners to the new Admin (per 05_Default_Mode_Design.md §8.2)
+            if (_lockRegistry is not null && existingAdmin is not null)
+            {
+                var adminOwner = new OwnerIdentity(existingAdmin.UserId, existingAdmin.Username, ClientKind.Wpf);
+                _lockRegistry.RewriteOwners(adminOwner);
+            }
 
             // Audit
             _auditWriter.Enqueue(new AuditEntry
@@ -125,6 +136,10 @@ public sealed class RbacModeTransitionService
 
             // Flip the flag
             _writableOptions.Update(opts => opts.Enabled = false);
+
+            // Phase 3a: Rewrite lock owners to Default user (per 05_Default_Mode_Design.md §9.1)
+            _lockRegistry?.RewriteOwners(
+                new OwnerIdentity(DefaultUser.UserId.ToString("D"), "Default user", ClientKind.Wpf));
 
             // Audit (last entry with real identity)
             _auditWriter.Enqueue(new AuditEntry

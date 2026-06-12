@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PlayCircle, XCircle, Upload, Download, RefreshCw } from 'lucide-react';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useExecution } from '../../hooks/useExecution';
 import { useWatchListStore } from '../../stores/watchlistStore';
 import TriggerDialog from '../execution/TriggerDialog';
+import LockConflictModal from '../dialogs/LockConflictModal';
+import type { PipelineLockDto } from '../../stores/lockStore';
 
 export default function WatchListToolbar() {
   const { refresh, importXml, exportXml } = useWatchList();
@@ -11,6 +13,17 @@ export default function WatchListToolbar() {
   const selectedNode = useWatchListStore(s => s.selectedNode);
   const [busy, setBusy] = useState(false);
   const [showTriggerDialog, setShowTriggerDialog] = useState(false);
+  const [conflictLock, setConflictLock] = useState<PipelineLockDto | null>(null);
+
+  // Listen for 409 lock conflict events from useExecution
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const lock = (e as CustomEvent).detail?.lock as PipelineLockDto | undefined;
+      if (lock) setConflictLock(lock);
+    };
+    window.addEventListener('pipeline-lock-conflict', handler);
+    return () => window.removeEventListener('pipeline-lock-conflict', handler);
+  }, []);
 
   const wrap = (fn: () => Promise<unknown>) => async () => {
     setBusy(true);
@@ -80,6 +93,14 @@ export default function WatchListToolbar() {
           isOpen={showTriggerDialog}
           onClose={() => setShowTriggerDialog(false)}
           onTrigger={handleTriggerWithParams}
+        />
+      )}
+
+      {conflictLock && (
+        <LockConflictModal
+          open={true}
+          lock={conflictLock}
+          onClose={() => setConflictLock(null)}
         />
       )}
     </div>

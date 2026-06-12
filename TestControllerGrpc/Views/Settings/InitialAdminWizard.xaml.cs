@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.ViewModels.Settings;
 
 namespace TestControllerGrpc.Views.Settings;
@@ -8,6 +9,7 @@ public partial class InitialAdminWizard : Window
 {
     public InitialAdminWizard()
     {
+        DataContext = App.Services.GetRequiredService<SecurityModeViewModel>();
         InitializeComponent();
     }
 

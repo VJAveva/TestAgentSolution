@@ -2,6 +2,20 @@ import { useCallback } from 'react';
 import axios from 'axios';
 import { useExecutionStore } from '../stores/executionStore';
 import type { ExecutionStatus, SessionsResponse } from '../types/api';
+import type { PipelineLockDto } from '../stores/lockStore';
+
+/** Dispatched when a trigger call returns 409 with a PipelineLockDto body. */
+export function dispatchLockConflict(lock: PipelineLockDto): void {
+  window.dispatchEvent(new CustomEvent('pipeline-lock-conflict', { detail: { lock } }));
+}
+
+function extractLockFrom409(error: any): PipelineLockDto | null {
+  if (error?.response?.status === 409) {
+    const body = error.response.data;
+    if (body?.lock) return body.lock as PipelineLockDto;
+  }
+  return null;
+}
 
 export function useExecution() {
   const setStatus = useExecutionStore(s => s.setStatus);
@@ -30,15 +44,33 @@ export function useExecution() {
     tag: string,
     params?: { buildNumber?: string; dropLocation?: string; parameters?: Record<string, string>; lockVersion?: number }
   ) => {
-    const { data } = await axios.post(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
-    await fetchSessions();
-    return data;
+    try {
+      const { data } = await axios.post(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
+      await fetchSessions();
+      return data;
+    } catch (err: any) {
+      const lock = extractLockFrom409(err);
+      if (lock) {
+        dispatchLockConflict(lock);
+        return;
+      }
+      throw err;
+    }
   }, [fetchSessions]);
 
   const triggerEvent = useCallback(async (tag: string, eventIndex: number) => {
-    const { data } = await axios.post(`/api/execution/trigger-event/${encodeURIComponent(tag)}/${eventIndex}`);
-    await fetchSessions();
-    return data;
+    try {
+      const { data } = await axios.post(`/api/execution/trigger-event/${encodeURIComponent(tag)}/${eventIndex}`);
+      await fetchSessions();
+      return data;
+    } catch (err: any) {
+      const lock = extractLockFrom409(err);
+      if (lock) {
+        dispatchLockConflict(lock);
+        return;
+      }
+      throw err;
+    }
   }, [fetchSessions]);
 
   const cancelAll = useCallback(async () => {

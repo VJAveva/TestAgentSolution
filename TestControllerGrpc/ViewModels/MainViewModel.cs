@@ -42,6 +42,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly Services.AuthClient _authClient;
     private readonly Services.CapabilityChecker _capabilityChecker;
     private readonly Services.CurrentUserHolder _currentUserHolder;
+    private readonly Services.LockStateService _lockStateService;
     private readonly System.Windows.Threading.DispatcherTimer _sessionElapsedTimer;
     private readonly System.Windows.Threading.DispatcherTimer _assignmentRefreshTimer;
     private readonly List<IDisposable> _subscriptions = [];
@@ -307,7 +308,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TestController.Api.Services.PipelineAuthorizationGuard pipelineGuard,
         Services.AuthClient authClient,
         Services.CapabilityChecker capabilityChecker,
-        Services.CurrentUserHolder currentUserHolder)
+        Services.CurrentUserHolder currentUserHolder,
+        Services.LockStateService lockStateService)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -323,6 +325,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _authClient = authClient;
         _capabilityChecker = capabilityChecker;
         _currentUserHolder = currentUserHolder;
+        _lockStateService = lockStateService;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher);
@@ -330,6 +333,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Phase 2b: subscribe to capability changes for CanExecute + filtering
         _capabilityChecker.CapabilitiesChanged += OnCapabilitiesChanged;
         _authClient.AuthStateChanged += OnAuthStateChanged;
+
+        // Phase 3b: subscribe to lock state changes for CanExecute + badge refresh
+        _lockStateService.LocksChanged += OnLocksChanged;
 
         _vocabMonitor.ConfigReloaded += OnConfigReloaded;
         _executor.LogEntry += OnLogEntry;
@@ -508,6 +514,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 });
             }
         }
+    }
+
+    /// <summary>Phase 3b: lock state changed — refresh CanExecute on trigger commands.</summary>
+    private void OnLocksChanged()
+    {
+        // LocksChanged is already marshaled to Dispatcher by LockStateService
+        NotifyExecutionCanExecuteChanged();
     }
 
     /// <summary>Handles AuthClient.AuthStateChanged — updates CurrentUserHolder.</summary>

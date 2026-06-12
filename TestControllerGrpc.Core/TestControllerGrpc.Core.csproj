@@ -12,6 +12,7 @@
     <PackageReference Include="Google.Protobuf" Version="3.26.1" />
     <PackageReference Include="Grpc.Tools" Version="2.62.0" PrivateAssets="All" />
     <PackageReference Include="Grpc.Net.Client" Version="2.62.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0-preview.3.25171.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0-preview.3.25171.5" />
   </ItemGroup>
 

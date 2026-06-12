@@ -10,7 +10,7 @@
         "Banner is fixed (not dismissible) by design — it is the discoverability anchor for the upgrade path."
     -->
     <Border Background="#33F9E2AF" BorderBrush="#FFF9E2AF" BorderThickness="0,0,0,1"
-            Padding="12,6" Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}}">
+            Padding="12,6" Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
         <DockPanel>
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
                        FontSize="12" Foreground="#FFF9E2AF">

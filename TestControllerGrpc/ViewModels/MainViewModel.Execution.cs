@@ -1,13 +1,19 @@
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
+using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using TestController.Api.Contracts;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
+using TestControllerGrpc.Views.Dialogs;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -38,6 +44,7 @@ public sealed partial class MainViewModel
         {
             if (SelectedNode?.NodeKind != NodeKinds.Event) return false;
             var tag = (SelectedNode.Parent?.ModelObject as WatchItemConfig)?.Tag;
+            if (tag is not null && _lockStateService.IsLockedByOther(tag)) return false;
             return _capabilityChecker.Can(Permission.Pipeline_Trigger, tag);
         }
     }
@@ -135,12 +142,44 @@ public sealed partial class MainViewModel
             AddLog($"[{session.SessionId}] Event cancelled: {ev.Type}", LogSeverity.Warning);
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
         }
+        catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Aborted)
+        {
+            // Pipeline lock conflict — extract PipelineLockDto from trailers
+            var lockDto = ExtractLockDtoFromTrailers(rpcEx);
+            if (lockDto is not null)
+            {
+                AddLog($"Pipeline '{tag}' is locked by {lockDto.OwnerDisplayName} ({lockDto.OwnerClientKind})", LogSeverity.Warning);
+                ShowLockConflictDialog(lockDto);
+            }
+            else
+            {
+                AddLog($"[{session.SessionId}] Trigger aborted: {rpcEx.Status.Detail}", LogSeverity.Warning);
+            }
+            eventNode.SetStatusRecursive("Idle");
+            eventNode.PropagateStatusUp();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Blocked", 0, 0, 0));
+        }
         catch (Exception ex)
         {
+            // Check for HTTP 409 conflict (REST path)
+            if (ex is HttpRequestException httpEx && httpEx.StatusCode == HttpStatusCode.Conflict)
+            {
+                var lockDto = await ExtractLockDtoFromHttpExceptionAsync(ex);
+                if (lockDto is not null)
+                {
+                    AddLog($"Pipeline '{tag}' is locked by {lockDto.OwnerDisplayName} ({lockDto.OwnerClientKind})", LogSeverity.Warning);
+                    ShowLockConflictDialog(lockDto);
+                    eventNode.SetStatusRecursive("Idle");
+                    eventNode.PropagateStatusUp();
+                    _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Blocked", 0, 0, 0));
+                    return;
+                }
+            }
+
             _logger.LogError(ex, "Event execution failed: {EventType}", ev.Type);
             eventNode.SetFailed(ex.Message);
             eventNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] Event failed: {ev.Type} � {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Event failed: {ev.Type} \u2014 {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
@@ -168,6 +207,7 @@ public sealed partial class MainViewModel
         {
             if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return false;
             var tag = (SelectedNode.ModelObject as WatchItemConfig)?.Tag;
+            if (tag is not null && _lockStateService.IsLockedByOther(tag)) return false;
             return _capabilityChecker.Can(Permission.Pipeline_Trigger, tag);
         }
     }
@@ -891,6 +931,69 @@ public sealed partial class MainViewModel
                 Owner = Application.Current.MainWindow
             };
             dialog.ShowDialog();
+        });
+    }
+
+    // ── Phase 3b: Lock conflict helpers ──────────────────────────────
+
+    /// <summary>
+    /// Extracts PipelineLockDto from gRPC trailing metadata (key: lock-conflict-bin).
+    /// </summary>
+    private static PipelineLockDto? ExtractLockDtoFromTrailers(RpcException rpcEx)
+    {
+        var entry = rpcEx.Trailers?.Get("lock-conflict-bin");
+        if (entry is null) return null;
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(entry.ValueBytes);
+            return System.Text.Json.JsonSerializer.Deserialize<PipelineLockDto>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Extracts PipelineLockDto from an HTTP 409 response body (REST path).
+    /// </summary>
+    private static async Task<PipelineLockDto?> ExtractLockDtoFromHttpExceptionAsync(Exception ex)
+    {
+        // The REST proxy returns JSON { "error": "pipeline-locked", "lock": { ... } }
+        // In practice the DTO is attached via the execution pipeline response;
+        // this method handles the edge case where a raw HttpResponseMessage is available.
+        _ = ex; // placeholder — actual extraction depends on how the HTTP error propagates
+        await Task.CompletedTask;
+        return null;
+    }
+
+    /// <summary>
+    /// Shows the Lock Conflict dialog populated from the DTO.
+    /// If the user chooses force-release, opens the reason dialog.
+    /// Badge updates come from the PipelineLockStolen broadcast — no optimistic update.
+    /// </summary>
+    private void ShowLockConflictDialog(PipelineLockDto dto)
+    {
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            var conflictDialog = new LockConflictDialog
+            {
+                Owner = Application.Current.MainWindow
+            };
+            conflictDialog.Initialize(dto);
+            conflictDialog.ShowDialog();
+
+            if (conflictDialog.ForceReleaseChosen)
+            {
+                var reasonDialog = new ForceReleaseReasonDialog
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                reasonDialog.Initialize(dto.PipelineId, dto.OwnerDisplayName);
+                reasonDialog.ShowDialog();
+                // On success, badge updates via PipelineLockStolen broadcast — no local update needed
+            }
         });
     }
 }

@@ -46,6 +46,7 @@ public static class RbacFeatureExtensions
             {
                 sqlite.MigrationsAssembly(typeof(OrchestratorDbContext).Assembly.GetName().Name);
             });
+            options.AddInterceptors(new SqliteConnectionInterceptor());
         });
 
         // Ensure database is created and pragmas are applied
@@ -82,7 +83,8 @@ public static class RbacFeatureExtensions
 }
 
 /// <summary>
-/// Ensures the SQLite database exists, applies migrations, and sets WAL pragmas.
+/// Applies pending EF Core migrations at startup, before any service touches the DB.
+/// WAL pragmas are handled per-connection by <see cref="SqliteConnectionInterceptor"/>.
 /// </summary>
 internal sealed class DatabaseInitializerService : Microsoft.Extensions.Hosting.IHostedService
 {
@@ -96,16 +98,31 @@ internal sealed class DatabaseInitializerService : Microsoft.Extensions.Hosting.
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        await db.Database.EnsureCreatedAsync(cancellationToken);
-
-        // Apply WAL pragmas
-        var conn = db.Database.GetDbConnection() as SqliteConnection;
-        if (conn is not null)
-        {
-            await conn.OpenAsync(cancellationToken);
-            OrchestratorDbContextExtensions.ApplyPragmas(conn);
-        }
+        await db.Database.MigrateAsync(cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Applies SQLite per-connection pragmas (foreign_keys, synchronous) on every connection open.
+/// WAL journal_mode is persistent per-file but foreign_keys and synchronous are per-connection.
+/// </summary>
+internal sealed class SqliteConnectionInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbConnectionInterceptor
+{
+    public override void ConnectionOpened(
+        System.Data.Common.DbConnection connection,
+        Microsoft.EntityFrameworkCore.Diagnostics.ConnectionEndEventData eventData)
+    {
+        OrchestratorDbContextExtensions.ApplyPragmas((SqliteConnection)connection);
+    }
+
+    public override async Task ConnectionOpenedAsync(
+        System.Data.Common.DbConnection connection,
+        Microsoft.EntityFrameworkCore.Diagnostics.ConnectionEndEventData eventData,
+        CancellationToken cancellationToken = default)
+    {
+        OrchestratorDbContextExtensions.ApplyPragmas((SqliteConnection)connection);
+        await Task.CompletedTask;
+    }
 }

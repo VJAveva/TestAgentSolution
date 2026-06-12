@@ -229,6 +229,7 @@ No Cake/MSBuild custom targets. Build uses `dotnet publish` with `win-x64`, self
 ### Coexists With
 - `AddMultiIdentitySecurity()` — still active for REST endpoints with NTLM/API-key/roles
 - `AgentLockManager` — still active for per-execution-session agent locking
+- `LockRecoveryService` (`TestController.Api/Services/`) — agent-layer recovery only; handles stale agent locks from `AgentLockManager`. Does NOT reference `LockRegistry` or `PipelineLock` types (verified Phase 3c). No interference with the pipeline-lock subsystem.
 
 Append a new section to docs/architecture/CURRENT_STATE.md:
 
@@ -327,3 +328,49 @@ Append a new section to docs/architecture/CURRENT_STATE.md:
 - UserIdentityBadge now reads from useAuthStore in Secured mode
 
 Output only the diff to append.
+
+## RBAC Feature (Phase 3 complete — 2026-06-12): Pipeline Lock Coordination
+
+### Lock architecture
+- In-memory LockRegistry lives ONLY in the controller process (WPF host).
+  Standalone WebApi forwards lock operations via ControllerProxyService.
+- TWO lock layers coexist: LockRegistry locks WatchItems (Tag) per
+  user/client; the pre-existing AgentLockManager locks agent machines per
+  execution session. Unchanged, unmerged.
+- Lock key = WatchItem Tag. Same-owner re-acquire succeeds.
+- LockExpirySweeper (hosted) expires stale locks by TTL.
+
+### Core types (TestControllerGrpc.Core/Locks/)
+- PipelineLock record, ILockRegistry
+
+### Controller-side (TestController.Api)
+- LockRegistry, LockExpirySweeper, LockEventBroadcaster, LockService
+  (force-release: reason >=10 server-validated, Pipeline_ForceRelease authz,
+  audit payload {reason, priorOwner}, prior-owner notification)
+- PipelineAuthorizationGuard extended: TryAcquire after authz Allow;
+  conflict → gRPC Aborted / REST 409 with PipelineLockDto body
+- RbacModeTransitionService extended: RewriteLockOwners on mode switch
+
+### SignalR contract (/hubs/controller)
+- PipelineLockAcquired/Released/Expired/Stolen/Rewritten; DTO shape per
+  the lock contract section above
+- GET /api/locks for initial/reconnect sync
+
+### WPF (Phase 3b)
+- LockStateService (Singleton, Dispatcher-marshaled), LockBadgeViewModel,
+  LockBadge control integrated in MainWindow tree ItemTemplate,
+  LockConflictDialog, ForceReleaseReasonDialog (both DataContext via
+  App.Services, FallbackValue=Collapsed convention)
+- CanTrigger* predicates extended with lock state; Aborted/409 → conflict dialog
+
+### Web (Phase 3c)
+- lockStore (Zustand) + LockEvents with reconnect resync via GET /api/locks
+- LockBadge in WatchListTree, LockConflictModal, ForceReleaseDialog
+- DisabledTriggerButton gains "locked by other" reason; 409 body → modal
+
+### Patterns established (reuse in later phases)
+- Cross-client live state: broadcast + full-resync-on-reconnect, never
+  polling
+- Server response carries the full DTO needed by the error UI (no refetch)
+- New UI controls ship WITH their visual-tree integration diff in the
+  same task

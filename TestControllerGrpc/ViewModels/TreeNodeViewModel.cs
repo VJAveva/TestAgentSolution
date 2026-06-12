@@ -62,6 +62,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _templateName = "";
     [ObservableProperty] private int _childCount;
 
+    // ── Phase 3b: Pipeline lock badge (per-row, bound in TreeViewSpec.xaml) ──
+    [ObservableProperty] private LockBadgeViewModel? _lockBadge;
+
     /// <summary>Returns the Parameters string with [Token] placeholders resolved. Read-only display value.</summary>
     public string ResolvedParameters => ResolveTokens(Parameters);
 

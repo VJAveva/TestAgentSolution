@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TestController.Api.Security;
 using TestControllerGrpc.Models;
@@ -211,5 +212,25 @@ public sealed class ControllerHub : Hub
             StatusMessage: statusMessage,
             GroupKey: agentLock.SessionId,
             Owner: agentLock.UserId);
+    }
+
+    /// <summary>
+    /// Client → Server: heartbeat to extend pipeline lock TTL.
+    /// Phase 3a: per Pipeline_Lock_Coordination_Spec.md §7.
+    /// </summary>
+    public bool HeartbeatLock(string pipelineId)
+    {
+        var lockRegistry = Context.GetHttpContext()?.RequestServices.GetService<TestControllerGrpc.Locking.ILockRegistry>();
+        if (lockRegistry is null)
+            return false;
+
+        // Extract user from hub context
+        var userContext = Context.GetHttpContext()?.RequestServices.GetService<TestControllerGrpc.Identity.IUserContext>();
+        if (userContext is null)
+            return false;
+
+        var owner = new TestControllerGrpc.Locking.OwnerIdentity(
+            userContext.UserId, userContext.DisplayName, userContext.ClientKind);
+        return lockRegistry.Heartbeat(pipelineId, owner);
     }
 }

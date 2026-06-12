@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useWatchListStore } from '../../stores/watchlistStore';
+import { useLockStore } from '../../stores/lockStore';
+import { useAuthStore } from '../../stores/authStore';
 import { apiFetch } from '../../lib/api';
 import { logCatch } from '../../lib/logger';
 import type { TreeNode, NodeKind } from '../../types/api';
 import type { AgentLockInfo } from '../../types/agentWorkspace';
 import { ChevronDown, ChevronRight, Eye, Zap, FolderTree, Play, Settings, Link2, FileText, List } from 'lucide-react';
+import LockBadge from './LockBadge';
 
 const kindIcon: Record<NodeKind, React.ReactNode> = {
   WatchList:    <List size={14} className="text-accent" />,
@@ -158,15 +161,13 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
           </span>
         )}
 
-        {/* Lock indicator for WatchItem nodes */}
+        {/* Pipeline lock badge for WatchItem nodes */}
         {node.nodeKind === 'WatchItem' && (() => {
-          const lockForTag = locks.find(l => l.watchItemTag === node.tag);
-          if (lockForTag) {
-            return (
-              <span className="ml-auto px-2 py-0.5 bg-amber-900/30 text-amber-400 text-[9px] font-bold rounded-full uppercase shrink-0">
-                Locked ({lockForTag.userId})
-              </span>
-            );
+          const lock = useLockStore.getState().getLock(node.tag ?? '');
+          const currentUserId = useAuthStore.getState().user?.userId;
+          if (lock) {
+            const isOwn = lock.ownerUserId === currentUserId;
+            return <LockBadge lock={lock} isOwn={isOwn} />;
           }
           return null;
         })()}

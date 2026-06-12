@@ -48,7 +48,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
         _rbacOptions.OnChange(opts =>
         {
-            IsSecuredMode = opts.Enabled;
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => IsSecuredMode = opts.Enabled);
         });
     }
 
