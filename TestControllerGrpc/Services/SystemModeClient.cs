@@ -49,8 +49,7 @@ public class SystemModeClient : IDisposable
         if (response.IsSuccessStatusCode)
             return (true, null);
 
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-        return (false, body?.Error ?? response.ReasonPhrase);
+        return (false, await ReadErrorAsync(response));
     }
 
     public virtual async Task<(bool Success, string? Error)> SwitchToDefaultAsync()
@@ -60,8 +59,22 @@ public class SystemModeClient : IDisposable
         if (response.IsSuccessStatusCode)
             return (true, null);
 
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-        return (false, body?.Error ?? response.ReasonPhrase);
+        return (false, await ReadErrorAsync(response));
+    }
+
+    private static async Task<string> ReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            // ProblemDetails shape (detail) or legacy shape (error)
+            if (json.TryGetProperty("detail", out var detail) && detail.GetString() is { } d)
+                return d;
+            if (json.TryGetProperty("error", out var err) && err.GetString() is { } e)
+                return e;
+        }
+        catch { /* fall through */ }
+        return response.ReasonPhrase ?? $"HTTP {(int)response.StatusCode}";
     }
 
     /// <summary>
@@ -104,6 +117,5 @@ public class SystemModeClient : IDisposable
         _hubConnection?.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
-    private sealed record ErrorResponse(string? Error);
     private sealed record SystemModeChangedPayload(string Mode);
 }

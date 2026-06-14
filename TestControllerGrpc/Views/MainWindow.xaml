@@ -818,7 +818,9 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                             HorizontalAlignment="Right" Margin="8,0">
                     <!-- User Identity Badge -->
-                    <controls:UserIdentityBadge VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <controls:UserIdentityBadge VerticalAlignment="Center" Margin="0,0,12,0"
+                                                 Role="{Binding DataContext.UserRole, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                 DisplayName="{Binding DataContext.UserDisplayName, RelativeSource={RelativeSource AncestorType=Window}}" />
 
                     <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource AccGreen}"
                                FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />

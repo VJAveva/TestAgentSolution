@@ -58,12 +58,13 @@
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                 <Button Content="Manage pipelines" Padding="10,6" FontSize="11" Margin="0,0,8,0"
+                        Command="{Binding OpenAssignPipelinesCommand}"
                         Background="#2274ACEA" Foreground="{DynamicResource TextPrimary}"/>
                 <Button Content="Reset password" Padding="10,6" FontSize="11" Margin="0,0,8,0"
-                        Command="{Binding ResetPasswordCommand}"
+                        Command="{Binding OpenResetPasswordCommand}"
                         Background="#22F0B070" Foreground="{DynamicResource TextPrimary}"/>
                 <Button Content="Delete user" Padding="10,6" FontSize="11"
-                        Command="{Binding DeleteUserCommand}"
+                        Command="{Binding OpenDeleteUserCommand}"
                         Background="#22F87171" Foreground="#F87171"/>
             </StackPanel>
 

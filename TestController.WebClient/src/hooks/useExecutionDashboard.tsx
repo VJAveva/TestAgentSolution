@@ -314,6 +314,7 @@ interface ExecutionDashboardContextValue {
   activeSessions: SessionSummary[];
   completedSessions: SessionSummary[];
   filteredLogs: DashboardLogEntry[];
+  fetchError: string | null;
   selectSession: (id: string | null) => void;
   selectAgent: (name: string | null) => void;
 }
@@ -328,12 +329,14 @@ export function useExecutionDashboard() {
 // ── Provider ──
 export function ExecutionDashboardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const connection = useConnectionStore((s: { connection: any }) => s.connection);
 
-  // Fetch sessions from the proxy endpoint (returns WPF controller data)
+  // Fetch sessions from the shared ExecutionController endpoint
   const fetchProxySessions = useCallback(() => {
-    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/proxy/dashboard-sessions')
+    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/dashboard-sessions')
       .then(data => {
+        setFetchError(null);
         const all = [
           ...(data.active || []),
           ...(data.history || []).slice(0, 20),
@@ -345,6 +348,10 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
           joinSession(connection, s.sessionId);
         }
         return data;
+      })
+      .catch(err => {
+        setFetchError(err?.detail || err?.error || 'Failed to load sessions');
+        throw err;
       });
   }, [connection]);
 
@@ -367,8 +374,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   }, [fetchProxySessions, hasActive]);
 
   // Poll logs from WPF controller for active sessions.
-  // The WPF controller exposes /api/execution/{sessionId}/recent-logs which
-  // the WebApi proxies at /api/execution/proxy/logs/{sessionId}.
+  // The shared ExecutionController exposes /api/execution/{sessionId}/recent-logs.
   const [activeSessionIds, setActiveSessionIds] = useState<string[]>([]);
   useEffect(() => {
     if (activeSessionIds.length === 0) return;
@@ -376,7 +382,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     const fetchLogs = () => {
       for (const sid of activeSessionIds) {
         apiFetch<{ logs: DashboardLogEntry[]; sessionId: string }>(
-          `/api/execution/proxy/logs/${encodeURIComponent(sid)}`
+          `/api/execution/${encodeURIComponent(sid)}/recent-logs`
         )
           .then(data => {
             if (!data.logs || data.logs.length === 0) return;
@@ -496,7 +502,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     <ExecutionDashboardContext.Provider value={{
       state, dispatch,
       activeSessions, completedSessions, filteredLogs,
-      selectSession, selectAgent,
+      fetchError, selectSession, selectAgent,
     }}>
       {children}
     </ExecutionDashboardContext.Provider>

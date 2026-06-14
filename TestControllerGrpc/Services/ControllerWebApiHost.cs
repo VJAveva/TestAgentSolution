@@ -136,6 +136,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_lockManager);
             builder.Services.AddSingleton(_appLogger);
 
+            // RBAC feature (identity, authorization, audit, persistence, mode transition)
+            builder.Services.AddRbacFeature(builder.Configuration);
+
             // Register security services (ISessionOwnershipChecker, ISecurityAuditLogger, auth)
             builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 
@@ -164,6 +167,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
                             "http://localhost:5173",
                             "http://localhost:8080",
                             "http://localhost:8081",
+                            "http://127.0.0.1:3000",
+                            "http://127.0.0.1:5173",
+                            "http://127.0.0.1:8080",
+                            "http://127.0.0.1:8081",
                             $"http://{Environment.MachineName}:3000",
                             $"http://{Environment.MachineName}:8080",
                             $"http://{Environment.MachineName}:8081",

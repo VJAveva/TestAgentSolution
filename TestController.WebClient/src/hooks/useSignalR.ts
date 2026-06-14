@@ -6,6 +6,7 @@ import { useAgentStore } from '../stores/agentStore';
 import { useExecutionStore } from '../stores/executionStore';
 import { useResultsStore } from '../stores/resultsStore';
 import { useConnectionStore } from '../stores/connectionStore';
+import { useAuthStore } from '../stores/authStore';
 import { getUserId } from '../lib/userIdentity';
 import { registerSystemModeEvents } from '../signalr/SystemModeEvents';
 import { registerLockEvents } from '../signalr/LockEvents';
@@ -35,7 +36,7 @@ const indefiniteRetryPolicy: IRetryPolicy = {
   },
 };
 
-export function useSignalR(): HubConnection | null {
+export function useSignalR(enabled = true): HubConnection | null {
   const [connection, setConnection] = useState<HubConnection | null>(null);
   const started = useRef(false);
   const unmountedRef = useRef(false);
@@ -77,6 +78,7 @@ export function useSignalR(): HubConnection | null {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     if (started.current) return;
     started.current = true;
     unmountedRef.current = false;
@@ -93,9 +95,8 @@ export function useSignalR(): HubConnection | null {
 
     const conn = new HubConnectionBuilder()
       .withUrl(hubUrl, {
-        // Pass browser credentials (cookies/NTLM) for Domain/Local auth modes.
-        // Harmless in None mode; Token mode would need a bearer token accessTokenFactory.
         withCredentials: true,
+        accessTokenFactory: () => useAuthStore.getState().token ?? '',
       })
       // Indefinite reconnect (see policy above) instead of the previous
       // 5-attempt array which gave up after ~47s and left the WebClient
@@ -353,7 +354,7 @@ export function useSignalR(): HubConnection | null {
       conn.stop().catch(err => console.error('[SignalR] Stop error:', err));
       connRef.current = null;
     };
-  }, [tryStart]);
+  }, [tryStart, enabled]);
 
   return connection;
 }

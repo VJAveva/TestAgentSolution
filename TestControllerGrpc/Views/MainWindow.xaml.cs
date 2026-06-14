@@ -60,6 +60,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         LoadDesignTokens();
         _vm = App.Services.GetRequiredService<MainViewModel>();
+        _vm.EnsureSubscriptions();
         DataContext = _vm;
 
         // Phase 1b: Users tab visible only for Admin (User_Create capability)
@@ -75,8 +76,22 @@ public partial class MainWindow : Window
         var systemMode = App.Services.GetService<SystemModeClient>();
         if (systemMode is not null)
         {
-            systemMode.ModeChanged += _ =>
-                Application.Current?.Dispatcher.InvokeAsync(() => _vm.IsDefaultMode = !systemMode.IsSecuredMode);
+            systemMode.ModeChanged += mode =>
+            {
+                Application.Current?.Dispatcher.InvokeAsync(() =>
+                {
+                    _vm.IsDefaultMode = !systemMode.IsSecuredMode;
+
+                    // After switching to Secured mode, route to LoginPage
+                    if (string.Equals(mode, "secured", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var loginPage = new Login.LoginPage();
+                        loginPage.Show();
+                        _isActuallyExiting = true;
+                        Close();
+                    }
+                });
+            };
         }
 
         Loaded += OnWindowLoaded;

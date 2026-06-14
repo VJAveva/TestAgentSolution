@@ -25,6 +25,7 @@
             <vm:NullToCollapsedConverter  x:Key="NullToCollapsed"/>
             <vm:NullToCollapsedConverter  x:Key="NullToCollapsedConverter"/>
             <vm:BoolToActiveTextConverter x:Key="BoolToActiveTextConverter"/>
+            <vm:BoolToCopiedTextConverter x:Key="BoolToCopiedTextConverter"/>
             <vm:NonEmptyToVisibilityConverter x:Key="StringToVisConverter"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
             <BooleanToVisibilityConverter x:Key="BoolVis"/>

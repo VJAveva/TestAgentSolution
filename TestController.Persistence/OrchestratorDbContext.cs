@@ -41,12 +41,21 @@ public static class OrchestratorDbContextExtensions
 {
     public static void ApplyPragmas(Microsoft.Data.Sqlite.SqliteConnection connection)
     {
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA foreign_keys = ON;
-            """;
-        cmd.ExecuteNonQuery();
+        try
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                PRAGMA journal_mode = WAL;
+                PRAGMA synchronous = NORMAL;
+                PRAGMA foreign_keys = ON;
+                PRAGMA busy_timeout = 5000;
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 8)
+        {
+            // SQLite Error 8 = SQLITE_READONLY — database not yet created or opened for existence check.
+            // Pragmas will be applied on the next writable connection.
+        }
     }
 }

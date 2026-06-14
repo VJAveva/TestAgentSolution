@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TestController.Persistence;
@@ -113,9 +114,29 @@ public sealed class RbacModeTransitionService
     /// <summary>
     /// Switch from Secured to Default mode. Revokes all sessions, archives users.
     /// Per 05_Default_Mode_Design.md §9.
+    /// All writes use a SINGLE DbContext/connection to avoid SQLite lock contention.
     /// </summary>
     public async Task<(bool Success, string? Error)> SwitchToDefaultAsync(
         IUserContext actor, CancellationToken ct = default)
+    {
+        // Retry up to 3 times on transient SQLite locked errors (Error 5)
+        const int maxRetries = 3;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await SwitchToDefaultCoreAsync(actor, ct);
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 5 && attempt < maxRetries)
+            {
+                // SQLITE_BUSY — wait and retry
+                await Task.Delay(200 * (attempt + 1), ct);
+            }
+        }
+    }
+
+    private async Task<(bool Success, string? Error)> SwitchToDefaultCoreAsync(
+        IUserContext actor, CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -126,8 +147,10 @@ public sealed class RbacModeTransitionService
             if (!_writableOptions.Value.Enabled)
                 return (true, null); // Idempotent
 
-            // Revoke all sessions
-            await _sessionStore.RevokeAllAsync(ct);
+            // Revoke all sessions ON THE SAME connection (avoids second-connection lock)
+            await db.Sessions
+                .Where(s => s.RevokedUtc == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedUtc, DateTime.UtcNow), ct);
 
             // Archive all users (set IsActive = false)
             await db.Users

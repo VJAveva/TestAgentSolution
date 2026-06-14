@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Services;
@@ -13,6 +14,7 @@ public sealed partial class UserManagementViewModel : ObservableObject
 {
     private readonly UserManagementClient _client;
     private readonly IAppLogger _logger;
+    private List<UserListItemViewModel> _allUsers = [];
 
     [ObservableProperty] private ObservableCollection<UserListItemViewModel> _users = [];
     [ObservableProperty] private UserListItemViewModel? _selectedUser;
@@ -20,6 +22,18 @@ public sealed partial class UserManagementViewModel : ObservableObject
     [ObservableProperty] private string _roleFilter = "All";
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private string _errorMessage = "";
+
+    /// <summary>Raised to request opening the Add User dialog.</summary>
+    public event Action? RequestOpenAddUser;
+
+    /// <summary>Raised to request opening the Assign Pipelines dialog for SelectedUser.</summary>
+    public event Action? RequestOpenAssignPipelines;
+
+    /// <summary>Raised to request opening the Reset Password dialog for SelectedUser.</summary>
+    public event Action? RequestOpenResetPassword;
+
+    /// <summary>Raised to request opening the Delete User confirmation for SelectedUser.</summary>
+    public event Action? RequestOpenDeleteUser;
 
     public UserManagementViewModel(UserManagementClient client, IAppLogger logger)
     {
@@ -45,7 +59,7 @@ public sealed partial class UserManagementViewModel : ObservableObject
                     u.IsActive, u.MustChangePassword, u.CreatedUtc, u.PipelineCount))
                 .ToList();
 
-            Users = new ObservableCollection<UserListItemViewModel>(items);
+            _allUsers = items;
             ApplyFilter();
         }
         catch (Exception ex)
@@ -61,48 +75,39 @@ public sealed partial class UserManagementViewModel : ObservableObject
 
     private void ApplyFilter()
     {
-        // Role filter is applied client-side on the already-loaded list
-        // The search is sent server-side. This is fine for small user counts.
+        var filtered = RoleFilter switch
+        {
+            "Admin" => _allUsers.Where(u => u.Role == "Administrator"),
+            "Sr.Mgr" => _allUsers.Where(u => u.Role == "SeniorManager"),
+            "Engineer" => _allUsers.Where(u => u.Role == "Engineer"),
+            _ => _allUsers // "All" or anything else
+        };
+        Users = new ObservableCollection<UserListItemViewModel>(filtered);
     }
 
     [RelayCommand]
-    private async Task DeleteUserAsync()
+    private void OpenAddUser() => RequestOpenAddUser?.Invoke();
+
+    [RelayCommand]
+    private void OpenAssignPipelines()
     {
         if (SelectedUser is null) return;
-
-        var (success, error) = await _client.DeleteUserAsync(SelectedUser.UserId);
-        if (success)
-        {
-            _logger.Info("UserMgmt", $"Deleted user {SelectedUser.Username}");
-            SelectedUser = null;
-            await LoadUsersAsync();
-        }
-        else
-        {
-            ErrorMessage = error ?? "Delete failed";
-        }
+        RequestOpenAssignPipelines?.Invoke();
     }
 
     [RelayCommand]
-    private async Task ResetPasswordAsync()
+    private void OpenResetPassword()
     {
         if (SelectedUser is null) return;
-
-        var (newPassword, error) = await _client.ResetPasswordAsync(SelectedUser.UserId);
-        if (newPassword is not null)
-        {
-            _logger.Info("UserMgmt", $"Reset password for {SelectedUser.Username}");
-            // The dialog ViewModel will display the password
-            LastResetPassword = newPassword;
-        }
-        else
-        {
-            ErrorMessage = error ?? "Reset failed";
-        }
+        RequestOpenResetPassword?.Invoke();
     }
 
-    /// <summary>Holds the last reset password for the dialog to display.</summary>
-    [ObservableProperty] private string? _lastResetPassword;
+    [RelayCommand]
+    private void OpenDeleteUser()
+    {
+        if (SelectedUser is null) return;
+        RequestOpenDeleteUser?.Invoke();
+    }
 }
 
 /// <summary>Lightweight item for the user list.</summary>

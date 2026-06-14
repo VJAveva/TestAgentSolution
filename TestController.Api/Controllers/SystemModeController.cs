@@ -47,31 +47,45 @@ public class SystemModeController : ControllerBase
     [HttpPost("mode/secured")]
     public async Task<IActionResult> SwitchToSecured([FromBody] SwitchToSecuredRequest request, CancellationToken ct)
     {
-        var (success, error) = await _transitionService.SwitchToSecuredAsync(
-            request.Username, request.Email, request.Password, ct);
+        try
+        {
+            var (success, error) = await _transitionService.SwitchToSecuredAsync(
+                request.Username, request.Email, request.Password, ct);
 
-        if (!success)
-            return BadRequest(new { error });
+            if (!success)
+                return BadRequest(new { error });
 
-        await _broadcaster.BroadcastModeChangedAsync("secured");
-        return Ok(new { mode = "secured" });
+            await _broadcaster.BroadcastModeChangedAsync("secured");
+            return Ok(new { mode = "secured" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiErrorFactory.ServerError(ex.Message));
+        }
     }
 
     /// <summary>POST /api/system/mode/default — switch to Default mode (requires admin).</summary>
     [HttpPost("mode/default")]
     public async Task<IActionResult> SwitchToDefault(CancellationToken ct)
     {
-        // In a full impl, resolve the current user from auth context.
-        // For Phase 0.5 the WPF client is the only caller and it passes through the gRPC path.
-        var actor = DefaultUser.ForClient(ClientKind.Wpf);
+        try
+        {
+            // In a full impl, resolve the current user from auth context.
+            // For Phase 0.5 the WPF client is the only caller and it passes through the gRPC path.
+            var actor = DefaultUser.ForClient(ClientKind.Wpf);
 
-        var (success, error) = await _transitionService.SwitchToDefaultAsync(actor, ct);
+            var (success, error) = await _transitionService.SwitchToDefaultAsync(actor, ct);
 
-        if (!success)
-            return BadRequest(new { error });
+            if (!success)
+                return BadRequest(new { error });
 
-        await _broadcaster.BroadcastModeChangedAsync("default");
-        return Ok(new { mode = "default" });
+            await _broadcaster.BroadcastModeChangedAsync("default");
+            return Ok(new { mode = "default" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiErrorFactory.ServerError(ex.Message));
+        }
     }
 }
 

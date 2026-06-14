@@ -75,6 +75,11 @@ public partial class App : Application
         base.OnStartup(e);
 
         _host = Host.CreateDefaultBuilder()
+            .UseDefaultServiceProvider(o =>
+            {
+                o.ValidateOnBuild = true;
+                o.ValidateScopes = true;
+            })
             .ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.SetBasePath(AppContext.BaseDirectory);
@@ -135,9 +140,11 @@ public partial class App : Application
                 services.AddSingleton<ExecutionHistoryPanelVM>();
 
                 // Phase 0.5: SystemMode client + Settings ViewModel
-                services.AddHttpClient("SystemMode", client =>
+                services.AddHttpClient("SystemMode", (sp, client) =>
                 {
-                    client.BaseAddress = new Uri("http://localhost:5000");
+                    var cfg = sp.GetRequiredService<IConfiguration>();
+                    var port = cfg.GetValue<int>("WebApiPort", 5200);
+                    client.BaseAddress = new Uri($"http://localhost:{port}");
                 });
                 services.AddSingleton<SystemModeClient>();
                 services.AddSingleton<ViewModels.Settings.SecurityModeViewModel>();

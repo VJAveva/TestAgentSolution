@@ -34,17 +34,24 @@ public sealed class AgentEventRelayService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        // Wait briefly for app startup to complete
-        await Task.Delay(2000, ct);
-
-        while (!ct.IsCancellationRequested)
+        try
         {
-            var agents = _registry.GetAll();
-            var tasks = agents.Select(a => SubscribeToAgentAsync(a, ct));
-            await Task.WhenAll(tasks);
+            // Wait briefly for app startup to complete
+            await Task.Delay(2000, ct);
 
-            // Re-check every 30 seconds for new agents
-            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+            while (!ct.IsCancellationRequested)
+            {
+                var agents = _registry.GetAll();
+                var tasks = agents.Select(a => SubscribeToAgentAsync(a, ct));
+                await Task.WhenAll(tasks);
+
+                // Re-check every 30 seconds for new agents
+                await Task.Delay(TimeSpan.FromSeconds(30), ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Normal shutdown — don't let this propagate as BackgroundService failure
         }
     }
 

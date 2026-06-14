@@ -13,8 +13,14 @@ public sealed partial class LoginViewModel : ObservableObject
     private readonly AuthClient _authClient;
     private readonly IAppLogger _logger;
 
-    [ObservableProperty] private string _username = "";
-    [ObservableProperty] private string _password = "";
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SignInCommand))]
+    private string _username = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SignInCommand))]
+    private string _password = "";
+
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _isLoading;
 

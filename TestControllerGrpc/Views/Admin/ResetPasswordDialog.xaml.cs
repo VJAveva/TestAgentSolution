@@ -13,6 +13,19 @@ public partial class ResetPasswordDialog : Window
         InitializeComponent();
         _viewModel = new ResetPasswordDialogViewModel(username, newPassword);
         DataContext = _viewModel;
+
+        _viewModel.PropertyChanged += OnVmPropertyChanged;
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ResetPasswordDialogViewModel.CanClose) && _viewModel.CanClose)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                DialogResult = !_viewModel.ExplicitlyCancelled;
+            });
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)

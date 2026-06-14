@@ -25,7 +25,9 @@ public partial class AssignPipelinesDialog : Window
     private void OnAssignmentsSaved()
     {
         _viewModel.AssignmentsSaved -= OnAssignmentsSaved;
-        DialogResult = true;
-        Close();
+        Dispatcher.InvokeAsync(() =>
+        {
+            DialogResult = true;
+        });
     }
 }

@@ -12,10 +12,10 @@ namespace TestController.Api.Hubs;
 /// </summary>
 public sealed class LockBroadcaster : IDisposable
 {
-    private readonly IHubContext<ControllerHub> _hub;
+    private readonly IHubContext<ControllerHub>? _hub;
     private readonly ILockRegistry _lockRegistry;
 
-    public LockBroadcaster(IHubContext<ControllerHub> hub, ILockRegistry lockRegistry)
+    public LockBroadcaster(ILockRegistry lockRegistry, IHubContext<ControllerHub>? hub = null)
     {
         _hub = hub;
         _lockRegistry = lockRegistry;
@@ -24,6 +24,7 @@ public sealed class LockBroadcaster : IDisposable
 
     private void OnLockEvent(LockEvent evt)
     {
+        if (_hub is null) return;
         var dto = LockMapper.ToDto(evt.Lock);
         var priorOwnerName = evt.PriorOwner?.DisplayName;
 

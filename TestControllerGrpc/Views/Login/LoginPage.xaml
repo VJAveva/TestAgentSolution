@@ -36,8 +36,19 @@
 
             <!-- Password -->
             <TextBlock Text="Password" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
-            <PasswordBox x:Name="PasswordBox" Padding="8,6" FontSize="13" Margin="0,0,0,12"
-                         IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}"/>
+            <Grid Margin="0,0,0,12">
+                <PasswordBox x:Name="PasswordBox" Padding="8,6" FontSize="13"
+                             IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}"/>
+                <TextBox x:Name="PasswordTextBox" Padding="8,6" FontSize="13"
+                         Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}"
+                         Visibility="Collapsed"/>
+                <Button x:Name="TogglePasswordBtn" Content="👁" FontSize="12"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Margin="0,0,6,0" Padding="4,2" Background="Transparent"
+                        BorderThickness="0" Cursor="Hand"
+                        Click="TogglePasswordVisibility_Click" Focusable="False"/>
+            </Grid>
 
             <!-- Error message -->
             <TextBlock Text="{Binding ErrorMessage}" FontSize="11" Foreground="#F87171"

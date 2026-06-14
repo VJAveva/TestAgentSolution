@@ -333,6 +333,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Phase 2b: subscribe to capability changes for CanExecute + filtering
         _capabilityChecker.CapabilitiesChanged += OnCapabilitiesChanged;
         _authClient.AuthStateChanged += OnAuthStateChanged;
+        _currentUserHolder.UserChanged += OnCurrentUserChanged;
 
         // Phase 3b: subscribe to lock state changes for CanExecute + badge refresh
         _lockStateService.LocksChanged += OnLocksChanged;
@@ -441,6 +442,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Initialize Default-mode banner state
         RefreshDefaultModeState();
+
+        // Seed identity badge from whatever CurrentUserHolder has at construction time
+        // (LoginPage already called SetUser before MainWindow opens).
+        RefreshUserBadge();
     }
 
     /// <summary>Creates the single WatchList + TemplateList root nodes on startup.</summary>
@@ -503,6 +508,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 RefreshFilteredPipelines();
                 NotifyExecutionCanExecuteChanged();
                 RefreshDefaultModeState();
+                RefreshUserBadge();
             }
             else
             {
@@ -511,6 +517,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     RefreshFilteredPipelines();
                     NotifyExecutionCanExecuteChanged();
                     RefreshDefaultModeState();
+                    RefreshUserBadge();
                 });
             }
         }
@@ -610,6 +617,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _watcherManager.TriggerParametersLoaded -= OnTriggerParametersLoaded;
         _capabilityChecker.CapabilitiesChanged -= OnCapabilitiesChanged;
         _authClient.AuthStateChanged -= OnAuthStateChanged;
+        _currentUserHolder.UserChanged -= OnCurrentUserChanged;
 
         // Dispose event aggregator subscriptions (replaces static event unsubscription)
         foreach (var sub in _subscriptions) sub.Dispose();

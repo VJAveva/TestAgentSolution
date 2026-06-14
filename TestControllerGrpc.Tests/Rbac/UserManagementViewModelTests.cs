@@ -42,87 +42,85 @@ public class UserManagementViewModelTests
     }
 
     [Fact]
-    public async Task DeleteUserCommand_Should_RefreshList_When_Successful()
+    public async Task OpenDeleteUserCommand_Should_RaiseEvent_When_UserSelected()
     {
         _client.UsersToReturn =
         [
             new("u1", "alice", "a@test.com", "Engineer", true, false, DateTime.UtcNow, null, 0),
         ];
-        _client.DeleteResult = (true, null);
 
         var sut = CreateSut();
         await sut.LoadUsersCommand.ExecuteAsync(null);
         sut.SelectedUser = sut.Users[0];
 
-        // After delete, the list is reloaded (client returns empty)
-        _client.UsersToReturn = [];
-        await sut.DeleteUserCommand.ExecuteAsync(null);
+        var raised = false;
+        sut.RequestOpenDeleteUser += () => raised = true;
+        sut.OpenDeleteUserCommand.Execute(null);
 
-        Assert.Null(sut.SelectedUser);
-        Assert.Empty(sut.Users);
+        Assert.True(raised);
     }
 
     [Fact]
-    public async Task DeleteUserCommand_Should_SetError_When_LastAdmin()
-    {
-        _client.UsersToReturn =
-        [
-            new("u1", "admin", "a@test.com", "Administrator", true, false, DateTime.UtcNow, null, 0),
-        ];
-        _client.DeleteResult = (false, "Cannot delete the last Administrator");
-
-        var sut = CreateSut();
-        await sut.LoadUsersCommand.ExecuteAsync(null);
-        sut.SelectedUser = sut.Users[0];
-        await sut.DeleteUserCommand.ExecuteAsync(null);
-
-        Assert.Equal("Cannot delete the last Administrator", sut.ErrorMessage);
-    }
-
-    [Fact]
-    public async Task ResetPasswordCommand_Should_SetLastResetPassword_When_Successful()
-    {
-        _client.UsersToReturn =
-        [
-            new("u1", "alice", "a@test.com", "Engineer", true, false, DateTime.UtcNow, null, 0),
-        ];
-        _client.ResetResult = ("NewP@ssw0rd!XyZ", null);
-
-        var sut = CreateSut();
-        await sut.LoadUsersCommand.ExecuteAsync(null);
-        sut.SelectedUser = sut.Users[0];
-        await sut.ResetPasswordCommand.ExecuteAsync(null);
-
-        Assert.Equal("NewP@ssw0rd!XyZ", sut.LastResetPassword);
-    }
-
-    [Fact]
-    public async Task ResetPasswordCommand_Should_SetError_When_Failed()
-    {
-        _client.UsersToReturn =
-        [
-            new("u1", "alice", "a@test.com", "Engineer", true, false, DateTime.UtcNow, null, 0),
-        ];
-        _client.ResetResult = (null, "User not found");
-
-        var sut = CreateSut();
-        await sut.LoadUsersCommand.ExecuteAsync(null);
-        sut.SelectedUser = sut.Users[0];
-        await sut.ResetPasswordCommand.ExecuteAsync(null);
-
-        Assert.Equal("User not found", sut.ErrorMessage);
-    }
-
-    [Fact]
-    public async Task DeleteUserCommand_Should_NoOp_When_NoSelection()
+    public async Task OpenDeleteUserCommand_Should_NoOp_When_NoSelection()
     {
         var sut = CreateSut();
         sut.SelectedUser = null;
 
-        await sut.DeleteUserCommand.ExecuteAsync(null);
+        var raised = false;
+        sut.RequestOpenDeleteUser += () => raised = true;
+        sut.OpenDeleteUserCommand.Execute(null);
 
-        // No error, no crash
+        Assert.False(raised);
         Assert.Equal("", sut.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task OpenResetPasswordCommand_Should_RaiseEvent_When_UserSelected()
+    {
+        _client.UsersToReturn =
+        [
+            new("u1", "alice", "a@test.com", "Engineer", true, false, DateTime.UtcNow, null, 0),
+        ];
+
+        var sut = CreateSut();
+        await sut.LoadUsersCommand.ExecuteAsync(null);
+        sut.SelectedUser = sut.Users[0];
+
+        var raised = false;
+        sut.RequestOpenResetPassword += () => raised = true;
+        sut.OpenResetPasswordCommand.Execute(null);
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public async Task OpenResetPasswordCommand_Should_NoOp_When_NoSelection()
+    {
+        _client.UsersToReturn =
+        [
+            new("u1", "alice", "a@test.com", "Engineer", true, false, DateTime.UtcNow, null, 0),
+        ];
+
+        var sut = CreateSut();
+        await sut.LoadUsersCommand.ExecuteAsync(null);
+        sut.SelectedUser = null;
+
+        var raised = false;
+        sut.RequestOpenResetPassword += () => raised = true;
+        sut.OpenResetPasswordCommand.Execute(null);
+
+        Assert.False(raised);
+    }
+
+    [Fact]
+    public void OpenAddUserCommand_Should_RaiseEvent()
+    {
+        var sut = CreateSut();
+        var raised = false;
+        sut.RequestOpenAddUser += () => raised = true;
+        sut.OpenAddUserCommand.Execute(null);
+
+        Assert.True(raised);
     }
 
     // ── Fakes ────────────────────────────────────────────────────────────

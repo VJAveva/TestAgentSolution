@@ -71,8 +71,8 @@ public sealed class LockService
         string pipelineId, string reason, IUserContext user, CancellationToken ct = default)
     {
         // Server-side validation even though UI gates it
-        if (string.IsNullOrWhiteSpace(reason) || reason.Length < 1 || reason.Length > 500)
-            return (false, null, "Reason must be between 1 and 500 characters");
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 10)
+            return (false, null, "Reason must be at least 10 characters long");
 
         var decision = await _authorizationService.CanAsync(user, Permission.Pipeline_ForceRelease, pipelineId, ct);
         if (!decision.Allowed)

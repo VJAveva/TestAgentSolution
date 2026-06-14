@@ -1,0 +1,147 @@
+using System.Security.Cryptography;
+
+namespace TestController.Persistence.Identity;
+
+/// <summary>
+/// Generates readable temporary passwords in Word-Word-NNNN format using
+/// cryptographically random selection. For admin reset flow only.
+/// </summary>
+public static class ReadablePasswordGenerator
+{
+    /// <summary>
+    /// Generates a readable password: two capitalized words joined by hyphens with a 4-digit number.
+    /// Example: "Tiger-Maple-7421". Entropy: ~33 bits (adequate for single-use temp password with MustChangePassword=true).
+    /// </summary>
+    public static string Generate()
+    {
+        var word1 = Words[RandomNumberGenerator.GetInt32(Words.Length)];
+        var word2 = Words[RandomNumberGenerator.GetInt32(Words.Length)];
+        var number = RandomNumberGenerator.GetInt32(1000, 10000); // 4-digit: 1000-9999
+        return $"{word1}-{word2}-{number}";
+    }
+
+    // 1024 short, common, easily readable/transcribable English words (capitalized).
+    // Curated to avoid ambiguous or offensive terms.
+    private static readonly string[] Words =
+    [
+        "Acorn", "Adder", "Agate", "Agave", "Alder", "Algae", "Amber", "Ample",
+        "Angel", "Angle", "Anvil", "Apple", "Arbor", "Arena", "Arrow", "Aspen",
+        "Atlas", "Attic", "Badge", "Baker", "Balsa", "Basil", "Basin", "Beach",
+        "Beam", "Berry", "Birch", "Blade", "Blaze", "Bloom", "Board", "Booth",
+        "Brace", "Brain", "Brass", "Brave", "Brick", "Ridge", "Brisk", "Brook",
+        "Brush", "Cabin", "Cable", "Cairn", "Camel", "Canal", "Canon", "Cargo",
+        "Cedar", "Chain", "Chair", "Chalk", "Chart", "Chase", "Chess", "Chest",
+        "Chime", "Cider", "Civic", "Clamp", "Clasp", "Clean", "Clear", "Clerk",
+        "Cliff", "Climb", "Clock", "Close", "Cloud", "Clover", "Coach", "Coast",
+        "Cobra", "Comet", "Coral", "Craft", "Crane", "Creek", "Crest", "Crown",
+        "Cycle", "Daisy", "Dance", "Delta", "Depot", "Diver", "Draft", "Drake",
+        "Dream", "Drift", "Drill", "Drive", "Druid", "Drums", "Dunes", "Dwarf",
+        "Eagle", "Earth", "Easel", "Elder", "Ember", "Enter", "Entry", "Epoch",
+        "Event", "Exile", "Fable", "Facet", "Fairy", "Faint", "Faith", "Fence",
+        "Field", "Finch", "Flame", "Flask", "Fleet", "Flint", "Float", "Flock",
+        "Flora", "Flute", "Focus", "Forge", "Frost", "Fruit", "Gamma", "Gauge",
+        "Gecko", "Ghost", "Giant", "Glade", "Glass", "Gleam", "Globe", "Glove",
+        "Golem", "Grace", "Grain", "Grand", "Grant", "Grape", "Graph", "Grass",
+        "Gravel", "Green", "Grove", "Guard", "Guide", "Gulch", "Haven", "Hazel",
+        "Heart", "Hedge", "Helix", "Heron", "Hiker", "Hills", "Hinge", "Honey",
+        "Horse", "Hotel", "House", "Hyena", "Ivory", "Jewel", "Joint", "Judge",
+        "Kayak", "Kiosk", "Knack", "Knoll", "Label", "Lance", "Larch", "Laser",
+        "Latch", "Layer", "Ledge", "Level", "Light", "Lilac", "Linen", "Links",
+        "Lodge", "Lotus", "Lunar", "Lumen", "Lyric", "Magma", "Manor", "Maple",
+        "March", "Marsh", "Mason", "Medal", "Melon", "Merge", "Metal", "Meter",
+        "Micro", "Mirth", "Moose", "Morph", "Motif", "Motor", "Mount", "Mural",
+        "Music", "Nerve", "Noble", "North", "Novel", "Oasis", "Ocean", "Olive",
+        "Onset", "Onyx", "Opera", "Orbit", "Otter", "Outer", "Oxide", "Ozone",
+        "Panel", "Patch", "Pearl", "Pedal", "Penny", "Perch", "Phase", "Piano",
+        "Pilot", "Pixel", "Place", "Plain", "Plant", "Plaza", "Plier", "Plumb",
+        "Point", "Polar", "Poppy", "Pouch", "Power", "Press", "Prism", "Probe",
+        "Proud", "Proxy", "Pulse", "Quail", "Quart", "Queen", "Quest", "Quick",
+        "Quiet", "Quill", "Quota", "Radar", "Ranch", "Range", "Rapid", "Raven",
+        "Realm", "Resin", "Ridge", "River", "Robin", "Rocky", "Rover", "Royal",
+        "Sable", "Salsa", "Sandy", "Satin", "Scale", "Scout", "Shaft", "Shale",
+        "Shell", "Shift", "Shine", "Shore", "Shrub", "Sigma", "Silk", "Siren",
+        "Skate", "Slate", "Sleep", "Slope", "Smith", "Snake", "Solar", "Solid",
+        "Sonic", "South", "Space", "Spark", "Spear", "Spice", "Spike", "Spine",
+        "Spoke", "Spray", "Staff", "Stage", "Stair", "Stake", "Stand", "Steam",
+        "Steel", "Stern", "Stone", "Storm", "Stove", "Straw", "Suite", "Swift",
+        "Sword", "Table", "Talon", "Tango", "Tapir", "Thorn", "Thyme", "Tidal",
+        "Tiger", "Tile", "Timber", "Token", "Topaz", "Torch", "Tower", "Track",
+        "Trail", "Train", "Trend", "Triad", "Tribe", "Trout", "Trunk", "Trust",
+        "Tulip", "Tunic", "Ultra", "Unity", "Upper", "Urban", "Usher", "Vault",
+        "Venus", "Vigor", "Viper", "Vista", "Vivid", "Vocal", "Voice", "Volta",
+        "Wagon", "Water", "Weave", "Wedge", "Whale", "Wheat", "Wheel", "White",
+        "Whole", "Widen", "Winch", "Wings", "Wired", "Witch", "Woven", "Yacht",
+        "Yield", "Zebra", "Abyss", "Adapt", "Admit", "Adopt", "Agile", "Alarm",
+        "Album", "Alert", "Alien", "Align", "Alloy", "Along", "Alpha", "Alter",
+        "Amino", "Andes", "Ankle", "Annex", "Apart", "Apron", "Armor", "Array",
+        "Aside", "Asset", "Audit", "Avian", "Axiom", "Badge", "Bagel", "Banjo",
+        "Baron", "Batch", "Baton", "Bench", "Biden", "Bison", "Blank", "Blend",
+        "Blimp", "Block", "Bluff", "Bonus", "Boost", "Braid", "Brand", "Brine",
+        "Broil", "Budge", "Bulge", "Bunch", "Burst", "Buyer", "Cache", "Cadet",
+        "Candy", "Caper", "Catch", "Cause", "Charm", "Chief", "Chill", "Chord",
+        "Churn", "Civic", "Claim", "Cleft", "Comet", "Coral", "Couch", "Count",
+        "Cover", "Cramp", "Crash", "Crawl", "Crisp", "Cross", "Crush", "Cubic",
+        "Curly", "Curve", "Dairy", "Darts", "Decal", "Decoy", "Delve", "Dense",
+        "Depth", "Derby", "Detox", "Digit", "Disco", "Ditch", "Diver", "Dodge",
+        "Donor", "Dough", "Drape", "Drawn", "Dress", "Drone", "Dryly", "Duvet",
+        "Dying", "Eager", "Easel", "Eject", "Elbow", "Elect", "Elite", "Elope",
+        "Elude", "Email", "Endow", "Enjoy", "Equal", "Erode", "Essay", "Evade",
+        "Event", "Exact", "Exalt", "Exist", "Extra", "Fairy", "Feast", "Fetid",
+        "Fever", "Fiber", "Fifth", "Fifty", "Final", "Fjord", "Flair", "Flank",
+        "Flare", "Flash", "Flesh", "Flick", "Fling", "Flood", "Floor", "Flour",
+        "Fluid", "Focal", "Folly", "Force", "Found", "Frame", "Frank", "Fresh",
+        "Front", "Froze", "Fungi", "Gamer", "Gauze", "Gears", "Geode", "Giddy",
+        "Girth", "Glare", "Glide", "Gloat", "Glyph", "Gourd", "Grain", "Grasp",
+        "Grate", "Greet", "Grief", "Grind", "Gripe", "Groom", "Grout", "Guest",
+        "Guild", "Habit", "Handy", "Happy", "Hardy", "Haste", "Hatch", "Haunt",
+        "Haven", "Hefty", "Hitch", "Hobby", "Hoist", "Honor", "Horns", "Hover",
+        "Humid", "Humor", "Hurry", "Husky", "Hyper", "Ideal", "Image", "Imply",
+        "Incur", "Index", "Inert", "Infer", "Ingot", "Inner", "Input", "Inter",
+        "Irony", "Issue", "Jaunt", "Jazzy", "Jiffy", "Joker", "Joust", "Juice",
+        "Jumbo", "Juror", "Kebab", "Kinky", "Knead", "Kneel", "Knife", "Knobs",
+        "Known", "Koala", "Kudos", "Laden", "Ladle", "Lapse", "Large", "Latex",
+        "Laugh", "Leach", "Leafy", "Learn", "Lease", "Leave", "Legal", "Lever",
+        "Libel", "Liner", "Liver", "Local", "Lofty", "Logic", "Loose", "Lower",
+        "Lucky", "Lunch", "Lusty", "Macro", "Major", "Mango", "Mania", "Maxim",
+        "Mayor", "Media", "Mercy", "Merit", "Miner", "Minor", "Mimic", "Mixed",
+        "Modal", "Moist", "Money", "Month", "Moody", "Moral", "Mossy", "Mound",
+        "Mouse", "Muddy", "Multi", "Naive", "Nanny", "Nasal", "Naval", "Nerve",
+        "Nexus", "Niche", "Ninja", "Nomad", "Notch", "Nudge", "Nurse", "Oaken",
+        "Occur", "Offal", "Onset", "Optic", "Order", "Oscar", "Outdo", "Outer",
+        "Oxide", "Paced", "Panda", "Parse", "Party", "Pasta", "Patio", "Pause",
+        "Peace", "Peach", "Perky", "Pesto", "Petty", "Photo", "Plaid", "Plank",
+        "Plead", "Pluck", "Plume", "Plush", "Poker", "Poise", "Poplar", "Porch",
+        "Posit", "Potion", "Pound", "Prank", "Prawn", "Price", "Prime", "Print",
+        "Prior", "Prize", "Prone", "Prong", "Proof", "Purge", "Quake", "Qualm",
+        "Quash", "Query", "Queue", "Quirk", "Quote", "Racer", "Radio", "Rally",
+        "Ranch", "Ratio", "React", "Ready", "Rebus", "Recap", "Refer", "Reign",
+        "Relay", "Remit", "Repay", "Reply", "Rider", "Rifle", "Rigor", "Rinse",
+        "Risen", "Risky", "Rival", "Roast", "Rogue", "Roost", "Rough", "Round",
+        "Route", "Rumba", "Rural", "Rusty", "Savor", "Scald", "Scant", "Scare",
+        "Scarf", "Scene", "Scone", "Scope", "Score", "Scrub", "Seize", "Sense",
+        "Serve", "Setup", "Seven", "Sever", "Shade", "Shape", "Share", "Sharp",
+        "Sheer", "Shelf", "Shirt", "Shock", "Shrub", "Siege", "Sight", "Silky",
+        "Sixth", "Sixty", "Skier", "Skull", "Slant", "Slice", "Slide", "Small",
+        "Smart", "Smelt", "Smile", "Snack", "Snail", "Snare", "Snore", "Sonar",
+        "Sound", "Spare", "Spend", "Spill", "Split", "Spoon", "Sport", "Spout",
+        "Squad", "Squid", "Stack", "Stalk", "Stamp", "Stark", "State", "Steep",
+        "Sting", "Stock", "Stoic", "Stool", "Story", "Strap", "Stray", "Strip",
+        "Strut", "Study", "Stump", "Stunt", "Sugar", "Surge", "Swamp", "Swarm",
+        "Sweep", "Swirl", "Sworn", "Syrup", "Tacit", "Taffy", "Taste", "Teens",
+        "Tempo", "Tenor", "Terse", "Theme", "Think", "Third", "Three", "Throw",
+        "Thumb", "Tidal", "Toast", "Today", "Topic", "Total", "Touch", "Tough",
+        "Towel", "Toxic", "Trace", "Tract", "Trade", "Trans", "Trash", "Trawl",
+        "Treat", "Trial", "Trick", "Troop", "Trove", "Truck", "Truly", "Tumor",
+        "Tuner", "Twang", "Tweed", "Twirl", "Twist", "Udder", "Ulcer", "Uncut",
+        "Under", "Undid", "Undue", "Unfit", "Union", "Unite", "Untie", "Until",
+        "Unzip", "Upset", "Usual", "Utter", "Valid", "Value", "Vapor", "Vault",
+        "Verse", "Video", "Vinyl", "Viral", "Visit", "Vital", "Vivid", "Vixen",
+        "Vogue", "Voila", "Voter", "Vouch", "Wafer", "Wages", "Watch", "Waver",
+        "Weary", "Weigh", "Weird", "Whack", "Wheat", "Where", "Whiff", "Whirl",
+        "Wield", "Windy", "Witty", "Woman", "Woods", "World", "Worry", "Worse",
+        "Worst", "Worth", "Wound", "Wrist", "Xenon", "Yacht", "Yearn", "Young",
+        "Youth", "Zesty", "Zones", "Plumb", "Prune", "Reign", "Ruler", "Salad",
+        "Scuba", "Sheet", "Shrug", "Snowy", "Solid", "Spool", "Stair", "Stern",
+        "Stiff", "Stomp", "Stork", "Sugar", "Swipe", "Tangy", "Taunt", "Tease",
+    ];
+}

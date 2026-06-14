@@ -25,13 +25,23 @@ export async function apiFetch<T>(
   const startTime = performance.now();
 
   try {
+    // Build headers: auto-attach auth token from sessionStorage when available.
+    // Callers can still override by passing their own Authorization header.
+    const autoHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Request-Id': correlationId,
+      'X-User-Id': getUserId(),
+      'X-Source': 'WebClient',
+    };
+    const token = sessionStorage.getItem('auth_token');
+    if (token) {
+      autoHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
-        'X-Request-Id': correlationId,
-        'X-User-Id': getUserId(),
-        'X-Source': 'WebClient',
+        ...autoHeaders,
         ...options?.headers,
       },
     });

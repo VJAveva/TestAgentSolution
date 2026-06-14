@@ -1,7 +1,9 @@
 using Microsoft.Data.Sqlite;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TestController.Api.Interceptors;
 using TestController.Api.Services;
@@ -22,7 +24,11 @@ namespace TestController.Api;
 /// </summary>
 public static class RbacFeatureExtensions
 {
-    public static IServiceCollection AddRbacFeature(this IServiceCollection services, IConfiguration configuration)
+    /// <summary>
+    /// Registers RBAC services. Only the primary host (WPF Controller) should open the SQLite database.
+    /// The standalone WebApi must pass <paramref name="isPrimaryHost"/> = false to avoid DB access.
+    /// </summary>
+    public static IServiceCollection AddRbacFeature(this IServiceCollection services, IConfiguration configuration, bool isPrimaryHost = true)
     {
         // Configuration
         services.Configure<RbacOptions>(configuration.GetSection(RbacOptions.SectionName));
@@ -39,9 +45,14 @@ public static class RbacFeatureExtensions
         var dbPath = configuration["RBAC:DatabasePath"]
             ?? Path.Combine(AppContext.BaseDirectory, "orchestrator.db");
 
+        // Ensure absolute path so all hosts and EF CLI resolve to the same file
+        if (!Path.IsPathRooted(dbPath))
+            dbPath = Path.Combine(AppContext.BaseDirectory, dbPath);
+        dbPath = Path.GetFullPath(dbPath);
+
         services.AddDbContextFactory<OrchestratorDbContext>(options =>
         {
-            var connectionString = $"Data Source={dbPath}";
+            var connectionString = $"Data Source={dbPath};Default Timeout=5";
             options.UseSqlite(connectionString, sqlite =>
             {
                 sqlite.MigrationsAssembly(typeof(OrchestratorDbContext).Assembly.GetName().Name);
@@ -84,30 +95,95 @@ public static class RbacFeatureExtensions
 
 /// <summary>
 /// Applies pending EF Core migrations at startup, before any service touches the DB.
+/// Handles the case where the DB was created by prior (now-removed) migrations or EnsureCreated
+/// by baselining: if tables already exist but the current Initial migration is pending, it is
+/// marked as applied without running its Up method.
 /// WAL pragmas are handled per-connection by <see cref="SqliteConnectionInterceptor"/>.
 /// </summary>
 internal sealed class DatabaseInitializerService : Microsoft.Extensions.Hosting.IHostedService
 {
     private readonly IDbContextFactory<OrchestratorDbContext> _dbFactory;
+    private readonly ILogger<DatabaseInitializerService> _logger;
 
-    public DatabaseInitializerService(IDbContextFactory<OrchestratorDbContext> dbFactory)
+    public DatabaseInitializerService(
+        IDbContextFactory<OrchestratorDbContext> dbFactory,
+        ILogger<DatabaseInitializerService> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        await db.Database.MigrateAsync(cancellationToken);
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            var connStr = db.Database.GetConnectionString();
+            _logger.LogInformation("RBAC database path: {ConnectionString}", connStr);
+
+            var pending = (await db.Database.GetPendingMigrationsAsync(cancellationToken)).ToList();
+            if (pending.Count > 0 && await SchemaAlreadyExistsAsync(db, cancellationToken))
+            {
+                // Tables exist from a previous creation path (old migrations or EnsureCreated).
+                // Baseline by recording all pending migrations as already applied.
+                foreach (var migrationId in pending)
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                        "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
+                        [migrationId, ProductVersion()],
+                        cancellationToken);
+                }
+            }
+            else
+            {
+                await db.Database.MigrateAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "RBAC database migration failed — application cannot start.");
+            throw;
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Checks if the AuditEntries table already exists (proxy for "schema already created").</summary>
+    private static async Task<bool> SchemaAlreadyExistsAsync(OrchestratorDbContext db, CancellationToken ct)
+    {
+        // Ensure the migrations history table exists so the INSERT OR IGNORE above can work.
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE TABLE IF NOT EXISTS \"__EFMigrationsHistory\" (\"MigrationId\" TEXT NOT NULL PRIMARY KEY, \"ProductVersion\" TEXT NOT NULL)",
+            ct);
+
+        var result = await db.Database.ExecuteSqlRawAsync(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='AuditEntries'", ct);
+        // ExecuteSqlRaw returns rows-affected which isn't useful here; use a raw query instead.
+        var conn = db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='AuditEntries'";
+        var count = (long)(await cmd.ExecuteScalarAsync(ct))!;
+        return count > 0;
+    }
+
+    private static string ProductVersion() =>
+        typeof(DbContext).Assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "10.0.0";
 }
 
 /// <summary>
-/// Applies SQLite per-connection pragmas (foreign_keys, synchronous) on every connection open.
-/// WAL journal_mode is persistent per-file but foreign_keys and synchronous are per-connection.
+/// Factory that throws if the WebApi host accidentally tries to open the SQLite database directly.
+/// All DB-backed operations must be routed through ControllerProxyService.
 /// </summary>
+internal sealed class ThrowingDbContextFactory : IDbContextFactory<OrchestratorDbContext>
+{
+    public OrchestratorDbContext CreateDbContext() =>
+        throw new InvalidOperationException(
+            "RBAC persistence is only available on the primary controller host. " +
+            "Route this operation through ControllerProxyService.");
+}
+
 internal sealed class SqliteConnectionInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbConnectionInterceptor
 {
     public override void ConnectionOpened(

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using TestController.Persistence;
 using TestController.Persistence.Identity;
@@ -363,26 +362,5 @@ public sealed class UserService
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private static string GenerateRandomPassword()
-    {
-        const string lower = "abcdefghijkmnpqrstuvwxyz";
-        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-        const string digits = "23456789";
-        const string special = "!@#$%&*";
-        const string all = lower + upper + digits + special;
-
-        var password = new char[16];
-        // Ensure at least one of each required class
-        password[0] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
-        password[1] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
-        password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
-        password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
-
-        for (int i = 4; i < password.Length; i++)
-            password[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
-
-        // Shuffle
-        RandomNumberGenerator.Shuffle(password.AsSpan());
-        return new string(password);
-    }
+    private static string GenerateRandomPassword() => ReadablePasswordGenerator.Generate();
 }

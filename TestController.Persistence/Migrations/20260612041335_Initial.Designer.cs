@@ -11,7 +11,7 @@ using TestController.Persistence;
 namespace TestController.Persistence.Migrations
 {
     [DbContext(typeof(OrchestratorDbContext))]
-    [Migration("20260612014619_Initial")]
+    [Migration("20260612041335_Initial")]
     partial class Initial
     {
         /// <inheritdoc />

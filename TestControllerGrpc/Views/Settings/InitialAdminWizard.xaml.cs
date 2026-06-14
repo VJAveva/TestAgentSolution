@@ -7,21 +7,33 @@ namespace TestControllerGrpc.Views.Settings;
 
 public partial class InitialAdminWizard : Window
 {
+    private readonly SecurityModeViewModel _vm;
+
     public InitialAdminWizard()
     {
-        DataContext = App.Services.GetRequiredService<SecurityModeViewModel>();
+        _vm = App.Services.GetRequiredService<SecurityModeViewModel>();
+        DataContext = _vm;
         InitializeComponent();
+
+        _vm.RequestClose += OnRequestClose;
+        Closed += (_, _) => _vm.RequestClose -= OnRequestClose;
+    }
+
+    private void OnRequestClose(bool success)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            DialogResult = success;
+        });
     }
 
     private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (DataContext is SecurityModeViewModel vm)
-            vm.WizardPassword = PasswordBox.Password;
+        _vm.WizardPassword = PasswordBox.Password;
     }
 
     private void ConfirmPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (DataContext is SecurityModeViewModel vm)
-            vm.WizardConfirmPassword = ConfirmPasswordBox.Password;
+        _vm.WizardConfirmPassword = ConfirmPasswordBox.Password;
     }
 }

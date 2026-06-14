@@ -22,7 +22,7 @@ export function useExecution() {
   const setSessions = useExecutionStore(s => s.setSessions);
 
   const fetchStatus = useCallback(async () => {
-    const { data } = await axios.get<ExecutionStatus>('/api/execution/proxy/status');
+    const { data } = await axios.get<ExecutionStatus>('/api/execution/status');
     setStatus(data.isExecuting, data.activeCount);
     return data;
   }, [setStatus]);

@@ -15,8 +15,14 @@ public sealed partial class AddUserDialogViewModel : ObservableObject
     private readonly IAppLogger _logger;
     private CancellationTokenSource? _usernameCheckCts;
 
-    [ObservableProperty] private string _username = "";
-    [ObservableProperty] private string _email = "";
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CreateCommand))]
+    private string _username = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CreateCommand))]
+    private string _email = "";
+
     [ObservableProperty] private string _selectedRole = "Engineer";
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _usernameError = "";

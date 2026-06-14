@@ -20,6 +20,13 @@ try
 {
 var builder = WebApplication.CreateBuilder(args);
 
+// Fail-fast DI validation: detect missing registrations at startup, not first request
+builder.Host.UseDefaultServiceProvider(o =>
+{
+    o.ValidateOnBuild = true;
+    o.ValidateScopes = true;
+});
+
 // Scale fix: Pre-warm ThreadPool for 200 concurrent agent operations.
 // Default min = CPU core count (8-16); under load, .NET adds threads at 500ms/thread.
 // At 200 agents with parallel health checks + gRPC streams, need immediate capacity.
@@ -88,8 +95,8 @@ builder.Services.AddSingleton<IActionPipelineExecutor>(sp => new StandalonePipel
     sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>()));
 builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
-// RBAC feature (identity, authorization, audit, persistence)
-builder.Services.AddRbacFeature(builder.Configuration);
+// RBAC feature (identity, authorization, audit — NO local DB; routes through controller)
+builder.Services.AddRbacFeature(builder.Configuration, isPrimaryHost: false);
 
 // Multi-identity security framework: authentication + authorization + audit
 builder.Services.AddMultiIdentitySecurity(builder.Configuration);

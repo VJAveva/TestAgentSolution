@@ -30,8 +30,9 @@ export const useSystemModeStore = create<SystemModeState>((set, get) => ({
         isSecured: mode === 'secured',
         isLoading: false,
       });
-    } catch {
+    } catch (err) {
       set({ isLoading: false });
+      throw err;
     }
   },
 

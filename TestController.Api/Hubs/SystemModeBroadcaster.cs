@@ -8,9 +8,9 @@ namespace TestController.Api.Hubs;
 /// </summary>
 public sealed class SystemModeBroadcaster
 {
-    private readonly IHubContext<ControllerHub> _hub;
+    private readonly IHubContext<ControllerHub>? _hub;
 
-    public SystemModeBroadcaster(IHubContext<ControllerHub> hub)
+    public SystemModeBroadcaster(IHubContext<ControllerHub>? hub = null)
     {
         _hub = hub;
     }
@@ -21,6 +21,7 @@ public sealed class SystemModeBroadcaster
     /// </summary>
     public async Task BroadcastModeChangedAsync(string newMode)
     {
+        if (_hub is null) return;
         await _hub.Clients.All.SendAsync("SystemModeChanged", new { mode = newMode });
     }
 }

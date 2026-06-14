@@ -126,8 +126,8 @@ export interface ApiEndpoints {
   '/api/agents': AgentsEndpoint;
   '/api/agents/:name/diagnostics': DiagnosticsEndpoint;
   '/api/execution/locks': ExecutionLocksEndpoint;
-  '/api/execution/proxy/dashboard-sessions': DashboardSessionsEndpoint;
-  '/api/execution/proxy/logs/:sessionId': DashboardLogsEndpoint;
+  '/api/execution/dashboard-sessions': DashboardSessionsEndpoint;
+  '/api/execution/:sessionId/recent-logs': DashboardLogsEndpoint;
   '/api/execution/force-release/:agentName': ForceReleaseEndpoint;
   '/api/execution/force-release-all': ForceReleaseAllEndpoint;
   '/api/execution/execute': ExecuteEndpoint;

@@ -155,6 +155,18 @@ public sealed class IntToVisibilityConverter : IValueConverter
         => Binding.DoNothing;
 }
 
+/// <summary>
+/// Converts a boolean HasCopied flag to button text: "Copy" / "Copied \u2713".
+/// </summary>
+public sealed class BoolToCopiedTextConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? "Copied \u2713" : "Copy to clipboard";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
 // ??? Execution Dashboard converters ????????????????????????????????????
 
 /// <summary>

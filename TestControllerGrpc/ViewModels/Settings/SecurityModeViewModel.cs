@@ -20,6 +20,9 @@ public sealed partial class SecurityModeViewModel : ObservableObject
     [ObservableProperty] private bool _isSwitching;
     [ObservableProperty] private string _statusMessage = "";
 
+    /// <summary>Raised when the wizard/dialog should close. Bool = success.</summary>
+    public event Action<bool>? RequestClose;
+
     // Initial Admin Wizard fields
     [ObservableProperty] private bool _isWizardOpen;
     [ObservableProperty] private string _wizardUsername = "";
@@ -30,7 +33,11 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
     // Disable RBAC confirmation fields
     [ObservableProperty] private bool _isDisableDialogOpen;
-    [ObservableProperty] private string _disableConfirmText = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmSwitchToDefaultCommand))]
+    private string _disableConfirmText = "";
+
     [ObservableProperty] private string _disableError = "";
 
     private const string DisableConfirmString = "DISABLE RBAC";
@@ -59,7 +66,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDefaultMode));
     }
 
-    public bool CanConfirmDisable => string.Equals(DisableConfirmText, DisableConfirmString, StringComparison.Ordinal);
+    public bool CanConfirmDisable => string.Equals(DisableConfirmText?.Trim(), DisableConfirmString, StringComparison.Ordinal);
 
     partial void OnDisableConfirmTextChanged(string value)
     {
@@ -100,6 +107,14 @@ public sealed partial class SecurityModeViewModel : ObservableObject
     {
         if (!IsWizardValid) return;
 
+        // Idempotency: if already secured, treat as success
+        if (_rbacOptions.CurrentValue.Enabled)
+        {
+            StatusMessage = "Already in Secured mode.";
+            RequestClose?.Invoke(true);
+            return;
+        }
+
         IsSwitching = true;
         WizardError = "";
 
@@ -110,9 +125,9 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
             if (success)
             {
-                IsWizardOpen = false;
                 StatusMessage = "Switched to Secured mode.";
                 _logger.Info("RBAC", "System switched to Secured mode");
+                RequestClose?.Invoke(true);
             }
             else
             {
@@ -144,7 +159,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
         IsDisableDialogOpen = false;
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanConfirmDisable))]
     private async Task ConfirmSwitchToDefaultAsync()
     {
         if (!CanConfirmDisable) return;
@@ -158,9 +173,9 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
             if (success)
             {
-                IsDisableDialogOpen = false;
                 StatusMessage = "Switched to Default mode.";
                 _logger.Info("RBAC", "System switched to Default mode");
+                RequestClose?.Invoke(true);
             }
             else
             {

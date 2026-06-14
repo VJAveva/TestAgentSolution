@@ -24,7 +24,9 @@ public partial class AddUserDialog : Window
     {
         GeneratedPassword = generatedPassword;
         _viewModel.UserCreated -= OnUserCreated;
-        DialogResult = true;
-        Close();
+        Dispatcher.InvokeAsync(() =>
+        {
+            DialogResult = true;
+        });
     }
 }
