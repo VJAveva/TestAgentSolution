@@ -29,8 +29,14 @@ window.onunhandledrejection = (event: PromiseRejectionEvent) => {
   });
 };
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+const rootEl = document.getElementById('root');
+if (!rootEl) {
+  document.body.innerHTML = '<h1 style="color:red">FATAL: #root element not found</h1>';
+} else {
+  const root = ReactDOM.createRoot(rootEl);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}

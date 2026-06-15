@@ -14,6 +14,7 @@ using TestController.Persistence.Authorization;
 using TestController.Persistence.Identity;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Configuration;
+using TestControllerGrpc.Identity;
 
 namespace TestController.Api;
 
@@ -30,7 +31,7 @@ public static class RbacFeatureExtensions
     /// </summary>
     public static IServiceCollection AddRbacFeature(this IServiceCollection services, IConfiguration configuration, bool isPrimaryHost = true)
     {
-        // Configuration
+        // Configuration (always needed — both hosts read RbacOptions to know if mode is secured)
         services.Configure<RbacOptions>(configuration.GetSection(RbacOptions.SectionName));
 
         // Writable options for live mode switching
@@ -41,53 +42,88 @@ public static class RbacFeatureExtensions
                 RbacOptions.SectionName,
                 appSettingsPath));
 
-        // EF Core + SQLite (Scoped DbContext accessed via IDbContextFactory from Singletons)
-        var dbPath = configuration["RBAC:DatabasePath"]
-            ?? Path.Combine(AppContext.BaseDirectory, "orchestrator.db");
-
-        // Ensure absolute path so all hosts and EF CLI resolve to the same file
-        if (!Path.IsPathRooted(dbPath))
-            dbPath = Path.Combine(AppContext.BaseDirectory, dbPath);
-        dbPath = Path.GetFullPath(dbPath);
-
-        services.AddDbContextFactory<OrchestratorDbContext>(options =>
-        {
-            var connectionString = $"Data Source={dbPath};Default Timeout=5";
-            options.UseSqlite(connectionString, sqlite =>
-            {
-                sqlite.MigrationsAssembly(typeof(OrchestratorDbContext).Assembly.GetName().Name);
-            });
-            options.AddInterceptors(new SqliteConnectionInterceptor());
-        });
-
-        // Ensure database is created and pragmas are applied
-        services.AddHostedService<DatabaseInitializerService>();
-
-        // Identity
-        services.AddSingleton<PasswordHasher>();
-        services.AddSingleton<ISessionStore, SessionStore>();
-
-        // Authorization
-        services.AddSingleton<IAuthorizationService, AuthorizationService>();
-
-        // Audit (fire-and-forget pattern)
-        services.AddSingleton<QueuedAuditWriter>();
-        services.AddSingleton<IAuditWriter>(sp => sp.GetRequiredService<QueuedAuditWriter>());
-        services.AddHostedService<AuditDrainWorker>();
-
-        // Interceptors
-        services.AddSingleton<SessionAuthInterceptor>();
-        services.AddSingleton<AuditLoggingInterceptor>();
-
-        // Services
-        services.AddSingleton<AuthService>();
-        services.AddSingleton<UserService>();
-        services.AddSingleton<RbacModeTransitionService>();
+        // SystemModeBroadcaster: SignalR-only, no DB access — safe for both hosts
         services.AddSingleton<Hubs.SystemModeBroadcaster>();
 
-        // Phase 2a: Pipeline authorization
-        services.AddSingleton<PipelineAuthorizationGuard>();
-        services.AddSingleton<PipelineService>();
+        if (isPrimaryHost)
+        {
+            // ── Primary host (WPF Controller): owns the SQLite database ──
+
+            var dbPath = configuration["RBAC:DatabasePath"]
+                ?? Path.Combine(AppContext.BaseDirectory, "orchestrator.db");
+
+            if (!Path.IsPathRooted(dbPath))
+                dbPath = Path.Combine(AppContext.BaseDirectory, dbPath);
+            dbPath = Path.GetFullPath(dbPath);
+
+            services.AddDbContextFactory<OrchestratorDbContext>(options =>
+            {
+                var connectionString = $"Data Source={dbPath};Default Timeout=5";
+                options.UseSqlite(connectionString, sqlite =>
+                {
+                    sqlite.MigrationsAssembly(typeof(OrchestratorDbContext).Assembly.GetName().Name);
+                });
+                options.AddInterceptors(new SqliteConnectionInterceptor());
+            });
+
+            services.AddHostedService<DatabaseInitializerService>();
+
+            // Identity
+            services.AddSingleton<PasswordHasher>();
+            services.AddSingleton<ISessionStore, SessionStore>();
+
+            // Authorization
+            services.AddSingleton<IAuthorizationService, AuthorizationService>();
+
+            // Audit (fire-and-forget pattern)
+            services.AddSingleton<QueuedAuditWriter>();
+            services.AddSingleton<IAuditWriter>(sp => sp.GetRequiredService<QueuedAuditWriter>());
+            services.AddHostedService<AuditDrainWorker>();
+
+            // Interceptors
+            services.AddSingleton<SessionAuthInterceptor>();
+            services.AddSingleton<AuditLoggingInterceptor>();
+
+            // Services
+            services.AddSingleton<AuthService>();
+            services.AddSingleton<UserService>();
+            services.AddSingleton<RbacModeTransitionService>();
+
+            // Phase 2a: Pipeline authorization
+            services.AddSingleton<PipelineAuthorizationGuard>();
+            services.AddSingleton<PipelineService>();
+        }
+        else
+        {
+            // ── Secondary host (standalone WebApi): NO local DB access ──
+            // Uses ThrowingDbContextFactory as a safety guard — any accidental DB
+            // access throws immediately instead of silently corrupting state.
+            services.AddSingleton<IDbContextFactory<OrchestratorDbContext>, ThrowingDbContextFactory>();
+
+            // Identity: no-op session store (all auth is proxied to the controller)
+            services.AddSingleton<PasswordHasher>();
+            services.AddSingleton<ISessionStore, NullSessionStore>();
+
+            // Authorization: no-op (proxied via ControllerProxyService)
+            services.AddSingleton<IAuthorizationService, NullAuthorizationService>();
+
+            // Audit: no-op writer (audit is written by the controller, not the WebApi)
+            services.AddSingleton<IAuditWriter, NullAuditWriter>();
+
+            // Interceptors still needed for DI resolution by shared controllers
+            services.AddSingleton<SessionAuthInterceptor>();
+            services.AddSingleton<AuditLoggingInterceptor>();
+
+            // Services: register concrete types so shared controllers can resolve them.
+            // These will proxy to the controller for actual operations.
+            services.AddSingleton<AuthService>();
+            services.AddSingleton<UserService>();
+            services.AddSingleton<RbacModeTransitionService>();
+
+            // Phase 2a: Pipeline authorization
+            services.AddSingleton<PipelineAuthorizationGuard>();
+            services.AddSingleton<PipelineService>();
+        }
 
         return services;
     }
@@ -182,6 +218,50 @@ internal sealed class ThrowingDbContextFactory : IDbContextFactory<OrchestratorD
         throw new InvalidOperationException(
             "RBAC persistence is only available on the primary controller host. " +
             "Route this operation through ControllerProxyService.");
+}
+
+/// <summary>
+/// No-op session store for the standalone WebApi. Auth operations are proxied
+/// to the controller; this satisfies DI resolution without DB access.
+/// </summary>
+internal sealed class NullSessionStore : ISessionStore
+{
+    public Task<Session> CreateSessionAsync(string? userId, string? guestId, ClientKind clientKind, string? ipAddress, CancellationToken ct = default)
+        => throw new InvalidOperationException("Session creation must be routed through ControllerProxyService.");
+
+    public Task<Session?> LookupByTokenAsync(string token, CancellationToken ct = default)
+        => Task.FromResult<Session?>(null);
+
+    public Task TouchAsync(string sessionId, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task RevokeAsync(string sessionId, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task RevokeAllForUserAsync(string userId, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task RevokeAllAsync(CancellationToken ct = default)
+        => Task.CompletedTask;
+}
+
+/// <summary>
+/// No-op authorization service for the standalone WebApi. Always allows —
+/// the real authorization check happens on the controller when proxied.
+/// </summary>
+internal sealed class NullAuthorizationService : TestControllerGrpc.Authorization.IAuthorizationService
+{
+    public Task<AuthDecision> CanAsync(IUserContext user, Permission permission, string? resourceId = null, CancellationToken ct = default)
+        => Task.FromResult(AuthDecision.Allow("proxy-bypass"));
+}
+
+/// <summary>
+/// No-op audit writer for the standalone WebApi. Audit entries are written
+/// by the controller; the WebApi does not need its own audit drain.
+/// </summary>
+internal sealed class NullAuditWriter : IAuditWriter
+{
+    public void Enqueue(AuditEntry entry) { /* no-op */ }
 }
 
 internal sealed class SqliteConnectionInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbConnectionInterceptor

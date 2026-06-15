@@ -13,8 +13,6 @@ import ChangePasswordView from './views/ChangePasswordView';
 export default function App() {
   const isSecured = useSystemModeStore((s) => s.isSecured);
   const isDefault = useSystemModeStore((s) => s.isDefault);
-  const isModeLoading = useSystemModeStore((s) => s.isLoading);
-  const fetchMode = useSystemModeStore((s) => s.fetchMode);
   const { isAuthenticated, mustChangePassword, fetchMe, token, user } = useAuthStore();
 
   // Defer SignalR connection in Secured mode until the user is authenticated.
@@ -23,12 +21,13 @@ export default function App() {
   const [initialized, setInitialized] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
-  // Fetch system mode on mount
+  // Fetch system mode on mount (once only).
+  // fetchMode is a stable Zustand action reference — empty deps is correct.
   useEffect(() => {
-    fetchMode()
+    useSystemModeStore.getState().fetchMode()
       .then(() => setInitialized(true))
       .catch((err) => setBootError(err?.detail ?? err?.error ?? err?.message ?? 'Failed to load system mode'));
-  }, [fetchMode]);
+  }, []);
 
   // Hydrate auth from sessionStorage token on mount (Secured mode only)
   useEffect(() => {
@@ -58,8 +57,10 @@ export default function App() {
     );
   }
 
-  // Show loading until mode is resolved
-  if (!initialized || isModeLoading) {
+  // Show loading until initial mode fetch is resolved.
+  // NOTE: Do NOT gate on isModeLoading here — subsequent re-fetches (e.g. from
+  // AppShell) would unmount the app shell and cause an infinite mount/unmount loop.
+  if (!initialized) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p className="text-sm text-text-secondary animate-pulse">Loading…</p>

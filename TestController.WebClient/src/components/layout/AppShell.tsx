@@ -20,7 +20,6 @@ import UserMenu from '../header/UserMenu';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useAgents } from '../../hooks/useAgents';
 import { useExecution } from '../../hooks/useExecution';
-import { useSystemModeStore } from '../../stores/systemModeStore';
 
 type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results';
 
@@ -38,14 +37,12 @@ export default function AppShell() {
   const { fetchConfig } = useWatchList();
   const { fetchAgents } = useAgents();
   const { fetchSessions } = useExecution();
-  const fetchMode = useSystemModeStore((s) => s.fetchMode);
 
   useEffect(() => {
-    fetchMode().catch(err => console.error('Failed to load system mode:', err));
     fetchConfig().catch(err => console.error('Failed to load watchlist:', err));
     fetchAgents().catch(err => console.error('Failed to load agents:', err));
     fetchSessions().catch(err => console.error('Failed to load execution sessions:', err));
-  }, [fetchMode, fetchConfig, fetchAgents, fetchSessions]);
+  }, [fetchConfig, fetchAgents, fetchSessions]);
 
   return (
     <div className="flex flex-col h-screen bg-bg">

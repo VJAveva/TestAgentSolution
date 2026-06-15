@@ -14,18 +14,58 @@ using TestControllerGrpc.Identity;
 
 namespace TestController.WebApi.Tests.Rbac;
 
-public class ModeSwitchE2ETests : IClassFixture<TestWebAppFactory>, IDisposable
+public class ModeSwitchE2ETests : IDisposable
 {
-    private readonly TestWebAppFactory _factory;
+    private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
+    private readonly string _dbPath;
 
-    public ModeSwitchE2ETests(TestWebAppFactory factory)
+    public ModeSwitchE2ETests()
     {
-        _factory = factory;
-        _client = factory.CreateClient();
+        // These tests exercise mode-switch endpoints that require real DB access.
+        // Override the DI to provide a file-based temp SQLite database.
+        _dbPath = Path.Combine(Path.GetTempPath(), $"rbac_test_{Guid.NewGuid():N}.db");
+
+        _factory = new TestWebAppFactory().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                // Remove the ThrowingDbContextFactory registered by AddRbacFeature(isPrimaryHost: false)
+                var dbFactoryDescriptor = services.FirstOrDefault(
+                    d => d.ServiceType == typeof(IDbContextFactory<OrchestratorDbContext>));
+                if (dbFactoryDescriptor is not null)
+                    services.Remove(dbFactoryDescriptor);
+
+                // Register real file-based SQLite for test isolation
+                services.AddDbContextFactory<OrchestratorDbContext>(options =>
+                {
+                    options.UseSqlite($"Data Source={_dbPath}");
+                });
+
+                // Remove NullSessionStore and register real SessionStore
+                var sessionStoreDescriptor = services.FirstOrDefault(
+                    d => d.ServiceType == typeof(ISessionStore));
+                if (sessionStoreDescriptor is not null)
+                    services.Remove(sessionStoreDescriptor);
+                services.AddSingleton<ISessionStore, SessionStore>();
+            });
+        });
+
+        // Ensure DB is created before tests run
+        using var scope = _factory.Services.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<OrchestratorDbContext>>();
+        using var db = factory.CreateDbContext();
+        db.Database.EnsureCreated();
+
+        _client = _factory.CreateClient();
     }
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose()
+    {
+        _client.Dispose();
+        _factory.Dispose();
+        try { File.Delete(_dbPath); } catch { /* best effort cleanup */ }
+    }
 
     [Fact]
     public async Task GetMode_Should_ReturnDefault_When_RbacDisabled()
