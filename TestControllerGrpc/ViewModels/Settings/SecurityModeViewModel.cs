@@ -31,6 +31,9 @@ public sealed partial class SecurityModeViewModel : ObservableObject
     [ObservableProperty] private string _wizardConfirmPassword = "";
     [ObservableProperty] private string _wizardError = "";
 
+    // Reactivation confirmation fields (shown when admin already exists)
+    [ObservableProperty] private bool _isReactivateDialogOpen;
+
     // Disable RBAC confirmation fields
     [ObservableProperty] private bool _isDisableDialogOpen;
 
@@ -86,8 +89,16 @@ public sealed partial class SecurityModeViewModel : ObservableObject
     partial void OnWizardConfirmPasswordChanged(string value) => OnPropertyChanged(nameof(IsWizardValid));
 
     [RelayCommand]
-    private void OpenWizard()
+    private async Task OpenWizardAsync()
     {
+        // Check if an admin already exists — if so, skip wizard and show reactivation confirmation
+        var adminExists = await _systemModeClient.HasExistingAdminAsync();
+        if (adminExists)
+        {
+            IsReactivateDialogOpen = true;
+            return;
+        }
+
         WizardUsername = "";
         WizardEmail = "";
         WizardPassword = "";
@@ -100,6 +111,47 @@ public sealed partial class SecurityModeViewModel : ObservableObject
     private void CloseWizard()
     {
         IsWizardOpen = false;
+    }
+
+    [RelayCommand]
+    private async Task ConfirmReactivateAsync()
+    {
+        // Idempotency: if already secured, treat as success
+        if (_rbacOptions.CurrentValue.Enabled)
+        {
+            StatusMessage = "Already in Secured mode.";
+            RequestClose?.Invoke(true);
+            return;
+        }
+
+        IsSwitching = true;
+        StatusMessage = "";
+
+        try
+        {
+            var (success, error) = await _systemModeClient.SwitchToSecuredReactivateAsync();
+
+            if (success)
+            {
+                StatusMessage = "Switched to Secured mode. Existing users reactivated.";
+                _logger.Info("RBAC", "System switched to Secured mode (reactivation)");
+                RequestClose?.Invoke(true);
+            }
+            else
+            {
+                StatusMessage = error ?? "Failed to switch to Secured mode.";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error: {ex.Message}";
+            _logger.Error("RBAC", "Failed to switch to Secured mode (reactivation)", ex);
+        }
+        finally
+        {
+            IsSwitching = false;
+            IsReactivateDialogOpen = false;
+        }
     }
 
     [RelayCommand]

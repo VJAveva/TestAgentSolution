@@ -12,6 +12,7 @@ public sealed class CurrentUserHolder
 {
     private readonly IOptionsMonitor<RbacOptions> _rbacOptions;
     private IUserContext _user;
+    private bool? _isSecuredModeOverride;
 
     public CurrentUserHolder(IOptionsMonitor<RbacOptions> rbacOptions)
     {
@@ -22,11 +23,19 @@ public sealed class CurrentUserHolder
     /// <summary>Current user context for UI capability checks.</summary>
     public IUserContext User => _user;
 
-    /// <summary>True when RBAC is enabled (Secured mode).</summary>
-    public bool IsSecuredMode => _rbacOptions.CurrentValue.Enabled;
+    /// <summary>True when RBAC is enabled (Secured mode).
+    /// Uses authoritative override from SignalR ModeChanged when available,
+    /// falls back to IOptionsMonitor for initial startup.</summary>
+    public bool IsSecuredMode => _isSecuredModeOverride ?? _rbacOptions.CurrentValue.Enabled;
 
     /// <summary>Raised when the user changes (login, logout, refresh, mode switch).</summary>
     public event Action? UserChanged;
+
+    /// <summary>Set the authoritative mode from a live ModeChanged event (bypasses stale IOptionsMonitor).</summary>
+    public void SetMode(bool isSecured)
+    {
+        _isSecuredModeOverride = isSecured;
+    }
 
     /// <summary>Set the active user from AuthClient login response.</summary>
     public void SetUser(AuthUserInfo info)

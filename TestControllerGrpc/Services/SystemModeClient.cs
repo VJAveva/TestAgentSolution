@@ -36,6 +36,21 @@ public class SystemModeClient : IDisposable
 
     public bool IsSecuredMode => _rbacOptions?.CurrentValue.Enabled ?? false;
 
+    /// <summary>Checks whether any Administrator account exists (active or archived).</summary>
+    public virtual async Task<bool> HasExistingAdminAsync()
+    {
+        try
+        {
+            var response = await _http!.GetFromJsonAsync<AdminExistsResponse>("/api/system/mode/admin-exists");
+            return response?.Exists ?? false;
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warn("RBAC", $"HasExistingAdminAsync failed: {ex.Message}");
+            return false;
+        }
+    }
+
     public virtual async Task<(bool Success, string? Error)> SwitchToSecuredAsync(
         string username, string email, string password)
     {
@@ -61,6 +76,19 @@ public class SystemModeClient : IDisposable
 
         return (false, await ReadErrorAsync(response));
     }
+
+    /// <summary>Switch to Secured mode by reactivating existing users (no wizard needed).</summary>
+    public virtual async Task<(bool Success, string? Error)> SwitchToSecuredReactivateAsync()
+    {
+        var response = await _http!.PostAsync("/api/system/mode/secured/reactivate", null);
+
+        if (response.IsSuccessStatusCode)
+            return (true, null);
+
+        return (false, await ReadErrorAsync(response));
+    }
+
+    private sealed record AdminExistsResponse(bool Exists);
 
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response)
     {

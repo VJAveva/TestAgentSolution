@@ -4,7 +4,6 @@ using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Settings;
-using TestControllerGrpc.Views.Login;
 
 namespace TestControllerGrpc.Views.Settings;
 
@@ -30,6 +29,10 @@ public partial class SecurityModePanel : UserControl
         {
             ShowDisableDialog();
         }
+        else if (e.PropertyName == nameof(SecurityModeViewModel.IsReactivateDialogOpen) && _vm.IsReactivateDialogOpen)
+        {
+            ShowReactivateConfirmation();
+        }
     }
 
     private void ShowWizard()
@@ -38,16 +41,8 @@ public partial class SecurityModePanel : UserControl
         {
             var wizard = new InitialAdminWizard();
             wizard.Owner = Window.GetWindow(this);
-            var result = wizard.ShowDialog();
-
-            // After successful switch to Secured mode, route to LoginPage
-            if (result == true && _vm.IsSecuredMode)
-            {
-                var ownerWindow = Window.GetWindow(this);
-                var loginPage = new LoginPage();
-                loginPage.Show();
-                ownerWindow?.Close();
-            }
+            wizard.ShowDialog();
+            // Navigation (LoginPage) is handled by MainWindow's ModeChanged handler.
         }
         catch (Exception ex)
         {
@@ -78,6 +73,36 @@ public partial class SecurityModePanel : UserControl
         finally
         {
             _vm.IsDisableDialogOpen = false;
+        }
+    }
+
+    private async void ShowReactivateConfirmation()
+    {
+        try
+        {
+            var result = MessageBox.Show(
+                Window.GetWindow(this),
+                "Switch to Secured mode?\n\nExisting users will be reactivated and login will be required.",
+                "Confirm Switch to Secured Mode",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.OK)
+            {
+                await _vm.ConfirmReactivateCommand.ExecuteAsync(null);
+                // Navigation (LoginPage) is handled by MainWindow's ModeChanged handler.
+            }
+            else
+            {
+                _vm.IsReactivateDialogOpen = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            var logger = App.Services.GetRequiredService<IAppLogger>();
+            logger.Error("RBAC", "Failed to show reactivation confirmation", ex);
+            _vm.StatusMessage = $"Error: {ex.Message}";
+            _vm.IsReactivateDialogOpen = false;
         }
     }
 }

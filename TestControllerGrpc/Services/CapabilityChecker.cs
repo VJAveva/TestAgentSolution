@@ -13,12 +13,10 @@ namespace TestControllerGrpc.Services;
 public sealed class CapabilityChecker
 {
     private readonly CurrentUserHolder _userHolder;
-    private readonly IOptionsMonitor<RbacOptions> _rbacOptions;
 
     public CapabilityChecker(CurrentUserHolder userHolder, IOptionsMonitor<RbacOptions> rbacOptions)
     {
         _userHolder = userHolder;
-        _rbacOptions = rbacOptions;
         _userHolder.UserChanged += OnUserChanged;
     }
 
@@ -35,7 +33,7 @@ public sealed class CapabilityChecker
     public bool Can(Permission permission, string? resourceId = null)
     {
         // Default mode: WPF gets full access
-        if (!_rbacOptions.CurrentValue.Enabled)
+        if (!_userHolder.IsSecuredMode)
             return true;
 
         var user = _userHolder.User;

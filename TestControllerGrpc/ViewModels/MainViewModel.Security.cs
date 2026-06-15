@@ -2,6 +2,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Views;
 using TestControllerGrpc.Views.Login;
 
@@ -57,8 +58,9 @@ public sealed partial class MainViewModel
     /// <summary>Called during initialization and on mode changes to refresh IsDefaultMode.</summary>
     private void RefreshDefaultModeState()
     {
-        var systemMode = App.Services.GetService<Services.SystemModeClient>();
-        IsDefaultMode = systemMode is null || !systemMode.IsSecuredMode;
+        // Use CurrentUserHolder.IsSecuredMode — it has the authoritative override
+        // from SetMode() which is set immediately on ModeChanged, bypassing stale IOptionsMonitor.
+        IsDefaultMode = !_currentUserHolder.IsSecuredMode;
     }
 
     /// <summary>Updates UserRole / UserDisplayName from CurrentUserHolder.</summary>
@@ -69,15 +71,32 @@ public sealed partial class MainViewModel
         UserDisplayName = user.DisplayName ?? "Default user";
     }
 
-    /// <summary>Direct handler for CurrentUserHolder.UserChanged — ensures badge always reflects login/logout.</summary>
+    /// <summary>Refreshes Users tab visibility: visible only in Secured mode for Admin.</summary>
+    private void RefreshUsersTabVisibility()
+    {
+        IsUsersTabVisible = !IsDefaultMode && _capabilityChecker.Can(Permission.User_Create);
+    }
+
+    /// <summary>Direct handler for CurrentUserHolder.UserChanged — ensures badge and tab always reflect login/logout.</summary>
     private void OnCurrentUserChanged()
     {
         if (Application.Current?.Dispatcher is { } dispatcher)
         {
             if (dispatcher.CheckAccess())
+            {
+                RefreshDefaultModeState();
                 RefreshUserBadge();
+                RefreshUsersTabVisibility();
+            }
             else
-                dispatcher.InvokeAsync(RefreshUserBadge);
+            {
+                dispatcher.InvokeAsync(() =>
+                {
+                    RefreshDefaultModeState();
+                    RefreshUserBadge();
+                    RefreshUsersTabVisibility();
+                });
+            }
         }
     }
 
@@ -98,9 +117,10 @@ public sealed partial class MainViewModel
         _lockStateService.LocksChanged += OnLocksChanged;
         _currentUserHolder.UserChanged += OnCurrentUserChanged;
 
-        // Refresh badge and mode state from current holder values
+        // Refresh badge, mode state, and tab visibility from current holder values
         RefreshDefaultModeState();
         RefreshUserBadge();
+        RefreshUsersTabVisibility();
     }
 
     [RelayCommand]
@@ -108,12 +128,17 @@ public sealed partial class MainViewModel
     {
         await _authClient.LogoutAsync();
         // CurrentUserHolder.Clear() fires via OnAuthStateChanged → badge reverts to Default.
-        // Navigate to LoginPage.
+        // Hide MainWindow (reuse after next login) and navigate to LoginPage.
         Application.Current?.Dispatcher.Invoke(() =>
         {
+            var mainWindow = FindOwnerWindow();
+            if (mainWindow is not null)
+            {
+                mainWindow.Hide();
+                mainWindow.ShowInTaskbar = false;
+            }
             var loginPage = new LoginPage();
             loginPage.Show();
-            FindOwnerWindow()?.Close();
         });
     }
 

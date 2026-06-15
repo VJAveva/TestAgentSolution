@@ -505,19 +505,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             if (dispatcher.CheckAccess())
             {
+                RefreshDefaultModeState();
                 RefreshFilteredPipelines();
                 NotifyExecutionCanExecuteChanged();
-                RefreshDefaultModeState();
                 RefreshUserBadge();
+                RefreshUsersTabVisibility();
             }
             else
             {
                 dispatcher.Invoke(() =>
                 {
+                    RefreshDefaultModeState();
                     RefreshFilteredPipelines();
                     NotifyExecutionCanExecuteChanged();
-                    RefreshDefaultModeState();
                     RefreshUserBadge();
+                    RefreshUsersTabVisibility();
                 });
             }
         }

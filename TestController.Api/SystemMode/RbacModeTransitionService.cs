@@ -55,9 +55,9 @@ public sealed class RbacModeTransitionService
             if (_writableOptions.Value.Enabled)
                 return (true, null); // Idempotent
 
-            // Check for existing admin (recovery path per §8.3)
+            // Check for existing admin (active OR archived — prevents duplicate creation)
             var existingAdmin = await db.Users.FirstOrDefaultAsync(
-                u => u.Role == Role.Administrator && u.IsActive, ct);
+                u => u.Role == Role.Administrator, ct);
 
             if (existingAdmin is null)
             {
@@ -78,6 +78,14 @@ public sealed class RbacModeTransitionService
                 };
                 db.Users.Add(admin);
                 await db.SaveChangesAsync(ct);
+                existingAdmin = admin;
+            }
+            else if (!existingAdmin.IsActive)
+            {
+                // Reactivate all archived users (symmetric with SwitchToDefault archive)
+                await db.Users
+                    .Where(u => !u.IsActive)
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, true), ct);
             }
 
             // Flip the flag
@@ -97,6 +105,73 @@ public sealed class RbacModeTransitionService
                 ActionName = "System_SwitchToSecured",
                 Allowed = true,
                 ReasonCode = "mode-transition",
+                TimestampUtc = DateTime.UtcNow,
+                ClientKind = ClientKind.Wpf,
+            });
+
+            await transaction.CommitAsync(ct);
+            return (true, null);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether any Administrator account exists in the database (active or archived).
+    /// Used by the WPF client to decide whether to show the wizard or the reactivation path.
+    /// </summary>
+    public async Task<bool> HasExistingAdminAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Users.AnyAsync(u => u.Role == Role.Administrator, ct);
+    }
+
+    /// <summary>
+    /// Switch to Secured mode by reactivating existing archived users.
+    /// Called when an admin already exists (skip wizard). Symmetric inverse of SwitchToDefaultAsync.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> SwitchToSecuredReactivateAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            // Idempotency
+            if (_writableOptions.Value.Enabled)
+                return (true, null);
+
+            // Safety: must have at least one admin to reactivate
+            var admin = await db.Users.FirstOrDefaultAsync(
+                u => u.Role == Role.Administrator, ct);
+            if (admin is null)
+                return (false, "No administrator account exists. Use the initial setup wizard.");
+
+            // Reactivate ALL previously-archived users in a single statement
+            await db.Users
+                .Where(u => !u.IsActive)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, true), ct);
+
+            // Flip the flag
+            _writableOptions.Update(opts => opts.Enabled = true);
+
+            // Phase 3a: Rewrite lock owners to the admin
+            if (_lockRegistry is not null)
+            {
+                var adminOwner = new OwnerIdentity(admin.UserId, admin.Username, ClientKind.Wpf);
+                _lockRegistry.RewriteOwners(adminOwner);
+            }
+
+            // Audit
+            _auditWriter.Enqueue(new AuditEntry
+            {
+                UserId = DefaultUser.UserId.ToString("D"),
+                ActionName = "System_SwitchToSecured",
+                Allowed = true,
+                ReasonCode = "mode-transition-reactivate",
                 TimestampUtc = DateTime.UtcNow,
                 ClientKind = ClientKind.Wpf,
             });

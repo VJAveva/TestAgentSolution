@@ -55,6 +55,9 @@ public partial class MainWindow : Window
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private bool _isActuallyExiting;
 
+    // ?? Mode-switch lifecycle ??????????????????????????????????
+    private readonly SystemModeClient? _systemModeClient;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -63,36 +66,18 @@ public partial class MainWindow : Window
         _vm.EnsureSubscriptions();
         DataContext = _vm;
 
-        // Phase 1b: Users tab visible only for Admin (User_Create capability)
-        var authClient = App.Services.GetRequiredService<AuthClient>();
-        _vm.IsUsersTabVisible = authClient.CurrentUser?.Capabilities?.Contains("User_Create") == true;
-        authClient.AuthStateChanged += () =>
-        {
-            Application.Current?.Dispatcher.InvokeAsync(() =>
-                _vm.IsUsersTabVisible = authClient.CurrentUser?.Capabilities?.Contains("User_Create") == true);
-        };
+        // Phase 1b: Users tab visibility now driven by CapabilityChecker via
+        // OnCapabilitiesChanged → RefreshUsersTabVisibility() in MainViewModel.
+        // Initial state is set in EnsureSubscriptions().
 
         // Refresh Default-mode banner on live mode switch
-        var systemMode = App.Services.GetService<SystemModeClient>();
-        if (systemMode is not null)
+        _systemModeClient = App.Services.GetService<SystemModeClient>();
+        if (_systemModeClient is not null)
         {
-            systemMode.ModeChanged += mode =>
-            {
-                Application.Current?.Dispatcher.InvokeAsync(() =>
-                {
-                    _vm.IsDefaultMode = !systemMode.IsSecuredMode;
-
-                    // After switching to Secured mode, route to LoginPage
-                    if (string.Equals(mode, "secured", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var loginPage = new Login.LoginPage();
-                        loginPage.Show();
-                        _isActuallyExiting = true;
-                        Close();
-                    }
-                });
-            };
+            _systemModeClient.ModeChanged += OnModeChanged;
         }
+
+        Closed += OnWindowClosed;
 
         Loaded += OnWindowLoaded;
 
@@ -258,6 +243,67 @@ public partial class MainWindow : Window
             if (_trayIcon != null)
                 _trayIcon.Visible = false;
         });
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // MODE-SWITCH LIFECYCLE
+    // ???????????????????????????????????????????????????????????????
+
+    private void OnModeChanged(string mode)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            HandleModeSwitch(mode);
+        }
+        else
+        {
+            Dispatcher.Invoke(() => HandleModeSwitch(mode));
+        }
+    }
+
+    private void HandleModeSwitch(string mode)
+    {
+        // Derive from the authoritative mode param, not IOptionsMonitor (may be stale)
+        bool isSecured = string.Equals(mode, "secured", StringComparison.OrdinalIgnoreCase);
+
+        // Set authoritative mode on holder BEFORE any user/capability refresh
+        var holder = App.Services.GetRequiredService<CurrentUserHolder>();
+        holder.SetMode(isSecured);
+
+        // Update ViewModel mode state — drives banner visibility
+        _vm.IsDefaultMode = !isSecured;
+
+        if (isSecured)
+        {
+            // Clear identity — user must log in again
+            holder.Clear();
+
+            // Explicitly refresh badge/tab to "no user" state
+            _vm.EnsureSubscriptions();
+
+            // Hide MainWindow (reuse on next login) and show LoginPage
+            Hide();
+            ShowInTaskbar = false;
+            var loginPage = new Login.LoginPage();
+            loginPage.Show();
+        }
+        else
+        {
+            // Default mode: clear identity, stay on MainWindow as Default user
+            var authClient = App.Services.GetRequiredService<AuthClient>();
+            _ = authClient.LogoutAsync(); // best-effort server-side cleanup
+            holder.SetDefaultUser();
+
+            // Explicitly refresh badge/tab to Default user state
+            _vm.EnsureSubscriptions();
+        }
+    }
+
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        // Prevent handler leak across repeated mode switches
+        if (_systemModeClient is not null)
+            _systemModeClient.ModeChanged -= OnModeChanged;
     }
 
     // ???????????????????????????????????????????????????????????????

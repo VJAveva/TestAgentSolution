@@ -64,6 +64,42 @@ public class SystemModeController : ControllerBase
         }
     }
 
+    /// <summary>GET /api/system/mode/admin-exists — check if any Administrator account exists (active or archived).</summary>
+    [HttpGet("mode/admin-exists")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AdminExists(CancellationToken ct)
+    {
+        try
+        {
+            var exists = await _transitionService.HasExistingAdminAsync(ct);
+            return Ok(new { exists });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiErrorFactory.ServerError(ex.Message));
+        }
+    }
+
+    /// <summary>POST /api/system/mode/secured/reactivate — switch to Secured by reactivating existing users (no wizard).</summary>
+    [HttpPost("mode/secured/reactivate")]
+    public async Task<IActionResult> SwitchToSecuredReactivate(CancellationToken ct)
+    {
+        try
+        {
+            var (success, error) = await _transitionService.SwitchToSecuredReactivateAsync(ct);
+
+            if (!success)
+                return BadRequest(new { error });
+
+            await _broadcaster.BroadcastModeChangedAsync("secured");
+            return Ok(new { mode = "secured" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiErrorFactory.ServerError(ex.Message));
+        }
+    }
+
     /// <summary>POST /api/system/mode/default — switch to Default mode (requires admin).</summary>
     [HttpPost("mode/default")]
     public async Task<IActionResult> SwitchToDefault(CancellationToken ct)
