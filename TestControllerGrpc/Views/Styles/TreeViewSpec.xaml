@@ -102,6 +102,7 @@
                 <ColumnDefinition Width="Auto" /> <!-- File pill -->
                 <ColumnDefinition Width="Auto" /> <!-- Status spinner -->
                 <ColumnDefinition Width="Auto" /> <!-- Lock badge -->
+                <ColumnDefinition Width="Auto" /> <!-- Permission pill -->
                 <ColumnDefinition Width="*" />    <!-- Spacer -->
                 <ColumnDefinition Width="Auto" /> <!-- Count badge -->
             </Grid.ColumnDefinitions>
@@ -568,8 +569,71 @@
                                 Visibility="{Binding IsVisible, FallbackValue=Collapsed,
                                     Converter={StaticResource BoolVis}}" />
 
-            <!-- ── Column 8: Child Count Badge ── -->
-            <Border Grid.Column="8"
+            <!-- ── Column 7: Permission Pill (Phase 2b) ── -->
+            <Border Grid.Column="7" Margin="4,0,0,0" Padding="5,1" CornerRadius="3"
+                    VerticalAlignment="Center">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <!-- Triggerable: teal "Assigned to you" pill (WatchItem nodes in Secured mode) -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding NodeKind}" Value="WatchItem" />
+                                    <Condition Binding="{Binding ShowPermissionIndicator}" Value="True" />
+                                    <Condition Binding="{Binding PipelinePermission}" Value="{x:Static vm:PipelinePermissionState.Triggerable}" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="Background" Value="{DynamicResource PillAssignedBg}" />
+                            </MultiDataTrigger>
+                            <!-- ViewOnly: grey "View only" pill (WatchItem nodes in Secured mode) -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding NodeKind}" Value="WatchItem" />
+                                    <Condition Binding="{Binding ShowPermissionIndicator}" Value="True" />
+                                    <Condition Binding="{Binding PipelinePermission}" Value="{x:Static vm:PipelinePermissionState.ViewOnly}" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="Background" Value="{DynamicResource PillViewOnlyBg}" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel Orientation="Horizontal">
+                    <!-- Eye icon for ViewOnly -->
+                    <mi:MaterialIcon Kind="EyeOutline" Width="10" Height="10" Margin="0,0,3,0"
+                                     VerticalAlignment="Center">
+                        <mi:MaterialIcon.Style>
+                            <Style TargetType="mi:MaterialIcon">
+                                <Setter Property="Foreground" Value="{DynamicResource PillViewOnlyFg}" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PipelinePermission}" Value="{x:Static vm:PipelinePermissionState.ViewOnly}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </mi:MaterialIcon.Style>
+                    </mi:MaterialIcon>
+                    <TextBlock FontSize="10" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="Assigned to you" />
+                                <Setter Property="Foreground" Value="{DynamicResource PillAssignedFg}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PipelinePermission}" Value="{x:Static vm:PipelinePermissionState.ViewOnly}">
+                                        <Setter Property="Text" Value="View only" />
+                                        <Setter Property="Foreground" Value="{DynamicResource PillViewOnlyFg}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <!-- ── Column 9: Child Count Badge ── -->
+            <Border Grid.Column="9"
                     Visibility="{Binding Children.Count, Converter={StaticResource NonZeroVis}}">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource CountBadgeStyle}">
@@ -710,6 +774,10 @@
                         <!-- Active rail when Running -->
                         <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
                             <Setter TargetName="RailBorder" Property="BorderBrush" Value="{DynamicResource RailActiveBrush}" />
+                        </DataTrigger>
+                        <!-- Dim row for ViewOnly pipelines -->
+                        <DataTrigger Binding="{Binding PipelinePermission}" Value="{x:Static vm:PipelinePermissionState.ViewOnly}">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.7" />
                         </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

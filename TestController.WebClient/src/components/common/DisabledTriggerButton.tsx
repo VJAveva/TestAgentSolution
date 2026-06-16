@@ -1,5 +1,6 @@
 import { useCan, useDisabledReason } from '../../hooks/useCapabilities';
 import { useLockStore } from '../../stores/lockStore';
+import { Lock } from 'lucide-react';
 
 interface DisabledTriggerButtonProps {
   /** Original onClick handler (only called when permission is granted). */
@@ -44,8 +45,9 @@ export default function DisabledTriggerButton({ onTrigger, label = 'Trigger', cl
       <div className="relative group inline-block">
         <button
           disabled
-          className={`px-3 py-1.5 rounded text-xs font-medium bg-white/5 text-text-secondary cursor-not-allowed opacity-50 ${className}`}
+          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-white/5 text-text-secondary cursor-not-allowed opacity-50 ${className}`}
         >
+          <Lock size={10} />
           {label}
         </button>
         {/* Tooltip */}

@@ -458,44 +458,70 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
     }
 
-    // ── Phase 2b: Pipeline filtering + capability refresh ───────────
+    // ── Phase 2b: Pipeline permission state refresh ───────────────
 
     /// <summary>
-    /// Refreshes WatchItem node visibility based on the current user's assignments.
-    /// Engineers in Secured mode see only assigned pipelines; everyone else sees all.
-    /// Toggles IsFilterVisible on individual nodes (preserves expansion state).
+    /// Refreshes PipelinePermission on each WatchItem node based on the current
+    /// user's role and assignments. All pipelines remain visible (reads are open);
+    /// only the trigger action is permission-gated.
     /// </summary>
-    private void RefreshFilteredPipelines()
+    private void RefreshPipelinePermissions()
     {
         if (WatchListRoot is null) return;
 
         var children = WatchListRoot.Children;
-        var total = children.Count;
 
-        if (!_currentUserHolder.IsSecuredMode
-            || _currentUserHolder.User.Roles.FirstOrDefault() is var role
-               && (string.Equals(role, Identity.Role.Administrator.ToString(), StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(role, Identity.Role.SeniorManager.ToString(), StringComparison.OrdinalIgnoreCase)
-                   || role is null))
+        if (!_currentUserHolder.IsSecuredMode)
         {
-            // Show all
+            // Default mode: everyone can trigger everything, no indicator needed
             foreach (var child in children)
-                child.IsFilterVisible = true;
+            {
+                child.PipelinePermission = PipelinePermissionState.Triggerable;
+                child.ShowPermissionIndicator = false;
+            }
             PipelineFilterLabel = "";
             return;
         }
 
-        // Engineer in Secured mode: filter by assignment
+        var role = _currentUserHolder.User.Roles.FirstOrDefault();
+
+        // Admin / SeniorManager → all triggerable
+        if (string.Equals(role, Identity.Role.Administrator.ToString(), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, Identity.Role.SeniorManager.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var child in children)
+            {
+                child.PipelinePermission = PipelinePermissionState.Triggerable;
+                child.ShowPermissionIndicator = false;
+            }
+            PipelineFilterLabel = "";
+            return;
+        }
+
+        // Guest → all view-only
+        if (string.Equals(role, Identity.Role.Guest.ToString(), StringComparison.OrdinalIgnoreCase)
+            || role is null)
+        {
+            foreach (var child in children)
+            {
+                child.PipelinePermission = PipelinePermissionState.ViewOnly;
+                child.ShowPermissionIndicator = true;
+            }
+            PipelineFilterLabel = "";
+            return;
+        }
+
+        // Engineer in Secured mode: assigned = Triggerable, rest = ViewOnly
         var assigned = _currentUserHolder.User.AssignedPipelineIds;
-        var visibleCount = 0;
         foreach (var child in children)
         {
             var tag = (child.ModelObject as WatchItemConfig)?.Tag ?? "";
-            var visible = assigned.Contains(tag);
-            child.IsFilterVisible = visible;
-            if (visible) visibleCount++;
+            child.PipelinePermission = assigned.Contains(tag)
+                ? PipelinePermissionState.Triggerable
+                : PipelinePermissionState.ViewOnly;
+            child.ShowPermissionIndicator = true;
         }
-        PipelineFilterLabel = $"Showing {visibleCount} of {total} pipelines";
+        PipelineFilterLabel = "";
     }
 
     /// <summary>Handles CapabilitiesChanged from background thread.</summary>
@@ -506,7 +532,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             if (dispatcher.CheckAccess())
             {
                 RefreshDefaultModeState();
-                RefreshFilteredPipelines();
+                RefreshPipelinePermissions();
                 NotifyExecutionCanExecuteChanged();
                 RefreshUserBadge();
                 RefreshUsersTabVisibility();
@@ -516,7 +542,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 dispatcher.Invoke(() =>
                 {
                     RefreshDefaultModeState();
-                    RefreshFilteredPipelines();
+                    RefreshPipelinePermissions();
                     NotifyExecutionCanExecuteChanged();
                     RefreshUserBadge();
                     RefreshUsersTabVisibility();
@@ -530,6 +556,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         // LocksChanged is already marshaled to Dispatcher by LockStateService
         NotifyExecutionCanExecuteChanged();
+    }
+
+    /// <summary>Live assignment update: PermissionsChanged signal received — refetch immediately.</summary>
+    private async void OnAssignmentsChanged()
+    {
+        // AssignmentsChanged is already marshaled to Dispatcher by LockStateService
+        await RefreshUserAssignmentsAsync();
     }
 
     /// <summary>Handles AuthClient.AuthStateChanged — updates CurrentUserHolder.</summary>

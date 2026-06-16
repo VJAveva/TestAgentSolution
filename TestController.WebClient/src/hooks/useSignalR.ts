@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/authStore';
 import { getUserId } from '../lib/userIdentity';
 import { registerSystemModeEvents } from '../signalr/SystemModeEvents';
 import { registerLockEvents } from '../signalr/LockEvents';
+import { registerPermissionEvents } from '../signalr/PermissionEvents';
 import type { NodeStatus, WatchListConfig } from '../types/api';
 
 /** Tracks joined sessions for auto-rejoin after reconnect. */
@@ -311,6 +312,9 @@ export function useSignalR(enabled = true): HubConnection | null {
 
     // Register pipeline lock event handlers for lock coordination
     registerLockEvents(conn);
+
+    // Register permission-change event handlers for live assignment updates
+    registerPermissionEvents(conn);
 
     connRef.current = conn;
     tryStart(conn);

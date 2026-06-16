@@ -95,7 +95,7 @@ export function getDisabledReason(
 
   // Engineer not assigned to this pipeline
   if (resourceId && user.role === 'Engineer') {
-    return 'You are not assigned to this pipeline. Contact your administrator.';
+    return 'Not assigned to you \u2014 contact an administrator to request access.';
   }
 
   return 'Permission denied.';

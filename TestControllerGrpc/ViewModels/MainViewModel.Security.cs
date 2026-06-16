@@ -110,11 +110,13 @@ public sealed partial class MainViewModel
         _capabilityChecker.CapabilitiesChanged -= OnCapabilitiesChanged;
         _authClient.AuthStateChanged -= OnAuthStateChanged;
         _lockStateService.LocksChanged -= OnLocksChanged;
+        _lockStateService.AssignmentsChanged -= OnAssignmentsChanged;
         _currentUserHolder.UserChanged -= OnCurrentUserChanged;
 
         _capabilityChecker.CapabilitiesChanged += OnCapabilitiesChanged;
         _authClient.AuthStateChanged += OnAuthStateChanged;
         _lockStateService.LocksChanged += OnLocksChanged;
+        _lockStateService.AssignmentsChanged += OnAssignmentsChanged;
         _currentUserHolder.UserChanged += OnCurrentUserChanged;
 
         // Refresh badge, mode state, and tab visibility from current holder values

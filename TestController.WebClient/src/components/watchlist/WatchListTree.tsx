@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useWatchListStore } from '../../stores/watchlistStore';
 import { useLockStore } from '../../stores/lockStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useSystemModeStore } from '../../stores/systemModeStore';
+import { useCan } from '../../hooks/useCapabilities';
 import { apiFetch } from '../../lib/api';
 import { logCatch } from '../../lib/logger';
 import type { TreeNode, NodeKind } from '../../types/api';
@@ -120,11 +122,27 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
   const isSelected = selectedNode?.id === node.id;
   const hasChildren = node.children.length > 0;
 
+  // Permission state for WatchItem rows
+  const isWatchItem = node.nodeKind === 'WatchItem';
+  const isSecured = useSystemModeStore(s => s.isSecured);
+  const canTrigger = useCan('Pipeline_Trigger', node.tag ?? undefined);
+  const isLockedByOther = useLockStore(s => isWatchItem && node.tag ? s.isLockedByOther(node.tag) : false);
+
+  // Derive permission state: locked > viewOnly > triggerable
+  const permissionState: 'triggerable' | 'viewOnly' | 'locked' =
+    isWatchItem
+      ? isLockedByOther ? 'locked' : !canTrigger ? 'viewOnly' : 'triggerable'
+      : 'triggerable';
+
+  // Row dimming: viewOnly dims the row (locked uses normal opacity — lock badge is enough)
+  const rowOpacity = permissionState === 'viewOnly' ? 'opacity-70' : '';
+
   return (
     <div>
       <div
         className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer text-xs transition-colors
-          ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}`}
+          ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}
+          ${rowOpacity}`}
         style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
         onClick={() => selectNode(node)}
       >
@@ -154,6 +172,9 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
         {/* Action-type badge */}
         <NodeBadge node={node} />
 
+        {/* Permission pill for WatchItem rows (only in Secured mode for triggerable, always for viewOnly) */}
+        {isWatchItem && <PermissionPill state={permissionState} isSecured={isSecured} />}
+
         {/* Child count annotation */}
         {hasChildren && (
           <span className="shrink-0 text-[10px] text-text-muted ml-auto mr-1">
@@ -179,4 +200,29 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
       )}
     </div>
   );
+}
+
+/** Permission pill matching WPF visual language */
+function PermissionPill({ state, isSecured }: { state: 'triggerable' | 'viewOnly' | 'locked'; isSecured: boolean }) {
+  // Triggerable pill: only show in Secured mode (in Default mode everyone is viewOnly, no "assigned" concept)
+  if (state === 'triggerable' && isSecured) {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[9px] font-medium shrink-0 bg-acc-teal/15 text-acc-teal">
+        Assigned to you
+      </span>
+    );
+  }
+
+  // ViewOnly pill: grey with eye icon
+  if (state === 'viewOnly') {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[9px] font-medium shrink-0 bg-white/5 text-text-muted">
+        <Eye size={9} />
+        View only
+      </span>
+    );
+  }
+
+  // Locked state: handled by LockBadge; no additional pill needed here
+  return null;
 }

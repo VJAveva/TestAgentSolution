@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using TestController.Api.Hubs;
 using TestController.Api.Interceptors;
 using TestController.Api.Services;
 using TestControllerGrpc.Identity;
@@ -15,11 +17,13 @@ public class UserController : ControllerBase
 {
     private readonly UserService _userService;
     private readonly SessionAuthInterceptor _authInterceptor;
+    private readonly IHubContext<ControllerHub> _hub;
 
-    public UserController(UserService userService, SessionAuthInterceptor authInterceptor)
+    public UserController(UserService userService, SessionAuthInterceptor authInterceptor, IHubContext<ControllerHub> hub)
     {
         _userService = userService;
         _authInterceptor = authInterceptor;
+        _hub = hub;
     }
 
     private async Task<IUserContext?> ResolveUser(CancellationToken ct)
@@ -119,6 +123,10 @@ public class UserController : ControllerBase
 
         var (success, error) = await _userService.SetAssignmentsAsync(id, request.PipelineIds, user.UserId, ct);
         if (!success) return BadRequest(new { error });
+
+        // Fire-and-forget: signal all clients to refetch their own capabilities
+        _ = _hub.Clients.All.SendAsync("PermissionsChanged", new { changedUserId = id }, CancellationToken.None);
+
         return Ok(new { message = "Assignments updated" });
     }
 

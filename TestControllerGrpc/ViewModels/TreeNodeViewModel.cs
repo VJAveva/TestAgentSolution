@@ -6,6 +6,15 @@ using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.ViewModels;
 
+/// <summary>Per-pipeline permission state for tree row visual treatment.</summary>
+public enum PipelinePermissionState
+{
+    /// <summary>User can trigger this pipeline (Admin = all; Engineer = assigned).</summary>
+    Triggerable,
+    /// <summary>Visible but user cannot trigger (not assigned / Guest).</summary>
+    ViewOnly,
+}
+
 public sealed partial class TreeNodeViewModel : ObservableObject
 {
     [ObservableProperty] private string _displayText = "";
@@ -129,6 +138,11 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     // ── Tree search/filter visibility ───────────────────────────────
     [ObservableProperty] private bool _isFilterVisible = true;
+
+    // ── Pipeline permission state (Phase 2b: reads open, trigger gated) ──
+    [ObservableProperty] private PipelinePermissionState _pipelinePermission = PipelinePermissionState.Triggerable;
+    /// <summary>True when in Secured mode and the permission pill should be visible on WatchItem rows.</summary>
+    [ObservableProperty] private bool _showPermissionIndicator;
 
     // ── Execution status ────────────────────────────────────────────
     // Values: "Idle", "Running", "Success", "Failed", "PartialFailure", "Cancelled"

@@ -136,6 +136,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
                 StatusMessage = "Switched to Secured mode. Existing users reactivated.";
                 _logger.Info("RBAC", "System switched to Secured mode (reactivation)");
                 RequestClose?.Invoke(true);
+                _systemModeClient.NotifyLocalModeChange("secured");
             }
             else
             {
@@ -180,6 +181,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
                 StatusMessage = "Switched to Secured mode.";
                 _logger.Info("RBAC", "System switched to Secured mode");
                 RequestClose?.Invoke(true);
+                _systemModeClient.NotifyLocalModeChange("secured");
             }
             else
             {
@@ -228,6 +230,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
                 StatusMessage = "Switched to Default mode.";
                 _logger.Info("RBAC", "System switched to Default mode");
                 RequestClose?.Invoke(true);
+                _systemModeClient.NotifyLocalModeChange("default");
             }
             else
             {

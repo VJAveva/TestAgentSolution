@@ -88,6 +88,17 @@ public class SystemModeClient : IDisposable
         return (false, await ReadErrorAsync(response));
     }
 
+    /// <summary>
+    /// Locally raise ModeChanged — used after a successful switch initiated by this
+    /// process. The WPF host is both server and client so the SignalR echo doesn't
+    /// reach the embedded client (ConnectSignalRAsync is not wired up in-process).
+    /// </summary>
+    public void NotifyLocalModeChange(string mode)
+    {
+        _logger?.Info("RBAC", $"NotifyLocalModeChange: {mode}");
+        ModeChanged?.Invoke(mode);
+    }
+
     private sealed record AdminExistsResponse(bool Exists);
 
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response)

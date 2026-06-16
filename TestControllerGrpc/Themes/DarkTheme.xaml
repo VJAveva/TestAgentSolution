@@ -157,6 +157,12 @@
     <SolidColorBrush x:Key="PillInitBg"         Color="#245DD0A8" />
     <SolidColorBrush x:Key="PillRefBg"          Color="#29A8ACB5" />
 
+    <!-- Pipeline permission pills -->
+    <SolidColorBrush x:Key="PillAssignedBg"     Color="#245DD0A8" />
+    <SolidColorBrush x:Key="PillAssignedFg"     Color="#FF5DD0A8" />
+    <SolidColorBrush x:Key="PillViewOnlyBg"     Color="#1AA8ACB5" />
+    <SolidColorBrush x:Key="PillViewOnlyFg"     Color="#FF8A8F99" />
+
     <!-- Status dot fills -->
     <SolidColorBrush x:Key="SReadyBrush"        Color="#FF2D7A4A" />
     <SolidColorBrush x:Key="SRunningBrush"      Color="#FFF5A623" />

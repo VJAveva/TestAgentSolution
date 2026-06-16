@@ -26,6 +26,9 @@ public class LockStateService : IDisposable
     /// <summary>Raised on the UI thread whenever the lock map changes.</summary>
     public event Action? LocksChanged;
 
+    /// <summary>Raised on the UI thread when pipeline assignments change (PermissionsChanged signal from server).</summary>
+    public event Action? AssignmentsChanged;
+
     public LockStateService(
         IHttpClientFactory httpClientFactory,
         AuthClient authClient,
@@ -91,6 +94,7 @@ public class LockStateService : IDisposable
         _hubConnection.On<PipelineLockDto>("PipelineLockExpired", OnLockExpired);
         _hubConnection.On<PipelineLockDto, string>("PipelineLockStolen", OnLockStolen);
         _hubConnection.On<PipelineLockDto, string>("PipelineLockRewritten", OnLockRewritten);
+        _hubConnection.On("PermissionsChanged", OnPermissionsChanged);
 
         _hubConnection.Reconnected += async _ => await ResyncLocksAsync();
 
@@ -171,6 +175,19 @@ public class LockStateService : IDisposable
         else
         {
             LocksChanged?.Invoke();
+        }
+    }
+
+    private void OnPermissionsChanged()
+    {
+        _logger.Info("LockState", "PermissionsChanged received — signaling assignment refresh");
+        if (Application.Current?.Dispatcher is { } dispatcher)
+        {
+            dispatcher.InvokeAsync(() => AssignmentsChanged?.Invoke());
+        }
+        else
+        {
+            AssignmentsChanged?.Invoke();
         }
     }
 
