@@ -35,7 +35,7 @@ public class AuthE2ETests : IDisposable
         var sessionStore = new SessionStore(dbFactory);
         _auditWriter = new QueuedAuditWriter();
 
-        _authService = new AuthService(dbFactory, sessionStore, passwordHasher);
+        _authService = new AuthService(dbFactory, sessionStore, passwordHasher, _auditWriter);
         _interceptor = new SessionAuthInterceptor(optionsMonitor, sessionStore, dbFactory);
 
         // Seed an administrator

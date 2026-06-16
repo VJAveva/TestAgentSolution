@@ -14,6 +14,7 @@ public static class ExecutionEndpoints
         group.MapPost("/trigger-all", TriggerAll);
         group.MapPost("/trigger-event/{tag}/{eventIndex:int}", TriggerEvent);
         group.MapPost("/retry/{sessionId}", RetrySession);
+        group.MapPost("/retry-tag/{tag}", RetryByTag);
         group.MapPost("/preflight/{tag}", PreflightCheck);
 
         // Proxy-aware overrides: when a WPF controller is running alongside this
@@ -288,6 +289,40 @@ public static class ExecutionEndpoints
         {
             message = $"Retry initiated for {retryable.Count} failed action(s).",
             sessionId,
+            retryableCount = retryable.Count
+        });
+    }
+
+    /// <summary>
+    /// POST /api/execution/retry-tag/{tag} — find the most recent failed session
+    /// for the given WatchItem tag and retry its failed actions.
+    /// </summary>
+    private static IResult RetryByTag(
+        string tag,
+        ExecutionSessionManager sessionManager,
+        IRealtimeNotifier notifier)
+    {
+        var history = sessionManager.GetHistory(50);
+        var lastFailed = history
+            .Where(s => string.Equals(s.WatchItemTag, tag, StringComparison.OrdinalIgnoreCase)
+                        && s.FailedCount > 0)
+            .OrderByDescending(s => s.StartedUtc)
+            .FirstOrDefault();
+
+        if (lastFailed is null)
+            return Results.NotFound($"No failed session found for pipeline '{tag}'.");
+
+        var retryable = sessionManager.GetRetryableNodes(lastFailed.SessionId);
+        if (retryable.Count == 0)
+            return Results.NotFound($"No retryable actions found for pipeline '{tag}'.");
+
+        notifier.NotifyLogEntry(new PipelineLogEntry(DateTime.Now, "Execution",
+            $"Retry-by-tag requested for '{tag}' (session '{lastFailed.SessionId}') — {retryable.Count} action(s)"));
+
+        return Results.Ok(new
+        {
+            message = $"Retry initiated for {retryable.Count} failed action(s).",
+            sessionId = lastFailed.SessionId,
             retryableCount = retryable.Count
         });
     }

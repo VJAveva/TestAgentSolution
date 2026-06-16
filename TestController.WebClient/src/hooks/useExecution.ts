@@ -91,5 +91,24 @@ export function useExecution() {
     return data;
   }, [fetchSessions]);
 
-  return { fetchStatus, fetchSessions, triggerAll, triggerByTag, triggerEvent, cancelAll, cancelSession, retrySession };
+  /** RBAC-gated retry: authorizes via pipelines controller, then triggers execution retry. */
+  const retryByTag = useCallback(async (tag: string) => {
+    try {
+      // Phase 4: authorize + acquire lock via RBAC endpoint
+      await axios.post(`/api/pipelines/${encodeURIComponent(tag)}/retry`);
+      // Delegate to existing retry-by-tag execution endpoint
+      const { data } = await axios.post(`/api/execution/retry-tag/${encodeURIComponent(tag)}`);
+      await fetchSessions();
+      return data;
+    } catch (err: any) {
+      const lock = extractLockFrom409(err);
+      if (lock) {
+        dispatchLockConflict(lock);
+        return;
+      }
+      throw err;
+    }
+  }, [fetchSessions]);
+
+  return { fetchStatus, fetchSessions, triggerAll, triggerByTag, triggerEvent, cancelAll, cancelSession, retrySession, retryByTag };
 }

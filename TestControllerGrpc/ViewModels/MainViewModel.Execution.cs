@@ -766,11 +766,27 @@ public sealed partial class MainViewModel
         }
     }
 
+    private bool CanRetryFailed
+    {
+        get
+        {
+            var tag = SelectedNode?.NodeKind switch
+            {
+                NodeKinds.WatchItem => SelectedNode?.Tag,
+                NodeKinds.Event => SelectedNode?.Parent?.Tag,
+                _ => null
+            };
+            if (string.IsNullOrEmpty(tag)) return false;
+            if (_lockStateService.IsLockedByOther(tag)) return false;
+            return _capabilityChecker.Can(Permission.Pipeline_Retry, tag);
+        }
+    }
+
     /// <summary>
     /// Re-executes only the actions that failed in the last execution session
     /// for the selected WatchItem, using the same resolved parameters.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRetryFailed))]
     private async Task RetryFailed()
     {
         var watchItemTag = SelectedNode?.NodeKind switch
@@ -802,6 +818,18 @@ public sealed partial class MainViewModel
         if (lastSession.FailedCount == 0)
         {
             AddLog($"No failed actions to retry in '{watchItemTag}'.");
+            return;
+        }
+
+        // Phase 4: Authorization guard
+        try
+        {
+            await _pipelineGuard.AuthorizeAsync(GetCurrentUserContext(), Permission.Pipeline_Retry, watchItemTag);
+        }
+        catch (PipelineAuthorizationDeniedException ex)
+        {
+            AddLog($"Retry denied for '{watchItemTag}': {ex.Message}", LogSeverity.Warning);
+            ShowAuthorizationDeniedDialog(ex.Message);
             return;
         }
 

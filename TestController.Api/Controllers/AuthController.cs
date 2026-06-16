@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using TestController.Api.Interceptors;
 using TestController.Api.Services;
@@ -84,6 +85,7 @@ public class AuthController : ControllerBase
     /// <summary>POST /api/auth/guest — issue guest session token.</summary>
     [HttpPost("guest")]
     [AllowAnonymous]
+    [EnableRateLimiting("mutation")]
     public async Task<IActionResult> LoginAsGuest(CancellationToken ct)
     {
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();

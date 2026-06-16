@@ -13,6 +13,7 @@ using ICSharpCode.AvalonEdit.Highlighting;
 using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.ViewModels;
 
 using TestControllerGrpc.Views.Dialogs;
@@ -22,6 +23,7 @@ namespace TestControllerGrpc.Views;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
+    private readonly Services.CapabilityChecker _capabilityChecker;
 
     // ?? Inline AvalonEdit editor ?????????????????????????????????????
     private TextEditor? _inlineEditor;
@@ -63,6 +65,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         LoadDesignTokens();
         _vm = App.Services.GetRequiredService<MainViewModel>();
+        _capabilityChecker = App.Services.GetRequiredService<Services.CapabilityChecker>();
         _vm.EnsureSubscriptions();
         DataContext = _vm;
 
@@ -580,11 +583,15 @@ public partial class MainWindow : Window
             menu.Items.Add(new Separator());
 
             // Toggle: include/exclude this WatchItem from "Trigger All" execution
+            var canToggleEnabled = _capabilityChecker.Can(
+                node.IsEnabled ? Permission.Pipeline_Disable : Permission.Pipeline_Enable, node.Tag);
             var enabledItem = new MenuItem
             {
                 Header = "Include in Trigger All",
                 IsCheckable = true,
-                IsChecked = node.IsEnabled
+                IsChecked = node.IsEnabled,
+                IsEnabled = canToggleEnabled,
+                ToolTip = canToggleEnabled ? null : "Administrator only",
             };
             var capturedNode = node;
             enabledItem.Checked += (_, _) => capturedNode.IsEnabled = true;
@@ -612,11 +619,18 @@ public partial class MainWindow : Window
         if (node.NodeKind is "WatchList")
         {
             // Enable All / Disable All toggle for WatchList root
+            var canEnable = _capabilityChecker.Can(Permission.Pipeline_Enable);
+            var canDisable = _capabilityChecker.Can(Permission.Pipeline_Disable);
+
             var enableAllItem = CreateMenuItemWithIcon("Enable All WatchItems", null, "\uE73E", "AccGreen");
+            enableAllItem.IsEnabled = canEnable;
+            enableAllItem.ToolTip = canEnable ? null : "Administrator only";
             enableAllItem.Click += (_, _) => node.IsEnabled = true;
             menu.Items.Add(enableAllItem);
 
             var disableAllItem = CreateMenuItemWithIcon("Disable All WatchItems", null, "\uE711", "AccRed");
+            disableAllItem.IsEnabled = canDisable;
+            disableAllItem.ToolTip = canDisable ? null : "Administrator only";
             disableAllItem.Click += (_, _) => node.IsEnabled = false;
             menu.Items.Add(disableAllItem);
             menu.Items.Add(new Separator());
@@ -680,6 +694,14 @@ public partial class MainWindow : Window
                     var retryItem = CreateMenuItemWithIcon(
                         $"Retry Failed ({lastSession.FailedCount} action{(lastSession.FailedCount > 1 ? "s" : "")})",
                         _vm.RetryFailedCommand, "\uE72C", "AccPeach");
+
+                    // Phase 4: disable if user lacks Pipeline_Retry permission or lock conflict
+                    if (!_vm.RetryFailedCommand.CanExecute(null))
+                    {
+                        retryItem.IsEnabled = false;
+                        retryItem.ToolTip = "You do not have permission to retry this pipeline.";
+                    }
+
                     menu.Items.Add(retryItem);
                 }
             }

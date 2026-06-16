@@ -7,13 +7,12 @@ using TestControllerGrpc.Services;
 namespace TestController.Api.Services;
 
 /// <summary>
-/// Authorized pipeline operations for REST/gRPC paths.
-/// Calls PipelineAuthorizationGuard → delegates to existing execution infrastructure.
-/// Phase 3a: acquires pipeline lock before trigger proceeds.
+/// Authorized retry operations for REST/gRPC paths.
+/// Calls PipelineAuthorizationGuard with Pipeline_Retry → acquires pipeline lock → audit.
+/// Per 02_Implementation_Roadmap.md §Phase 4.
 /// Singleton DI per CONVENTIONS.md.
-/// Per 02_Implementation_Roadmap.md §Phase 2 + phase-3a-context.md.
 /// </summary>
-public sealed class PipelineService
+public sealed class RetryService
 {
     private readonly PipelineAuthorizationGuard _guard;
     private readonly ILockRegistry? _lockRegistry;
@@ -21,7 +20,7 @@ public sealed class PipelineService
     private readonly IAuditWriter _auditWriter;
     private readonly IAppLogger _logger;
 
-    public PipelineService(
+    public RetryService(
         PipelineAuthorizationGuard guard,
         IAppLogger logger,
         IAuditWriter auditWriter,
@@ -36,25 +35,25 @@ public sealed class PipelineService
     }
 
     /// <summary>
-    /// Authorize and acquire pipeline lock for a trigger operation.
+    /// Authorize and acquire pipeline lock for a retry operation.
     /// Throws PipelineAuthorizationDeniedException on deny.
     /// Returns a conflict DTO if the pipeline is locked by another user.
     /// </summary>
-    public async Task<PipelineLockDto?> AuthorizeTriggerAsync(IUserContext user, string pipelineId, CancellationToken ct = default)
+    public async Task<PipelineLockDto?> AuthorizeRetryAsync(IUserContext user, string pipelineId, CancellationToken ct = default)
     {
-        // Phase 6: reject trigger on disabled pipeline
+        // Phase 6: reject retry on disabled pipeline
         var watchItem = _vocabMonitor.CurrentConfig?.WatchItems
             .FirstOrDefault(wi => string.Equals(wi.Tag, pipelineId, StringComparison.OrdinalIgnoreCase));
         if (watchItem is not null && !watchItem.IsEnabled)
         {
             throw new PipelineAuthorizationDeniedException(
-                Permission.Pipeline_Trigger, pipelineId, "pipeline-disabled", "Pipeline is disabled.");
+                Permission.Pipeline_Retry, pipelineId, "pipeline-disabled", "Pipeline is disabled.");
         }
 
-        await _guard.AuthorizeAsync(user, Permission.Pipeline_Trigger, pipelineId, ct);
-        _logger.Info("PipelineService", $"Trigger authorized for user={user.DisplayName} pipeline={pipelineId}");
+        await _guard.AuthorizeAsync(user, Permission.Pipeline_Retry, pipelineId, ct);
+        _logger.Info("RetryService", $"Retry authorized for user={user.DisplayName} pipeline={pipelineId}");
 
-        // Phase 3a: Acquire pipeline lock (if registry available — controller host only)
+        // Acquire pipeline lock (if registry available — controller host only)
         if (_lockRegistry is not null)
         {
             var owner = new OwnerIdentity(user.UserId, user.DisplayName, user.ClientKind);
@@ -63,63 +62,42 @@ public sealed class PipelineService
             switch (result)
             {
                 case AcquireResult.Success:
-                    _logger.Info("PipelineService", $"Pipeline lock acquired for pipeline={pipelineId} owner={user.DisplayName}");
+                    _logger.Info("RetryService", $"Pipeline lock acquired for retry pipeline={pipelineId} owner={user.DisplayName}");
                     _auditWriter.Enqueue(new AuditEntry
                     {
                         UserId = user.UserId,
-                        ActionName = "Pipeline_LockAcquire",
+                        ActionName = "Pipeline_Retry",
                         ResourceId = pipelineId,
                         Allowed = true,
-                        ReasonCode = "trigger",
+                        ReasonCode = "retry",
                         TimestampUtc = DateTime.UtcNow,
                         ClientKind = user.ClientKind,
                     });
                     break;
 
                 case AcquireResult.ReAcquired:
-                    _logger.Info("PipelineService", $"Pipeline lock re-acquired for pipeline={pipelineId} owner={user.DisplayName}");
+                    _logger.Info("RetryService", $"Pipeline lock re-acquired for retry pipeline={pipelineId} owner={user.DisplayName}");
                     break;
 
                 case AcquireResult.Conflict conflict:
                     return LockMapper.ToDto(conflict.ExistingLock);
             }
         }
-
-        return null; // No conflict
-    }
-
-    /// <summary>
-    /// Release the pipeline lock after execution completes (any terminal state).
-    /// Called from execution completion hooks.
-    /// </summary>
-    public void ReleaseLockOnCompletion(string pipelineId, IUserContext user)
-    {
-        if (_lockRegistry is null) return;
-
-        var owner = new OwnerIdentity(user.UserId, user.DisplayName, user.ClientKind);
-        if (_lockRegistry.TryRelease(pipelineId, owner))
+        else
         {
-            _logger.Info("PipelineService", $"Pipeline lock released on completion for pipeline={pipelineId}");
+            // No lock registry (standalone WebApi) — still audit
             _auditWriter.Enqueue(new AuditEntry
             {
                 UserId = user.UserId,
-                ActionName = "Pipeline_LockRelease",
+                ActionName = "Pipeline_Retry",
                 ResourceId = pipelineId,
                 Allowed = true,
-                ReasonCode = "completion",
+                ReasonCode = "retry",
                 TimestampUtc = DateTime.UtcNow,
                 ClientKind = user.ClientKind,
             });
         }
-    }
 
-    /// <summary>
-    /// Authorize a cancel operation. Throws PipelineAuthorizationDeniedException on deny.
-    /// Phase 2a: Pipeline_Cancel for both own and others' runs (split in Phase 3).
-    /// </summary>
-    public async Task AuthorizeCancelAsync(IUserContext user, string pipelineId, CancellationToken ct = default)
-    {
-        await _guard.AuthorizeAsync(user, Permission.Pipeline_Cancel, pipelineId, ct);
-        _logger.Info("PipelineService", $"Cancel authorized for user={user.DisplayName} pipeline={pipelineId}");
+        return null; // No conflict
     }
 }

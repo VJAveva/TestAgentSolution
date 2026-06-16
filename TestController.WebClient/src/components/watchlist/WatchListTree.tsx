@@ -128,14 +128,17 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
   const canTrigger = useCan('Pipeline_Trigger', node.tag ?? undefined);
   const isLockedByOther = useLockStore(s => isWatchItem && node.tag ? s.isLockedByOther(node.tag) : false);
 
-  // Derive permission state: locked > viewOnly > triggerable
-  const permissionState: 'triggerable' | 'viewOnly' | 'locked' =
+  // Phase 6: disabled pipeline detection
+  const isPipelineDisabled = isWatchItem && node.model && 'isEnabled' in node.model && !(node.model as { isEnabled?: boolean }).isEnabled;
+
+  // Derive permission state: disabled > locked > viewOnly > triggerable
+  const permissionState: 'disabled' | 'triggerable' | 'viewOnly' | 'locked' =
     isWatchItem
-      ? isLockedByOther ? 'locked' : !canTrigger ? 'viewOnly' : 'triggerable'
+      ? isPipelineDisabled ? 'disabled' : isLockedByOther ? 'locked' : !canTrigger ? 'viewOnly' : 'triggerable'
       : 'triggerable';
 
-  // Row dimming: viewOnly dims the row (locked uses normal opacity — lock badge is enough)
-  const rowOpacity = permissionState === 'viewOnly' ? 'opacity-70' : '';
+  // Row dimming: viewOnly dims the row, disabled uses strikethrough-like dimming
+  const rowOpacity = permissionState === 'viewOnly' ? 'opacity-70' : permissionState === 'disabled' ? 'opacity-50' : '';
 
   return (
     <div>
@@ -203,7 +206,16 @@ function TreeNodeRow({ node, locks }: { node: TreeNode; locks: any[] }) {
 }
 
 /** Permission pill matching WPF visual language */
-function PermissionPill({ state, isSecured }: { state: 'triggerable' | 'viewOnly' | 'locked'; isSecured: boolean }) {
+function PermissionPill({ state, isSecured }: { state: 'disabled' | 'triggerable' | 'viewOnly' | 'locked'; isSecured: boolean }) {
+  // Disabled pill: pipeline is excluded from execution
+  if (state === 'disabled') {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[9px] font-medium shrink-0 bg-acc-red/10 text-acc-red line-through">
+        Disabled
+      </span>
+    );
+  }
+
   // Triggerable pill: only show in Secured mode (in Default mode everyone is viewOnly, no "assigned" concept)
   if (state === 'triggerable' && isSecured) {
     return (

@@ -1,19 +1,35 @@
 import { useState, useEffect } from 'react';
-import { PlayCircle, XCircle, Upload, Download, RefreshCw } from 'lucide-react';
+import { PlayCircle, XCircle, Upload, Download, RefreshCw, RotateCcw } from 'lucide-react';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useExecution } from '../../hooks/useExecution';
 import { useWatchListStore } from '../../stores/watchlistStore';
+import { useCan, useDisabledReason } from '../../hooks/useCapabilities';
+import { useLockStore } from '../../stores/lockStore';
 import TriggerDialog from '../execution/TriggerDialog';
 import LockConflictModal from '../dialogs/LockConflictModal';
 import type { PipelineLockDto } from '../../stores/lockStore';
 
 export default function WatchListToolbar() {
   const { refresh, importXml, exportXml } = useWatchList();
-  const { triggerAll, triggerByTag, cancelAll } = useExecution();
+  const { triggerAll, triggerByTag, cancelAll, retryByTag } = useExecution();
   const selectedNode = useWatchListStore(s => s.selectedNode);
   const [busy, setBusy] = useState(false);
   const [showTriggerDialog, setShowTriggerDialog] = useState(false);
   const [conflictLock, setConflictLock] = useState<PipelineLockDto | null>(null);
+
+  // Retry permission check
+  const selectedTag = selectedNode?.nodeKind === 'WatchItem' ? selectedNode.tag : undefined;
+  const canRetry = useCan('Pipeline_Retry', selectedTag ?? undefined);
+  const retryDeniedReason = useDisabledReason('Pipeline_Retry', selectedTag ?? undefined);
+  const isLockedByOther = useLockStore(s => selectedTag ? s.isLockedByOther(selectedTag) : false);
+  const showRetry = selectedNode?.nodeKind === 'WatchItem' && selectedNode.executionStatus === 'Failed';
+
+  // Phase 6: detect disabled pipeline from model
+  const isPipelineDisabled = selectedNode?.nodeKind === 'WatchItem'
+    && selectedNode.model && 'isEnabled' in selectedNode.model
+    && !(selectedNode.model as { isEnabled?: boolean }).isEnabled;
+
+  const retryDisabled = busy || !canRetry || isLockedByOther || isPipelineDisabled;
 
   // Listen for 409 lock conflict events from useExecution
   useEffect(() => {
@@ -64,6 +80,23 @@ export default function WatchListToolbar() {
     return triggerAll();
   };
 
+  const handleRetry = async () => {
+    if (!selectedTag) return;
+    setBusy(true);
+    try {
+      await retryByTag(selectedTag);
+    } catch (e: any) {
+      if (e?.response?.status === 403) {
+        // Permission denied — already guarded client-side, but catch server 403
+        console.warn('Retry denied by server:', e.response.data?.error);
+      } else {
+        console.error('Retry failed:', e);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleTriggerWithParams = async (buildNumber: string, dropLocation: string, lockVersion?: number) => {
     if (!selectedNode?.tag) return;
     try {
@@ -87,6 +120,17 @@ export default function WatchListToolbar() {
       <ToolBtn icon={<Download size={14} />} label="Export" onClick={wrap(handleExport)} disabled={busy} />
       <ToolBtn icon={<RefreshCw size={14} />} label="Refresh" onClick={wrap(refresh)} disabled={busy} />
 
+      {showRetry && (
+        <ToolBtn
+          icon={<RotateCcw size={14} />}
+          label="Retry Failed"
+          onClick={handleRetry}
+          disabled={retryDisabled}
+          accent
+          title={retryDisabled ? (isPipelineDisabled ? 'Pipeline is disabled' : isLockedByOther ? 'Pipeline is locked by another user' : retryDeniedReason ?? undefined) : undefined}
+        />
+      )}
+
       {showTriggerDialog && selectedNode?.tag && (
         <TriggerDialog
           watchItemTag={selectedNode.tag}
@@ -107,9 +151,9 @@ export default function WatchListToolbar() {
   );
 }
 
-function ToolBtn({ icon, label, onClick, disabled, accent, danger }: {
+function ToolBtn({ icon, label, onClick, disabled, accent, danger, title }: {
   icon: React.ReactNode; label: string; onClick: () => void;
-  disabled?: boolean; accent?: boolean; danger?: boolean;
+  disabled?: boolean; accent?: boolean; danger?: boolean; title?: string;
 }) {
   const base = 'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-40';
   const color = accent
@@ -118,7 +162,7 @@ function ToolBtn({ icon, label, onClick, disabled, accent, danger }: {
       ? 'bg-acc-red/15 text-acc-red hover:bg-acc-red/25'
       : 'bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary';
   return (
-    <button className={`${base} ${color}`} onClick={onClick} disabled={disabled}>
+    <button className={`${base} ${color}`} onClick={onClick} disabled={disabled} title={title}>
       {icon}{label}
     </button>
   );

@@ -80,6 +80,10 @@ public static class RbacFeatureExtensions
             services.AddSingleton<IAuditWriter>(sp => sp.GetRequiredService<QueuedAuditWriter>());
             services.AddHostedService<AuditDrainWorker>();
 
+            // Audit retention (purges old entries daily)
+            services.Configure<AuditRetentionOptions>(configuration.GetSection("Audit"));
+            services.AddHostedService<AuditRetentionWorker>();
+
             // Interceptors
             services.AddSingleton<SessionAuthInterceptor>();
             services.AddSingleton<AuditLoggingInterceptor>();
@@ -92,6 +96,8 @@ public static class RbacFeatureExtensions
             // Phase 2a: Pipeline authorization
             services.AddSingleton<PipelineAuthorizationGuard>();
             services.AddSingleton<PipelineService>();
+            services.AddSingleton<RetryService>();
+            services.AddSingleton<EnableDisableService>();
         }
         else
         {
@@ -123,6 +129,8 @@ public static class RbacFeatureExtensions
             // Phase 2a: Pipeline authorization
             services.AddSingleton<PipelineAuthorizationGuard>();
             services.AddSingleton<PipelineService>();
+            services.AddSingleton<RetryService>();
+            services.AddSingleton<EnableDisableService>();
         }
 
         return services;

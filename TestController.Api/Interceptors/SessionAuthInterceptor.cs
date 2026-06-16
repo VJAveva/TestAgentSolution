@@ -63,6 +63,10 @@ public sealed class SessionAuthInterceptor
         if ((DateTime.UtcNow - session.LastUsedUtc).TotalMinutes > 60)
             return null;
 
+        // Check absolute TTL for guest sessions (60 minutes from creation)
+        if (session.GuestId is not null && (DateTime.UtcNow - session.CreatedUtc).TotalMinutes > 60)
+            return null;
+
         // Touch session (fire-and-forget)
         _ = _sessionStore.TouchAsync(session.SessionId, CancellationToken.None);
 

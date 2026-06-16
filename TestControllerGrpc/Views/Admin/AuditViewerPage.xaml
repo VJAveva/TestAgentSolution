@@ -1,0 +1,87 @@
+<UserControl x:Class="TestControllerGrpc.Views.Admin.AuditViewerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             Background="{DynamicResource WindowBg}">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="Audit Log Viewer" FontSize="18" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
+
+        <!-- Filter bar -->
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <DatePicker SelectedDate="{Binding FromDate}" Width="130"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <DatePicker SelectedDate="{Binding ToDate}" Width="130"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBlock Text="User:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox Text="{Binding UserIdFilter, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBlock Text="Action:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox Text="{Binding ActionFilter, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBlock Text="Decision:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox SelectedItem="{Binding DecisionFilter}" Width="90">
+                    <sys:String>All</sys:String>
+                    <sys:String>Allowed</sys:String>
+                    <sys:String>Denied</sys:String>
+                </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBlock Text="Resource:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox Text="{Binding ResourceFilter, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+            </StackPanel>
+            <Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,4,4" Padding="12,4"/>
+            <Button Content="Clear" Command="{Binding ClearFiltersCommand}" Margin="0,0,4,4" Padding="8,4"/>
+            <Button Content="Export CSV" Command="{Binding ExportCsvCommand}" Margin="0,0,0,4" Padding="8,4"/>
+        </WrapPanel>
+
+        <!-- DataGrid -->
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Entries}" AutoGenerateColumns="False"
+                  IsReadOnly="True" CanUserSortColumns="True"
+                  SelectionMode="Single" GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column" VerticalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Time (UTC)" Binding="{Binding TimestampUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="150"/>
+                <DataGridTextColumn Header="User" Binding="{Binding UserId}" Width="100"/>
+                <DataGridTextColumn Header="Guest" Binding="{Binding GuestId}" Width="80"/>
+                <DataGridTextColumn Header="Role" Binding="{Binding RoleAtTime}" Width="90"/>
+                <DataGridTextColumn Header="Action" Binding="{Binding ActionName}" Width="140"/>
+                <DataGridTextColumn Header="Resource" Binding="{Binding ResourceId}" Width="140"/>
+                <DataGridCheckBoxColumn Header="Allowed" Binding="{Binding Allowed}" Width="60"/>
+                <DataGridTextColumn Header="Reason" Binding="{Binding ReasonCode}" Width="140"/>
+                <DataGridTextColumn Header="Client" Binding="{Binding ClientKind}" Width="60"/>
+                <DataGridTextColumn Header="CorrelationId" Binding="{Binding CorrelationId}" Width="200"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Pagination + status -->
+        <DockPanel Grid.Row="3" Margin="0,8,0,0">
+            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center">
+                <Run Text="Total: "/><Run Text="{Binding TotalCount, Mode=OneWay}"/>
+                <Run Text=" | Page "/><Run Text="{Binding CurrentPage, Mode=OneWay}"/>
+                <Run Text=" of "/><Run Text="{Binding TotalPages, Mode=OneWay}"/>
+            </TextBlock>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="◀ Prev" Command="{Binding PrevPageCommand}" Padding="8,4" Margin="0,0,4,0"/>
+                <Button Content="Next ▶" Command="{Binding NextPageCommand}" Padding="8,4"/>
+            </StackPanel>
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        </DockPanel>
+    </Grid>
+</UserControl>

@@ -1835,8 +1835,15 @@
                                                     <TextBlock Text="Users" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding OpenAuditViewerCommand}"
+                                                    ToolTip="Open Audit Log Viewer">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE7BA;" Foreground="{DynamicResource AccMauve}" />
+                                                    <TextBlock Text="Audit Log" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
-                                        <TextBlock Text="User Management" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
+                                        <TextBlock Text="Administration" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>

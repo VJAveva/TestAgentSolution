@@ -55,6 +55,27 @@ public sealed partial class MainViewModel
         _userManagementWindow.ShowDialog();
     }
 
+    private AuditViewerWindow? _auditViewerWindow;
+
+    [RelayCommand]
+    private void OpenAuditViewer()
+    {
+        if (!_capabilityChecker.Can(Permission.Audit_View)) return;
+
+        if (_auditViewerWindow is not null && _auditViewerWindow.IsLoaded)
+        {
+            _auditViewerWindow.Activate();
+            if (_auditViewerWindow.WindowState == WindowState.Minimized)
+                _auditViewerWindow.WindowState = WindowState.Normal;
+            return;
+        }
+
+        _auditViewerWindow = new AuditViewerWindow();
+        _auditViewerWindow.Closed += (_, _) => _auditViewerWindow = null;
+        _auditViewerWindow.Owner = FindOwnerWindow();
+        _auditViewerWindow.ShowDialog();
+    }
+
     /// <summary>Called during initialization and on mode changes to refresh IsDefaultMode.</summary>
     private void RefreshDefaultModeState()
     {

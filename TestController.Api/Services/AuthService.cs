@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TestController.Persistence;
 using TestController.Persistence.Identity;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Identity;
 
 namespace TestController.Api.Services;
@@ -14,15 +15,18 @@ public sealed class AuthService
     private readonly IDbContextFactory<OrchestratorDbContext> _dbFactory;
     private readonly ISessionStore _sessionStore;
     private readonly PasswordHasher _passwordHasher;
+    private readonly IAuditWriter _auditWriter;
 
     public AuthService(
         IDbContextFactory<OrchestratorDbContext> dbFactory,
         ISessionStore sessionStore,
-        PasswordHasher passwordHasher)
+        PasswordHasher passwordHasher,
+        IAuditWriter auditWriter)
     {
         _dbFactory = dbFactory;
         _sessionStore = sessionStore;
         _passwordHasher = passwordHasher;
+        _auditWriter = auditWriter;
     }
 
     public sealed record LoginResult(bool Success, string? Token = null, Role? Role = null, bool MustChangePassword = false, string? Error = null);
@@ -49,6 +53,17 @@ public sealed class AuthService
         var guestId = Guid.NewGuid().ToString("D").ToLowerInvariant();
         var session = await _sessionStore.CreateSessionAsync(null, guestId, clientKind, ipAddress, ct);
         var token = SessionStore.TokenToString(session.TokenHash);
+
+        _auditWriter.Enqueue(new AuditEntry
+        {
+            GuestId = guestId,
+            RoleAtTime = Role.Guest,
+            ActionName = "Session_GuestCreated",
+            Allowed = true,
+            ReasonCode = "guest-login",
+            TimestampUtc = DateTime.UtcNow,
+            ClientKind = clientKind,
+        });
 
         return new LoginResult(true, token, Role.Guest);
     }

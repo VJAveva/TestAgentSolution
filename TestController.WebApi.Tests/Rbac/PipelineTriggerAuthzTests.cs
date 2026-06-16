@@ -46,7 +46,7 @@ public class PipelineTriggerAuthzTests : IDisposable
         var authzService = new AuthorizationService(optionsMonitor, dbFactory, auditWriter);
         _guard = new PipelineAuthorizationGuard(authzService);
         _pipelineService = new PipelineService(_guard, new FakeAppLogger(), auditWriter, null);
-        _authService = new AuthService(dbFactory, sessionStore, _passwordHasher);
+        _authService = new AuthService(dbFactory, sessionStore, _passwordHasher, auditWriter);
         _interceptor = new SessionAuthInterceptor(optionsMonitor, sessionStore, dbFactory);
 
         // Seed users

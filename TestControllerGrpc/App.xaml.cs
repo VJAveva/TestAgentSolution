@@ -168,6 +168,10 @@ public partial class App : Application
                 services.AddTransient<ViewModels.Admin.AddUserDialogViewModel>();
                 services.AddTransient<ViewModels.Admin.AssignPipelinesDialogViewModel>();
 
+                // Phase 10: Audit viewer
+                services.AddSingleton<AuditClient>();
+                services.AddSingleton<ViewModels.Admin.AuditViewerViewModel>();
+
                 // Health threshold settings (operator-configurable)
                 services.AddSingleton(sp =>
                 {

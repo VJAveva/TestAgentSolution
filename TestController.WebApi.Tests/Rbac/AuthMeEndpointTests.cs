@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using TestController.Api.Interceptors;
 using TestController.Api.Services;
 using TestController.Persistence;
+using TestController.Persistence.Audit;
 using TestController.Persistence.Identity;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Configuration;
@@ -37,7 +38,8 @@ public class AuthMeEndpointTests : IDisposable
         _passwordHasher = new PasswordHasher();
         var sessionStore = new SessionStore(dbFactory);
 
-        _authService = new AuthService(dbFactory, sessionStore, _passwordHasher);
+        var auditWriter = new QueuedAuditWriter();
+        _authService = new AuthService(dbFactory, sessionStore, _passwordHasher, auditWriter);
         _interceptor = new SessionAuthInterceptor(optionsMonitor, sessionStore, dbFactory);
 
         // Seed an admin user

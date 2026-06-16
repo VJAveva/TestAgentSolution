@@ -116,6 +116,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ExecuteGroupCommand.NotifyCanExecuteChanged();
         ExecuteSingleActionCommand.NotifyCanExecuteChanged();
         CancelExecutionCommand.NotifyCanExecuteChanged();
+        RetryFailedCommand.NotifyCanExecuteChanged();
     }
 
     // ── Active editing context (Feature 3) ──────────────────────────
