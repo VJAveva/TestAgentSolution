@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import axios from 'axios';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, apiGet } from '../../lib/api';
 import { getUserId } from '../../lib/userIdentity';
 
 interface TriggerDialogProps {
@@ -75,16 +74,16 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
       .finally(() => setCheckingAgents(false));
 
     // Load current parameters for this WatchItem
-    axios.get(`/api/watchlist/${encodeURIComponent(watchItemTag)}/parameters`)
-      .then(({ data }) => {
+    apiGet<{ parameters?: Record<string, string> }>(`/api/watchlist/${encodeURIComponent(watchItemTag)}/parameters`)
+      .then((data) => {
         setCurrentParams(data.parameters || {});
         setBuildNumber(data.parameters?.['_BuildNumber'] || '');
         setDropLocation(data.parameters?.['_DropLocation'] || '');
 
         const basePath = data.parameters?.['_BuildBasePath'] || '';
         if (basePath) {
-          axios.get('/api/execution/available-builds', { params: { basePath } })
-            .then(({ data: d }) => setAvailableBuilds(d.builds || []))
+          apiGet<{ builds?: AvailableBuild[] }>(`/api/execution/available-builds?basePath=${encodeURIComponent(basePath)}`)
+            .then((d) => setAvailableBuilds(d.builds || []))
             .catch(() => {});
         }
       })
@@ -126,7 +125,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
         <div className="px-5 py-4 space-y-4">
           {/* Agent availability check */}
           {checkingAgents && (
-            <div className="text-text-muted text-xs animate-pulse">Checking agent availability…</div>
+            <div className="text-text-muted text-xs animate-pulse">Checking agent availabilityï¿½</div>
           )}
           {canTrigger && (
             <div className={`rounded-lg p-3 border ${
@@ -137,7 +136,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
               <div className="flex items-center gap-2 mb-1">
                 <span className={`w-2 h-2 rounded-full ${hasConflicts ? 'bg-acc-red' : 'bg-acc-green'}`} />
                 <span className={`text-xs font-semibold ${hasConflicts ? 'text-acc-red' : 'text-acc-green'}`}>
-                  {hasConflicts ? 'Agents Not Available' : 'All Agents Free — Ready'}
+                  {hasConflicts ? 'Agents Not Available' : 'All Agents Free ï¿½ Ready'}
                 </span>
               </div>
               {canTrigger.requiredAgents.length > 0 && (
@@ -155,7 +154,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
               {hasConflicts && canTrigger.conflicts.map(c => (
                 <div key={c.agentName} className="flex items-center justify-between py-1 border-t border-red-800/20 text-[11px] mt-1">
                   <span><span className="font-mono text-acc-red font-bold">{c.agentName}</span> <span className="text-text-muted">locked by</span> <span className="text-amber-300">{c.lockedBy}</span></span>
-                  <span className="text-text-muted">{c.pipeline} • <span className="font-mono">{c.duration}</span></span>
+                  <span className="text-text-muted">{c.pipeline} ï¿½ <span className="font-mono">{c.duration}</span></span>
                 </div>
               ))}
             </div>

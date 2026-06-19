@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
+import { apiGet } from '../lib/api';
 import type { AgentTelemetry } from '../types/agentWorkspace';
 import { errorThrottle } from '../lib/errorThrottle';
 
@@ -26,7 +26,7 @@ export function useAgentTelemetry(agentName: string | null, intervalMs = DEFAULT
   const fetchTelemetry = useCallback(async () => {
     if (!agentName) return;
     try {
-      const { data } = await axios.get<AgentTelemetry>(
+      const data = await apiGet<AgentTelemetry>(
         `/api/agents/${encodeURIComponent(agentName)}/telemetry`
       );
       if (mountedRef.current) {

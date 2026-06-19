@@ -23,6 +23,8 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
     [ObservableProperty] private string _errorMessage = "";
 
     public bool IsAdministrator => string.Equals(Role, "Administrator", StringComparison.OrdinalIgnoreCase);
+    public bool IsSeniorManager => string.Equals(Role, "SeniorManager", StringComparison.OrdinalIgnoreCase);
+    public bool IsFullAccessRole => IsAdministrator || IsSeniorManager;
 
     /// <summary>Raised when assignments are saved successfully.</summary>
     public event Action? AssignmentsSaved;
@@ -47,9 +49,9 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
         try
         {
             List<PipelineCheckItem> items;
-            if (IsAdministrator)
+            if (IsFullAccessRole)
             {
-                // Admins effectively own all pipelines; keep dialog representation consistent.
+                // Admins and Senior Managers have full access to all pipelines; show as pre-checked and readonly.
                 items = allPipelineIds
                     .Select(id => new PipelineCheckItem(id, true, false))
                     .ToList();
@@ -85,7 +87,7 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
 
         try
         {
-            var desiredIds = IsAdministrator
+            var desiredIds = IsFullAccessRole
                 ? Pipelines.Select(p => p.PipelineId).ToList()
                 : Pipelines.Where(p => p.IsChecked).Select(p => p.PipelineId).ToList();
 

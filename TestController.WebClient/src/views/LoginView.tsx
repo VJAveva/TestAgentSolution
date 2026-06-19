@@ -76,7 +76,7 @@ export default function LoginView() {
           <button
             type="submit"
             disabled={isLoading || !username.trim() || !password.trim()}
-            className="w-full py-2 text-sm font-medium rounded bg-accent-blue text-white hover:bg-accent-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-2 text-sm font-medium rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? 'Signing in…' : 'Sign in'}
           </button>

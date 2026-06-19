@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import axios from 'axios';
+import { apiGet } from '../lib/api';
 import type { FleetResponse, FleetAgent } from '../types/agentWorkspace';
 import { useSignalR } from './useSignalR';
 import { errorThrottle } from '../lib/errorThrottle';
@@ -20,7 +20,7 @@ export function useFleetState() {
 
   const fetchFleet = useCallback(async () => {
     try {
-      const { data } = await axios.get<FleetResponse>('/api/agents/fleet');
+      const data = await apiGet<FleetResponse>('/api/agents/fleet');
       if (mountedRef.current) {
         setFleet(data.agents);
         setLockVersion(data.lockVersion);

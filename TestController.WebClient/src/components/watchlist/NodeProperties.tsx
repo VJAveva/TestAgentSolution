@@ -3,6 +3,7 @@ import type { WatchItemConfig, ActionConfig, ActionGroupConfig, InitializeConfig
 
 export default function NodeProperties() {
   const node = useWatchListStore(s => s.selectedNode);
+  const status = useWatchListStore(s => (node?.tag ? s.nodeStatus[node.tag.toLowerCase()] : undefined) ?? 'Idle');
 
   if (!node) {
     return (
@@ -16,12 +17,12 @@ export default function NodeProperties() {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <span className="text-xs font-bold text-accent uppercase">{node.nodeKind}</span>
-        {node.executionStatus !== 'Idle' && (
+        {status !== 'Idle' && (
           <span className={`text-xs px-2 py-0.5 rounded font-medium
-            ${node.executionStatus === 'Running' ? 'bg-accent/20 text-accent' :
-              node.executionStatus === 'Success' ? 'bg-acc-green/20 text-acc-green' :
+            ${status === 'Running' ? 'bg-accent/20 text-accent' :
+              status === 'Success' ? 'bg-acc-green/20 text-acc-green' :
               'bg-acc-red/20 text-acc-red'}`}>
-            {node.executionStatus}
+            {status}
           </span>
         )}
       </div>

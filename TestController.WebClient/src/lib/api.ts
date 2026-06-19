@@ -70,6 +70,16 @@ export async function apiFetch<T>(
         body
       );
 
+      // 401 handling — token invalid/expired: clear auth so the UI returns to login.
+      if (response.status === 401 && !path.includes('/api/auth/')) {
+        sessionStorage.removeItem('auth_token');
+        const { useAuthStore } = await import('../stores/authStore');
+        const st = useAuthStore.getState();
+        if (st.isAuthenticated) {
+          useAuthStore.setState({ user: null, token: null, isAuthenticated: false, mustChangePassword: false, error: null });
+        }
+      }
+
       // Phase 2c: 403 handling — show toast + refresh stale capabilities
       if (response.status === 403) {
         const { useAuthDeniedToast } = await import('../components/common/AuthDeniedToast');
@@ -85,6 +95,7 @@ export async function apiFetch<T>(
         detail: body.detail,
         reasonCode: body.reasonCode,
         correlationId: body.correlationId || correlationId,
+        body,
       };
     }
 
@@ -108,4 +119,46 @@ export async function apiFetch<T>(
       correlationId,
     };
   }
+}
+
+/** Typed verb helpers over apiFetch to cut call-site boilerplate. */
+export const apiGet = <T>(path: string) => apiFetch<T>(path);
+
+export const apiPost = <T>(path: string, body?: unknown) =>
+  apiFetch<T>(path, {
+    method: 'POST',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+export const apiPut = <T>(path: string, body?: unknown) =>
+  apiFetch<T>(path, {
+    method: 'PUT',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+export const apiDelete = <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' });
+
+/**
+ * Fetch a non-JSON payload (blob/text downloads) through the same
+ * auth/correlation pipeline as apiFetch, without JSON parsing.
+ */
+export async function apiFetchRaw(path: string, options?: RequestInit): Promise<Response> {
+  const correlationId = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)).slice(0, 8);
+  const url = `${API_BASE}${path}`;
+  const autoHeaders: Record<string, string> = {
+    'X-Request-Id': correlationId,
+    'X-User-Id': getUserId(),
+    'X-Source': 'WebClient',
+  };
+  const token = sessionStorage.getItem('auth_token');
+  if (token) autoHeaders['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(url, {
+    ...options,
+    headers: { ...autoHeaders, ...options?.headers },
+  });
+  if (!response.ok) {
+    throw { status: response.status, error: response.statusText, correlationId };
+  }
+  return response;
 }

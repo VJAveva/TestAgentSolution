@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel, type IRetryPolicy, type RetryContext } from '@microsoft/signalr';
-import axios from 'axios';
+import { apiGet } from '../lib/api';
 import { useWatchListStore } from '../stores/watchlistStore';
 import { useAgentStore } from '../stores/agentStore';
 import { useExecutionStore } from '../stores/executionStore';
@@ -11,7 +11,7 @@ import { getUserId } from '../lib/userIdentity';
 import { registerSystemModeEvents } from '../signalr/SystemModeEvents';
 import { registerLockEvents } from '../signalr/LockEvents';
 import { registerPermissionEvents } from '../signalr/PermissionEvents';
-import type { NodeStatus, WatchListConfig } from '../types/api';
+import type { NodeStatus, WatchListConfig, BuildSummary } from '../types/api';
 
 /** Tracks joined sessions for auto-rejoin after reconnect. */
 const joinedSessions = new Set<string>();
@@ -221,7 +221,7 @@ export function useSignalR(enabled = true): HubConnection | null {
 
     // Results updated: re-fetch builds list when new results are available
     conn.on('ResultsUpdated', () => {
-      axios.get('/api/results/builds').then(({ data }) => {
+      apiGet<{ items?: BuildSummary[] }>('/api/results/builds').then((data) => {
         useResultsStore.getState().setBuilds(data.items ?? []);
       }).catch(() => {});
     });
@@ -258,17 +258,15 @@ export function useSignalR(enabled = true): HubConnection | null {
     conn.on('AgentOutputBatch', (batch: Array<{
       agentName?: string; line?: string; kind?: string; sessionId?: string;
     }>) => {
-      const store = useExecutionStore.getState();
-      for (const data of batch) {
-        store.addLog({
-          message: data.line ?? '',
-          agent: data.agentName,
-          sessionId: data.sessionId,
-          timestamp: new Date().toISOString(),
-          kind: data.kind as 'stdout' | 'stderr',
-          severity: data.kind === 'stderr' ? 'error' : 'info',
-        });
-      }
+      const now = new Date().toISOString();
+      useExecutionStore.getState().addLogs(batch.map(data => ({
+        message: data.line ?? '',
+        agent: data.agentName,
+        sessionId: data.sessionId,
+        timestamp: now,
+        kind: data.kind as 'stdout' | 'stderr',
+        severity: data.kind === 'stderr' ? 'error' : 'info',
+      })));
     });
 
     // Agent lifecycle
@@ -282,18 +280,17 @@ export function useSignalR(enabled = true): HubConnection | null {
       if (data.agentName && data.status) useAgentStore.getState().updateStatus(data.agentName, data.status);
     });
     conn.on('AgentHeartbeats', (batch: Array<{ agentName?: string; state?: string }>) => {
-      const store = useAgentStore.getState();
-      for (const hb of batch) {
-        if (hb.agentName && hb.state) {
-          store.updateStatus(hb.agentName, hb.state);
-        }
-      }
+      useAgentStore.getState().applyHeartbeats(
+        batch
+          .filter((hb): hb is { agentName: string; state: string } => !!hb.agentName && !!hb.state)
+          .map(hb => ({ name: hb.agentName, status: hb.state }))
+      );
     });
 
     // WatchList hot-reload: refetch tree when server signals config change
     conn.on('WatchListReloaded', async () => {
       try {
-        const { data } = await axios.get<WatchListConfig>('/api/watchlist');
+        const data = await apiGet<WatchListConfig>('/api/watchlist');
         useWatchListStore.getState().setConfig(data);
       } catch (err) {
         console.error('[SignalR] WatchListReloaded refetch failed:', err);

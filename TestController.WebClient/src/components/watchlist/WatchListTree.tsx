@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, memo } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useWatchListStore, useFilteredWatchItems } from '../../stores/watchlistStore';
 import { useLockStore } from '../../stores/lockStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -75,6 +76,23 @@ const statusDot: Record<string, string> = {
   Failed:  'bg-acc-red',
 };
 
+/**
+ * Depth-first flatten of the visible nodes (descending only into expanded
+ * nodes), producing the ordered flat list the virtualizer renders. Roots are
+ * always emitted; children are emitted only when their parent isExpanded.
+ */
+function flattenVisible(roots: TreeNode[]): TreeNode[] {
+  const out: TreeNode[] = [];
+  const walk = (node: TreeNode) => {
+    out.push(node);
+    if (node.isExpanded && node.children.length > 0) {
+      for (const child of node.children) walk(child);
+    }
+  };
+  for (const root of roots) walk(root);
+  return out;
+}
+
 export default function WatchListTree() {
   const treeRoots = useWatchListStore(s => s.treeRoots);
   const loading = useWatchListStore(s => s.loading);
@@ -86,6 +104,7 @@ export default function WatchListTree() {
   const { triggerByTag } = useExecution();
   const [triggerTarget, setTriggerTarget] = useState<string | null>(null);
   const [conflictLock, setConflictLock] = useState<PipelineLockDto | null>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   // Listen for 409 lock conflict events from useExecution
   useEffect(() => {
@@ -96,6 +115,30 @@ export default function WatchListTree() {
     window.addEventListener('pipeline-lock-conflict', handler);
     return () => window.removeEventListener('pipeline-lock-conflict', handler);
   }, []);
+
+  // Rebuild the WatchList root with assignment-filtered children so expand/collapse,
+  // selection, and root annotations keep working while honoring the Engineer's
+  // assigned-pipeline visibility. Non-WatchList roots (e.g. Templates) are unchanged.
+  const watchListRoot = treeRoots[0];
+  const isAssignmentFiltered = filterLabel.length > 0;
+  const hideWatchListRoot = isAssignmentFiltered && filteredWatchItems.length === 0;
+
+  // Flat, virtualizable list of all currently-visible nodes.
+  const flatNodes = useMemo(() => {
+    const roots: TreeNode[] = [];
+    if (watchListRoot && !hideWatchListRoot) {
+      roots.push({ ...watchListRoot, children: filteredWatchItems });
+    }
+    roots.push(...treeRoots.slice(1));
+    return flattenVisible(roots);
+  }, [watchListRoot, treeRoots, filteredWatchItems, hideWatchListRoot]);
+
+  const virtualizer = useVirtualizer({
+    count: flatNodes.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 28,
+    overscan: 15,
+  });
 
   const handleTriggerWithParams = async (buildNumber: string, dropLocation: string, lockVersion?: number) => {
     if (!triggerTarget) return;
@@ -123,20 +166,9 @@ export default function WatchListTree() {
     return <p className="p-3 text-xs text-text-muted">No WatchList loaded.</p>;
   }
 
-  // Rebuild the WatchList root with assignment-filtered children so the existing
-  // recursive rendering, expand/collapse, and root annotations keep working while
-  // honoring the Engineer's assigned-pipeline visibility. Non-WatchList roots
-  // (e.g. Templates) are rendered unchanged.
-  const watchListRoot = treeRoots[0];
-  const otherRoots = treeRoots.slice(1);
-  const filteredWatchListRoot: TreeNode | null = watchListRoot
-    ? { ...watchListRoot, children: filteredWatchItems }
-    : null;
-  const isAssignmentFiltered = filterLabel.length > 0;
-
   return (
-    <div className="py-1 select-none">
-      <div className="px-3 pb-2 text-[10px] text-text-muted flex flex-wrap items-center gap-3">
+    <div className="flex flex-col h-full select-none">
+      <div className="px-3 pt-1 pb-2 shrink-0 text-[10px] text-text-muted flex flex-wrap items-center gap-3">
         <span className="inline-flex items-center gap-1"><Circle size={8} className="fill-state-triggerable text-state-triggerable" /> Triggerable</span>
         <span className="inline-flex items-center gap-1"><Circle size={8} className="fill-state-viewonly text-state-viewonly" /> View only</span>
         <span className="inline-flex items-center gap-1"><Circle size={8} className="fill-state-disabled text-state-disabled" /> Disabled</span>
@@ -146,17 +178,30 @@ export default function WatchListTree() {
         )}
       </div>
 
-      {filteredWatchListRoot && (
-        isAssignmentFiltered && filteredWatchItems.length === 0 ? (
-          <p className="px-3 py-2 text-xs text-text-muted">
-            No pipelines are assigned to you. Contact an administrator to request access.
-          </p>
-        ) : (
-          <TreeNodeRow key={filteredWatchListRoot.id} node={filteredWatchListRoot} onTriggerRequest={setTriggerTarget} />
-        )
+      {hideWatchListRoot && (
+        <p className="px-3 py-2 shrink-0 text-xs text-text-muted">
+          No pipelines are assigned to you. Contact an administrator to request access.
+        </p>
       )}
 
-      {otherRoots.map(root => <TreeNodeRow key={root.id} node={root} onTriggerRequest={setTriggerTarget} />)}
+      <div ref={parentRef} className="flex-1 min-h-0 overflow-auto">
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+          {virtualizer.getVirtualItems().map(virtualRow => {
+            const node = flatNodes[virtualRow.index];
+            return (
+              <div
+                key={node.id}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                className="absolute top-0 left-0 w-full"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <TreeNodeRow node={node} onTriggerRequest={setTriggerTarget} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {triggerTarget && (
         <TriggerDialog
@@ -180,10 +225,11 @@ export default function WatchListTree() {
 
 type PipelineState = 'triggerable' | 'viewOnly' | 'disabled' | 'locked';
 
-function TreeNodeRow({ node, onTriggerRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void }) {
+const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void }) {
   const selectNode = useWatchListStore(s => s.selectNode);
   const toggleExpand = useWatchListStore(s => s.toggleExpand);
   const selectedNode = useWatchListStore(s => s.selectedNode);
+  const status = useWatchListStore(s => (node.tag ? s.nodeStatus[node.tag.toLowerCase()] : undefined) ?? 'Idle');
   const isSelected = selectedNode?.id === node.id;
   const hasChildren = node.children.length > 0;
 
@@ -210,78 +256,71 @@ function TreeNodeRow({ node, onTriggerRequest }: { node: TreeNode; onTriggerRequ
   const isOwnLock = !!lock && lock.ownerUserId === currentUserId;
 
   return (
-    <div>
-      <div
-        className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer text-xs transition-colors
-          ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}
-          ${rowOpacity}`}
-        style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
-        onClick={() => selectNode(node)}
-      >
-        {/* Expand/collapse toggle */}
-        {hasChildren ? (
-          <button
-            className="p-0.5 hover:bg-white/10 rounded"
-            onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
-          >
-            {node.isExpanded
-              ? <ChevronDown size={12} className="text-text-muted" />
-              : <ChevronRight size={12} className="text-text-muted" />}
-          </button>
-        ) : (
-          <span className="w-4" />
-        )}
-
-        {/* Glanceable trigger state indicator (WatchItem only) */}
-        {isWatchItem && <TriggerStateIndicator state={permissionState} />}
-
-        {/* Status indicator */}
-        {node.executionStatus !== 'Idle' && (
-          <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot[node.executionStatus]}`} />
-        )}
-
-        {/* Icon + label */}
-        {kindIcon[node.nodeKind]}
-        <span className="truncate">{node.displayText}</span>
-
-        {/* Action-type badge */}
-        <NodeBadge node={node} />
-
-        {/* Permission pill for WatchItem rows */}
-        {isWatchItem && <PermissionPill state={permissionState} isSecured={isSecured} />}
-
-        {/* Per-row trigger affordance with centralized gating */}
-        {isWatchItem && node.tag && (
-          <div className="shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
-            <DisabledTriggerButton
-              pipelineTag={node.tag}
-              label="Trigger"
-              className="px-2 py-0.5 text-[10px]"
-              forceDisabled={isPipelineDisabled}
-              forceReason="This pipeline is disabled"
-              onTrigger={() => onTriggerRequest(node.tag!)}
-            />
-          </div>
-        )}
-
-        {/* Child count annotation */}
-        {hasChildren && (
-          <span className="shrink-0 text-[10px] text-text-muted ml-auto mr-1">
-            {node.children.length} {node.children.length === 1 ? 'item' : 'items'}
-          </span>
-        )}
-
-        {/* Pipeline lock badge for WatchItem nodes */}
-        {isWatchItem && lock && <LockBadge lock={lock} isOwn={isOwnLock} />}
-      </div>
-
-      {/* Recursive children */}
-      {node.isExpanded && hasChildren && (
-        <div>{node.children.map(c => <TreeNodeRow key={c.id} node={c} onTriggerRequest={onTriggerRequest} />)}</div>
+    <div
+      className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer text-xs transition-colors
+        ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}
+        ${rowOpacity}`}
+      style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
+      onClick={() => selectNode(node)}
+    >
+      {/* Expand/collapse toggle */}
+      {hasChildren ? (
+        <button
+          className="p-0.5 hover:bg-white/10 rounded"
+          onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
+        >
+          {node.isExpanded
+            ? <ChevronDown size={12} className="text-text-muted" />
+            : <ChevronRight size={12} className="text-text-muted" />}
+        </button>
+      ) : (
+        <span className="w-4" />
       )}
+
+      {/* Glanceable trigger state indicator (WatchItem only) */}
+      {isWatchItem && <TriggerStateIndicator state={permissionState} />}
+
+      {/* Status indicator */}
+      {status !== 'Idle' && (
+        <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot[status]}`} />
+      )}
+
+      {/* Icon + label */}
+      {kindIcon[node.nodeKind]}
+      <span className="truncate">{node.displayText}</span>
+
+      {/* Action-type badge */}
+      <NodeBadge node={node} />
+
+      {/* Permission pill for WatchItem rows */}
+      {isWatchItem && <PermissionPill state={permissionState} isSecured={isSecured} />}
+
+      {/* Per-row trigger affordance with centralized gating */}
+      {isWatchItem && node.tag && (
+        <div className="shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
+          <DisabledTriggerButton
+            pipelineTag={node.tag}
+            label="Trigger"
+            className="px-2 py-0.5 text-[10px]"
+            forceDisabled={isPipelineDisabled}
+            forceReason="This pipeline is disabled"
+            onTrigger={() => onTriggerRequest(node.tag!)}
+          />
+        </div>
+      )}
+
+      {/* Child count annotation */}
+      {hasChildren && (
+        <span className="shrink-0 text-[10px] text-text-muted ml-auto mr-1">
+          {node.children.length} {node.children.length === 1 ? 'item' : 'items'}
+        </span>
+      )}
+
+      {/* Pipeline lock badge for WatchItem nodes */}
+      {isWatchItem && lock && <LockBadge lock={lock} isOwn={isOwnLock} />}
     </div>
   );
-}
+});
 
 function TriggerStateIndicator({ state }: { state: PipelineState }) {
   if (state === 'triggerable') {

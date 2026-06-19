@@ -7,6 +7,7 @@ interface AgentState {
   setAgents: (agents: AgentInfo[]) => void;
   selectAgent: (name: string | null) => void;
   updateStatus: (name: string, status: string) => void;
+  applyHeartbeats: (updates: { name: string; status: string }[]) => void;
   addAgent: (agent: AgentInfo) => void;
   removeAgent: (name: string) => void;
 }
@@ -24,6 +25,18 @@ export const useAgentStore = create<AgentState>((set) => ({
           : a
       ),
     })),
+  applyHeartbeats: (updates) =>
+    set((s) => {
+      if (updates.length === 0) return s;
+      const map = new Map(updates.map(u => [u.name.toLowerCase(), u.status]));
+      const now = new Date().toISOString();
+      return {
+        agents: s.agents.map(a => {
+          const status = map.get(a.name.toLowerCase());
+          return status ? { ...a, status, lastCheckedUtc: now } : a;
+        }),
+      };
+    }),
   addAgent: (agent) => set((s) => ({ agents: [...s.agents, agent] })),
   removeAgent: (name) =>
     set((s) => ({

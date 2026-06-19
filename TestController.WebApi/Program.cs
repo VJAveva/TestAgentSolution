@@ -98,11 +98,17 @@ builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 // RBAC feature (identity, authorization, audit — NO local DB; routes through controller)
 builder.Services.AddRbacFeature(builder.Configuration, isPrimaryHost: false);
 
+// Keep this secondary host's RBAC mode in sync with the controller (source of truth)
+// so the IIS-hosted web client switches Default/Secured when the WPF app does.
+builder.Services.AddHostedService<SystemModeSyncService>();
+
 // Multi-identity security framework: authentication + authorization + audit
 builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 
 // Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
 builder.Services.AddControllerApi()
+    .ConfigureApplicationPartManager(apm =>
+        apm.FeatureProviders.Add(new ProxiedControllerExclusionProvider()))
     .AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -349,6 +355,9 @@ app.MapGroup("/api/watchlist").MapWatchListEndpoints().RequireAuthorization(Secu
 app.MapGroup("/api/agents").MapAgentEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/execution").MapExecutionEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api").MapLockEndpoints().RequireAuthorization(SecurityPolicies.User);
+// Auth is proxied to the controller (secondary host has no session store); allow anonymous so
+// login/guest reach the controller, which performs the real authentication.
+app.MapGroup("/api").MapAuthEndpoints().AllowAnonymous();
 app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 app.MapGroup("/api/tokens").MapTokenManagementEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);

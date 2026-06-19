@@ -6,6 +6,7 @@ import { useSystemModeStore } from './systemModeStore';
 interface WatchListState {
   config: WatchListConfig | null;
   treeRoots: TreeNode[];
+  nodeStatus: Record<string, NodeStatus>;
   selectedNode: TreeNode | null;
   loading: boolean;
   error: string | null;
@@ -120,19 +121,6 @@ function buildTree(config: WatchListConfig): TreeNode[] {
   return roots;
 }
 
-function updateStatusRecursive(nodes: TreeNode[], tag: string, status: NodeStatus): TreeNode[] {
-  return nodes.map(n => {
-    const updated = { ...n };
-    if (n.tag && n.tag.toLowerCase() === tag.toLowerCase()) {
-      updated.executionStatus = status;
-    }
-    if (n.children.length > 0) {
-      updated.children = updateStatusRecursive(n.children, tag, status);
-    }
-    return updated;
-  });
-}
-
 function toggleRecursive(nodes: TreeNode[], id: string): TreeNode[] {
   return nodes.map(n => {
     if (n.id === id) return { ...n, isExpanded: !n.isExpanded };
@@ -144,16 +132,17 @@ function toggleRecursive(nodes: TreeNode[], id: string): TreeNode[] {
 export const useWatchListStore = create<WatchListState>((set) => ({
   config: null,
   treeRoots: [],
+  nodeStatus: {},
   selectedNode: null,
   loading: false,
   error: null,
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
-  setConfig: (config) => set({ config, treeRoots: buildTree(config), error: null }),
+  setConfig: (config) => set({ config, treeRoots: buildTree(config), nodeStatus: {}, error: null }),
   selectNode: (node) => set({ selectedNode: node }),
   toggleExpand: (id) => set((s) => ({ treeRoots: toggleRecursive(s.treeRoots, id) })),
   updateNodeStatus: (tag, status) =>
-    set((s) => ({ treeRoots: updateStatusRecursive(s.treeRoots, tag, status as NodeStatus) })),
+    set((s) => ({ nodeStatus: { ...s.nodeStatus, [tag.toLowerCase()]: status as NodeStatus } })),
 }));
 
 /**

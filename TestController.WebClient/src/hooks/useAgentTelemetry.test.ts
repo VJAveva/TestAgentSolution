@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import axios from 'axios';
 
-// Mock axios
-vi.mock('axios');
-const mockedAxios = vi.mocked(axios, true);
+// Mock the apiFetch layer (the hook calls apiGet)
+vi.mock('../lib/api', () => ({ apiGet: vi.fn() }));
+import { apiGet } from '../lib/api';
+// Alias so existing `mockedAxios.get` call-sites keep reading naturally.
+const mockedAxios = { get: vi.mocked(apiGet) };
 
 // Mock connectionStore
 const mockStatus = { value: 'disconnected' };
@@ -29,20 +30,18 @@ describe('useAgentTelemetry — timer lifecycle', () => {
     mockStatus.value = 'disconnected';
     mockedAxios.get.mockImplementation(() =>
       Promise.resolve({
-        data: {
-          agentName: 'TestAgent',
-          state: 'Ready',
-          currentActivity: '',
-          currentCommand: '',
-          executionsCompleted: 5,
-          executionsFailed: 0,
-          cpuUsagePct: 25,
-          memoryUsedMb: 1024,
-          memoryTotalMb: 4096,
-          diskFreeGb: 50,
-          activeProcessCount: 3,
-          timestamp: new Date().toISOString(),
-        },
+        agentName: 'TestAgent',
+        state: 'Ready',
+        currentActivity: '',
+        currentCommand: '',
+        executionsCompleted: 5,
+        executionsFailed: 0,
+        cpuUsagePct: 25,
+        memoryUsedMb: 1024,
+        memoryTotalMb: 4096,
+        diskFreeGb: 50,
+        activeProcessCount: 3,
+        timestamp: new Date().toISOString(),
       })
     );
   });
@@ -156,9 +155,9 @@ describe('useAgentTelemetry — timer lifecycle', () => {
   it('clears error on successful fetch after failure', async () => {
     mockedAxios.get
       .mockImplementationOnce(() => Promise.reject(new Error('Network Error')))
-      .mockImplementationOnce(() => Promise.resolve({
-        data: { agentName: 'TestAgent', state: 'Ready' },
-      }));
+      .mockImplementationOnce(() => Promise.resolve(
+        { agentName: 'TestAgent', state: 'Ready' },
+      ));
 
     let hookResult: any;
     await act(async () => {

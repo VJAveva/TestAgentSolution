@@ -12,6 +12,7 @@ interface ExecutionState {
   setStatus: (isExecuting: boolean, activeCount: number) => void;
   setSessions: (sessions: SessionInfo[]) => void;
   addLog: (entry: LogEntry) => void;
+  addLogs: (entries: LogEntry[]) => void;
   clearLogs: () => void;
   togglePause: () => void;
   setLogSessionFilter: (sessionId: string) => void;
@@ -31,6 +32,13 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
     set((s) => {
       if (s.isLogPaused) return s;
       const logs = [...s.logs, entry];
+      if (logs.length > s.maxLogs) logs.splice(0, logs.length - s.maxLogs);
+      return { logs };
+    }),
+  addLogs: (entries) =>
+    set((s) => {
+      if (s.isLogPaused || entries.length === 0) return s;
+      const logs = s.logs.concat(entries);
       if (logs.length > s.maxLogs) logs.splice(0, logs.length - s.maxLogs);
       return { logs };
     }),

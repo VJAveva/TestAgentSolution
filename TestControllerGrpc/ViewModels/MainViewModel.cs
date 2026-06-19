@@ -692,7 +692,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private PipelineSession CreateSession(string watchItemTag)
     {
         var session = new PipelineSession { WatchItemTag = watchItemTag };
-        Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Add(session));
+        Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Add(session));
         return session;
     }
 
@@ -703,7 +703,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Keep in list for 30 seconds for visibility, then remove
         _ = Task.Delay(30_000).ContinueWith(_ =>
         {
-            Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+            Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
         });
     }
 

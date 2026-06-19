@@ -1,0 +1,85 @@
+name: loadtest-nightly
+
+# D3 soak harness. NOT part of the per-PR build — runs nightly (or on demand)
+# against a LIVE controller. Spinning up the full controller stack is
+# environment-specific (SQLite, auth mode, watchlist), so this job points the
+# simulated fleet at an already-running controller via a URL input / repo
+# variable rather than bootstrapping one in CI.
+
+on:
+  schedule:
+    # 02:30 UTC nightly.
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      controller_url:
+        description: "Controller base URL (gRPC + REST), e.g. http://controller-host:5000"
+        required: true
+        type: string
+      agents:
+        description: "Number of simulated agents"
+        required: false
+        default: "100"
+        type: string
+      duration:
+        description: "Soak duration (hh:mm:ss)"
+        required: false
+        default: "00:15:00"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: Simulated-fleet soak
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+
+      - name: Resolve controller URL
+        id: cfg
+        shell: pwsh
+        run: |
+          $url = "${{ github.event.inputs.controller_url }}"
+          if ([string]::IsNullOrWhiteSpace($url)) { $url = "${{ vars.LOADTEST_CONTROLLER_URL }}" }
+          if ([string]::IsNullOrWhiteSpace($url)) {
+            Write-Host "::warning::No controller URL provided (input or LOADTEST_CONTROLLER_URL variable). Skipping soak."
+            "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "skip=false"   >> $env:GITHUB_OUTPUT
+            "url=$url"      >> $env:GITHUB_OUTPUT
+            $agents   = "${{ github.event.inputs.agents }}";   if ([string]::IsNullOrWhiteSpace($agents))   { $agents   = "100" }
+            $duration = "${{ github.event.inputs.duration }}"; if ([string]::IsNullOrWhiteSpace($duration)) { $duration = "00:15:00" }
+            "agents=$agents"     >> $env:GITHUB_OUTPUT
+            "duration=$duration" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build harness
+        if: steps.cfg.outputs.skip == 'false'
+        run: dotnet build TestController.LoadTests/TestController.LoadTests.csproj -c Release --nologo
+
+      - name: Run soak
+        if: steps.cfg.outputs.skip == 'false'
+        run: >
+          dotnet run -c Release --no-build --project TestController.LoadTests --
+          --controller ${{ steps.cfg.outputs.url }}
+          --agents ${{ steps.cfg.outputs.agents }}
+          --duration ${{ steps.cfg.outputs.duration }}
+          | Tee-Object -FilePath ${{ runner.temp }}/soak-report.txt
+        shell: pwsh
+
+      - name: Upload soak report
+        if: always() && steps.cfg.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-report
+          path: ${{ runner.temp }}/soak-report.txt
+          retention-days: 30

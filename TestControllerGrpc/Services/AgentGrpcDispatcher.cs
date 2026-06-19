@@ -337,6 +337,63 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         => _agents.TryGetValue(agentName, out var ep) ? ep.Address : null;
 
     /// <summary>
+    /// Progress callback for long-running remote actions: logs and surfaces a
+    /// status update. Shared by the initial stream and the busy-retry stream.
+    /// </summary>
+    private void OnLongRunningProgress(string agent, string command, TimeSpan elapsed)
+    {
+        _logger.LogInformation(
+            "Long-running action on {Agent}: {Command} running for {Elapsed}",
+            agent, SecurityRedactor.Redact(command), elapsed.ToString(@"hh\:mm\:ss"));
+        StatusChanged?.Invoke(agent,
+            $"Running: {SecurityRedactor.Redact(command)} ({elapsed:hh\\:mm\\:ss})");
+    }
+
+    /// <summary>
+    /// Streams a single remote command attempt, enforcing the action's Timeout
+    /// (in SECONDS; 0 = no limit) via a CancellationTokenSource linked to <paramref name="ct"/>.
+    /// </summary>
+    private async Task<RemoteCommandStreamResult> StreamWithTimeoutAsync(
+        TestAgentService.TestAgentServiceClient client,
+        string agentName,
+        ActionConfig resolved,
+        CancellationToken ct,
+        Action<string, string, TimeSpan>? onProgressTick,
+        string? correlationId)
+    {
+        CancellationTokenSource? timeoutCts = resolved.Timeout > 0
+            ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
+            : null;
+        using var _timeoutCtsDisposable = timeoutCts;
+        using var linked = timeoutCts is not null
+            ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
+            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        return await RemoteCommandStreamRunner.StreamAsync(
+            client, agentName, resolved, linked.Token,
+            outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
+            onProgressTick: onProgressTick,
+            correlationId: correlationId);
+    }
+
+    /// <summary>
+    /// Runs a single command attempt inside the endpoint's resilience pipeline,
+    /// re-resolving the client per Polly attempt. Used by the recovery and
+    /// post-reboot retry paths (no progress ticks on these retries).
+    /// </summary>
+    private async Task<RemoteCommandStreamResult> RunResilientStreamAsync(
+        AgentEndpoint endpoint,
+        string agentName,
+        ActionConfig resolved,
+        string? correlationId,
+        CancellationToken ct)
+        => await endpoint.Resilience.ExecuteAsync(
+            async resilienceCt => await StreamWithTimeoutAsync(
+                endpoint.GetClient(), agentName, resolved, resilienceCt,
+                onProgressTick: null, correlationId: correlationId),
+            ct);
+
+    /// <summary>
     /// Executes a RunRemoteCommand on the specified agent.
     /// Streams stdout/stderr events back in real-time.
     /// Handles reboot actions (waits for agent to come back).
@@ -407,14 +464,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 var streamResult = await RemoteCommandStreamRunner.StreamAsync(
                     client, agentName, resolved, linked.Token,
                     outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
-                    onProgressTick: (a, cmd, elapsed) =>
-                    {
-                        _logger.LogInformation(
-                            "Long-running action on {Agent}: {Command} running for {Elapsed}",
-                            a, SecurityRedactor.Redact(cmd), elapsed.ToString(@"hh\:mm\:ss"));
-                        StatusChanged?.Invoke(a,
-                            $"Running: {SecurityRedactor.Redact(cmd)} ({elapsed:hh\\:mm\\:ss})");
-                    },
+                    onProgressTick: OnLongRunningProgress,
                     correlationId: correlationId);
 
                 // If agent rejected the command because it's still busy (e.g. draining
@@ -534,14 +584,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     streamResult = await RemoteCommandStreamRunner.StreamAsync(
                         client, agentName, resolved, linked.Token,
                         outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
-                        onProgressTick: (a, cmd, elapsed) =>
-                        {
-                            _logger.LogInformation(
-                                "Long-running action on {Agent}: {Command} running for {Elapsed}",
-                                a, SecurityRedactor.Redact(cmd), elapsed.ToString(@"hh\:mm\:ss"));
-                            StatusChanged?.Invoke(a,
-                                $"Running: {SecurityRedactor.Redact(cmd)} ({elapsed:hh\\:mm\\:ss})");
-                        });
+                        onProgressTick: OnLongRunningProgress);
                 }
 
                 // Reboot handling: wait for agent to come back.
@@ -650,23 +693,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
                 try
                 {
-                    var retryResult = await endpoint.Resilience.ExecuteAsync(async resilienceCt =>
-                    {
-                        var retryClient = endpoint.GetClient();
-
-                        CancellationTokenSource? retryTimeoutCts = resolved.Timeout > 0
-                            ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
-                            : null;
-                        using var _retryTimeoutDisposable = retryTimeoutCts;
-                        using var retryLinked = retryTimeoutCts is not null
-                            ? CancellationTokenSource.CreateLinkedTokenSource(resilienceCt, retryTimeoutCts.Token)
-                            : CancellationTokenSource.CreateLinkedTokenSource(resilienceCt);
-
-                        return await RemoteCommandStreamRunner.StreamAsync(
-                            retryClient, agentName, resolved, retryLinked.Token,
-                            outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
-                            correlationId: correlationId);
-                    }, ct);
+                    var retryResult = await RunResilientStreamAsync(
+                        endpoint, agentName, resolved, correlationId, ct);
 
                     var retryExitCode = retryResult.ExitCode;
                     var retryError = retryResult.ErrorMessage;
@@ -759,22 +787,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                         try
                         {
                             var retryEndpoint = _agents.TryGetValue(agentName, out var ep2) ? ep2 : endpoint;
-                            var retryResult = await retryEndpoint.Resilience.ExecuteAsync(async resilienceCt =>
-                            {
-                                var retryClient = retryEndpoint.GetClient();
-                                CancellationTokenSource? retryTimeoutCts = resolved.Timeout > 0
-                                    ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
-                                    : null;
-                                using var _retryTimeoutDisposable = retryTimeoutCts;
-                                using var retryLinked = retryTimeoutCts is not null
-                                    ? CancellationTokenSource.CreateLinkedTokenSource(resilienceCt, retryTimeoutCts.Token)
-                                    : CancellationTokenSource.CreateLinkedTokenSource(resilienceCt);
-
-                                return await RemoteCommandStreamRunner.StreamAsync(
-                                    retryClient, agentName, resolved, retryLinked.Token,
-                                    outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
-                                    correlationId: correlationId);
-                            }, ct);
+                            var retryResult = await RunResilientStreamAsync(
+                                retryEndpoint, agentName, resolved, correlationId, ct);
 
                             var retryExitCode = retryResult.ExitCode;
                             var retryError = retryResult.ErrorMessage;
@@ -916,18 +930,9 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         {
             var client = endpoint.GetClient();
 
-            CancellationTokenSource? timeoutCts = resolved.Timeout > 0
-                ? new CancellationTokenSource(TimeSpan.FromSeconds(resolved.Timeout))
-                : null;
-            using var _timeoutCtsDisposable = timeoutCts;
-            using var linked = timeoutCts is not null
-                ? CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token)
-                : CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-            var streamResult = await RemoteCommandStreamRunner.StreamAsync(
-                client, agentName, resolved, linked.Token,
-                outputReceived: (a, l, k) => OutputReceived?.Invoke(a, l, k),
-                correlationId: correlationId);
+            var streamResult = await StreamWithTimeoutAsync(
+                client, agentName, resolved, ct,
+                onProgressTick: null, correlationId: correlationId);
 
             // Reboot accepted — wait for agent to come back online
             if (streamResult.ExitCode != -1)

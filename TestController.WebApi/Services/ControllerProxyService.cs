@@ -191,6 +191,33 @@ public sealed class ControllerProxyService : IDisposable
             return null;
         }
     }
+
+    /// <summary>
+    /// Forwards a request (optionally with a JSON body) to the WPF controller, preserving the
+    /// caller's Authorization header. Used by auth proxy endpoints on the secondary host.
+    /// </summary>
+    public async Task<HttpResponseMessage?> ForwardWithBodyAsync(
+        HttpMethod method, string path, string? authorizationHeader, string? jsonBody, string contentType)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var request = new HttpRequestMessage(method, $"{_baseUrl}{path}");
+            if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+            if (jsonBody is not null)
+                request.Content = new StringContent(jsonBody, System.Text.Encoding.UTF8, contentType);
+
+            return await _http.SendAsync(request);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogDebug("Controller proxy forward-with-body unavailable: {Message}", ex.Message);
+            return null;
+        }
+    }
 }
 
 // Response DTOs for deserialization

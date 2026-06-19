@@ -593,7 +593,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start group '{ag.Tag}' \u2014 agents are busy:\n{conflictMsg}", LogSeverity.Warning);
-                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
             _events.Publish(new AgentLocksChangedEvent
@@ -699,7 +699,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start action '{action.ResolvedTag}' \u2014 agent is busy:\n{conflictMsg}", LogSeverity.Warning);
-                Application.Current?.Dispatcher.Invoke(() => ActiveSessions.Remove(session));
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
             _events.Publish(new AgentLocksChangedEvent

@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
-import axios from 'axios';
-import { apiFetch } from '../lib/api';
+import { apiFetch, apiFetchRaw } from '../lib/api';
 import { useResultsStore } from '../stores/resultsStore';
 import type { BuildSummary, BuildNode, BuildDetailResponse, TrendReport, ConsecutiveFailureAlert } from '../types/api';
 
@@ -45,14 +44,12 @@ export function useResults() {
   }, [setAlerts]);
 
   const exportReport = useCallback(async (buildNumber: string, format: 'html' | 'csv' = 'html') => {
-    // Blob downloads can't go through apiFetch (which assumes JSON).
-    // axios is now configured with baseURL in main.tsx, so this works
-    // in both dev (relative ? Vite proxy) and production (absolute via
-    // VITE_API_BASE_URL).
-    const { data } = await axios.get<Blob>(
-      `/api/results/export/${encodeURIComponent(buildNumber)}`,
-      { params: { format }, responseType: 'blob' });
-    const url = URL.createObjectURL(data);
+    // Blob downloads bypass JSON parsing via apiFetchRaw, which still carries
+    // the auth token + correlation headers and respects VITE_API_BASE_URL.
+    const response = await apiFetchRaw(
+      `/api/results/export/${encodeURIComponent(buildNumber)}?format=${format}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `BuildResults_${buildNumber}.${format}`;

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import axios from 'axios';
+import { apiGet, apiPost } from '../lib/api';
 import { useExecutionStore } from '../stores/executionStore';
 import type { ExecutionStatus, SessionsResponse } from '../types/api';
 import type { PipelineLockDto } from '../stores/lockStore';
@@ -10,9 +10,8 @@ export function dispatchLockConflict(lock: PipelineLockDto): void {
 }
 
 function extractLockFrom409(error: any): PipelineLockDto | null {
-  if (error?.response?.status === 409) {
-    const body = error.response.data;
-    if (body?.lock) return body.lock as PipelineLockDto;
+  if (error?.status === 409 && error.body?.lock) {
+    return error.body.lock as PipelineLockDto;
   }
   return null;
 }
@@ -22,20 +21,20 @@ export function useExecution() {
   const setSessions = useExecutionStore(s => s.setSessions);
 
   const fetchStatus = useCallback(async () => {
-    const { data } = await axios.get<ExecutionStatus>('/api/execution/status');
+    const data = await apiGet<ExecutionStatus>('/api/execution/status');
     setStatus(data.isExecuting, data.activeCount);
     return data;
   }, [setStatus]);
 
   const fetchSessions = useCallback(async () => {
-    const { data } = await axios.get<SessionsResponse>('/api/execution/sessions');
+    const data = await apiGet<SessionsResponse>('/api/execution/sessions');
     setStatus(data.hasActive, data.activeCount);
     setSessions(data.sessions ?? []);
     return data;
   }, [setStatus, setSessions]);
 
   const triggerAll = useCallback(async () => {
-    const { data } = await axios.post('/api/execution/trigger-all');
+    const data = await apiPost('/api/execution/trigger-all');
     await fetchSessions();
     return data;
   }, [fetchSessions]);
@@ -45,7 +44,7 @@ export function useExecution() {
     params?: { buildNumber?: string; dropLocation?: string; parameters?: Record<string, string>; lockVersion?: number }
   ) => {
     try {
-      const { data } = await axios.post(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
+      const data = await apiPost(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
       await fetchSessions();
       return data;
     } catch (err: any) {
@@ -60,7 +59,7 @@ export function useExecution() {
 
   const triggerEvent = useCallback(async (tag: string, eventIndex: number) => {
     try {
-      const { data } = await axios.post(`/api/execution/trigger-event/${encodeURIComponent(tag)}/${eventIndex}`);
+      const data = await apiPost(`/api/execution/trigger-event/${encodeURIComponent(tag)}/${eventIndex}`);
       await fetchSessions();
       return data;
     } catch (err: any) {
@@ -74,19 +73,19 @@ export function useExecution() {
   }, [fetchSessions]);
 
   const cancelAll = useCallback(async () => {
-    const { data } = await axios.post('/api/execution/cancel');
+    const data = await apiPost('/api/execution/cancel');
     await fetchSessions();
     return data;
   }, [fetchSessions]);
 
   const cancelSession = useCallback(async (sessionId: string) => {
-    const { data } = await axios.post(`/api/execution/${encodeURIComponent(sessionId)}/cancel`);
+    const data = await apiPost(`/api/execution/${encodeURIComponent(sessionId)}/cancel`);
     await fetchSessions();
     return data;
   }, [fetchSessions]);
 
   const retrySession = useCallback(async (sessionId: string) => {
-    const { data } = await axios.post(`/api/execution/retry/${encodeURIComponent(sessionId)}`);
+    const data = await apiPost(`/api/execution/retry/${encodeURIComponent(sessionId)}`);
     await fetchSessions();
     return data;
   }, [fetchSessions]);
@@ -95,9 +94,9 @@ export function useExecution() {
   const retryByTag = useCallback(async (tag: string) => {
     try {
       // Phase 4: authorize + acquire lock via RBAC endpoint
-      await axios.post(`/api/pipelines/${encodeURIComponent(tag)}/retry`);
+      await apiPost(`/api/pipelines/${encodeURIComponent(tag)}/retry`);
       // Delegate to existing retry-by-tag execution endpoint
-      const { data } = await axios.post(`/api/execution/retry-tag/${encodeURIComponent(tag)}`);
+      const data = await apiPost(`/api/execution/retry-tag/${encodeURIComponent(tag)}`);
       await fetchSessions();
       return data;
     } catch (err: any) {

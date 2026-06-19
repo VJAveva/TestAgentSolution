@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    D3 load/soak harness. NOT part of the per-PR test run — invoked manually or
+    by the nightly CI job. Drives N simulated TestAgentService gRPC servers that
+    register + heartbeat against a live controller and measures controller-side
+    responsiveness against the SCALING-IMPLEMENTATION-PLAN success criteria.
+
+    Proto-generated server base (TestAgentService.TestAgentServiceBase) and the
+    controller client (TestControllerService.TestControllerServiceClient) come
+    from TestControllerGrpc.Core, so no local .proto compilation is needed.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TestController.LoadTests</RootNamespace>
+    <AssemblyName>TestController.LoadTests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,9 +1,14 @@
 <Window x:Class="TestControllerGrpc.Views.Admin.AssignPipelinesDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
         Title="Assign Pipelines" Height="450" Width="400"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="{DynamicResource WindowBg}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis"/>
+        <vm:InverseBoolToVisibilityConverter x:Key="InvBoolVis"/>
+    </Window.Resources>
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -21,10 +26,11 @@
                 </TextBlock.Text>
             </TextBlock>
             <TextBlock Text="Check pipelines to assign; uncheck to revoke." FontSize="11"
-                       Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
-            <TextBlock Text="Administrators always have access to all pipelines."
-                       FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,0"
-                       Visibility="{Binding IsAdministrator, Converter={StaticResource BoolToVis}}"/>
+                       Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"
+                       Visibility="{Binding IsFullAccessRole, Converter={StaticResource InvBoolVis}}"/>
+            <TextBlock Text="Administrators and Senior Managers have full access to all pipelines to trigger and cancel."
+                       FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"
+                       Visibility="{Binding IsFullAccessRole, Converter={StaticResource BoolVis}}"/>
         </StackPanel>
 
         <!-- Pipeline checkboxes -->
