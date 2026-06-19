@@ -185,6 +185,68 @@ namespace TestController.Persistence.Migrations
 
                     b.ToTable("Users", (string)null);
                 });
+
+            modelBuilder.Entity("TestControllerGrpc.Models.NotificationCooldown", b =>
+                {
+                    b.Property<long>("CooldownId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("LastSentUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("CooldownId");
+
+                    b.HasIndex("Target", "TargetType")
+                        .IsUnique();
+
+                    b.ToTable("NotificationCooldowns", (string)null);
+                });
+
+            modelBuilder.Entity("TestControllerGrpc.Models.NotificationMute", b =>
+                {
+                    b.Property<long>("MuteId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("MutedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MutedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("MuteId");
+
+                    b.HasIndex("Target", "TargetType")
+                        .IsUnique();
+
+                    b.ToTable("NotificationMutes", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

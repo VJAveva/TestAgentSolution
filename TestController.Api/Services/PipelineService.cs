@@ -17,7 +17,7 @@ public sealed class PipelineService
 {
     private readonly PipelineAuthorizationGuard _guard;
     private readonly ILockRegistry? _lockRegistry;
-    private readonly IVocabularyMonitor _vocabMonitor;
+    private readonly IVocabularyMonitor? _vocabMonitor;
     private readonly IAuditWriter _auditWriter;
     private readonly IAppLogger _logger;
 
@@ -25,7 +25,7 @@ public sealed class PipelineService
         PipelineAuthorizationGuard guard,
         IAppLogger logger,
         IAuditWriter auditWriter,
-        IVocabularyMonitor vocabMonitor,
+        IVocabularyMonitor? vocabMonitor = null,
         ILockRegistry? lockRegistry = null)
     {
         _guard = guard;
@@ -43,7 +43,7 @@ public sealed class PipelineService
     public async Task<PipelineLockDto?> AuthorizeTriggerAsync(IUserContext user, string pipelineId, CancellationToken ct = default)
     {
         // Phase 6: reject trigger on disabled pipeline
-        var watchItem = _vocabMonitor.CurrentConfig?.WatchItems
+        var watchItem = _vocabMonitor?.CurrentConfig?.WatchItems
             .FirstOrDefault(wi => string.Equals(wi.Tag, pipelineId, StringComparison.OrdinalIgnoreCase));
         if (watchItem is not null && !watchItem.IsEnabled)
         {

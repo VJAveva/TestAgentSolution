@@ -17,9 +17,12 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
 
     [ObservableProperty] private string _userId = "";
     [ObservableProperty] private string _username = "";
+    [ObservableProperty] private string _role = "";
     [ObservableProperty] private ObservableCollection<PipelineCheckItem> _pipelines = [];
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private string _errorMessage = "";
+
+    public bool IsAdministrator => string.Equals(Role, "Administrator", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Raised when assignments are saved successfully.</summary>
     public event Action? AssignmentsSaved;
@@ -34,20 +37,32 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
     /// Initialize with user ID and available pipelines.
     /// Call after constructing, before showing the dialog.
     /// </summary>
-    public async Task InitializeAsync(string userId, string username, IReadOnlyList<string> allPipelineIds)
+    public async Task InitializeAsync(string userId, string username, string role, IReadOnlyList<string> allPipelineIds)
     {
         UserId = userId;
         Username = username;
+        Role = role;
         IsLoading = true;
 
         try
         {
-            var currentAssignments = await _client.GetAssignmentsAsync(userId);
-            var currentSet = new HashSet<string>(currentAssignments);
+            List<PipelineCheckItem> items;
+            if (IsAdministrator)
+            {
+                // Admins effectively own all pipelines; keep dialog representation consistent.
+                items = allPipelineIds
+                    .Select(id => new PipelineCheckItem(id, true, false))
+                    .ToList();
+            }
+            else
+            {
+                var currentAssignments = await _client.GetAssignmentsAsync(userId);
+                var currentSet = new HashSet<string>(currentAssignments);
 
-            var items = allPipelineIds
-                .Select(id => new PipelineCheckItem(id, currentSet.Contains(id)))
-                .ToList();
+                items = allPipelineIds
+                    .Select(id => new PipelineCheckItem(id, currentSet.Contains(id), true))
+                    .ToList();
+            }
 
             Pipelines = new ObservableCollection<PipelineCheckItem>(items);
         }
@@ -70,10 +85,9 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
 
         try
         {
-            var desiredIds = Pipelines
-                .Where(p => p.IsChecked)
-                .Select(p => p.PipelineId)
-                .ToList();
+            var desiredIds = IsAdministrator
+                ? Pipelines.Select(p => p.PipelineId).ToList()
+                : Pipelines.Where(p => p.IsChecked).Select(p => p.PipelineId).ToList();
 
             var (success, error) = await _client.SetAssignmentsAsync(UserId, desiredIds);
             if (success)
@@ -102,12 +116,14 @@ public sealed partial class AssignPipelinesDialogViewModel : ObservableObject
 public sealed partial class PipelineCheckItem : ObservableObject
 {
     public string PipelineId { get; }
+    public bool IsSelectable { get; }
 
     [ObservableProperty] private bool _isChecked;
 
-    public PipelineCheckItem(string pipelineId, bool isChecked)
+    public PipelineCheckItem(string pipelineId, bool isChecked, bool isSelectable = true)
     {
         PipelineId = pipelineId;
         _isChecked = isChecked;
+        IsSelectable = isSelectable;
     }
 }

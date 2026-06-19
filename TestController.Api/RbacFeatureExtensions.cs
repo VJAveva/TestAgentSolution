@@ -1,6 +1,9 @@
 using Microsoft.Data.Sqlite;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -15,6 +18,7 @@ using TestController.Persistence.Identity;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Configuration;
 using TestControllerGrpc.Identity;
+using TestControllerGrpc.Models;
 
 namespace TestController.Api;
 
@@ -98,6 +102,10 @@ public static class RbacFeatureExtensions
             services.AddSingleton<PipelineService>();
             services.AddSingleton<RetryService>();
             services.AddSingleton<EnableDisableService>();
+
+            // Phase 8: Notification mute
+            services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
+            services.AddSingleton<MuteService>();
         }
         else
         {
@@ -168,20 +176,32 @@ internal sealed class DatabaseInitializerService : Microsoft.Extensions.Hosting.
             var pending = (await db.Database.GetPendingMigrationsAsync(cancellationToken)).ToList();
             if (pending.Count > 0 && await SchemaAlreadyExistsAsync(db, cancellationToken))
             {
-                // Tables exist from a previous creation path (old migrations or EnsureCreated).
-                // Baseline by recording all pending migrations as already applied.
-                foreach (var migrationId in pending)
+                // Tables may exist from a previous creation path (old migrations or EnsureCreated).
+                // Baseline ONLY the legacy Initial migration when history is empty, then run MigrateAsync
+                // for all real schema deltas (e.g., AddNotificationTables).
+                var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken)).ToList();
+                var pendingInitial = pending.Where(IsInitialMigration).ToList();
+                if (applied.Count == 0 && pendingInitial.Count > 0)
                 {
-                    await db.Database.ExecuteSqlRawAsync(
-                        "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
-                        [migrationId, ProductVersion()],
-                        cancellationToken);
+                    foreach (var migrationId in pendingInitial)
+                    {
+                        await db.Database.ExecuteSqlRawAsync(
+                            "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
+                            [migrationId, ProductVersion()],
+                            cancellationToken);
+                    }
                 }
             }
-            else
-            {
-                await db.Database.MigrateAsync(cancellationToken);
-            }
+
+            // Always migrate after optional baseline so pending schema changes are actually applied.
+            await db.Database.MigrateAsync(cancellationToken);
+
+            // Repair "phantom migration" drift: a stale build-output database can have an
+            // __EFMigrationsHistory row for a migration whose physical tables were never created
+            // (e.g. switching branches reuses bin\Debug\...\orchestrator.db). MigrateAsync sees the
+            // history row, reports "up to date", and the missing table surfaces only at query time
+            // (SQLite Error 1: 'no such table: NotificationMutes'). Detect and replay such migrations.
+            await RepairMissingMigratedTablesAsync(db, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -191,6 +211,89 @@ internal sealed class DatabaseInitializerService : Microsoft.Extensions.Hosting.
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Verifies that every migration recorded as applied in <c>__EFMigrationsHistory</c> actually
+    /// produced its expected tables. For any applied migration whose tables are physically missing,
+    /// the migration's <c>Up()</c> is regenerated via EF's own SQL generator and executed, recreating
+    /// the lost tables and indexes without touching healthy tables or deleting user data.
+    /// </summary>
+    private async Task RepairMissingMigratedTablesAsync(OrchestratorDbContext db, CancellationToken ct)
+    {
+        var applied = (await db.Database.GetAppliedMigrationsAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (applied.Count == 0)
+            return;
+
+        var migrationsAssembly = db.GetService<IMigrationsAssembly>();
+        var sqlGenerator = db.GetService<IMigrationsSqlGenerator>();
+        var existingTables = await GetExistingTablesAsync(db, ct);
+
+        foreach (var (migrationId, metadata) in migrationsAssembly.Migrations)
+        {
+            if (!applied.Contains(migrationId))
+                continue; // not recorded as applied — MigrateAsync owns these
+
+            var migration = migrationsAssembly.CreateMigration(metadata, db.Database.ProviderName!);
+            var createdTables = migration.UpOperations
+                .OfType<CreateTableOperation>()
+                .Select(op => op.Name)
+                .ToList();
+
+            if (createdTables.Count == 0)
+                continue; // nothing table-creating to verify (e.g. data-only migration)
+
+            var missing = createdTables.Where(t => !existingTables.Contains(t)).ToList();
+            if (missing.Count == 0)
+                continue; // schema matches history — healthy
+
+            _logger.LogWarning(
+                "RBAC database drift detected: migration {MigrationId} is recorded as applied but its table(s) {MissingTables} are missing. Replaying migration.",
+                migrationId, string.Join(", ", missing));
+
+            // Replay only the operations whose target tables are missing, so already-present tables
+            // (and their data) are left untouched.
+            var operationsToReplay = migration.UpOperations
+                .Where(op => OperationTargetsAnyTable(op, missing))
+                .ToList();
+
+            var commands = sqlGenerator.Generate(operationsToReplay, db.Model);
+            foreach (var command in commands)
+            {
+                await db.Database.ExecuteSqlRawAsync(command.CommandText, ct);
+            }
+
+            foreach (var table in missing)
+                existingTables.Add(table);
+
+            _logger.LogInformation(
+                "RBAC database drift repaired: recreated table(s) {RepairedTables} for migration {MigrationId}.",
+                string.Join(", ", missing), migrationId);
+        }
+    }
+
+    private static bool OperationTargetsAnyTable(MigrationOperation operation, IReadOnlyCollection<string> tables)
+        => operation switch
+        {
+            CreateTableOperation create => tables.Contains(create.Name),
+            CreateIndexOperation index => tables.Contains(index.Table),
+            _ => false,
+        };
+
+    /// <summary>Returns the set of user tables currently present in the SQLite database.</summary>
+    private static async Task<HashSet<string>> GetExistingTablesAsync(OrchestratorDbContext db, CancellationToken ct)
+    {
+        var conn = db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync(ct);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
+        var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            tables.Add(reader.GetString(0));
+        return tables;
+    }
 
     /// <summary>Checks if the AuditEntries table already exists (proxy for "schema already created").</summary>
     private static async Task<bool> SchemaAlreadyExistsAsync(OrchestratorDbContext db, CancellationToken ct)
@@ -214,6 +317,9 @@ internal sealed class DatabaseInitializerService : Microsoft.Extensions.Hosting.
 
     private static string ProductVersion() =>
         typeof(DbContext).Assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "10.0.0";
+
+    private static bool IsInitialMigration(string migrationId) =>
+        migrationId.EndsWith("_Initial", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

@@ -17,6 +17,7 @@ import Sidebar from './Sidebar';
 import ConnectionStatus from './ConnectionStatus';
 import DefaultModeBanner from '../header/DefaultModeBanner';
 import UserMenu from '../header/UserMenu';
+import ThemeToggle from '../header/ThemeToggle';
 import { useWatchList } from '../../hooks/useWatchList';
 import { useAgents } from '../../hooks/useAgents';
 import { useExecution } from '../../hooks/useExecution';
@@ -64,6 +65,7 @@ export default function AppShell() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-3">
+          <ThemeToggle />
           <UserMenu />
           <ConnectionStatus />
         </div>

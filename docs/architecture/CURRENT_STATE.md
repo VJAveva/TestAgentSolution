@@ -500,3 +500,98 @@ Output only the diff to append.
 | `TestControllerGrpc/ViewModels/MainViewModel.Security.cs` | Added OpenAuditViewer command |
 | `TestControllerGrpc/App.xaml.cs` | DI registrations for AuditClient + AuditViewerViewModel |
 | `TestController.WebApi.Tests/Rbac/AuditControllerTests.cs` | New — 9 integration tests |
+
+## Phase 8 — Automatic Notifications + Mute
+
+### Bugfix
+- `TestControllerGrpc/Services/ActionPipelineExecutor.cs` — replaced hardcoded `new SmtpClient("smtp")` with `new SmtpClient(_config.SmtpServer, _config.SmtpPort)`. Added `BuildResultsConfig` to constructor injection.
+
+### New backend — Notification dispatch
+- `TestControllerGrpc/Services/NotificationDispatcher.cs` — BackgroundService, subscribes to `ExecutionCompletedEvent` via `IEventAggregator`. On completion with failures: runs existing `ConsecutiveFailureDetector.Detect()`, filters muted/cooled-down targets, generates alert email via existing `BuildReportHtmlGenerator.GenerateAlertEmailHtml()`, sends to `QaAlertRecipients` via configured SMTP. Fire-and-forget, does not block execution pipeline.
+- **Decision**: fires ONLY on threshold crossings (configurable via `AlertOnThresholdOnly`), NOT every run — avoids duplicating existing CI batch email.
+
+### New backend — Mute service + storage
+- `TestControllerGrpc.Core/Models/NotificationEntities.cs` — `NotificationMute` + `NotificationCooldown` POCO entities.
+- `TestControllerGrpc.Core/Models/NotificationOptions.cs` — config class (`AutoAlertEnabled`, `AlertOnThresholdOnly`, `CooldownHours`). Bound from `"Notifications"` section.
+- `TestController.Persistence/Configurations/NotificationConfigurations.cs` — EF Core table configs (`NotificationMutes`, `NotificationCooldowns`).
+- `TestController.Persistence/OrchestratorDbContext.cs` — added `DbSet<NotificationMute>` + `DbSet<NotificationCooldown>`.
+- `TestController.Api/Services/MuteService.cs` — Singleton. Mute/Unmute (gated by `Notification_Mute` permission + audited), IsMuted, IsInCooldown, RecordSent.
+
+### New REST — Notification mute endpoints
+- `TestController.Api/Controllers/NotificationsController.cs`:
+  - `GET /api/notifications/mutes` — list all active mutes (authenticated).
+  - `POST /api/notifications/mutes` — mute target (gated by `Notification_Mute`).
+  - `DELETE /api/notifications/mutes/{id}` — unmute (gated by `Notification_Mute`).
+
+### New WPF
+- `TestControllerGrpc/Services/NotificationMuteClient.cs` — HTTP client for mute API.
+- `TestControllerGrpc/ViewModels/Admin/NotificationSettingsViewModel.cs` — CommunityToolkit.Mvvm. Read-only display of settings + mute list management.
+- DI: `NotificationMuteClient` + `NotificationSettingsViewModel` + `NotificationDispatcher` (hosted service) in `App.xaml.cs`.
+
+### New Web
+- `TestController.WebClient/src/hooks/useMutes.ts` — React hook: list/mute/unmute/isMuted/canMute.
+- `TestController.WebClient/src/components/results/TrendCharts.tsx` — Added mute/unmute buttons on each alert card (gated by `Notification_Mute` capability). Shows "MUTED" badge on muted tests.
+
+### Tests
+- `TestController.WebApi.Tests/Rbac/NotificationMuteTests.cs` — 9 tests: mute succeeds for admin, mute succeeds for engineer (own pipeline), 403 for unowned, unmute, cooldown suppression, cooldown expiry, 404 on unknown mute, audit.
+
+### DI registration
+- `TestController.Api/RbacFeatureExtensions.cs` — `MuteService` + `NotificationOptions` config (primary host only).
+- `TestControllerGrpc/App.xaml.cs` — `NotificationDispatcher` hosted service, `NotificationMuteClient`, `NotificationSettingsViewModel`.
+
+### Files created/modified
+| File | Change |
+|------|--------|
+| `TestControllerGrpc/Services/ActionPipelineExecutor.cs` | Bugfix: injected BuildResultsConfig, use configured SMTP |
+| `TestControllerGrpc.Core/Models/NotificationEntities.cs` | New — NotificationMute + NotificationCooldown |
+| `TestControllerGrpc.Core/Models/NotificationOptions.cs` | New — config class |
+| `TestController.Persistence/OrchestratorDbContext.cs` | Added 2 DbSets |
+| `TestController.Persistence/Configurations/NotificationConfigurations.cs` | New — EF config |
+| `TestController.Api/Services/MuteService.cs` | New — mute/cooldown logic |
+| `TestController.Api/Controllers/NotificationsController.cs` | New — REST endpoints |
+| `TestController.Api/RbacFeatureExtensions.cs` | MuteService + NotificationOptions DI |
+| `TestControllerGrpc/Services/NotificationDispatcher.cs` | New — automatic alert dispatch |
+| `TestControllerGrpc/Services/NotificationMuteClient.cs` | New — WPF HTTP client |
+| `TestControllerGrpc/ViewModels/Admin/NotificationSettingsViewModel.cs` | New — settings VM |
+| `TestControllerGrpc/App.xaml.cs` | DI for dispatcher + mute client + VM |
+| `TestController.WebClient/src/hooks/useMutes.ts` | New — React mute hook |
+| `TestController.WebClient/src/components/results/TrendCharts.tsx` | Added mute controls |
+| `TestController.WebApi.Tests/Rbac/NotificationMuteTests.cs` | New — 9 tests |
+
+---
+
+## Phase 9 — Reports (RBAC-gated)
+
+### What changed
+RBAC gating added to the **existing** report engine. No new report functionality.
+
+- **Report_View** (all roles incl. Guest): view reports, view trends, export CSV/HTML.
+- **Report_Generate** (Admin + SrMgr only): send report email.
+- Trend generation is a READ → gated by Report_View, not Report_Generate.
+- PDF export: NOT included.
+
+### Backend
+- `TestController.WebApi/Endpoints/ResultsEndpoints.cs` — `SendReport` gated by `Report_Generate` via `SessionAuthInterceptor.ResolveUserAsync` + `IAuthorizationService.CanAsync`. Returns 401/403 for unauthenticated/unpermitted. Fire-and-forget audit entry on successful send (ActionName=`Report_Generate`, resource=buildNumber, reason includes recipients count).
+- `/api/results/export` and `/api/results/trends` left open (Report_View — all roles).
+
+### WPF
+- `TestControllerGrpc/ViewModels/BuildResultsViewModel.cs` — Constructor takes optional `CapabilityChecker`. Adds `CanExportReport` (Report_View) and `CanSendReport` (Report_Generate) observable properties. Export (CSV/HTML/Trend) commands guard on `CanExportReport`; Send (SendReport, SendQaAlert, SendEmailSummary) commands guard on `CanSendReport`. Subscribes to `CapabilitiesChanged` for re-evaluation (Dispatcher-marshaled).
+
+### Web
+- `TestController.WebClient/src/components/results/BuildDetail.tsx` — Email button gated by `useCan('Report_Generate')`. Disabled with tooltip when denied. Export buttons remain visible (Report_View — all roles).
+- `TestController.WebClient/src/hooks/useResults.ts` — `sendReport` switched from raw `axios.post` to `apiFetch` so 403 triggers AuthDeniedToast.
+
+### Tests
+- `TestController.WebApi.Tests/Rbac/ReportAuthzTests.cs` — 9 tests: Report_View allowed for all 4 roles; Report_Generate allowed for Admin + SrMgr, denied for Engineer + Guest; audit fires on decision.
+
+### DI registrations
+- No new DI changes needed. `CapabilityChecker` already registered; `BuildResultsViewModel` already Singleton with auto-resolved constructor params.
+
+### Files modified
+| File | Change |
+|------|--------|
+| `TestController.WebApi/Endpoints/ResultsEndpoints.cs` | SendReport gated by Report_Generate + audit |
+| `TestControllerGrpc/ViewModels/BuildResultsViewModel.cs` | CapabilityChecker injection, Can* properties, command guards |
+| `TestController.WebClient/src/components/results/BuildDetail.tsx` | Email button gated by useCan('Report_Generate') |
+| `TestController.WebClient/src/hooks/useResults.ts` | sendReport → apiFetch for 403 handling |
+| `TestController.WebApi.Tests/Rbac/ReportAuthzTests.cs` | New — 9 tests |

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
+import { useMutes } from '../../hooks/useMutes';
 import { logCatch } from '../../lib/logger';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -23,6 +24,7 @@ export default function TrendCharts() {
   const trends = useResultsStore(s => s.trends);
   const alerts = useResultsStore(s => s.alerts);
   const { fetchTrends, fetchAlerts } = useResults();
+  const { canMute, isMuted, getMuteId, mute, unmute } = useMutes();
 
   useEffect(() => {
     fetchTrends().catch(logCatch('TrendCharts', 'fetchTrends'));
@@ -138,6 +140,21 @@ export default function TrendCharts() {
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${priorityColor}`}>{a.priority}</span>
                     <span className="font-medium text-text-primary">{a.testName}</span>
+                    {isMuted(a.testName) && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted">MUTED</span>
+                    )}
+                    {canMute && (
+                      <button
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-bdr hover:bg-bg-elevated text-text-muted"
+                        onClick={() => {
+                          const muteId = getMuteId(a.testName);
+                          if (muteId) unmute(muteId);
+                          else mute(a.testName, 'Test');
+                        }}
+                      >
+                        {isMuted(a.testName) ? 'Unmute' : 'Mute'}
+                      </button>
+                    )}
                     <span className="text-text-muted ml-auto">{a.consecutiveFailCount}× consecutive</span>
                   </div>
                   <div className="text-text-muted mt-0.5">{a.useCaseName}</div>

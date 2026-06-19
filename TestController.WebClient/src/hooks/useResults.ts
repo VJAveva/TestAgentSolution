@@ -61,10 +61,11 @@ export function useResults() {
   }, []);
 
   const sendReport = useCallback(async (buildNumber: string, recipients?: string) => {
-    const { data } = await axios.post(
-      '/api/results/send-report',
-      { buildNumber, recipients });
-    return data;
+    return apiFetch<{ message: string; recipients: number }>('/api/results/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buildNumber, recipients }),
+    });
   }, []);
 
   return { fetchBuilds, fetchBuild, fetchBuildDetail, fetchTrends, fetchAlerts, exportReport, sendReport };

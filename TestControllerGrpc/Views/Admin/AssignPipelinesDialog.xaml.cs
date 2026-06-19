@@ -17,9 +17,9 @@ public partial class AssignPipelinesDialog : Window
         _viewModel.AssignmentsSaved += OnAssignmentsSaved;
     }
 
-    public async Task InitializeAsync(string userId, string username, IReadOnlyList<string> allPipelineIds)
+    public async Task InitializeAsync(string userId, string username, string role, IReadOnlyList<string> allPipelineIds)
     {
-        await _viewModel.InitializeAsync(userId, username, allPipelineIds);
+        await _viewModel.InitializeAsync(userId, username, role, allPipelineIds);
     }
 
     private void OnAssignmentsSaved()

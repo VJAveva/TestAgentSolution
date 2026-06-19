@@ -69,10 +69,11 @@
         <a href="#config">9. Configuration Reference</a>
         <a href="#shortcuts">10. Keyboard Shortcuts</a>
         <a href="#security">11. Security Features</a>
-        <a href="#common-issues">12. Common Execution Issues</a>
-        <a href="#grpc-config">13. gRPC Communication Setup</a>
-        <a href="#best-practices">14. Best Practices & Lessons</a>
-        <a href="#glossary">15. Glossary</a>
+        <a href="#rbac">12. Role-Based Access Control</a>
+        <a href="#common-issues">13. Common Execution Issues</a>
+        <a href="#grpc-config">14. gRPC Communication Setup</a>
+        <a href="#best-practices">15. Best Practices & Lessons</a>
+        <a href="#glossary">16. Glossary</a>
     </div>
 </div>
 
@@ -1095,7 +1096,156 @@ BackupPath=\\nas\backups</pre>
 
 <hr>
 
-<h2 id="common-issues">12. Common Execution Issues</h2>
+<h2 id="rbac">12. Role-Based Access Control (RBAC)</h2>
+
+<p>Section 11 covers <strong>authentication</strong> — proving <em>who</em> a user is. <strong>Role-Based Access Control</strong> answers the next question: once someone is signed in, <em>what are they allowed to do?</em> RBAC gives each user a <strong>role</strong>, and each role grants a specific set of permissions for triggering pipelines, editing the WatchList, managing agents, and viewing the audit trail.</p>
+
+<div class="note">RBAC is <strong>server-enforced</strong>. The web client hides or disables buttons based on your role, but the Controller re-checks every write request on the server — so permissions can't be bypassed by tampering with the browser UI.</div>
+
+<h3>How RBAC Fits With Authentication</h3>
+<p>Your <em>identity</em> comes from the authentication mode you set up in Section 11 (Domain, Local, or Token). RBAC then maps that identity to a <em>role</em> and a permission set stored in the Controller's RBAC database.</p>
+<ul>
+    <li>The <strong>WPF Controller (the desktop app) is the sole owner of the RBAC database.</strong> All roles and permissions are created and edited there.</li>
+    <li>Changes are pushed <strong>live to every connected web client over SignalR</strong> — no page reload or service restart required.</li>
+    <li><strong>Reads are open; writes are gated.</strong> Anyone signed in can <em>view</em> status, logs, and results. Only <em>actions</em> — trigger, cancel, edit, configure, manage agents — require permission.</li>
+</ul>
+
+<h3>The Built-In Roles</h3>
+<table>
+    <tr><th>Role</th><th>Intended For</th><th>What They Can Do</th><th>Where</th></tr>
+    <tr>
+        <td><span class="badge badge-red">Administrator</span></td>
+        <td>System owners</td>
+        <td>Everything: manage roles &amp; permissions, register agents, change configuration, and view the audit trail</td>
+        <td>WPF Controller only</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-mauve">Senior Manager</span></td>
+        <td>Leads who run the whole suite</td>
+        <td>Full operator rights — trigger and cancel <em>any</em> pipeline, view everything</td>
+        <td>Web + WPF</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-blue">Engineer</span></td>
+        <td>Team members who own specific pipelines</td>
+        <td>Trigger and cancel <strong>only their assigned pipelines</strong>; view-only everywhere else</td>
+        <td>Web + WPF</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-yellow">Guest</span></td>
+        <td>Observers, dashboards, stakeholders</td>
+        <td>Read-only — view status and results via an anonymous session token; cannot trigger anything</td>
+        <td>Web</td>
+    </tr>
+</table>
+
+<div class="warning">The <span class="badge badge-red">Administrator</span> role signs in through the <strong>desktop Controller only</strong> — there is no admin login on the web client, by design. This keeps database ownership and audit access on a single trusted surface.</div>
+
+<h3>Permission States in the Web Client</h3>
+<p>In the web client's WatchList tree, every node shows one of three states so a user can tell at a glance what they're allowed to do. The legend at the top of the tree matches these:</p>
+<table>
+    <tr><th>State</th><th>What It Means</th><th>Trigger Button</th></tr>
+    <tr>
+        <td><span class="badge badge-green">Triggerable</span></td>
+        <td>Your role has trigger rights on this pipeline</td>
+        <td>Active</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-blue">View only</span></td>
+        <td>You can see the item and its results, but your role can't trigger it</td>
+        <td>Hidden / inactive</td>
+    </tr>
+    <tr>
+        <td><span class="badge badge-peach">Admin-disabled</span></td>
+        <td>An administrator has disabled this item for <em>everyone</em></td>
+        <td>Disabled for all roles</td>
+    </tr>
+</table>
+<div class="tip">Because permission changes broadcast over SignalR, when an administrator changes a role or disables an item in the Controller, connected web clients re-render these states within moments — no reload needed.</div>
+
+<h3>Configuring RBAC — Step by Step</h3>
+<p>RBAC is set up by an administrator from the WPF Controller. A typical first-time configuration:</p>
+
+<div class="step">
+    <span class="step-num">1</span>
+    <strong>Enable authorization in configuration</strong>
+    <p style="margin-top: 8px;">Add an <code>Authorization</code> block to the Controller's <code>appsettings.json</code>, alongside the <code>Security</code> block from Section 11:</p>
+    <pre>{
+  "Authorization": {
+    "Enabled": true,
+    "DefaultRole": "Guest",
+    "DatabasePath": "C:\\ProgramData\\TestController\\rbac.db"
+  }
+}</pre>
+    <p style="margin-top: 8px;">Restart the Controller so the RBAC database initializes.</p>
+</div>
+
+<div class="step">
+    <span class="step-num">2</span>
+    <strong>Sign in as Administrator (desktop)</strong>
+    <p style="margin-top: 8px;">Launch the WPF Controller and sign in with an account that resolves to the Administrator role. The RBAC management screens are available only here.</p>
+</div>
+
+<div class="step">
+    <span class="step-num">3</span>
+    <strong>Assign roles to users</strong>
+    <p style="margin-top: 8px;">Open the security / roles area in the Controller and give each user (or authenticated identity) one of the four built-in roles. Until a user is assigned a role, they fall back to the <strong>default role</strong> set in step 1.</p>
+</div>
+
+<div class="step">
+    <span class="step-num">4</span>
+    <strong>Scope Engineers to their pipelines</strong>
+    <p style="margin-top: 8px;">For each <span class="badge badge-blue">Engineer</span>, select the WatchItems (pipelines) they own. They'll be able to trigger and cancel those, and will see everything else as <em>view-only</em>.</p>
+</div>
+
+<div class="step">
+    <span class="step-num">5</span>
+    <strong>(Optional) Disable items for everyone</strong>
+    <p style="margin-top: 8px;">Mark any WatchItem as <em>admin-disabled</em> to lock it out for all roles — handy for retiring a pipeline or freezing it during maintenance without deleting it.</p>
+</div>
+
+<div class="tip">You can verify any user's effective permissions at any time with <code>GET /api/security/whoami</code>, which returns their identity, role, and resolved permissions (see Section 11, Diagnostic Endpoints).</div>
+
+<h3>Default Mode</h3>
+<p><strong>Default Mode</strong> governs what an authenticated user can do <em>before</em> an administrator has assigned them a role — for example, on a freshly configured Controller. The role named in <code>DefaultRole</code> is applied to every unassigned identity.</p>
+<div class="warning">Set <code>DefaultRole</code> to the <strong>least privilege</strong> appropriate for your environment — usually <span class="badge badge-yellow">Guest</span> (read-only). A permissive default means anyone who authenticates can trigger pipelines until you explicitly restrict them.</div>
+
+<h3>Auditing RBAC Activity</h3>
+<p>RBAC decisions feed the same audit trail described in Section 11. Recorded events include:</p>
+<ul>
+    <li><strong>Role assignments and changes</strong> — who changed whose role, and when</li>
+    <li><strong>Permission checks</strong> — which write requests were allowed or denied</li>
+    <li><strong>Command rejections</strong> — actions blocked because the caller's role lacked permission</li>
+</ul>
+<div class="note">The audit trail is viewable by <span class="badge badge-red">Administrators</span> and only from the <strong>WPF Controller</strong> — it is not exposed on the web client.</div>
+
+<h3>RBAC Troubleshooting</h3>
+
+<details>
+    <summary>A user can see a pipeline but the Trigger button is missing</summary>
+    <p>That node is in the <span class="badge badge-blue">View only</span> state — their role doesn't have trigger rights for it. If they should be able to run it, assign them as an <span class="badge badge-blue">Engineer</span> scoped to that pipeline, or grant the <span class="badge badge-mauve">Senior Manager</span> role for full operator rights.</p>
+</details>
+
+<details>
+    <summary>I changed a role but the web client still shows the old permissions</summary>
+    <p>Permission changes broadcast over SignalR and normally apply within seconds. If a client isn't updating, its SignalR connection to the Controller has likely dropped — check the Online/Offline indicator in the web client header. Reloading the page forces a fresh permission fetch.</p>
+</details>
+
+<details>
+    <summary>Why can't I log in as Administrator on the web client?</summary>
+    <p>This is intentional. Administrator access — including role management and audit viewing — is restricted to the desktop WPF Controller so that database ownership stays on one trusted surface. Use the Controller for any admin task.</p>
+</details>
+
+<details>
+    <summary>Every item shows as view-only or disabled</summary>
+    <p>The Controller is probably running with no roles assigned yet, so every authenticated user falls back to the <code>DefaultRole</code> (Default Mode). Sign in as Administrator on the desktop and assign roles as described above.</p>
+</details>
+
+<div class="warning">RBAC controls <em>authorization</em>, not encryption. In production, always pair it with a real authentication mode and TLS (Section 11). Note that <code>Security.Mode = "None"</code> treats every caller as Admin and effectively bypasses RBAC.</div>
+
+<hr>
+
+<h2 id="common-issues">13. Common Execution Issues</h2>
 
 <p>This section covers the most frequent problems encountered during execution and how to resolve them.</p>
 
@@ -1309,7 +1459,7 @@ BackupPath=\\nas\backups</pre>
 
 <hr>
 
-<h2 id="grpc-config">13. gRPC Communication Setup</h2>
+<h2 id="grpc-config">14. gRPC Communication Setup</h2>
 
 <p>Proper gRPC configuration is critical for reliable Controller-Agent communication, especially for long-running pipelines.</p>
 
@@ -1489,7 +1639,7 @@ BackupPath=\\nas\backups</pre>
 
 <hr>
 
-<h2 id="best-practices">14. Best Practices & Lessons Learned</h2>
+<h2 id="best-practices">15. Best Practices & Lessons Learned</h2>
 
 <h3>Agent Deployment</h3>
 
@@ -1628,7 +1778,7 @@ BackupPath=\\nas\backups</pre>
 
 <hr>
 
-<h2 id="glossary">15. Glossary</h2>
+<h2 id="glossary">16. Glossary</h2>
 
 <table>
     <tr>

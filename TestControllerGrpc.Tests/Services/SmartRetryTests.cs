@@ -22,7 +22,8 @@ public class SmartRetryTests
             NullLogger<ActionPipelineExecutor>.Instance,
             new TrxResultsParser(),
             new BuildResultsAggregator(config),
-            new BuildReportHtmlGenerator(config));
+            new BuildReportHtmlGenerator(config),
+            config);
     }
 
     private static PipelineExecutionContext CreateContext() => new();

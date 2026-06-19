@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Mail;
 using System.Text;
+using TestController.Api.Interceptors;
+using TestControllerGrpc.Authorization;
+using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using IAuthorizationService = TestControllerGrpc.Authorization.IAuthorizationService;
 
 namespace TestController.WebApi.Endpoints;
 
@@ -24,7 +28,7 @@ public static class ResultsEndpoints
         return group;
     }
 
-    /// <summary>GET /api/results/export/{buildNumber}?format=html|csv — download report.</summary>
+    /// <summary>GET /api/results/export/{buildNumber}?format=html|csv ï¿½ download report.</summary>
     private static IResult ExportBuildReport(
         string buildNumber,
         HttpContext context,
@@ -71,14 +75,28 @@ public static class ResultsEndpoints
         }
     }
 
-    /// <summary>POST /api/results/send-report — email report to recipients.</summary>
+    /// <summary>POST /api/results/send-report â€“ email report to recipients. Gated by Report_Generate.</summary>
     private static async Task<IResult> SendReport(
         SendReportRequest request,
+        HttpContext context,
+        SessionAuthInterceptor authInterceptor,
+        IAuthorizationService authorizationService,
+        IAuditWriter auditWriter,
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildReportHtmlGenerator htmlGenerator,
         BuildResultsConfig config)
     {
+        // â”€â”€ Permission gate: Report_Generate (Admin + SrMgr only) â”€â”€
+        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        var user = await authInterceptor.ResolveUserAsync(authHeader, ClientKind.Web);
+        if (user is null)
+            return Results.Json(new { error = "Not authenticated" }, statusCode: 401);
+
+        var decision = await authorizationService.CanAsync(user, Permission.Report_Generate);
+        if (!decision.Allowed)
+            return Results.Json(new { error = decision.HumanReadable ?? "Forbidden" }, statusCode: 403);
+
         var builds = parser.DiscoverBuilds(config.ResultsRootPath);
         var match = builds.FirstOrDefault(b =>
             string.Equals(b.BuildNumber, request.BuildNumber, StringComparison.OrdinalIgnoreCase));
@@ -106,7 +124,7 @@ public static class ResultsEndpoints
                     !string.IsNullOrWhiteSpace(config.FromAddress)
                         ? config.FromAddress
                         : "testcontroller@noreply.local"),
-                Subject = $"Build Results: {request.BuildNumber} — {node.PassRate:F1}% pass rate",
+                Subject = $"Build Results: {request.BuildNumber} ï¿½ {node.PassRate:F1}% pass rate",
                 Body = html,
                 IsBodyHtml = true
             };
@@ -119,6 +137,20 @@ public static class ResultsEndpoints
             }
 
             await smtp.SendMailAsync(message);
+
+            // Fire-and-forget audit
+            auditWriter.Enqueue(new AuditEntry
+            {
+                UserId = user.UserId,
+                GuestId = user.GuestId,
+                RoleAtTime = Enum.TryParse<Role>(user.Roles.FirstOrDefault(), out var r) ? r : null,
+                ActionName = "Report_Generate",
+                ResourceId = request.BuildNumber,
+                Allowed = true,
+                ReasonCode = $"sent:recipients={message.To.Count}",
+                TimestampUtc = DateTime.UtcNow,
+                ClientKind = user.ClientKind,
+            });
 
             return Results.Ok(new
             {

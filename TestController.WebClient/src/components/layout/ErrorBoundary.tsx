@@ -17,15 +17,15 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen bg-[#1E1E2E] text-[#CDD6F4] p-8">
-          <h1 className="text-2xl font-bold text-[#F38BA8] mb-4">Application Error</h1>
-          <pre className="max-w-2xl overflow-auto text-sm bg-[#313244] p-4 rounded-lg border border-[#585B70] whitespace-pre-wrap">
+        <div className="flex flex-col items-center justify-center h-screen bg-bg text-text-primary p-8">
+          <h1 className="text-2xl font-bold text-acc-red mb-4">Application Error</h1>
+          <pre className="max-w-2xl overflow-auto text-sm bg-bg-card p-4 rounded-lg border border-bdr whitespace-pre-wrap">
             {this.state.error.message}
             {'\n\n'}
             {this.state.error.stack}
           </pre>
           <button
-            className="mt-6 px-4 py-2 bg-[#89B4FA] text-[#1E1E2E] font-medium rounded hover:bg-[#89B4FA]/80"
+            className="mt-6 px-4 py-2 bg-accent text-bg font-medium rounded hover:bg-accent/80"
             onClick={() => window.location.reload()}
           >
             Reload Page

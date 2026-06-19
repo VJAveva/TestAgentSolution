@@ -35,6 +35,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestController.Dashboard", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestController.Persistence", "TestController.Persistence\TestController.Persistence.csproj", "{5ADF1F3C-D0BA-4B91-BEA6-2E26CA1718C4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestController.ApiTests", "TestController.ApiTests\TestController.ApiTests.csproj", "{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -165,6 +167,18 @@ Global
 		{5ADF1F3C-D0BA-4B91-BEA6-2E26CA1718C4}.Release|x64.Build.0 = Release|Any CPU
 		{5ADF1F3C-D0BA-4B91-BEA6-2E26CA1718C4}.Release|x86.ActiveCfg = Release|Any CPU
 		{5ADF1F3C-D0BA-4B91-BEA6-2E26CA1718C4}.Release|x86.Build.0 = Release|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Debug|x64.Build.0 = Debug|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Debug|x86.Build.0 = Debug|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Release|x64.ActiveCfg = Release|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Release|x64.Build.0 = Release|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Release|x86.ActiveCfg = Release|Any CPU
+		{B3C8E79A-5414-4891-B7D0-B193AF01CC4A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -23,7 +23,8 @@ public class ActionPipelineExecutorTests
             NullLogger<ActionPipelineExecutor>.Instance,
             new TrxResultsParser(),
             new BuildResultsAggregator(config),
-            new BuildReportHtmlGenerator(config));
+            new BuildReportHtmlGenerator(config),
+            config);
     }
 
     private static PipelineExecutionContext CreateContext() => new();

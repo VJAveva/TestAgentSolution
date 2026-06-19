@@ -180,6 +180,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
             {
                 StatusMessage = "Switched to Secured mode.";
                 _logger.Info("RBAC", "System switched to Secured mode");
+                IsWizardOpen = false;
                 RequestClose?.Invoke(true);
                 _systemModeClient.NotifyLocalModeChange("secured");
             }
@@ -229,6 +230,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
             {
                 StatusMessage = "Switched to Default mode.";
                 _logger.Info("RBAC", "System switched to Default mode");
+                IsDisableDialogOpen = false;
                 RequestClose?.Invoke(true);
                 _systemModeClient.NotifyLocalModeChange("default");
             }

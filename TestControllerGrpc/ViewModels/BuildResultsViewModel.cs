@@ -22,6 +22,7 @@ public partial class BuildResultsViewModel : ObservableObject
     private readonly BuildResultsConfig _config;
     private readonly BuildReportHtmlGenerator _htmlGenerator;
     private readonly FailurePatternAnalyzer? _patternAnalyzer;
+    private readonly CapabilityChecker? _capabilityChecker;
 
     public ObservableCollection<BuildListItem> AvailableBuilds { get; } = new();
     public ObservableCollection<ResultsTreeNode> ResultsTree { get; } = new();
@@ -102,18 +103,45 @@ public partial class BuildResultsViewModel : ObservableObject
     // Constructor
     // ???????????????????????????????????????????????????????????????
 
-    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator, FailurePatternAnalyzer? patternAnalyzer = null)
+    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator, FailurePatternAnalyzer? patternAnalyzer = null, CapabilityChecker? capabilityChecker = null)
     {
         _parser = parser;
         _aggregator = aggregator;
         _config = config;
         _htmlGenerator = htmlGenerator;
         _patternAnalyzer = patternAnalyzer;
+        _capabilityChecker = capabilityChecker;
         _goodThreshold = config.GoodThreshold;
         _warningThreshold = config.WarningThreshold;
         _resultsRootPath = config.ResultsRootPath;
         PassRateConverter = new PassRateToColorConverter(config);
         AnalyzeFailurePatternCommand = new RelayCommand<string>(OnAnalyzeFailurePattern, name => !string.IsNullOrWhiteSpace(name));
+
+        // Initialize capability-gated flags
+        RefreshReportCapabilities();
+        if (_capabilityChecker is not null)
+            _capabilityChecker.CapabilitiesChanged += OnCapabilitiesChanged;
+    }
+
+    /// <summary>
+    /// True when the current user can export reports (Report_View — all roles).
+    /// </summary>
+    [ObservableProperty] private bool _canExportReport = true;
+
+    /// <summary>
+    /// True when the current user can send report emails (Report_Generate — Admin + SrMgr).
+    /// </summary>
+    [ObservableProperty] private bool _canSendReport = true;
+
+    private void RefreshReportCapabilities()
+    {
+        CanExportReport = _capabilityChecker?.Can(TestControllerGrpc.Authorization.Permission.Report_View) ?? true;
+        CanSendReport = _capabilityChecker?.Can(TestControllerGrpc.Authorization.Permission.Report_Generate) ?? true;
+    }
+
+    private void OnCapabilitiesChanged()
+    {
+        Application.Current?.Dispatcher.InvokeAsync(RefreshReportCapabilities);
     }
 
     /// <summary>
@@ -344,6 +372,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private void ExportToCsv()
     {
+        if (!CanExportReport) { StatusMessage = "Report export is not available."; return; }
         if (CurrentBuildNode is null) return;
 
         var dlg = new SaveFileDialog
@@ -360,6 +389,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private void ExportToHtml()
     {
+        if (!CanExportReport) { StatusMessage = "Report export is not available."; return; }
         if (CurrentBuildNode is null) return;
 
         var dlg = new SaveFileDialog
@@ -406,6 +436,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private void SendReport()
     {
+        if (!CanSendReport) { StatusMessage = "Report sending requires Manager role."; return; }
         if (CurrentBuildNode is null) return;
         var html = _htmlGenerator.GenerateSingleBuildHtml(CurrentBuildNode);
         var subject = $"Build Results: {CurrentBuildNode.BuildNumber} � {CurrentBuildNode.PassRate:F1}% ({CurrentBuildNode.Health})";
@@ -415,6 +446,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private void SendQaAlert()
     {
+        if (!CanSendReport) { StatusMessage = "Report sending requires Manager role."; return; }
         if (FailureAlerts.Count == 0) return;
         var html = _htmlGenerator.GenerateAlertEmailHtml(FailureAlerts);
         var subject = $"\u26A0 Priority Investigation Required � {FailureAlerts.Count} tests failing consecutively";
@@ -424,6 +456,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private async Task SendEmailSummary()
     {
+        if (!CanSendReport) { StatusMessage = "Report sending requires Manager role."; return; }
         if (IsConsolidatedMode)
         {
             if (LoadedBuildNodes.Count == 0)
@@ -497,6 +530,7 @@ public partial class BuildResultsViewModel : ObservableObject
     [RelayCommand]
     private async Task GenerateTrendReport()
     {
+        if (!CanExportReport) { StatusMessage = "Report export is not available."; return; }
         if (string.IsNullOrWhiteSpace(ResultsRootPath))
         {
             StatusMessage = "Set a results root path first.";

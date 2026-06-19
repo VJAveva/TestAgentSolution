@@ -22,6 +22,9 @@
             </TextBlock>
             <TextBlock Text="Check pipelines to assign; uncheck to revoke." FontSize="11"
                        Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+            <TextBlock Text="Administrators always have access to all pipelines."
+                       FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,0"
+                       Visibility="{Binding IsAdministrator, Converter={StaticResource BoolToVis}}"/>
         </StackPanel>
 
         <!-- Pipeline checkboxes -->
@@ -29,7 +32,7 @@
                  BorderBrush="{DynamicResource BorderDefault}">
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding PipelineId}"
+                    <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsSelectable}" Content="{Binding PipelineId}"
                               FontSize="12" Margin="4,3"/>
                 </DataTemplate>
             </ListBox.ItemTemplate>

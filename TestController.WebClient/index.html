@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TestController</title>
+    <script>
+      // Resolve and apply the theme before first paint to avoid a flash of the
+      // wrong theme. Mirrors the logic in src/stores/themeStore.ts (persist key
+      // 'theme-storage', default 'system').
+      (function () {
+        try {
+          var choice = 'system';
+          var raw = localStorage.getItem('theme-storage');
+          if (raw) { choice = (JSON.parse(raw).state || {}).theme || 'system'; }
+          var resolved = choice === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : choice;
+          document.documentElement.dataset.theme = resolved;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body class="bg-bg text-text-primary">
     <div id="root"></div>

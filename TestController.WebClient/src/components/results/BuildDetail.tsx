@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
+import { useCan, useDisabledReason } from '../../hooks/useCapabilities';
 import { logCatch } from '../../lib/logger';
 import { Download, Mail, ChevronDown, ChevronRight, Search, Filter, Activity, FileSearch } from 'lucide-react';
 import type { BuildDetailTest } from '../../types/api';
@@ -13,6 +14,8 @@ export default function BuildDetail() {
   const build = useResultsStore(s => s.selectedBuild);
   const detail = useResultsStore(s => s.buildDetail);
   const { exportReport, sendReport, fetchBuildDetail } = useResults();
+  const canSend = useCan('Report_Generate');
+  const sendDeniedReason = useDisabledReason('Report_Generate');
   const [activeTab, setActiveTab] = useState<DetailTab>('usecases');
   const [searchText, setSearchText] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('All');
@@ -76,12 +79,24 @@ export default function BuildDetail() {
         >
           <Download size={12} /> CSV
         </button>
-        <button
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-accent/15 text-accent hover:bg-accent/25"
-          onClick={() => sendReport(build.buildNumber)}
-        >
-          <Mail size={12} /> Email
-        </button>
+        <div className="relative group inline-block">
+          <button
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+              canSend
+                ? 'bg-accent/15 text-accent hover:bg-accent/25'
+                : 'bg-white/5 text-text-secondary cursor-not-allowed opacity-50'
+            }`}
+            onClick={() => canSend && sendReport(build.buildNumber)}
+            disabled={!canSend}
+          >
+            <Mail size={12} /> Email
+          </button>
+          {!canSend && sendDeniedReason && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded bg-bg-ribbon border border-bdr text-xs text-text-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+              {sendDeniedReason}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI cards */}

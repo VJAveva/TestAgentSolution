@@ -60,7 +60,7 @@ public partial class UserManagementPage : UserControl
 
             var dialog = new AssignPipelinesDialog();
             dialog.Owner = Window.GetWindow(this);
-            await dialog.InitializeAsync(_vm.SelectedUser.UserId, _vm.SelectedUser.Username, allTags);
+            await dialog.InitializeAsync(_vm.SelectedUser.UserId, _vm.SelectedUser.Username, _vm.SelectedUser.Role, allTags);
 
             if (dialog.ShowDialog() == true)
             {

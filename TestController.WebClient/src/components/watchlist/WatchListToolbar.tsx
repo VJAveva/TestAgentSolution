@@ -25,9 +25,9 @@ export default function WatchListToolbar() {
   const showRetry = selectedNode?.nodeKind === 'WatchItem' && selectedNode.executionStatus === 'Failed';
 
   // Phase 6: detect disabled pipeline from model
-  const isPipelineDisabled = selectedNode?.nodeKind === 'WatchItem'
-    && selectedNode.model && 'isEnabled' in selectedNode.model
-    && !(selectedNode.model as { isEnabled?: boolean }).isEnabled;
+  const isPipelineDisabled =
+    selectedNode?.nodeKind === 'WatchItem'
+    && (selectedNode.model as { isEnabled?: boolean } | undefined)?.isEnabled === false;
 
   const retryDisabled = busy || !canRetry || isLockedByOther || isPipelineDisabled;
 

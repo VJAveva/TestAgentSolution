@@ -25,6 +25,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
     private readonly TrxResultsParser _parser;
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildReportHtmlGenerator _htmlGenerator;
+    private readonly BuildResultsConfig _config;
 
     public ActionPipelineExecutor(
         IAgentGrpcDispatcher dispatcher,
@@ -32,13 +33,15 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
         ILogger<ActionPipelineExecutor> logger,
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
-        BuildReportHtmlGenerator htmlGenerator)
+        BuildReportHtmlGenerator htmlGenerator,
+        BuildResultsConfig config)
         : base(sessionManager, logger)
     {
         _dispatcher = dispatcher;
         _parser = parser;
         _aggregator = aggregator;
         _htmlGenerator = htmlGenerator;
+        _config = config;
     }
 
     // ?? Action execution with smart retry ??????????????????????????????
@@ -178,7 +181,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
 
         try
         {
-            using var smtpClient = new SmtpClient("smtp")
+            using var smtpClient = new SmtpClient(_config.SmtpServer, _config.SmtpPort)
             {
                 UseDefaultCredentials = true
             };

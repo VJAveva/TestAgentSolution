@@ -126,6 +126,9 @@ public partial class App : Application
                 services.AddHostedService<ControllerGrpcServerHost>();
                 services.AddHostedService<ControllerWebApiHost>();
 
+                // Phase 8: Automatic notification dispatcher
+                services.AddHostedService<NotificationDispatcher>();
+
                 // Application logger (file + in-memory ring buffer)
                 services.AddSingleton<IAppLogger>(sp =>
                 {
@@ -172,6 +175,10 @@ public partial class App : Application
                 services.AddSingleton<AuditClient>();
                 services.AddSingleton<ViewModels.Admin.AuditViewerViewModel>();
 
+                // Phase 8: Notification mute + settings
+                services.AddSingleton<NotificationMuteClient>();
+                services.AddSingleton<ViewModels.Admin.NotificationSettingsViewModel>();
+
                 // Health threshold settings (operator-configurable)
                 services.AddSingleton(sp =>
                 {
@@ -183,6 +190,8 @@ public partial class App : Application
 
                 // Build Results services
                 services.AddSingleton<TrxResultsParser>();
+                services.AddSingleton<ConsecutiveFailureDetector>();
+                services.AddSingleton<FlakyTestDetector>();
                 services.AddSingleton(sp =>
                 {
                     var config = sp.GetRequiredService<IConfiguration>();

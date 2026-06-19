@@ -2,14 +2,109 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  background: #1E1E2E;
-  color: #CDD6F4;
+/*
+ * Semantic colour tokens as CSS variables, keyed off [data-theme] on <html>.
+ * Values are space-separated RGB channels so Tailwind's `<alpha-value>`
+ * opacity modifiers (e.g. bg-accent/20) keep working.
+ *
+ * Light is the :root default; dark uses the exact pre-existing hex values so
+ * the dark theme is pixel-for-pixel identical to before.
+ */
+:root,
+[data-theme='light'] {
+  /* Surfaces */
+  --bg-app: 238 240 246;       /* #EEF0F6 */
+  --bg-card: 255 255 255;      /* #FFFFFF */
+  --bg-panel: 248 249 252;     /* #F8F9FC */
+  --bg-surface: 226 229 238;   /* #E2E5EE */
+  --bg-ribbon: 255 255 255;    /* #FFFFFF */
+
+  /* Text */
+  --text-primary: 28 35 51;    /* #1C2333 */
+  --text-secondary: 74 81 105; /* #4A5169 */
+  --text-muted: 122 128 145;   /* #7A8091 */
+
+  /* Borders */
+  --border-default: 210 214 224; /* #D2D6E0 */
+
+  /* Accents — deeper blue identity so it reads on white (#74ACEA was too pale) */
+  --accent: 37 99 235;         /* #2563EB */
+  --acc-green: 22 138 95;      /* #168A5F */
+  --acc-red: 220 38 60;        /* #DC263C */
+  --acc-yellow: 180 121 31;    /* #B4791F */
+  --acc-amber: 180 121 31;     /* #B4791F */
+  --acc-teal: 13 148 136;      /* #0D9488 */
+  --acc-peach: 194 100 41;     /* #C26429 */
+  --acc-mauve: 124 58 237;     /* #7C3AED */
+  --acc-blue: 37 99 235;       /* #2563EB */
+
+  /* Tree states — must stay distinct from each other */
+  --state-triggerable: 14 159 110; /* #0E9F6E green */
+  --state-viewonly: 107 114 128;   /* #6B7280 gray */
+  --state-disabled: 183 121 31;    /* #B7791F ochre */
+  --state-locked: 194 65 12;       /* #C2410C orange */
+
+  /* Node-type badges (WatchList tree) — deepened for light readability */
+  --badge-evt: 124 58 237;     /* #7C3AED */
+  --badge-seq: 2 132 199;      /* #0284C7 */
+  --badge-init: 13 148 136;    /* #0D9488 */
+  --badge-ref: 180 83 9;       /* #B45309 */
+  --badge-rmt: 225 29 72;      /* #E11D48 */
+  --badge-cmd: 71 85 105;      /* #475569 */
+  --badge-par: 79 70 229;      /* #4F46E5 */
 }
 
-/* Custom scrollbar (Catppuccin dark) */
+[data-theme='dark'] {
+  /* Surfaces (Catppuccin — unchanged) */
+  --bg-app: 30 30 46;          /* #1E1E2E */
+  --bg-card: 49 50 68;         /* #313244 */
+  --bg-panel: 24 24 37;        /* #181825 */
+  --bg-surface: 69 71 90;      /* #45475A */
+  --bg-ribbon: 27 27 47;       /* #1B1B2F */
+
+  /* Text */
+  --text-primary: 205 214 244; /* #CDD6F4 */
+  --text-secondary: 147 153 178; /* #9399B2 */
+  --text-muted: 88 91 112;     /* #585B70 */
+
+  /* Borders */
+  --border-default: 88 91 112; /* #585B70 */
+
+  /* Accents */
+  --accent: 137 180 250;       /* #89B4FA */
+  --acc-green: 166 227 161;    /* #A6E3A1 */
+  --acc-red: 243 139 168;      /* #F38BA8 */
+  --acc-yellow: 249 226 175;   /* #F9E2AF */
+  --acc-amber: 245 197 66;     /* #F5C542 */
+  --acc-teal: 93 208 168;      /* #5DD0A8 */
+  --acc-peach: 250 179 135;    /* #FAB387 */
+  --acc-mauve: 203 166 247;    /* #CBA6F7 */
+  --acc-blue: 59 130 246;      /* #3B82F6 */
+
+  /* Tree states (unchanged look: view-only matches the old white/40 dot) */
+  --state-triggerable: 93 208 168; /* #5DD0A8 */
+  --state-viewonly: 120 122 134;   /* ≈ white @ 40% over #1E1E2E */
+  --state-disabled: 249 226 175;   /* #F9E2AF */
+  --state-locked: 251 191 36;      /* #FBBF24 amber-400 */
+
+  /* Node-type badges (original vivid hues) */
+  --badge-evt: 167 139 250;    /* #A78BFA */
+  --badge-seq: 56 189 248;     /* #38BDF8 */
+  --badge-init: 45 212 191;    /* #2DD4BF */
+  --badge-ref: 251 191 36;     /* #FBBF24 */
+  --badge-rmt: 251 113 133;    /* #FB7185 */
+  --badge-cmd: 148 163 184;    /* #94A3B8 */
+  --badge-par: 129 140 248;    /* #818CF8 */
+}
+
+body {
+  margin: 0;
+  background: rgb(var(--bg-app));
+  color: rgb(var(--text-primary));
+}
+
+/* Custom scrollbar — themed via variables */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: #181825; }
-::-webkit-scrollbar-thumb { background: #45475A; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #585B70; }
+::-webkit-scrollbar-track { background: rgb(var(--bg-panel)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--bg-surface)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--text-muted)); }
