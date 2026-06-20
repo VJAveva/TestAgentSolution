@@ -49,9 +49,9 @@ public sealed class StripExecutionModeConverter : IValueConverter
         text = ExecutionModeBrackets.Replace(text, "");
         text = ExecutionModeParens.Replace(text, "");
 
-        // "WatchList (name — N items)" → "Test Plan (name — N items)"
+        // "WatchList (name — N items)" → "Test Plans (name — N items)"
         if (text.StartsWith("WatchList"))
-            text = "Test Plan" + text["WatchList".Length..];
+            text = "Test Plans" + text["WatchList".Length..];
 
         // "Event: Type" → "Type"
         if (text.StartsWith("Event: "))
@@ -182,8 +182,8 @@ public sealed class ActionLabelConverter : IMultiValueConverter
         text = Regex.Replace(text, @"\[(Sequential|Parallel)\]\s*", "");
         text = Regex.Replace(text, @"\s*\((Sequential|Parallel)\)", "");
 
-        // "WatchList (filename — N items)" → "Test Plan (filename — N items)"
-        if (text.StartsWith("WatchList")) text = "Test Plan" + text["WatchList".Length..];
+        // "WatchList (filename — N items)" → "Test Plans (filename — N items)"
+        if (text.StartsWith("WatchList")) text = "Test Plans" + text["WatchList".Length..];
 
         // "Event: Type" → "Type" (EVT pill already shows the kind)
         if (text.StartsWith("Event: ")) text = text["Event: ".Length..];

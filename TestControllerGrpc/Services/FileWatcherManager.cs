@@ -1,5 +1,7 @@
 using System.IO;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Identity;
+using TestControllerGrpc.Locking;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
@@ -17,6 +19,7 @@ public sealed class FileWatcherManager : IFileWatcherManager
     private readonly IActionPipelineExecutor _executor;
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<FileWatcherManager> _logger;
+    private readonly ILockRegistry? _lockRegistry;
     private readonly List<ActiveWatcher> _watchers = new();
     private readonly object _lock = new();
     private WatchListConfig _config = new();
@@ -33,11 +36,13 @@ public sealed class FileWatcherManager : IFileWatcherManager
     public FileWatcherManager(
         IActionPipelineExecutor executor,
         ExecutionSessionManager sessionManager,
-        ILogger<FileWatcherManager> logger)
+        ILogger<FileWatcherManager> logger,
+        ILockRegistry? lockRegistry = null)
     {
         _executor = executor;
         _sessionManager = sessionManager;
         _logger = logger;
+        _lockRegistry = lockRegistry;
     }
 
     /// <summary>
@@ -223,11 +228,32 @@ public sealed class FileWatcherManager : IFileWatcherManager
 
         TriggerFired?.Invoke(wi.Path, fileName);
 
+        // Single-run gate: a file-drop is a trigger. If a run for this pipeline is already
+        // active, refuse — the lock is owned until that run stops (then frees it).
+        var lockToken = string.Empty;
+        if (_lockRegistry is not null)
+        {
+            var sys = DefaultUser.ForClient(ClientKind.Wpf);
+            var owner = new OwnerIdentity(sys.UserId, sys.DisplayName, ClientKind.Wpf);
+            var acquire = _lockRegistry.TryAcquire(wi.Tag, owner, LockKind.Trigger);
+            if (acquire is AcquireResult.Conflict conflict)
+            {
+                _logger.LogWarning(
+                    "Ignoring trigger for '{Tag}' — pipeline locked by {Owner} ({Kind}). File: {File}",
+                    wi.Tag, conflict.ExistingLock.Owner.DisplayName,
+                    conflict.ExistingLock.Owner.ClientKind, fileName);
+                return;
+            }
+            if (acquire is AcquireResult.Success success)
+                lockToken = success.Lock.Token;
+        }
+
         // Build execution context
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wi.Path,
             TriggerFileName = fileName,
+            LockToken = lockToken,
         };
 
         // Load parameters from trigger file

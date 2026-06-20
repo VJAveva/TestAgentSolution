@@ -38,13 +38,35 @@ public sealed partial class MainViewModel
             roles: [authUser.Role]);
     }
 
+    /// <summary>
+    /// Acquires the single-run pipeline lock for a WPF-initiated trigger.
+    /// Single-run: ANY active lock (any user, any role, the owner and Administrator
+    /// included) blocks the trigger — the only path forward is Cancel. Returns the
+    /// per-acquisition token to thread into the execution context, or <c>null</c> when
+    /// the pipeline already has an active run (the conflict dialog is shown).
+    /// </summary>
+    private string? AcquirePipelineLock(string tag)
+    {
+        var user = GetCurrentUserContext();
+        var owner = new TestControllerGrpc.Locking.OwnerIdentity(user.UserId, user.DisplayName, ClientKind.Wpf);
+        var result = _lockRegistry.TryAcquire(tag, owner, TestControllerGrpc.Locking.LockKind.Trigger);
+        if (result is TestControllerGrpc.Locking.AcquireResult.Conflict conflict)
+        {
+            var dto = LockMapper.ToDto(conflict.ExistingLock);
+            AddLog($"Pipeline '{tag}' is locked by {dto.OwnerDisplayName} ({dto.OwnerClientKind})", LogSeverity.Warning);
+            ShowLockConflictDialog(dto);
+            return null;
+        }
+        return (result as TestControllerGrpc.Locking.AcquireResult.Success)?.Lock.Token ?? string.Empty;
+    }
+
     private bool CanTriggerEvent
     {
         get
         {
             if (SelectedNode?.NodeKind != NodeKinds.Event) return false;
             var tag = (SelectedNode.Parent?.ModelObject as WatchItemConfig)?.Tag;
-            if (tag is not null && _lockStateService.IsLockedByOther(tag)) return false;
+            if (tag is not null && _lockStateService.HasActiveLock(tag)) return false;
             return _capabilityChecker.Can(Permission.Pipeline_Trigger, tag);
         }
     }
@@ -79,6 +101,14 @@ public sealed partial class MainViewModel
 
         WriteBackAll();
 
+        // Single-run pipeline lock — ANY active run blocks (owner included). Path is Cancel.
+        var pipelineToken = AcquirePipelineLock(tag);
+        if (pipelineToken is null) return;
+
+        // Keep this run's lock alive so the expiry sweeper never reaps it mid-run.
+        using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
+            _lockRegistry, tag, pipelineToken, _lockRegistry.RenewalInterval);
+
         var session = CreateSession(tag);
         var eventNode = SelectedNode;
 
@@ -104,6 +134,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} � locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start '{tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                _lockRegistry.TryRelease(tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }            _events.Publish(new AgentLocksChangedEvent
@@ -185,6 +216,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockRegistry.TryRelease(tag, pipelineToken);
             _lockManager.ReleaseSession(session.SessionId);
             _events.Publish(new AgentLocksChangedEvent
             {
@@ -207,7 +239,7 @@ public sealed partial class MainViewModel
         {
             if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return false;
             var tag = (SelectedNode.ModelObject as WatchItemConfig)?.Tag;
-            if (tag is not null && _lockStateService.IsLockedByOther(tag)) return false;
+            if (tag is not null && _lockStateService.HasActiveLock(tag)) return false;
             return _capabilityChecker.Can(Permission.Pipeline_Trigger, tag);
         }
     }
@@ -238,6 +270,14 @@ public sealed partial class MainViewModel
 
         WriteBackAll();
 
+        // Single-run pipeline lock — ANY active run blocks (owner included). Path is Cancel.
+        var pipelineToken = AcquirePipelineLock(wi.Tag);
+        if (pipelineToken is null) return;
+
+        // Keep this run's lock alive so the expiry sweeper never reaps it mid-run.
+        using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
+            _lockRegistry, wi.Tag, pipelineToken, _lockRegistry.RenewalInterval);
+
         var session = CreateSession(wi.Tag);
         var wiNode = SelectedNode;
 
@@ -254,6 +294,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} � locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start '{wi.Tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                _lockRegistry.TryRelease(wi.Tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }            _events.Publish(new AgentLocksChangedEvent
@@ -331,6 +372,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockRegistry.TryRelease(wi.Tag, pipelineToken);
             _lockManager.ReleaseSession(session.SessionId);
             _events.Publish(new AgentLocksChangedEvent
             {
@@ -435,6 +477,14 @@ public sealed partial class MainViewModel
                 return true;
             }
 
+            // Single-run pipeline lock — ANY active run blocks (owner included); skip if held.
+            var pipelineToken = AcquirePipelineLock(wi.Tag);
+            if (pipelineToken is null) return true; // skip locked pipeline, not a batch failure
+
+            // Keep this run's lock alive so the expiry sweeper never reaps it mid-run.
+            using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
+                _lockRegistry, wi.Tag, pipelineToken, _lockRegistry.RenewalInterval);
+
             var session = CreateSession(wi.Tag);
             var wiNode = WatchListRoot?.Children.FirstOrDefault(c =>
                 ReferenceEquals(c.ModelObject, wi));
@@ -454,6 +504,7 @@ public sealed partial class MainViewModel
                     var conflictMsg = string.Join(", ",
                         conflicts.Select(c => $"{c.AgentName}←{c.UserId}"));
                     AddLog($"Cannot start '{wi.Tag}' — agents busy: {conflictMsg}", LogSeverity.Warning);
+                    _lockRegistry.TryRelease(wi.Tag, pipelineToken);
                     await Application.Current!.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                     return true; // skip this WatchItem, not a failure of the batch
                 }
@@ -526,6 +577,7 @@ public sealed partial class MainViewModel
             }
             finally
             {
+                _lockRegistry.TryRelease(wi.Tag, pipelineToken);
                 _lockManager.ReleaseSession(session.SessionId);
                 _events.Publish(new AgentLocksChangedEvent
                 {
@@ -777,7 +829,7 @@ public sealed partial class MainViewModel
                 _ => null
             };
             if (string.IsNullOrEmpty(tag)) return false;
-            if (_lockStateService.IsLockedByOther(tag)) return false;
+            if (_lockStateService.HasActiveLock(tag)) return false;
             return _capabilityChecker.Can(Permission.Pipeline_Retry, tag);
         }
     }

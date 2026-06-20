@@ -92,7 +92,7 @@
     <SolidColorBrush x:Key="OverlayBg"      Color="#CC000000" />
 
     <!-- Watermark -->
-    <sys:Double x:Key="WatermarkOpacity">0.12</sys:Double>
+    <sys:Double x:Key="WatermarkOpacity">0.24</sys:Double>
 
     <!-- Agent latency indicator -->
     <SolidColorBrush x:Key="LatencyGood"    Color="#FF00FF00" />
@@ -191,6 +191,9 @@
     <SolidColorBrush x:Key="RowBorder"       Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="TextPrimary"     Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="TextSecondary"   Color="#FFCCCCCC" />
+    <!-- Theme-aware aliases (used by RBAC dialogs / badges); kept in sync with TextPrimary/TextSecondary -->
+    <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FFCCCCCC" />
     <SolidColorBrush x:Key="TextDim"         Color="#FF999999" />
     <SolidColorBrush x:Key="MonoFont"        Color="#FF00FFFF" />
 

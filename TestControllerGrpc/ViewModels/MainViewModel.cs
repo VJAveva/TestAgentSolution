@@ -43,6 +43,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly Services.CapabilityChecker _capabilityChecker;
     private readonly Services.CurrentUserHolder _currentUserHolder;
     private readonly Services.LockStateService _lockStateService;
+    private readonly TestControllerGrpc.Locking.ILockRegistry _lockRegistry;
     private readonly System.Windows.Threading.DispatcherTimer _sessionElapsedTimer;
     private readonly System.Windows.Threading.DispatcherTimer _assignmentRefreshTimer;
     private readonly List<IDisposable> _subscriptions = [];
@@ -160,7 +161,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string LogFilterTag
     {
         get => _logFilterTag;
-        set { if (SetProperty(ref _logFilterTag, value)) ApplyLogFilter(); }
+        set
+        {
+            if (SetProperty(ref _logFilterTag, value))
+            {
+                FilterAgentNamesByPipeline(value);
+                ApplyLogFilter();
+            }
+        }
     }
 
     private string _logFilterAgent = "";
@@ -194,7 +202,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string LogFilterSession
     {
         get => _logFilterSession;
-        set { if (SetProperty(ref _logFilterSession, value)) ApplyLogFilter(); }
+        set
+        {
+            if (SetProperty(ref _logFilterSession, value))
+            {
+                // Smart session filter: selecting a specific session shows every
+                // action for that run (executed and in-progress) by clearing the
+                // narrowing filters so nothing is hidden.
+                if (!string.IsNullOrWhiteSpace(value) &&
+                    !string.Equals(value, "All", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logFilterAgent = "";
+                    OnPropertyChanged(nameof(LogFilterAgent));
+                    _logFilterTag = "";
+                    OnPropertyChanged(nameof(LogFilterTag));
+                    FilterAgentNamesByPipeline("");
+                    _logLevelFilter = "All";
+                    OnPropertyChanged(nameof(LogLevelFilter));
+                    ShowErrorsOnly = false;
+                }
+                ApplyLogFilter();
+            }
+        }
     }
 
     /// <summary>When true, search uses regex. When false, plain text.</summary>
@@ -310,7 +339,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Services.AuthClient authClient,
         Services.CapabilityChecker capabilityChecker,
         Services.CurrentUserHolder currentUserHolder,
-        Services.LockStateService lockStateService)
+        Services.LockStateService lockStateService,
+        TestControllerGrpc.Locking.ILockRegistry lockRegistry)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -327,6 +357,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _capabilityChecker = capabilityChecker;
         _currentUserHolder = currentUserHolder;
         _lockStateService = lockStateService;
+        _lockRegistry = lockRegistry;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher);

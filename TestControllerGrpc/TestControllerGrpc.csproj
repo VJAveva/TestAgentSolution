@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>TestControllerGrpc</RootNamespace>
     <AssemblyName>TestControllerGrpc</AssemblyName>
-    <ApplicationIcon>Assets\dashboard.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\testcontroller.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +20,11 @@
          the exe so the file-path fallback also works without rebuild. -->
     <Resource Include="Assets\dashboard.ico" />
     <None Update="Assets\dashboard.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Application / Task Manager icon: "TC" badge matching the tray + window icon. -->
+    <Resource Include="Assets\testcontroller.ico" />
+    <None Update="Assets\testcontroller.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

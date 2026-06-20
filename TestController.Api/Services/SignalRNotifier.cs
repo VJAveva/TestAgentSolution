@@ -356,6 +356,8 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             eventType = e.EventType,
             startTime = DateTime.UtcNow.ToString("o"),
             source = e.Source,
+            userId = session?.UserId ?? "",
+            lockedAgents = session?.LockedAgents ?? Array.Empty<string>(),
             pendingActions,
         });
     }

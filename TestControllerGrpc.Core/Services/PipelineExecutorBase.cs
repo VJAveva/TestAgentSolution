@@ -1,5 +1,6 @@
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using TestControllerGrpc.Locking;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
@@ -23,6 +24,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 {
     protected readonly ExecutionSessionManager _sessionManager;
     protected readonly ILogger _logger;
+
+    /// <summary>
+    /// The single-run pipeline lock authority. Non-null only in the WPF controller host
+    /// (the standalone WebApi forwards lock ops to the controller and passes null here).
+    /// When present, each tracked run releases its lock in <c>finally</c> after teardown.
+    /// </summary>
+    protected readonly ILockRegistry? _lockRegistry;
     protected Dictionary<string, TemplateConfig> _templates =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -42,10 +50,12 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected PipelineExecutorBase(
         ExecutionSessionManager sessionManager,
-        ILogger logger)
+        ILogger logger,
+        ILockRegistry? lockRegistry = null)
     {
         _sessionManager = sessionManager;
         _logger = logger;
+        _lockRegistry = lockRegistry;
     }
 
     /// <summary>
@@ -99,12 +109,37 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         return success;
     }
 
+    /// <summary>
+    /// Captures this run's single-run lock token from the context. The trigger path that
+    /// acquired the lock threads the per-acquisition token via <see cref="PipelineExecutionContext.LockToken"/>.
+    /// Returns empty when no token was threaded (standalone WebApi, or hosts that own the
+    /// release themselves such as the WPF view model) — in which case the executor never
+    /// releases the lock.
+    /// </summary>
+    private string CaptureLockToken(string watchItemTag, PipelineExecutionContext ctx)
+    {
+        _ = watchItemTag;
+        return ctx.LockToken;
+    }
+
+    /// <summary>
+    /// Releases this run's single-run lock. No-op when there is no authority, no token, or
+    /// the token is stale (a newer acquisition reused the pipeline) — so a torn-down run can
+    /// never free someone else's lock.
+    /// </summary>
+    private void ReleaseRunLock(string watchItemTag, string lockToken)
+    {
+        if (_lockRegistry is null || string.IsNullOrEmpty(lockToken))
+            return;
+        if (_lockRegistry.TryRelease(watchItemTag, lockToken))
+            Log("Lock", $"Released single-run lock for {watchItemTag}");
+    }
+
     public async Task ExecuteEventTrackedAsync(
         string watchItemTag, EventConfig evt, PipelineExecutionContext ctx, CancellationToken ct)
     {
         // Snapshot isolation: clone the action tree so hot-reloads don't mutate in-flight nodes.
         var snapshotChildren = evt.Children.Select(DeepCloneNode).ToList();
-
         // Use the caller's sessionId if provided (e.g. from WebApi controller).
         var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
 
@@ -117,6 +152,15 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:{evt.Type}");
 
+        // Capture the single-run lock token now so we release exactly THIS run's lock
+        // (a later acquisition that reused the pipeline would carry a different token).
+        var lockToken = CaptureLockToken(watchItemTag, ctx);
+
+        // Renew the lock for the run's duration so the expiry sweeper never reaps it
+        // mid-run; disposed (with linkedCts) after the run unwinds.
+        using var lockRenewal = new LockRenewalTimer(
+            _lockRegistry, watchItemTag, lockToken, _lockRegistry?.RenewalInterval ?? TimeSpan.Zero);
+
         // Link the external cancellation token with the session's own CTS so
         // both _sessionManager.CancelSession() and external cancellation work.
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
@@ -128,7 +172,10 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         }
         finally
         {
+            // RELEASE only after the run has fully stopped (completed or cancelled + torn
+            // down). On cancel, control reaches here only once the awaited pipeline unwinds.
             _sessionManager.CompleteSession(session.SessionId);
+            ReleaseRunLock(watchItemTag, lockToken);
             Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
         }
     }
@@ -148,6 +195,11 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:Group:{group.Tag}");
 
+        var lockToken = CaptureLockToken(watchItemTag, ctx);
+
+        using var lockRenewal = new LockRenewalTimer(
+            _lockRegistry, watchItemTag, lockToken, _lockRegistry?.RenewalInterval ?? TimeSpan.Zero);
+
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
 
         try
@@ -159,6 +211,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         finally
         {
             _sessionManager.CompleteSession(session.SessionId);
+            ReleaseRunLock(watchItemTag, lockToken);
             Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
         }
     }
@@ -178,6 +231,11 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:Action:{action.ResolvedTag}");
 
+        var lockToken = CaptureLockToken(watchItemTag, ctx);
+
+        using var lockRenewal = new LockRenewalTimer(
+            _lockRegistry, watchItemTag, lockToken, _lockRegistry?.RenewalInterval ?? TimeSpan.Zero);
+
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, session.CancellationToken);
 
         try
@@ -187,6 +245,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         finally
         {
             _sessionManager.CompleteSession(session.SessionId);
+            ReleaseRunLock(watchItemTag, lockToken);
             Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
         }
     }

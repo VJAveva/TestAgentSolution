@@ -34,8 +34,9 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
         TrxResultsParser parser,
         BuildResultsAggregator aggregator,
         BuildReportHtmlGenerator htmlGenerator,
-        BuildResultsConfig config)
-        : base(sessionManager, logger)
+        BuildResultsConfig config,
+        TestControllerGrpc.Locking.ILockRegistry? lockRegistry = null)
+        : base(sessionManager, logger, lockRegistry)
     {
         _dispatcher = dispatcher;
         _parser = parser;

@@ -109,6 +109,23 @@ describe('lockStore', () => {
     });
   });
 
+  describe('hasActiveLock', () => {
+    it('Should_ReturnFalse_When_NoLockExists', () => {
+      expect(useLockStore.getState().hasActiveLock('nonexistent')).toBe(false);
+    });
+
+    it('Should_ReturnTrue_When_LockedByCurrentUser', () => {
+      // Single-run: the owner is blocked from a second run just like everyone else.
+      useLockStore.setState({ locks: { [mockLock.pipelineId]: mockLock } });
+      expect(useLockStore.getState().hasActiveLock('WarmSetup-Four-Nodes')).toBe(true);
+    });
+
+    it('Should_ReturnTrue_When_LockedByAnotherUser', () => {
+      useLockStore.setState({ locks: { [mockLock2.pipelineId]: mockLock2 } });
+      expect(useLockStore.getState().hasActiveLock('Sanity-Tests')).toBe(true);
+    });
+  });
+
   describe('getLock', () => {
     it('Should_ReturnLock_When_Exists', () => {
       useLockStore.setState({ locks: { [mockLock.pipelineId]: mockLock } });

@@ -308,6 +308,17 @@ app.Use(async (context, next) =>
     }
 });
 
+// Architecture: the WPF controller is the single pipeline-execution engine. When a controller
+// proxy URL is configured (co-located deployment), forward web-triggered execution writes
+// (trigger / cancel / RBAC retry) to the controller so local commands, rCloud revert and email
+// run on the controller node under the controller identity, and the authoritative single-run
+// lock is enforced there. Registered only when a proxy is configured; standalone WebApi-only
+// deployments keep executing locally.
+if (app.Services.GetRequiredService<ControllerProxyService>().IsConfigured)
+{
+    app.UseMiddleware<ControllerExecutionForwardingMiddleware>();
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {

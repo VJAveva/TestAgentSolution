@@ -110,7 +110,20 @@ public class AuditController : ControllerBase
         if (p.From.HasValue)
             q = q.Where(a => a.TimestampUtc >= p.From.Value);
         if (p.To.HasValue)
-            q = q.Where(a => a.TimestampUtc <= p.To.Value);
+        {
+            // A date-only "To" (midnight) is treated as inclusive of that whole day,
+            // so selecting the same From/To date still returns that day's entries.
+            var to = p.To.Value;
+            if (to.TimeOfDay == TimeSpan.Zero)
+            {
+                var toExclusive = to.AddDays(1);
+                q = q.Where(a => a.TimestampUtc < toExclusive);
+            }
+            else
+            {
+                q = q.Where(a => a.TimestampUtc <= to);
+            }
+        }
         if (!string.IsNullOrWhiteSpace(p.UserId))
             q = q.Where(a => a.UserId == p.UserId || a.GuestId == p.UserId);
         if (!string.IsNullOrWhiteSpace(p.ActionName))

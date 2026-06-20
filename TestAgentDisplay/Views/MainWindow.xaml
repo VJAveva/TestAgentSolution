@@ -10,7 +10,18 @@
     <Window.Icon>
         <DrawingImage>
             <DrawingImage.Drawing>
-                <GeometryDrawing Brush="#FF00C9A7" Geometry="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 C17.52,22 22,17.52 22,12 C22,6.48 17.52,2 12,2 Z M9,16 L5.5,12.5 L6.91,11.09 L9,13.17 L15.59,6.58 L17,8 Z M19,11 L13,11 L13,13 L19,13 Z" />
+                <!-- Live activity / pulse-monitor waveform (relevant to the Real-Time Execution Monitor) -->
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#FF00C9A7" Geometry="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 C17.52,22 22,17.52 22,12 C22,6.48 17.52,2 12,2 Z M12,4 C16.42,4 20,7.58 20,12 C20,16.42 16.42,20 12,20 C7.58,20 4,16.42 4,12 C4,7.58 7.58,4 12,4 Z" />
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FF00C9A7" Thickness="1.6" LineJoin="Round" StartLineCap="Round" EndLineCap="Round" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M5,12 L8.5,12 L10.5,7 L13,17 L15,12 L19,12" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
             </DrawingImage.Drawing>
         </DrawingImage>
     </Window.Icon>

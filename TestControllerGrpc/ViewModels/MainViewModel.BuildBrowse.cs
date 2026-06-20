@@ -115,6 +115,32 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Saves the build selected via Browse Build on this WatchItem to ALL pipelines:
+    /// updates the global variables file and every Initialize parameter file in-place
+    /// (only _BuildNumber and _DropLocation; all other parameters are preserved).
+    /// </summary>
+    [RelayCommand]
+    private void SaveBuildToAllFiles()
+    {
+        if (ActiveEditNode is null) return;
+
+        var buildNumber = ActiveEditNode.LastBuildNumber ?? "";
+        var dropLocation = ActiveEditNode.LastDropLocation ?? "";
+
+        if (string.IsNullOrWhiteSpace(buildNumber))
+        {
+            AddLog("No build selected \u2014 use Browse Build to pick a build folder first.", LogSeverity.Warning);
+            return;
+        }
+
+        // Reuse the same in-place propagation used by the Global Variables editor:
+        // writes _BuildNumber + _DropLocation to the global file and every pipeline's
+        // parameter file, preserving all other parameters, and refreshes tokens/tree.
+        PropagateGlobalBuildToAllParameterFiles(buildNumber, dropLocation);
+        IsDirty = true;
+    }
+
+    /// <summary>
     /// Recursively searches the subtree to find the first Initialize node's ParameterFile path.
     /// Works at any nesting depth (WatchItem ? Event ? ActionGroup ? � ? Initialize).
     /// </summary>

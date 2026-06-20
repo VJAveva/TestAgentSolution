@@ -3,8 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
+using TestController.Api.Contracts;
 using TestController.Api.Hubs;
 using TestController.Api.Security;
+using TestControllerGrpc.Identity;
+using TestControllerGrpc.Locking;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -35,6 +38,7 @@ public class ExecutionController : ControllerBase
     private readonly ISessionOwnershipChecker _ownershipChecker;
     private readonly ISecurityAuditLogger _auditLogger;
     private readonly IEventAggregator _events;
+    private readonly ILockRegistry? _lockRegistry;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
@@ -52,7 +56,8 @@ public class ExecutionController : ControllerBase
         IAppLogger appLogger,
         ISessionOwnershipChecker ownershipChecker,
         ISecurityAuditLogger auditLogger,
-        IEventAggregator events)
+        IEventAggregator events,
+        ILockRegistry? lockRegistry = null)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -64,6 +69,7 @@ public class ExecutionController : ControllerBase
         _ownershipChecker = ownershipChecker;
         _auditLogger = auditLogger;
         _events = events;
+        _lockRegistry = lockRegistry;
     }
 
     /// <summary>GET /api/execution/sessions � list active sessions.</summary>
@@ -351,10 +357,25 @@ public class ExecutionController : ControllerBase
         // Atomic check-and-lock inside a per-tag lock to prevent TOCTOU race.
         var tagLock = _triggerLocks.GetOrAdd(watchItemTag, _ => new object());
         string sessionId;
+        var pipelineLockToken = string.Empty;
         lock (tagLock)
         {
             if (_sessionManager.HasActiveExecution(watchItemTag))
                 return Conflict(ApiErrorFactory.Conflict($"WatchItem '{watchItemTag}' is already running"));
+
+            // Single-run gate: acquire the authoritative pipeline lock. ANY active lock
+            // (any user, any role, owner included) blocks the trigger — the path is Cancel.
+            if (_lockRegistry is not null)
+            {
+                var clientKind = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase)
+                    ? ClientKind.Wpf : ClientKind.Web;
+                var owner = new OwnerIdentity(userId, userId, clientKind);
+                var acquire = _lockRegistry.TryAcquire(watchItemTag, owner, LockKind.Trigger);
+                if (acquire is AcquireResult.Conflict pipelineConflict)
+                    return Conflict(new { error = "pipeline-locked", @lock = LockMapper.ToDto(pipelineConflict.ExistingLock) });
+                if (acquire is AcquireResult.Success pipelineSuccess)
+                    pipelineLockToken = pipelineSuccess.Lock.Token;
+            }
 
             // Try to lock all agents atomically
             sessionId = Guid.NewGuid().ToString("N")[..12];
@@ -365,6 +386,9 @@ public class ExecutionController : ControllerBase
 
                 if (!locked)
                 {
+                    // Free the single-run lock we just took so the pipeline isn't stuck.
+                    if (_lockRegistry is not null && pipelineLockToken.Length > 0)
+                        _lockRegistry.TryRelease(watchItemTag, pipelineLockToken);
                     // Detect "just missed it" race: conflict lock was acquired < 5s ago
                     var newestConflict = conflicts.OrderByDescending(c => c.LockedAtUtc).First();
                     var lockAge = DateTime.UtcNow - newestConflict.LockedAtUtc;
@@ -428,6 +452,7 @@ public class ExecutionController : ControllerBase
             SessionId = sessionId,
             StartedUtc = DateTime.UtcNow,
             Parameters = parameters,
+            LockToken = pipelineLockToken,
         };
 
         // Broadcast lock state to all clients
@@ -500,19 +525,13 @@ public class ExecutionController : ControllerBase
             }
         });
 
-        // Notify both SignalR clients and in-process subscribers (FleetVM)
+        // Notify both SignalR clients and in-process subscribers (FleetVM).
+        // The SignalR "ExecutionStarted" broadcast (including pendingActions,
+        // userId, and lockedAgents) is emitted by SignalRNotifier.OnExecutionStarted
+        // in response to this event — do NOT also send it directly here, or the
+        // second (pendingActions-less) message overwrites the pre-populated pipeline
+        // pills in the WebClient, leaving only completed actions visible.
         _events.Publish(new ExecutionStartedEvent(sessionId, watchItemTag, evt.Type, source));
-
-        await _hub.Clients.Group("global").SendAsync("ExecutionStarted", new
-        {
-            sessionId,
-            watchItemTag,
-            eventType = evt.Type,
-            startTime = DateTime.UtcNow.ToString("o"),
-            source,
-            userId,
-            lockedAgents = requiredAgents,
-        }, new CancellationTokenSource(BroadcastTimeout).Token);
 
         return Accepted(new
         {

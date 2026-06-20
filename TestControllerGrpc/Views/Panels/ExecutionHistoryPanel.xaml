@@ -21,7 +21,7 @@
                             Foreground="{DynamicResource TextS}"
                             Command="{Binding ClearLiveLogCommand}" ToolTip="Clear live log" />
                 </StackPanel>
-                <TextBlock Text="Execution History" FontSize="11" FontWeight="SemiBold"
+                <TextBlock Text="Execution History" FontSize="14" FontWeight="Bold"
                            Foreground="{DynamicResource TextP}" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
@@ -37,7 +37,13 @@
             </Grid.RowDefinitions>
 
             <!-- TOP: Session list -->
-            <DataGrid Grid.Row="0" ItemsSource="{Binding Sessions}"
+            <DockPanel Grid.Row="0">
+                <Border DockPanel.Dock="Top" Padding="6,3"
+                        Background="{DynamicResource BgHeaderBrush}">
+                    <TextBlock Text="Sessions" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextP}"/>
+                </Border>
+                <DataGrid ItemsSource="{Binding Sessions}"
                       SelectedItem="{Binding SelectedSession}"
                       AutoGenerateColumns="False" IsReadOnly="True"
                       HeadersVisibility="Column" GridLinesVisibility="None"
@@ -45,7 +51,7 @@
                       Foreground="{DynamicResource TextDefaultBrush}"
                       RowBackground="Transparent"
                       AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
-                      FontSize="10" FontFamily="Consolas"
+                      FontSize="12" FontFamily="Consolas"
                       SelectionMode="Single">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="" Binding="{Binding StateIcon}" Width="20"/>
@@ -56,20 +62,27 @@
                     <DataGridTextColumn Header="Time" Binding="{Binding DurationDisplay}" Width="55"/>
                     <DataGridTextColumn Header="At" Binding="{Binding TimeDisplay}" Width="60"/>
                 </DataGrid.Columns>
-            </DataGrid>
+                </DataGrid>
+            </DockPanel>
 
             <GridSplitter Grid.Row="1" Height="3" HorizontalAlignment="Stretch"
                           Background="{DynamicResource BgSurface}" />
 
             <!-- MIDDLE: Action details for selected session -->
-            <DataGrid Grid.Row="2" ItemsSource="{Binding SessionActions}"
+            <DockPanel Grid.Row="2">
+                <Border DockPanel.Dock="Top" Padding="6,3"
+                        Background="{DynamicResource BgHeaderBrush}">
+                    <TextBlock Text="Action Details" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextP}"/>
+                </Border>
+                <DataGrid ItemsSource="{Binding SessionActions}"
                       AutoGenerateColumns="False" IsReadOnly="True"
                       HeadersVisibility="Column" GridLinesVisibility="None"
                       Background="Transparent" BorderThickness="0"
                       Foreground="{DynamicResource TextDefaultBrush}"
                       RowBackground="Transparent"
                       AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
-                      FontSize="10" FontFamily="Consolas">
+                      FontSize="12" FontFamily="Consolas">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="" Binding="{Binding OutcomeIcon}" Width="20"/>
                     <DataGridTextColumn Header="Action" Binding="{Binding ActionTag}" Width="*"/>
@@ -79,7 +92,8 @@
                     <DataGridTextColumn Header="Time" Binding="{Binding Duration}" Width="55"/>
                     <DataGridTextColumn Header="Exit" Binding="{Binding ExitCode}" Width="32"/>
                 </DataGrid.Columns>
-            </DataGrid>
+                </DataGrid>
+            </DockPanel>
 
             <GridSplitter Grid.Row="3" Height="3" HorizontalAlignment="Stretch"
                           Background="{DynamicResource BgSurface}" />
@@ -88,8 +102,8 @@
             <DockPanel Grid.Row="4">
                 <Border DockPanel.Dock="Top" Padding="6,2"
                         Background="{DynamicResource BgHeaderBrush}">
-                    <TextBlock Text="Live Feed" FontSize="9" FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock Text="Live Feed" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextP}"/>
                 </Border>
                 <DataGrid ItemsSource="{Binding LiveActions}"
                           AutoGenerateColumns="False" IsReadOnly="True"
@@ -97,7 +111,7 @@
                           Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource TextDefaultBrush}"
                           RowBackground="Transparent"
-                          FontSize="9.5" FontFamily="Consolas">
+                          FontSize="11.5" FontFamily="Consolas">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="" Binding="{Binding StatusIcon}" Width="18"/>
                         <DataGridTextColumn Header="Time" Binding="{Binding TimeDisplay}" Width="75"/>

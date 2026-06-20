@@ -43,14 +43,16 @@ public sealed class LockRegistryTests
     }
 
     [Fact]
-    public void TryAcquire_Should_ReturnReAcquired_When_SameUserIdReacquires()
+    public void TryAcquire_Should_ReturnConflict_When_SameUserIdReacquires()
     {
         _registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
 
-        // Same UserId, different ClientKind — per phase-3a "Watch out for" #4
+        // Single-run: ANY active lock blocks a second trigger, the owner included.
         var result = _registry.TryAcquire("pipeline-1", AliceWeb, LockKind.Retry);
 
-        Assert.IsType<AcquireResult.ReAcquired>(result);
+        Assert.IsType<AcquireResult.Conflict>(result);
+        var conflict = (AcquireResult.Conflict)result;
+        Assert.Equal(Alice, conflict.ExistingLock.Owner);
     }
 
     [Fact]
@@ -69,22 +71,22 @@ public sealed class LockRegistryTests
     }
 
     [Fact]
-    public void TryRelease_Should_ReturnTrue_When_OwnerReleasesOwnLock()
+    public void TryRelease_Should_ReturnTrue_When_TokenMatches()
     {
-        _registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
+        var acquired = (AcquireResult.Success)_registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
 
-        var released = _registry.TryRelease("pipeline-1", Alice);
+        var released = _registry.TryRelease("pipeline-1", acquired.Lock.Token);
 
         Assert.True(released);
         Assert.Null(_registry.Get("pipeline-1"));
     }
 
     [Fact]
-    public void TryRelease_Should_ReturnFalse_When_DifferentOwnerAttempts()
+    public void TryRelease_Should_ReturnFalse_When_TokenMismatches()
     {
         _registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
 
-        var released = _registry.TryRelease("pipeline-1", Bob);
+        var released = _registry.TryRelease("pipeline-1", "not-the-real-token");
 
         Assert.False(released);
         Assert.NotNull(_registry.Get("pipeline-1"));
@@ -93,7 +95,7 @@ public sealed class LockRegistryTests
     [Fact]
     public void TryRelease_Should_ReturnFalse_When_NoPipelineLockExists()
     {
-        var released = _registry.TryRelease("nonexistent", Alice);
+        var released = _registry.TryRelease("nonexistent", "any-token");
 
         Assert.False(released);
     }
@@ -128,6 +130,66 @@ public sealed class LockRegistryTests
         var success = _registry.Heartbeat("nonexistent", Alice);
 
         Assert.False(success);
+    }
+
+    [Fact]
+    public void TryRenew_Should_ExtendExpiry_When_TokenMatches()
+    {
+        var acquired = (AcquireResult.Success)_registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
+        var expiresBefore = acquired.Lock.ExpiresUtc;
+
+        Thread.Sleep(10);
+        var renewed = _registry.TryRenew("pipeline-1", acquired.Lock.Token);
+        var lockAfter = _registry.Get("pipeline-1")!;
+
+        Assert.True(renewed);
+        Assert.True(lockAfter.ExpiresUtc > expiresBefore);
+    }
+
+    [Fact]
+    public void TryRenew_Should_ReturnFalse_When_TokenMismatches()
+    {
+        _registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
+
+        var renewed = _registry.TryRenew("pipeline-1", "not-the-real-token");
+
+        Assert.False(renewed);
+    }
+
+    [Fact]
+    public void TryRenew_Should_ReturnFalse_When_NoPipelineLockExists()
+    {
+        var renewed = _registry.TryRenew("nonexistent", "any-token");
+
+        Assert.False(renewed);
+    }
+
+    [Fact]
+    public void TryRenew_Should_KeepLockAlive_Through_ExpireStale()
+    {
+        // A short TTL would normally let the sweeper reap the lock; renewing first keeps
+        // it alive (Impediment #1: a live run renews so the sweeper never reaps mid-run).
+        var registry = new LockRegistry(Options.Create(
+            new LockOptions { HeartbeatTimeoutSeconds = 1 }));
+        var acquired = (AcquireResult.Success)registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
+
+        var renewed = registry.TryRenew("pipeline-1", acquired.Lock.Token);
+        var expired = registry.ExpireStale();
+
+        Assert.True(renewed);
+        Assert.Equal(0, expired);
+        Assert.NotNull(registry.Get("pipeline-1"));
+    }
+
+    [Fact]
+    public void RenewalInterval_Should_BeLessThan_HeartbeatTimeout()
+    {
+        // Renewal must fire comfortably before the TTL elapses, or the sweeper reaps mid-run.
+        var registry = new LockRegistry(Options.Create(
+            new LockOptions { HeartbeatTimeoutSeconds = 30, RenewalIntervalSeconds = 10 }));
+
+        Assert.Equal(TimeSpan.FromSeconds(10), registry.RenewalInterval);
+        Assert.True(registry.RenewalInterval < TimeSpan.FromSeconds(30));
     }
 
     [Fact]
@@ -255,11 +317,11 @@ public sealed class LockRegistryTests
     [Fact]
     public void TryRelease_Should_EmitReleasedEvent()
     {
-        _registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
+        var acquired = (AcquireResult.Success)_registry.TryAcquire("pipeline-1", Alice, LockKind.Trigger);
         LockEvent? capturedEvent = null;
         _registry.OnLockEvent += e => capturedEvent = e;
 
-        _registry.TryRelease("pipeline-1", Alice);
+        _registry.TryRelease("pipeline-1", acquired.Lock.Token);
 
         Assert.NotNull(capturedEvent);
         Assert.Equal(LockEventKind.Released, capturedEvent!.EventKind);
@@ -274,9 +336,10 @@ public sealed class LockRegistryTests
     }
 
     [Fact]
-    public void DefaultMode_Should_AllowReAcquireFromSecondWpfInstance()
+    public void DefaultMode_Should_BlockSecondWpfInstance()
     {
-        // Per 05_Default_Mode_Design.md §5.1: two WPF instances share Default user
+        // Per single-run semantics: even two WPF instances sharing the Default user
+        // cannot start a second concurrent run — the second trigger is refused.
         var defaultWpf1 = new OwnerIdentity(
             DefaultUser.UserId.ToString("D"), "Default user", ClientKind.Wpf);
         var defaultWpf2 = new OwnerIdentity(
@@ -285,6 +348,6 @@ public sealed class LockRegistryTests
         _registry.TryAcquire("pipeline-1", defaultWpf1, LockKind.Trigger);
         var result = _registry.TryAcquire("pipeline-1", defaultWpf2, LockKind.Trigger);
 
-        Assert.IsType<AcquireResult.ReAcquired>(result);
+        Assert.IsType<AcquireResult.Conflict>(result);
     }
 }

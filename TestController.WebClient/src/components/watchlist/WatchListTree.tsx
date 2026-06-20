@@ -237,7 +237,7 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest }: { node
   const isWatchItem = node.nodeKind === 'WatchItem';
   const isSecured = useSystemModeStore(s => s.isSecured);
   const canTrigger = useCan('Pipeline_Trigger', node.tag ?? undefined);
-  const isLockedByOther = useLockStore(s => isWatchItem && node.tag ? s.isLockedByOther(node.tag) : false);
+  const hasActiveLock = useLockStore(s => isWatchItem && node.tag ? s.hasActiveLock(node.tag) : false);
   const lock = useLockStore(s => isWatchItem && node.tag ? s.locks[node.tag] : undefined);
   const currentUserId = useAuthStore(s => s.user?.userId);
 
@@ -245,10 +245,11 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest }: { node
   const isPipelineDisabled =
     isWatchItem && (node.model as { isEnabled?: boolean } | undefined)?.isEnabled === false;
 
-  // Derive state: locked > disabled > viewOnly > triggerable
+  // Derive state: locked > disabled > viewOnly > triggerable.
+  // Single-run: ANY active lock (owner included) shows 'locked' and blocks triggering.
   const permissionState: PipelineState =
     isWatchItem
-      ? isLockedByOther ? 'locked' : isPipelineDisabled ? 'disabled' : !canTrigger ? 'viewOnly' : 'triggerable'
+      ? hasActiveLock ? 'locked' : isPipelineDisabled ? 'disabled' : !canTrigger ? 'viewOnly' : 'triggerable'
       : 'triggerable';
 
   // View-only is intentionally dimmed; disabled stays readable.

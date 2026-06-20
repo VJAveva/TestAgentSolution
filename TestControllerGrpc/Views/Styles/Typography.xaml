@@ -16,10 +16,11 @@
     <FontFamily x:Key="FontIcon">Segoe MDL2 Assets</FontFamily>
 
     <!-- ═══ Font Size Scale ═══ -->
-    <sys:Double x:Key="FontSize9">9</sys:Double>
-    <sys:Double x:Key="FontSize10">10</sys:Double>
-    <sys:Double x:Key="FontSize11">11</sys:Double>
-    <sys:Double x:Key="FontSize12">12</sys:Double>
+    <!-- Small end nudged up +1 for readability (labels/captions were too small). -->
+    <sys:Double x:Key="FontSize9">10</sys:Double>
+    <sys:Double x:Key="FontSize10">11</sys:Double>
+    <sys:Double x:Key="FontSize11">12</sys:Double>
+    <sys:Double x:Key="FontSize12">13</sys:Double>
     <sys:Double x:Key="FontSize13">13</sys:Double>
     <sys:Double x:Key="FontSize14">14</sys:Double>
     <sys:Double x:Key="FontSize16">16</sys:Double>

@@ -49,6 +49,16 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
             </WatchList>
             """);
 
+        // These integration tests validate the WebApi's own (standalone) execution path.
+        // Clear ControllerProxyUrl so the host runs in standalone mode — otherwise the
+        // execution-forwarding middleware would forward trigger/cancel/retry to a controller
+        // that isn't running in the test host. Added last so it overrides appsettings.json.
+        builder.ConfigureAppConfiguration((_, cfg) =>
+            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ControllerProxyUrl"] = string.Empty,
+            }));
+
         builder.ConfigureServices(services =>
         {
             // Remove ALL authentication-related registrations from the production pipeline.

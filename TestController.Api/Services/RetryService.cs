@@ -75,10 +75,6 @@ public sealed class RetryService
                     });
                     break;
 
-                case AcquireResult.ReAcquired:
-                    _logger.Info("RetryService", $"Pipeline lock re-acquired for retry pipeline={pipelineId} owner={user.DisplayName}");
-                    break;
-
                 case AcquireResult.Conflict conflict:
                     return LockMapper.ToDto(conflict.ExistingLock);
             }

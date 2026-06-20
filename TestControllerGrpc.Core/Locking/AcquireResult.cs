@@ -11,9 +11,10 @@ public abstract record AcquireResult
     /// <summary>Lock successfully acquired (new lock created).</summary>
     public sealed record Success(PipelineLock Lock) : AcquireResult;
 
-    /// <summary>Same owner re-acquired (TTL extended, no conflict).</summary>
-    public sealed record ReAcquired(PipelineLock Lock) : AcquireResult;
-
-    /// <summary>Different owner holds the lock — caller cannot proceed.</summary>
+    /// <summary>
+    /// An active lock already exists for this pipeline — the caller cannot proceed.
+    /// Single-run rule: this is returned for EVERY existing active lock, including the
+    /// caller's own. Privilege does not grant a second concurrent run; the path is Cancel.
+    /// </summary>
     public sealed record Conflict(PipelineLock ExistingLock) : AcquireResult;
 }

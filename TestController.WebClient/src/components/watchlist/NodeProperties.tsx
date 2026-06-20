@@ -7,8 +7,14 @@ export default function NodeProperties() {
 
   if (!node) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        Select a node from the tree to view its properties.
+      <div className="flex flex-col items-center justify-center h-full text-text-muted select-none">
+        <img
+          src="/nextgen_watermark.png"
+          alt=""
+          aria-hidden="true"
+          className="w-64 h-64 opacity-60 pointer-events-none drop-shadow-sm"
+        />
+        <p className="text-sm mt-1">Select a node from the tree to view its properties.</p>
       </div>
     );
   }

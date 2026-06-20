@@ -6,5 +6,13 @@
         Height="700" Width="1100" MinWidth="800" MinHeight="500"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBg}">
+    <Window.Icon>
+        <DrawingImage>
+            <DrawingImage.Drawing>
+                <!-- Shield with checkmark glyph (relevant to Audit Log / security records) -->
+                <GeometryDrawing Brush="#FFF5C542" Geometry="M12,1 L3,5 L3,11 C3,16.55 6.84,21.74 12,23 C17.16,21.74 21,16.55 21,11 L21,5 L12,1 Z M10.5,16.5 L6.5,12.5 L7.91,11.09 L10.5,13.67 L16.09,8.09 L17.5,9.5 L10.5,16.5 Z" />
+            </DrawingImage.Drawing>
+        </DrawingImage>
+    </Window.Icon>
     <admin:AuditViewerPage />
 </Window>

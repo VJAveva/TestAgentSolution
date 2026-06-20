@@ -218,6 +218,43 @@ public sealed class ControllerProxyService : IDisposable
             return null;
         }
     }
+
+    /// <summary>
+    /// Forwards an execution-write request (trigger/cancel/retry) to the WPF controller so the
+    /// pipeline runs on the controller node — local commands, rCloud revert and email execute
+    /// under the controller identity. Carries the caller's identity (Authorization + X-User-Id +
+    /// X-Source) so the controller's pipeline-lock owner and audit reflect the web user, while OS
+    /// execution runs under the controller's interactive identity.
+    /// Returns null when unreachable so the caller can surface a clear "controller-unreachable" error.
+    /// </summary>
+    public async Task<HttpResponseMessage?> ForwardExecutionAsync(
+        HttpMethod method, string pathAndQuery, string? authorizationHeader,
+        string? userId, string? source, string? body, string contentType)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var request = new HttpRequestMessage(method, $"{_baseUrl}{pathAndQuery}");
+            if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+            if (!string.IsNullOrWhiteSpace(userId))
+                request.Headers.TryAddWithoutValidation("X-User-Id", userId);
+            request.Headers.TryAddWithoutValidation(
+                "X-Source", string.IsNullOrWhiteSpace(source) ? "WebClient" : source);
+
+            if (!string.IsNullOrEmpty(body))
+                request.Content = new StringContent(body, System.Text.Encoding.UTF8, contentType);
+
+            return await _http.SendAsync(request);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(
+                "Controller proxy execution forward failed for {Path}: {Message}", pathAndQuery, ex.Message);
+            return null;
+        }
+    }
 }
 
 // Response DTOs for deserialization

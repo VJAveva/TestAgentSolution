@@ -13,7 +13,7 @@
             Padding="12,6" Visibility="{Binding IsDefaultMode, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
         <DockPanel>
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
-                       FontSize="12" Foreground="#FFF9E2AF">
+                       FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource StatusWarningFg}">
                 <Run Text="⚠"/>
                 <Run Text=" Default Mode"/>
                 <Run Text=" — " Foreground="{DynamicResource TextSecondaryBrush}"/>

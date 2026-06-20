@@ -56,6 +56,13 @@ public class LockStateService : IDisposable
     /// <summary>Returns the lock for the given pipeline tag, or null if not locked.</summary>
     public PipelineLockDto? GetLock(string tag) => _locks.TryGetValue(tag, out var dto) ? dto : null;
 
+    /// <summary>
+    /// Returns true if the pipeline has ANY active run. Single-run semantics: a held lock
+    /// blocks every new trigger for everyone — the owner and Administrator included — so the
+    /// trigger affordances are disabled whenever a lock exists, regardless of who owns it.
+    /// </summary>
+    public bool HasActiveLock(string tag) => _locks.ContainsKey(tag);
+
     /// <summary>Returns true if the pipeline is locked by a different user.</summary>
     public bool IsLockedByOther(string tag)
     {

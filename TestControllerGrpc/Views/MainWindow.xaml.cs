@@ -51,7 +51,7 @@ public partial class MainWindow : Window
     private double _logPaneCollapsedHeight = 28;
     private double _treePanelMaxWidthPercent = 0.35;
     private double _agentPanelMaxWidthPercent = 0.35;
-    private double _logPaneMaxHeightPercent = 0.40;
+    private double _logPaneMaxHeightPercent = 0.70;
 
     // ?? System tray ??????????????????????????????????????????
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -107,6 +107,9 @@ public partial class MainWindow : Window
 
         // ?? Keyboard shortcut support ????????????????????????
         _vm.FocusLogSearchRequested += OnFocusLogSearchRequested;
+
+        // ?? Window icon (matches the system tray "TC" badge) ?????????
+        Icon = CreateControllerWindowImage();
 
         // ?? System tray setup ???????????????????????????????
         SetupTrayIcon();
@@ -189,20 +192,74 @@ public partial class MainWindow : Window
     /// </summary>
     private static System.Drawing.Icon CreateControllerTrayIcon()
     {
-        using var bmp = new System.Drawing.Bitmap(16, 16);
+        using var bmp = CreateControllerBadgeBitmap(16);
+        return System.Drawing.Icon.FromHandle(bmp.GetHicon());
+    }
+
+    /// <summary>
+    /// Creates the window icon from the SAME "TC" badge artwork used by the tray,
+    /// so the title-bar/taskbar icon and the tray icon are identical (rendered at
+    /// 32x32 for crisp display in the taskbar and Alt+Tab).
+    /// </summary>
+    private static System.Windows.Media.ImageSource CreateControllerWindowImage()
+    {
+        using var bmp = CreateControllerBadgeBitmap(32);
+        var hIcon = bmp.GetHicon();
+        try
+        {
+            var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                hIcon,
+                System.Windows.Int32Rect.Empty,
+                System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+            src.Freeze();
+            return src;
+        }
+        finally
+        {
+            DestroyIcon(hIcon);
+        }
+    }
+
+    /// <summary>
+    /// Renders the Controller's "TC" badge (rounded blue square with white "TC")
+    /// at the requested size. Shared by the tray icon and the window icon so they
+    /// always match.
+    /// </summary>
+    private static System.Drawing.Bitmap CreateControllerBadgeBitmap(int size)
+    {
+        var bmp = new System.Drawing.Bitmap(size, size);
         using var g = System.Drawing.Graphics.FromImage(bmp);
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(System.Drawing.Color.FromArgb(30, 100, 200)); // blue background
-        using var font = new System.Drawing.Font("Segoe UI", 7f, System.Drawing.FontStyle.Bold);
+        g.Clear(System.Drawing.Color.Transparent);
+
+        float radius = size * 0.22f;
+        using (var path = new System.Drawing.Drawing2D.GraphicsPath())
+        {
+            float d = radius * 2f;
+            float max = size - 1f;
+            path.AddArc(0, 0, d, d, 180, 90);
+            path.AddArc(max - d, 0, d, d, 270, 90);
+            path.AddArc(max - d, max - d, d, d, 0, 90);
+            path.AddArc(0, max - d, d, d, 90, 90);
+            path.CloseFigure();
+            using var bg = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(30, 100, 200));
+            g.FillPath(bg, path);
+        }
+
+        using var font = new System.Drawing.Font("Segoe UI", size * 0.42f, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
         using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.White);
         var sf = new System.Drawing.StringFormat
         {
             Alignment = System.Drawing.StringAlignment.Center,
             LineAlignment = System.Drawing.StringAlignment.Center
         };
-        g.DrawString("TC", font, brush, new System.Drawing.RectangleF(0, 0, 16, 16), sf);
-        return System.Drawing.Icon.FromHandle(bmp.GetHicon());
+        g.DrawString("TC", font, brush, new System.Drawing.RectangleF(0, 0, size, size), sf);
+        return bmp;
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr handle);
 
     private void OnWindowClosing(object? sender, CancelEventArgs e)
     {

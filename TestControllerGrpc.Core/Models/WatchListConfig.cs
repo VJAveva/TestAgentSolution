@@ -267,6 +267,13 @@ public sealed class PipelineExecutionContext
 
     /// <summary>Short session ID for log prefixing in concurrent execution.</summary>
     public string SessionId { get; set; } = "";
+
+    /// <summary>
+    /// Per-acquisition pipeline-lock token set by the trigger path that acquired the
+    /// single-run lock. The executor releases that exact lock when the run fully stops.
+    /// Empty when the run was started without acquiring a pipeline lock.
+    /// </summary>
+    public string LockToken { get; set; } = "";
 }
 
 // =============================================================================

@@ -61,7 +61,7 @@
     <!-- Panel MaxWidth/MaxHeight as percentage of available space (0.0–1.0) -->
     <sys:Double x:Key="TreePanelMaxWidthPercent">0.35</sys:Double>
     <sys:Double x:Key="AgentPanelMaxWidthPercent">0.35</sys:Double>
-    <sys:Double x:Key="LogPaneMaxHeightPercent">0.40</sys:Double>
+    <sys:Double x:Key="LogPaneMaxHeightPercent">0.70</sys:Double>
 
     <!-- ═══ Animation Durations ═══ -->
     <Duration x:Key="AnimFast">0:0:0.12</Duration>

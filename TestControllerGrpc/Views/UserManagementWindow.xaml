@@ -6,5 +6,13 @@
         Height="700" Width="900" MinWidth="600" MinHeight="450"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBg}">
+    <Window.Icon>
+        <DrawingImage>
+            <DrawingImage.Drawing>
+                <!-- Users / people glyph (relevant to User Management) -->
+                <GeometryDrawing Brush="#FF89B4FA" Geometry="M9,11 C11.21,11 13,9.21 13,7 C13,4.79 11.21,3 9,3 C6.79,3 5,4.79 5,7 C5,9.21 6.79,11 9,11 Z M9,13 C6.33,13 1,14.34 1,17 L1,20 L17,20 L17,17 C17,14.34 11.67,13 9,13 Z M16.5,11 C18.16,11 19.5,9.66 19.5,8 C19.5,6.34 18.16,5 16.5,5 C16.04,5 15.61,5.11 15.22,5.29 C15.71,5.99 16,6.86 16,7.8 C16,8.74 15.71,9.61 15.22,10.31 C15.61,10.49 16.04,11 16.5,11 Z M17.5,13 C16.84,13 16.18,13.09 15.56,13.24 C16.42,13.93 17,14.82 17,16 L17,20 L23,20 L23,17 C23,14.69 19.61,13 17.5,13 Z" />
+            </DrawingImage.Drawing>
+        </DrawingImage>
+    </Window.Icon>
     <admin:UserManagementPage />
 </Window>

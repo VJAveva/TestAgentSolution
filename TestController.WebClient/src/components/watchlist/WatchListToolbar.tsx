@@ -21,7 +21,7 @@ export default function WatchListToolbar() {
   const selectedTag = selectedNode?.nodeKind === 'WatchItem' ? selectedNode.tag : undefined;
   const canRetry = useCan('Pipeline_Retry', selectedTag ?? undefined);
   const retryDeniedReason = useDisabledReason('Pipeline_Retry', selectedTag ?? undefined);
-  const isLockedByOther = useLockStore(s => selectedTag ? s.isLockedByOther(selectedTag) : false);
+  const hasActiveLock = useLockStore(s => selectedTag ? s.hasActiveLock(selectedTag) : false);
   const selectedStatus = useWatchListStore(s => (selectedTag ? s.nodeStatus[selectedTag.toLowerCase()] : undefined) ?? 'Idle');
   const showRetry = selectedNode?.nodeKind === 'WatchItem' && selectedStatus === 'Failed';
 
@@ -30,7 +30,7 @@ export default function WatchListToolbar() {
     selectedNode?.nodeKind === 'WatchItem'
     && (selectedNode.model as { isEnabled?: boolean } | undefined)?.isEnabled === false;
 
-  const retryDisabled = busy || !canRetry || isLockedByOther || isPipelineDisabled;
+  const retryDisabled = busy || !canRetry || hasActiveLock || isPipelineDisabled;
 
   // Listen for 409 lock conflict events from useExecution
   useEffect(() => {
@@ -128,7 +128,7 @@ export default function WatchListToolbar() {
           onClick={handleRetry}
           disabled={retryDisabled}
           accent
-          title={retryDisabled ? (isPipelineDisabled ? 'Pipeline is disabled' : isLockedByOther ? 'Pipeline is locked by another user' : retryDeniedReason ?? undefined) : undefined}
+          title={retryDisabled ? (isPipelineDisabled ? 'Pipeline is disabled' : hasActiveLock ? 'Pipeline is running — cancel it to retrigger' : retryDeniedReason ?? undefined) : undefined}
         />
       )}
 

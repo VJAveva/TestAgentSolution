@@ -42,8 +42,17 @@ public sealed class LockService
 
     public bool ReleaseLock(string pipelineId, IUserContext user)
     {
+        var existing = _lockRegistry.Get(pipelineId);
+        if (existing is null)
+            return false;
+
+        // Owner self-release: only the current owner may release via this path; the
+        // release itself is token-validated by the registry.
         var owner = new OwnerIdentity(user.UserId, user.DisplayName, user.ClientKind);
-        var released = _lockRegistry.TryRelease(pipelineId, owner);
+        if (existing.Owner != owner)
+            return false;
+
+        var released = _lockRegistry.TryRelease(pipelineId, existing.Token);
 
         if (released)
         {

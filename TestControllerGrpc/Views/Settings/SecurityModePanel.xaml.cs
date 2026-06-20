@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Settings;
+using TestControllerGrpc.Views.Dialogs;
 
 namespace TestControllerGrpc.Views.Settings;
 
@@ -107,19 +108,11 @@ public partial class SecurityModePanel : UserControl
     {
         try
         {
-            var owner = Window.GetWindow(this);
-            var result = owner is { IsLoaded: true }
-                ? MessageBox.Show(
-                    owner,
-                    "Switch to Secured mode?\n\nExisting users will be reactivated and login will be required.",
-                    "Confirm Switch to Secured Mode",
-                    MessageBoxButton.OKCancel,
-                    MessageBoxImage.Question)
-                : MessageBox.Show(
-                    "Switch to Secured mode?\n\nExisting users will be reactivated and login will be required.",
-                    "Confirm Switch to Secured Mode",
-                    MessageBoxButton.OKCancel,
-                    MessageBoxImage.Question);
+            var result = ThemedMessageBox.Show(
+                "Switch to Secured mode?\n\nExisting users will be reactivated and login will be required.",
+                "Confirm Switch to Secured Mode",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
 
             if (result == MessageBoxResult.OK)
             {

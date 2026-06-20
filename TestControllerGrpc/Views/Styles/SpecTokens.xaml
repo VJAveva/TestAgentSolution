@@ -38,8 +38,8 @@
     <SolidColorBrush x:Key="BgWarningBrush" Color="#33E0B341"/>
 
     <!-- ?? Text ?????????????????????????????????????????????????????????? -->
-    <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#E6E9EE"/>
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#9098A4"/>
+    <!-- TextPrimaryBrush / TextSecondaryBrush are theme-aware and defined in the theme dictionaries
+         (LightTheme/DarkTheme/HighContrastTheme) so they adapt to the selected theme. -->
     <SolidColorBrush x:Key="TextTertiaryBrush"  Color="#6B7280"/>
     <SolidColorBrush x:Key="TextInfoBrush"      Color="#4A9EFF"/>
     <SolidColorBrush x:Key="TextSuccessBrush"   Color="#3DDC84"/>

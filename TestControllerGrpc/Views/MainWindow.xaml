@@ -1451,7 +1451,7 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Test Plan" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
+                                        <TextBlock Text="Test Plans" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -1518,7 +1518,7 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Templates" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
+                                        <TextBlock Text="Library" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -1528,10 +1528,15 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                             <StackPanel Margin="0,0,10,0">
-                                                <TextBlock Text="Theme" FontSize="9" Foreground="{DynamicResource TextS}" Margin="0,0,0,2" />
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                    <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                                               Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                    <TextBlock Text="Theme" FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextP}" VerticalAlignment="Center" />
+                                                </StackPanel>
                                                 <ComboBox ItemsSource="{Binding AvailableThemes}"
                                                           SelectedItem="{Binding SelectedTheme}"
-                                                          Style="{StaticResource Cmb}" Width="120" />
+                                                          Style="{StaticResource Cmb}" Width="134" FontSize="12" />
                                             </StackPanel>
                                             <Border Background="{DynamicResource BgSurface}" CornerRadius="10" Padding="6,4">
                                                 <StackPanel Orientation="Horizontal">
@@ -2055,7 +2060,7 @@
                         <TabItem.Header>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                <TextBlock Text="Test Plan" VerticalAlignment="Center" />
+                                <TextBlock Text="Test Plans" VerticalAlignment="Center" />
                             </StackPanel>
                         </TabItem.Header>
                         <DockPanel>
@@ -2082,12 +2087,12 @@
                         </DockPanel>
                     </TabItem>
 
-                    <!-- Templates Tab -->
+                    <!-- Library Tab -->
                     <TabItem>
                         <TabItem.Header>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                <TextBlock Text="Templates" VerticalAlignment="Center" />
+                                <TextBlock Text="Library" VerticalAlignment="Center" />
                             </StackPanel>
                         </TabItem.Header>
                         <DockPanel>
@@ -2189,7 +2194,7 @@
                                         RelativeSource={RelativeSource AncestorType=Window},
                                         Converter={StaticResource BoolVis}}">
                             <Image Source="pack://application:,,,/Resources/nextgen_watermark.png"
-                                   Width="280" Height="280"
+                                   Width="340" Height="340"
                                    Opacity="{DynamicResource WatermarkOpacity}"
                                    HorizontalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality" />
@@ -2328,6 +2333,18 @@
                                                     Command="{Binding DataContext.BrowseBuildCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     ToolTip="Browse network path to select a build folder" />
                                         </Grid>
+
+                                        <!-- Save the browsed build to the global file + every pipeline's parameter file -->
+                                        <Button Margin="0,8,0,4" Padding="10,6" HorizontalAlignment="Left"
+                                                Style="{StaticResource SmBtn}"
+                                                Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                                                Command="{Binding DataContext.SaveBuildToAllFilesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTip="Write the build selected via Browse Build (_BuildNumber and _DropLocation) to the global variables file and every pipeline's parameter file. All other parameters are preserved.">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,6,0" />
+                                                <TextBlock Text="Save Build to All Pipelines" FontSize="11" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Button>
 
                                         <Label Content="SELECTED BUILD" Style="{StaticResource Lbl}"
                                                Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}" />
@@ -2914,13 +2931,14 @@
                                       Style="{StaticResource Cmb}" Margin="0,0,8,0"
                                       ToolTip="Filter by execution session" />
 
-                            <!-- Tag filter -->
-                            <TextBlock Text="Tag:" FontSize="10" FontWeight="SemiBold"
+                            <!-- Pipeline filter -->
+                            <TextBlock Text="Pipeline:" FontSize="10" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextS}" VerticalAlignment="Center" Margin="0,0,4,0" />
-                            <ComboBox Width="100" ItemsSource="{Binding AvailableWatchItemTags}"
+                            <ComboBox Width="140" ItemsSource="{Binding AvailableWatchItemTags}"
                                       SelectedItem="{Binding LogFilterTag}" IsEditable="True"
                                       Text="{Binding LogFilterTag, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource Cmb}" Margin="0,0,8,0" />
+                                      Style="{StaticResource Cmb}" Margin="0,0,8,0"
+                                      ToolTip="Filter by pipeline; the Agent list narrows to agents used in the selected pipeline" />
 
                             <!-- Agent filter -->
                             <TextBlock Text="Agent:" FontSize="10" FontWeight="SemiBold"
@@ -2985,7 +3003,7 @@
                          for visible rows, not all 10K entries. Recycling reuses discarded
                          containers. ScrollUnit=Pixel gives smooth scrolling. -->
                     <ListBox Grid.Row="2" x:Name="LogListBox" ItemsSource="{Binding FilteredLogEntries}" Background="Transparent"
-                             BorderThickness="0" FontFamily="Consolas" FontSize="11" Padding="4,2"
+                             BorderThickness="0" FontFamily="Consolas" FontSize="13" Padding="4,2"
                              SelectionMode="Extended"
                              VirtualizingStackPanel.IsVirtualizing="True"
                              VirtualizingStackPanel.VirtualizationMode="Recycling"

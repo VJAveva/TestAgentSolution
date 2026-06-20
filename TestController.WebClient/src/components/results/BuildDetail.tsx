@@ -3,10 +3,11 @@ import { useResultsStore } from '../../stores/resultsStore';
 import { useResults } from '../../hooks/useResults';
 import { useCan, useDisabledReason } from '../../hooks/useCapabilities';
 import { logCatch } from '../../lib/logger';
-import { Download, Mail, ChevronDown, ChevronRight, Search, Filter, Activity, FileSearch } from 'lucide-react';
+import { Download, Mail, ChevronDown, ChevronRight, Search, Filter, Activity, FileSearch, ExternalLink } from 'lucide-react';
 import type { BuildDetailTest } from '../../types/api';
 import FailureAnalysisDialog from './FailureAnalysisDialog';
 import ExecutionLogDialog from './ExecutionLogDialog';
+import { openTraceWindow } from '../../lib/traceWindow';
 
 type DetailTab = 'usecases' | 'failed' | 'all';
 
@@ -300,6 +301,13 @@ function TestRow({ test, expanded, onToggle, onAnalyze, onViewLog }: {
                   <FileSearch size={10} /> View Execution Log
                 </button>
               )}
+              <button
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
+                title="Open the full debug trace in a separate window"
+                onClick={e => { e.stopPropagation(); openTraceWindow(test); }}
+              >
+                <ExternalLink size={10} /> Pop Out Trace
+              </button>
             </div>
           )}
           {test.errorMessage && (

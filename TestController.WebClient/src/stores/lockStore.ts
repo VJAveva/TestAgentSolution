@@ -20,6 +20,7 @@ interface LockState {
   onRewritten: (dto: PipelineLockDto) => void;
   setAll: (dtos: PipelineLockDto[]) => void;
   getLock: (tag: string) => PipelineLockDto | undefined;
+  hasActiveLock: (tag: string) => boolean;
   isLockedByOther: (tag: string) => boolean;
 }
 
@@ -51,6 +52,10 @@ export const useLockStore = create<LockState>((set, get) => ({
   },
 
   getLock: (tag) => get().locks[tag],
+
+  // Single-run gate: ANY active lock blocks a new trigger — for everyone, every
+  // role, the owner and Administrator included. The only path is Cancel.
+  hasActiveLock: (tag) => get().locks[tag] !== undefined,
 
   isLockedByOther: (tag) => {
     const lock = get().locks[tag];

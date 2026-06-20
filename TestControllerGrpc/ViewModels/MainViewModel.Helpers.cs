@@ -232,27 +232,57 @@ public sealed partial class MainViewModel
             if (!string.IsNullOrWhiteSpace(wi.Tag))
                 AvailableWatchItemTags.Add(wi.Tag);
 
+        FilterAgentNamesByPipeline(LogFilterTag);
+    }
+
+    /// <summary>
+    /// Rebuilds <see cref="AvailableAgentNames"/> for the log filter. When a pipeline
+    /// (WatchItem tag) is selected, the list narrows to agents used within that pipeline;
+    /// otherwise it shows all registered and WatchList-referenced agents.
+    /// </summary>
+    private void FilterAgentNamesByPipeline(string? pipelineTag)
+    {
+        var previousAgent = LogFilterAgent;
+
         AvailableAgentNames.Clear();
         AvailableAgentNames.Add(""); // "All" option
 
-        // Include registered (connected) agents
-        foreach (var agent in RegisteredAgents)
-            if (!string.IsNullOrWhiteSpace(agent.Name))
-                AvailableAgentNames.Add(agent.Name);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Also include agent names already used in the loaded WatchList XML
-        // so Remote Command actions show the correct agent even before connecting
-        var usedAgentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        CollectAgentNamesFromChildren(
-            _config.WatchItems.SelectMany(wi => wi.Events).SelectMany(ev => ev.Children),
-            usedAgentNames);
-        CollectAgentNamesFromChildren(
-            _config.Templates.SelectMany(t => t.Children),
-            usedAgentNames);
+        if (string.IsNullOrWhiteSpace(pipelineTag))
+        {
+            // No pipeline selected: include registered (connected) agents...
+            foreach (var agent in RegisteredAgents)
+                if (!string.IsNullOrWhiteSpace(agent.Name))
+                    names.Add(agent.Name);
 
-        foreach (var name in usedAgentNames)
-            if (!AvailableAgentNames.Contains(name, StringComparer.OrdinalIgnoreCase))
-                AvailableAgentNames.Add(name);
+            // ...and agent names referenced anywhere in the loaded WatchList / Templates.
+            CollectAgentNamesFromChildren(
+                _config.WatchItems.SelectMany(wi => wi.Events).SelectMany(ev => ev.Children),
+                names);
+            CollectAgentNamesFromChildren(
+                _config.Templates.SelectMany(t => t.Children),
+                names);
+        }
+        else
+        {
+            // Pipeline selected: only agents used within WatchItems carrying that tag.
+            var matching = _config.WatchItems
+                .Where(wi => string.Equals(wi.Tag, pipelineTag, StringComparison.OrdinalIgnoreCase));
+            CollectAgentNamesFromChildren(
+                matching.SelectMany(wi => wi.Events).SelectMany(ev => ev.Children),
+                names);
+        }
+
+        foreach (var name in names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+            AvailableAgentNames.Add(name);
+
+        // Drop a stale agent selection that no longer belongs to the chosen pipeline.
+        if (!string.IsNullOrEmpty(previousAgent) &&
+            !AvailableAgentNames.Contains(previousAgent, StringComparer.OrdinalIgnoreCase))
+        {
+            LogFilterAgent = "";
+        }
     }
 
     private static void CollectAgentNamesFromChildren(

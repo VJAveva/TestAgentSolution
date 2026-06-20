@@ -31,10 +31,11 @@ export default function DisabledTriggerButton({
   const allowed = useCan('Pipeline_Trigger', pipelineTag);
   const reason = useDisabledReason('Pipeline_Trigger', pipelineTag);
   const lock = useLockStore((s) => pipelineTag ? s.locks[pipelineTag] : undefined);
-  const isLockedByOther = useLockStore((s) => pipelineTag ? s.isLockedByOther(pipelineTag) : false);
+  const hasActiveLock = useLockStore((s) => pipelineTag ? s.hasActiveLock(pipelineTag) : false);
 
-  // Lock takes priority — cannot trigger regardless of role
-  if (isLockedByOther && lock) {
+  // Single-run gate takes priority — while a run is active NOBODY can trigger a
+  // second one (owner and Administrator included). The path forward is Cancel.
+  if (hasActiveLock && lock) {
     return (
       <div className="relative group inline-block">
         <button
@@ -45,7 +46,7 @@ export default function DisabledTriggerButton({
         </button>
         {/* Tooltip */}
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded bg-bg-ribbon border border-bdr text-xs text-text-secondary whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-          Pipeline is locked by {lock.ownerDisplayName}
+          Pipeline is running · Locked by {lock.ownerDisplayName} ({lock.ownerClientKind})
         </div>
       </div>
     );

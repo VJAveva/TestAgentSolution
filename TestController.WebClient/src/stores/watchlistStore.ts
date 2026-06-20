@@ -75,7 +75,7 @@ function buildTree(config: WatchListConfig): TreeNode[] {
   nodeIdCounter = 0;
   const watchListRoot: TreeNode = {
     id: nextId(), nodeKind: 'WatchList',
-    displayText: `WatchList (${config.watchItems.length} items)`,
+    displayText: `Test Plans (${config.watchItems.length} items)`,
     tag: '', executionStatus: 'Idle',
     children: config.watchItems.map((wi: WatchItemConfig) => {
       const wiNode: TreeNode = {
@@ -104,7 +104,7 @@ function buildTree(config: WatchListConfig): TreeNode[] {
   if (config.templates.length > 0) {
     const templateRoot: TreeNode = {
       id: nextId(), nodeKind: 'TemplateList',
-      displayText: `Templates (${config.templates.length})`,
+      displayText: `Library (${config.templates.length})`,
       tag: '', executionStatus: 'Idle',
       children: config.templates.map((t: TemplateConfig) => ({
         id: nextId(), nodeKind: 'Template' as const,

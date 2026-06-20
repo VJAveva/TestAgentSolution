@@ -13,13 +13,17 @@ public sealed class LockRegistry : ILockRegistry
     private readonly ConcurrentDictionary<string, PipelineLock> _locks = new();
     private readonly ConcurrentDictionary<string, object> _keyLocks = new();
     private readonly int _heartbeatTimeoutSeconds;
+    private readonly TimeSpan _renewalInterval;
 
     public event Action<LockEvent>? OnLockEvent;
 
     public LockRegistry(IOptions<LockOptions> options)
     {
         _heartbeatTimeoutSeconds = options.Value.HeartbeatTimeoutSeconds;
+        _renewalInterval = TimeSpan.FromSeconds(Math.Max(1, options.Value.RenewalIntervalSeconds));
     }
+
+    public TimeSpan RenewalInterval => _renewalInterval;
 
     public AcquireResult TryAcquire(string pipelineId, OwnerIdentity owner, LockKind kind)
     {
@@ -28,23 +32,17 @@ public sealed class LockRegistry : ILockRegistry
         {
             if (_locks.TryGetValue(pipelineId, out var existing))
             {
-                // Expired locks are treated as absent
+                // Expired locks are treated as absent.
                 if (existing.ExpiresUtc < DateTime.UtcNow)
                 {
                     _locks.TryRemove(pipelineId, out _);
-                    // Fall through to create new lock
-                }
-                else if (existing.Owner == owner)
-                {
-                    // Same-owner re-acquire: extend TTL
-                    var reacquired = existing.WithExtendedExpiry(
-                        DateTime.UtcNow.AddSeconds(_heartbeatTimeoutSeconds));
-                    _locks[pipelineId] = reacquired;
-                    OnLockEvent?.Invoke(new LockEvent(LockEventKind.Acquired, reacquired));
-                    return new AcquireResult.ReAcquired(reacquired);
+                    // Fall through to create a new lock.
                 }
                 else
                 {
+                    // Single-run rule: ANY active lock blocks a new trigger — including the
+                    // caller's own and regardless of role. The only way past is Cancel
+                    // (which stops the run and frees the lock), then trigger again.
                     return new AcquireResult.Conflict(existing);
                 }
             }
@@ -59,6 +57,7 @@ public sealed class LockRegistry : ILockRegistry
                 AcquiredUtc = now,
                 ExpiresUtc = now.AddSeconds(_heartbeatTimeoutSeconds),
                 LastHeartbeatUtc = now,
+                Token = Guid.NewGuid().ToString("N"),
             };
             _locks[pipelineId] = newLock;
             OnLockEvent?.Invoke(new LockEvent(LockEventKind.Acquired, newLock));
@@ -66,15 +65,21 @@ public sealed class LockRegistry : ILockRegistry
         }
     }
 
-    public bool TryRelease(string pipelineId, OwnerIdentity owner)
+    public bool TryRelease(string pipelineId, string token)
     {
+        if (string.IsNullOrEmpty(token))
+            return false;
+
         var keyLock = _keyLocks.GetOrAdd(pipelineId, _ => new object());
         lock (keyLock)
         {
             if (!_locks.TryGetValue(pipelineId, out var existing))
                 return false;
 
-            if (existing.Owner != owner)
+            // Release succeeds only when the caller presents the current lock's token.
+            // A late release from a torn-down run (whose token no longer matches a newer
+            // acquisition) is a no-op, so it can never free someone else's run.
+            if (!string.Equals(existing.Token, token, StringComparison.Ordinal))
                 return false;
 
             _locks.TryRemove(pipelineId, out _);
@@ -124,6 +129,30 @@ public sealed class LockRegistry : ILockRegistry
                 return false;
 
             if (existing.Owner != owner)
+                return false;
+
+            _locks[pipelineId] = existing.WithExtendedExpiry(
+                DateTime.UtcNow.AddSeconds(_heartbeatTimeoutSeconds));
+            return true;
+        }
+    }
+
+    public bool TryRenew(string pipelineId, string token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return false;
+
+        var keyLock = _keyLocks.GetOrAdd(pipelineId, _ => new object());
+        lock (keyLock)
+        {
+            if (!_locks.TryGetValue(pipelineId, out var existing))
+                return false;
+
+            // Renew only when the caller presents the current lock's token, so a stray
+            // renewal from a torn-down run can never revive a newer run's lock. Renewal
+            // is silent (no event) — clients already render the lock and count elapsed
+            // time from AcquiredUtc, which renewal does not change.
+            if (!string.Equals(existing.Token, token, StringComparison.Ordinal))
                 return false;
 
             _locks[pipelineId] = existing.WithExtendedExpiry(

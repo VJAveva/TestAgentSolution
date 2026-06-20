@@ -76,10 +76,6 @@ public sealed class PipelineService
                     });
                     break;
 
-                case AcquireResult.ReAcquired:
-                    _logger.Info("PipelineService", $"Pipeline lock re-acquired for pipeline={pipelineId} owner={user.DisplayName}");
-                    break;
-
                 case AcquireResult.Conflict conflict:
                     return LockMapper.ToDto(conflict.ExistingLock);
             }
@@ -96,8 +92,13 @@ public sealed class PipelineService
     {
         if (_lockRegistry is null) return;
 
+        var existing = _lockRegistry.Get(pipelineId);
+        if (existing is null) return;
+
         var owner = new OwnerIdentity(user.UserId, user.DisplayName, user.ClientKind);
-        if (_lockRegistry.TryRelease(pipelineId, owner))
+        if (existing.Owner != owner) return;
+
+        if (_lockRegistry.TryRelease(pipelineId, existing.Token))
         {
             _logger.Info("PipelineService", $"Pipeline lock released on completion for pipeline={pipelineId}");
             _auditWriter.Enqueue(new AuditEntry
