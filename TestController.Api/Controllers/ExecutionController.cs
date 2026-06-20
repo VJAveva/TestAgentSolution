@@ -39,6 +39,7 @@ public class ExecutionController : ControllerBase
     private readonly ISecurityAuditLogger _auditLogger;
     private readonly IEventAggregator _events;
     private readonly ILockRegistry? _lockRegistry;
+    private readonly IAuthenticationModeProvider _modeProvider;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
@@ -57,6 +58,7 @@ public class ExecutionController : ControllerBase
         ISessionOwnershipChecker ownershipChecker,
         ISecurityAuditLogger auditLogger,
         IEventAggregator events,
+        IAuthenticationModeProvider modeProvider,
         ILockRegistry? lockRegistry = null)
     {
         _sessionManager = sessionManager;
@@ -69,6 +71,7 @@ public class ExecutionController : ControllerBase
         _ownershipChecker = ownershipChecker;
         _auditLogger = auditLogger;
         _events = events;
+        _modeProvider = modeProvider;
         _lockRegistry = lockRegistry;
     }
 
@@ -285,6 +288,14 @@ public class ExecutionController : ControllerBase
             ?? "anonymous";
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
 
+        // Attribution (display only — NOT an authorization input): the logical owner is the
+        // triggering user; OS execution identity remains the Controller. Display name prefers
+        // the authenticated principal, falling back to the supplied userId.
+        var displayName = HttpContext.User?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(displayName))
+            displayName = userId;
+        var role = _modeProvider.ResolveRole(HttpContext.User ?? new System.Security.Claims.ClaimsPrincipal()).ToString();
+
         var config = _vocabMonitor.CurrentConfig;
         var watchItem = config?.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
@@ -369,7 +380,7 @@ public class ExecutionController : ControllerBase
             {
                 var clientKind = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase)
                     ? ClientKind.Wpf : ClientKind.Web;
-                var owner = new OwnerIdentity(userId, userId, clientKind);
+                var owner = new OwnerIdentity(userId, displayName, clientKind);
                 var acquire = _lockRegistry.TryAcquire(watchItemTag, owner, LockKind.Trigger);
                 if (acquire is AcquireResult.Conflict pipelineConflict)
                     return Conflict(new { error = "pipeline-locked", @lock = LockMapper.ToDto(pipelineConflict.ExistingLock) });
@@ -427,6 +438,8 @@ public class ExecutionController : ControllerBase
                 evt.Children.ToList(),
                 sessionId);
             session.UserId = userId;
+            session.UserDisplayName = displayName;
+            session.UserRole = role;
             session.OwnerSid = _ownershipChecker.GetUserSid(HttpContext.User);
             session.Source = source;
             session.LockedAgents = requiredAgents.ToArray();
@@ -487,12 +500,20 @@ public class ExecutionController : ControllerBase
                     failed = completedSession?.FailedCount ?? 0,
                     total = completedSession?.TotalActions ?? 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
+                    owner = new
+                    {
+                        userId = completedSession?.UserId ?? "",
+                        displayName = completedSession?.UserDisplayName ?? completedSession?.UserId ?? "",
+                        role = completedSession?.UserRole ?? "",
+                    },
                 }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             catch (OperationCanceledException)
             {
                 _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, "Cancelled", 0, 0, 0));
 
+                var cancelledSession = _sessionManager.GetSession(sessionId)
+                    ?? _sessionManager.GetLastSession(watchItemTag);
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -500,12 +521,20 @@ public class ExecutionController : ControllerBase
                     state = "Cancelled",
                     passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
+                    owner = new
+                    {
+                        userId = cancelledSession?.UserId ?? "",
+                        displayName = cancelledSession?.UserDisplayName ?? cancelledSession?.UserId ?? "",
+                        role = cancelledSession?.UserRole ?? "",
+                    },
                 }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             catch (Exception ex)
             {
                 _events.Publish(new ExecutionCompletedEvent(sessionId, watchItemTag, "Failed", 0, 0, 0));
 
+                var failedSession = _sessionManager.GetSession(sessionId)
+                    ?? _sessionManager.GetLastSession(watchItemTag);
                 await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
                 {
                     sessionId,
@@ -514,6 +543,12 @@ public class ExecutionController : ControllerBase
                     error = ex.Message,
                     passed = 0, failed = 0, total = 0,
                     timestamp = DateTime.UtcNow.ToString("o"),
+                    owner = new
+                    {
+                        userId = failedSession?.UserId ?? "",
+                        displayName = failedSession?.UserDisplayName ?? failedSession?.UserId ?? "",
+                        role = failedSession?.UserRole ?? "",
+                    },
                 }, new CancellationTokenSource(BroadcastTimeout).Token);
             }
             finally

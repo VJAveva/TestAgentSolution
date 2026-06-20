@@ -82,6 +82,10 @@ builder.Services.AddSingleton<WatchListFileService>();
 builder.Services.AddSingleton<ControllerProxyService>();
 builder.Services.AddSingleton<ConfigValidator>();
 builder.Services.AddHostedService<AgentEventRelayService>();
+// Bridges the WPF controller's hub events (live run + lock + owner) to this host's
+// ControllerHub so web clients see them without ever connecting to the controller directly.
+// Self-disables when no ControllerProxyUrl is configured.
+builder.Services.AddHostedService<ControllerEventRelayService>();
 
 // Adapters: expose standalone services as the interfaces the shared API controllers expect
 builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabularyMonitor(sp.GetRequiredService<WatchListFileService>()));

@@ -2,6 +2,7 @@ export interface SessionSummary {
   sessionId: string;
   watchItemTag: string;
   userId: string;
+  owner?: RunOwner;
   source: string;
   status: SessionStatus;
   startedUtc: string;
@@ -14,6 +15,13 @@ export interface SessionSummary {
   progressPercent: number;
   lockedAgents: string[];
   buildNumber?: string;
+}
+
+/// Attribution for who triggered a run (display only — not an authorization input).
+export interface RunOwner {
+  userId: string;
+  displayName: string;
+  role: string;
 }
 
 export type SessionStatus =

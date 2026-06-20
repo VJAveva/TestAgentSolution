@@ -114,6 +114,9 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
         sessionId: d.sessionId,
         watchItemTag: d.watchItemTag || '',
         userId: d.userId || '',
+        owner: d.owner
+          ? { userId: d.owner.userId || '', displayName: d.owner.displayName || '', role: d.owner.role || '' }
+          : undefined,
         source: d.source || 'WebClient',
         status: 'Running',
         startedUtc: d.startTime || new Date().toISOString(),
@@ -142,6 +145,9 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
         next.set(d.sessionId, {
           ...existing,
           status: d.state as SessionStatus,
+          owner: d.owner
+            ? { userId: d.owner.userId || '', displayName: d.owner.displayName || '', role: d.owner.role || '' }
+            : existing.owner,
           passedActions: d.passed > 0 ? d.passed : existing.passedActions,
           failedActions: d.failed > 0 ? d.failed : existing.failedActions,
           elapsed: d.totalDuration ?? existing.elapsed,

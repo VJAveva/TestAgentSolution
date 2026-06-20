@@ -9,6 +9,7 @@ namespace TestController.Api.Contracts;
 public sealed record PipelineLockDto
 {
     public required string PipelineId { get; init; }
+    public required string OwnerUserId { get; init; }
     public required string OwnerDisplayName { get; init; }
     public required string OwnerClientKind { get; init; }
     public required DateTime AcquiredUtc { get; init; }

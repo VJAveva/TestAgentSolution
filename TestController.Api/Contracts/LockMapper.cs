@@ -10,6 +10,7 @@ public static class LockMapper
     public static PipelineLockDto ToDto(PipelineLock lockEntry) => new()
     {
         PipelineId = lockEntry.PipelineId,
+        OwnerUserId = lockEntry.Owner.UserId,
         OwnerDisplayName = lockEntry.Owner.DisplayName,
         OwnerClientKind = lockEntry.Owner.ClientKind.ToString(),
         AcquiredUtc = lockEntry.AcquiredUtc,

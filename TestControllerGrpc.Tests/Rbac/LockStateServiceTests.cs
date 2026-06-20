@@ -11,6 +11,7 @@ public sealed class LockStateServiceTests
     private static PipelineLockDto MakeDto(string pipelineId, string owner = "ravi.kumar", string clientKind = "Web") => new()
     {
         PipelineId = pipelineId,
+        OwnerUserId = owner,
         OwnerDisplayName = owner,
         OwnerClientKind = clientKind,
         AcquiredUtc = DateTime.UtcNow.AddMinutes(-5),

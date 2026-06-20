@@ -377,6 +377,8 @@ public sealed class ExecutionSessionManager
                         WatchItemTag = entry.WatchItemTag,
                         EventType = entry.EventType,
                         UserId = entry.UserId,
+                        UserDisplayName = entry.UserDisplayName,
+                        UserRole = entry.UserRole,
                         Source = entry.Source,
                         LockedAgents = entry.LockedAgents ?? Array.Empty<string>(),
                         ResolvedParameters = entry.ResolvedParameters ?? new(),
@@ -431,6 +433,8 @@ public sealed class ExecutionSessionManager
         CompletedUtc = s.CompletedUtc?.ToString("o"),
         State = s.State.ToString(),
         UserId = s.UserId,
+        UserDisplayName = s.UserDisplayName,
+        UserRole = s.UserRole,
         Source = s.Source,
         LockedAgents = s.LockedAgents,
         ResolvedParameters = new Dictionary<string, string>(s.ResolvedParameters),
@@ -459,6 +463,8 @@ public sealed class ExecutionSessionManager
         public string? CompletedUtc { get; init; }
         public string State { get; init; } = "";
         public string UserId { get; init; } = "";
+        public string UserDisplayName { get; init; } = "";
+        public string UserRole { get; init; } = "";
         public string Source { get; init; } = "";
         public string[] LockedAgents { get; init; } = [];
         public Dictionary<string, string> ResolvedParameters { get; init; } = new();

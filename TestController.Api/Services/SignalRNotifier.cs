@@ -357,6 +357,12 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             startTime = DateTime.UtcNow.ToString("o"),
             source = e.Source,
             userId = session?.UserId ?? "",
+            owner = new
+            {
+                userId = session?.UserId ?? "",
+                displayName = session?.UserDisplayName ?? session?.UserId ?? "",
+                role = session?.UserRole ?? "",
+            },
             lockedAgents = session?.LockedAgents ?? Array.Empty<string>(),
             pendingActions,
         });
@@ -414,6 +420,8 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         // Invalidate build results cache so the next dashboard load picks up new TRX files
         _buildResults.InvalidateAll();
 
+        var session = _sessionManager.GetSession(e.SessionId);
+
         SendSafe("ExecutionCompleted", new
         {
             sessionId = e.SessionId,
@@ -423,6 +431,12 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
             failed = e.Failed,
             total = e.Total,
             timestamp = DateTime.UtcNow.ToString("o"),
+            owner = new
+            {
+                userId = session?.UserId ?? "",
+                displayName = session?.UserDisplayName ?? session?.UserId ?? "",
+                role = session?.UserRole ?? "",
+            },
         });
 
         // Notify Results page to refresh build list

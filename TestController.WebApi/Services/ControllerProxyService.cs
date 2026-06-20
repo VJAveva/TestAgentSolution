@@ -33,6 +33,9 @@ public sealed class ControllerProxyService : IDisposable
     /// <summary>Whether a WPF controller proxy URL is configured.</summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_baseUrl);
 
+    /// <summary>The configured WPF controller base URL (e.g. <c>http://localhost:5200</c>), or null.</summary>
+    public string? BaseUrl => _baseUrl;
+
     /// <summary>
     /// Fetches dashboard session data from the WPF controller's embedded API.
     /// Returns null on any failure (timeout, unreachable, bad response) so the

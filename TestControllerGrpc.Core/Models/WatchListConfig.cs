@@ -291,6 +291,12 @@ public sealed class ExecutionSession
     /// <summary>Who triggered this session.</summary>
     public string UserId { get; set; } = "";
 
+    /// <summary>Display name of the triggering user (for attribution). Falls back to UserId when unknown.</summary>
+    public string UserDisplayName { get; set; } = "";
+
+    /// <summary>Role of the triggering user at trigger time ("Admin" | "User" | "Anonymous"). Attribution only — NOT an authorization input.</summary>
+    public string UserRole { get; set; } = "";
+
     /// <summary>Security identifier of the session owner (SID for Windows, token ID for token mode).</summary>
     public string OwnerSid { get; set; } = "";
 
