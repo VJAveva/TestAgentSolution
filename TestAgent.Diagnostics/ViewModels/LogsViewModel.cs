@@ -15,7 +15,7 @@ namespace TestAgent.Diagnostics.ViewModels;
 /// </summary>
 public sealed partial class LogsViewModel : ObservableObject
 {
-    private IReadOnlyList<LogRecord> _all = Array.Empty<LogRecord>();
+    private List<LogRecord> _all = new();
     private ICollectionView? _view;
 
     public ObservableCollection<LogRecord> Records { get; } = new();
@@ -35,12 +35,15 @@ public sealed partial class LogsViewModel : ObservableObject
     [ObservableProperty] private int _visibleCount;
     [ObservableProperty] private int _totalCount;
 
+    /// <summary>When true (live mode), new records are appended and the view auto-scrolls.</summary>
+    [ObservableProperty] private bool _autoFollow = true;
+
     public bool HasContext => !string.IsNullOrEmpty(ContextChip);
 
     /// <summary>Replace the shared record set (called once after a load).</summary>
     public void SetRecords(IReadOnlyList<LogRecord> records)
     {
-        _all = records;
+        _all = records.ToList();
         Records.Clear();
         foreach (var r in records) Records.Add(r);
 
@@ -60,6 +63,38 @@ public sealed partial class LogsViewModel : ObservableObject
         _view.Filter = FilterPredicate;
         TotalCount = records.Count;
         Refresh();
+    }
+
+    /// <summary>Raised after a live append so the view can auto-scroll to the tail.</summary>
+    public event Action? RecordsAppended;
+
+    /// <summary>Append a live batch of records (live tail mode). Keeps filters intact.</summary>
+    public void AppendRecords(IReadOnlyList<LogRecord> records)
+    {
+        if (records.Count == 0) return;
+
+        foreach (var r in records)
+        {
+            _all.Add(r);
+            Records.Add(r);
+
+            if (!string.IsNullOrEmpty(r.Component) && !Components.Contains(r.Component))
+                InsertSorted(Components, r.Component);
+            if (!string.IsNullOrEmpty(r.Agent) && !Agents.Contains(r.Agent))
+                InsertSorted(Agents, r.Agent);
+        }
+
+        TotalCount = _all.Count;
+        Refresh();
+        if (AutoFollow) RecordsAppended?.Invoke();
+    }
+
+    /// <summary>Insert into a sorted list whose first element is the "All" sentinel.</summary>
+    private static void InsertSorted(ObservableCollection<string> items, string value)
+    {
+        var i = 1; // keep "All" first
+        while (i < items.Count && StringComparer.Ordinal.Compare(items[i], value) < 0) i++;
+        items.Insert(i, value);
     }
 
     /// <summary>Arrive pre-filtered from View A.</summary>

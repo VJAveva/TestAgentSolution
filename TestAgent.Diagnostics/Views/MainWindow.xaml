@@ -24,6 +24,17 @@
                 <Button DockPanel.Dock="Left" Content="Reload" Padding="12,6" Margin="0,0,16,0"
                         Command="{Binding ReloadCommand}" />
 
+                <!-- Live controls -->
+                <Button DockPanel.Dock="Left" Content="▶ Go Live" Padding="12,6" Margin="0,0,6,0"
+                        Command="{Binding GoLiveCommand}"
+                        Visibility="{Binding IsLiveActive, Converter={StaticResource InvBoolToVis}}" />
+                <Button DockPanel.Dock="Left" Content="■ Stop" Padding="12,6" Margin="0,0,8,0"
+                        Command="{Binding StopLiveCommand}"
+                        Visibility="{Binding IsLiveActive, Converter={StaticResource BoolToVis}}" />
+                <TextBlock DockPanel.Dock="Left" Text="● LIVE" FontWeight="Bold" VerticalAlignment="Center"
+                           Margin="0,0,16,0" Foreground="{DynamicResource AccGreen}"
+                           Visibility="{Binding IsLiveActive, Converter={StaticResource BoolToVis}}" />
+
                 <!-- View toggle -->
                 <Border DockPanel.Dock="Left" CornerRadius="4" Padding="2"
                         Background="{DynamicResource BgCard}" Margin="0,0,16,0">
@@ -34,6 +45,9 @@
                         <RadioButton Content="Logs" GroupName="View" Padding="12,5"
                                      IsChecked="{Binding IsLogs, Mode=OneWay}"
                                      Command="{Binding ShowLogsCommand}" />
+                        <RadioButton Content="Live" GroupName="View" Padding="12,5"
+                                     IsChecked="{Binding IsLive, Mode=OneWay}"
+                                     Command="{Binding ShowLiveCommand}" />
                     </StackPanel>
                 </Border>
 
@@ -54,6 +68,11 @@
                                     Converter={StaticResource BoolToVis}}" />
             <views:LogsView DataContext="{Binding Logs}"
                             Visibility="{Binding DataContext.IsLogs,
+                                RelativeSource={RelativeSource AncestorType=Window},
+                                Converter={StaticResource BoolToVis}}" />
+
+            <views:LiveStatusView DataContext="{Binding Live}"
+                            Visibility="{Binding DataContext.IsLive,
                                 RelativeSource={RelativeSource AncestorType=Window},
                                 Converter={StaticResource BoolToVis}}" />
 

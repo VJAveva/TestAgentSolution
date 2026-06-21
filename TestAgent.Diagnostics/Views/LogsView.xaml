@@ -48,7 +48,7 @@
                 <ColumnDefinition Width="1*" MinWidth="260" />
             </Grid.ColumnDefinitions>
 
-            <ListView Grid.Column="0" ItemsSource="{Binding Records}" SelectedItem="{Binding SelectedRecord}"
+            <ListView Grid.Column="0" x:Name="LogList" ItemsSource="{Binding Records}" SelectedItem="{Binding SelectedRecord}"
                       Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}"
                       Foreground="{DynamicResource TextP}"
                       ScrollViewer.IsDeferredScrollingEnabled="True"

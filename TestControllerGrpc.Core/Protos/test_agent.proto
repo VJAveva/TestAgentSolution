@@ -101,6 +101,10 @@ message ExecutionEvent {
   double     progress_pct   = 12;
   string     detail         = 13;
   ResourceMetrics metrics   = 14;
+  // Correlation/run id propagated from the controller via the x-correlation-id
+  // gRPC metadata header, echoed back so agent-origin events join the same
+  // end-to-end trace as the triggering run.
+  string     correlation_id = 15;
 }
 
 enum ExecutionEventType {

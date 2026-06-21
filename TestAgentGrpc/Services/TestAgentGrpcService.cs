@@ -168,6 +168,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
                 EventType   = ExecutionEventType.EventFailed,
                 ErrorMessage = "Agent is busy.",
                 Detail       = "Command rejected — another execution is in progress.",
+                CorrelationId = correlationId,
             });
             return;
         }
@@ -182,6 +183,10 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         {
             await foreach (var evt in reader.ReadAllAsync(context.CancellationToken))
             {
+                // Stamp the run/correlation id at the boundary (the executor that
+                // produced the event doesn't see the gRPC header) so every
+                // agent-origin event carries the same id as the triggering run.
+                evt.CorrelationId = correlationId;
                 await responseStream.WriteAsync(evt);
             }
         }

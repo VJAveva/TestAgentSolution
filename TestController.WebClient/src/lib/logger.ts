@@ -32,10 +32,40 @@ function emit() {
   listeners.forEach(l => l());
 }
 
+/**
+ * Ships a single error-level entry to the shared server log
+ * (POST /api/clientlogs → IAppLogger). Gated by VITE_REPORT_CLIENT_ERRORS so
+ * it stays opt-in. Never throws — a logger must not become a failure surface.
+ */
+function reportToServer(entry: AppLogEntry) {
+  if (import.meta.env.VITE_REPORT_CLIENT_ERRORS !== 'true') return;
+  try {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+    void fetch(`${baseUrl}/api/clientlogs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        level: entry.level,
+        scope: entry.category,
+        detail: entry.message,
+        correlationId: entry.correlationId,
+        timestamp: entry.timestamp,
+        userAgent: navigator.userAgent,
+        page: window.location.pathname,
+      }),
+      keepalive: true,
+    }).catch(() => { /* never throw from a logger */ });
+  } catch { /* swallow — logger must never break the app */ }
+}
+
 export const appLogger = {
   log(level: LogLevel, category: string, message: string, data?: unknown, correlationId?: string) {
-    entries = [...entries, { id: String(nextId++), timestamp: new Date().toISOString(), level, category, message, data, correlationId }];
+    const entry: AppLogEntry = { id: String(nextId++), timestamp: new Date().toISOString(), level, category, message, data, correlationId };
+    entries = [...entries, entry];
     emit();
+    // Ship errors to the shared server log so client crashes land next to the
+    // server-side failure in errors_{date}.log / app_{date}.jsonl.
+    if (level === 'error') reportToServer(entry);
   },
   debug(category: string, message: string, data?: unknown) { appLogger.log('debug', category, message, data); },
   info(category: string, message: string, data?: unknown) { appLogger.log('info', category, message, data); },
@@ -87,32 +117,13 @@ export function logError(scope: string, action: string, err: unknown): void {
 
   const message = `[${scope}:${action}] ${status}${url ? ` ${url}` : ''} \u2014 ${detail}`;
 
-  // Write to appLogger so AppLogPanel can display it
+  // Write to appLogger so AppLogPanel can display it. appLogger.error ships
+  // error-level entries to POST /api/clientlogs via reportToServer, so the
+  // message (which already embeds scope/action/status/url) reaches the server.
   appLogger.error(scope, message, err, cid);
 
   // Also write to console for dev tools
   console.error(`[ERR] [cid=${cid}] ${message}`, err);
-
-  // Optional: POST to a server-side ingestion endpoint for centralized logs.
-  // Disabled by default to avoid request loops if the server itself is down.
-  // Enable by setting VITE_REPORT_CLIENT_ERRORS=true and implementing
-  // POST /api/clientlogs on the server.
-  if (import.meta.env.VITE_REPORT_CLIENT_ERRORS === 'true') {
-    try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
-      void fetch(`${baseUrl}/api/clientlogs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope, action, status, url, detail, correlationId: cid,
-          timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent,
-          page: window.location.pathname,
-        }),
-        keepalive: true,
-      }).catch(() => { /* never throw from a logger */ });
-    } catch { /* swallow ? logger must never break the app */ }
-  }
 }
 
 /**

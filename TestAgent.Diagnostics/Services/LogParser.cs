@@ -41,84 +41,111 @@ public sealed partial class LogParser
     [GeneratedRegex(@"\[_?Agent\d+\]|on\s+(?<a1>[A-Za-z][\w.-]*)|\((?<a2>local)\)")]
     private static partial Regex AgentRegex();
 
+    // --- Incremental parser state (shared by batch Parse and live tailing via Feed/Flush) ---
+    private LogRecord? _current;
+    private string _activeRunId = "";
+    private string _activePipeline = "";
+
+    /// <summary>Reset the incremental state so a fresh file can be parsed from the top.</summary>
+    public void Reset()
+    {
+        _current = null;
+        _activeRunId = "";
+        _activePipeline = "";
+    }
+
     /// <summary>Lazily parse a file's lines into records. Streams the file (does not buffer it whole).</summary>
     public IEnumerable<LogRecord> Parse(IEnumerable<string> lines, string sourceFile)
     {
-        LogRecord? current = null;
-        string activeRunId = "";
-        string activePipeline = "";
-
+        Reset();
         foreach (var raw in lines)
+            foreach (var rec in Feed(raw ?? "", sourceFile))
+                yield return rec;
+        foreach (var rec in Flush())
+            yield return rec;
+    }
+
+    /// <summary>
+    /// Feed a single line and yield any record that became complete because of it.
+    /// A header line completes the previously-pending record; continuation lines
+    /// (exceptions / stack traces) attach to the pending record and yield nothing.
+    /// Used by the live tailer, which feeds newly-appended lines one at a time.
+    /// </summary>
+    public IEnumerable<LogRecord> Feed(string line, string sourceFile)
+    {
+        var m = LineRegex().Match(line);
+        if (!m.Success)
         {
-            var line = raw ?? "";
-            var m = LineRegex().Match(line);
-            if (!m.Success)
+            // Continuation line — belongs to the previous record (exception / stack trace).
+            if (_current is not null)
+                AppendContinuation(_current, line);
+            yield break;
+        }
+
+        if (_current is not null)
+        {
+            yield return _current;
+            _current = null;
+        }
+
+        var ts = DateTime.ParseExact(m.Groups["ts"].Value, "yyyy-MM-dd HH:mm:ss.fff",
+            CultureInfo.InvariantCulture);
+        var severity = m.Groups["lvl"].Value switch
+        {
+            "ERR" => Severity.Error,
+            "WRN" => Severity.Warning,
+            "DBG" => Severity.Debug,
+            _ => Severity.Info,
+        };
+
+        var rest = m.Groups["rest"].Value;
+        var (correlationId, component, message) = SplitHeader(rest);
+
+        // Track the active execution session so action/detail lines inherit its run id + pipeline.
+        var subTag = LeadingTag(message);
+        if (string.Equals(subTag, "Session", StringComparison.OrdinalIgnoreCase))
+        {
+            var body = StripLeadingTag(message);
+            var start = SessionStartRegex().Match(body);
+            if (start.Success)
             {
-                // Continuation line — belongs to the previous record (exception / stack trace).
-                if (current is not null)
-                    AppendContinuation(current, line);
-                continue;
-            }
-
-            if (current is not null)
-                yield return current;
-
-            var ts = DateTime.ParseExact(m.Groups["ts"].Value, "yyyy-MM-dd HH:mm:ss.fff",
-                CultureInfo.InvariantCulture);
-            var severity = m.Groups["lvl"].Value switch
-            {
-                "ERR" => Severity.Error,
-                "WRN" => Severity.Warning,
-                "DBG" => Severity.Debug,
-                _ => Severity.Info,
-            };
-
-            var rest = m.Groups["rest"].Value;
-            var (correlationId, component, message) = SplitHeader(rest);
-
-            // Track the active execution session so action/detail lines inherit its run id + pipeline.
-            var subTag = LeadingTag(message);
-            if (string.Equals(subTag, "Session", StringComparison.OrdinalIgnoreCase))
-            {
-                var body = StripLeadingTag(message);
-                var start = SessionStartRegex().Match(body);
-                if (start.Success)
-                {
-                    activeRunId = start.Groups["id"].Value;
-                    activePipeline = start.Groups["pipe"].Value.Trim();
-                }
-                else if (SessionEndRegex().IsMatch(body))
-                {
-                    // keep run id for the Completed line itself, then clear afterwards.
-                }
-            }
-
-            var runId = !string.IsNullOrEmpty(correlationId) ? correlationId : activeRunId;
-            var component2 = string.IsNullOrEmpty(subTag) ? component : subTag;
-
-            current = new LogRecord
-            {
-                Timestamp = ts,
-                Severity = severity,
-                Component = component2,
-                RunId = runId,
-                Pipeline = activePipeline,
-                Action = DeriveAction(message, component2),
-                Agent = DeriveAgent(message),
-                Message = message,
-                SourceFile = sourceFile,
-            };
-
-            if (string.Equals(subTag, "Session", StringComparison.OrdinalIgnoreCase)
-                && SessionEndRegex().IsMatch(message))
-            {
-                activeRunId = "";
-                activePipeline = "";
+                _activeRunId = start.Groups["id"].Value;
+                _activePipeline = start.Groups["pipe"].Value.Trim();
             }
         }
 
-        if (current is not null)
-            yield return current;
+        var runId = !string.IsNullOrEmpty(correlationId) ? correlationId : _activeRunId;
+        var component2 = string.IsNullOrEmpty(subTag) ? component : subTag;
+
+        _current = new LogRecord
+        {
+            Timestamp = ts,
+            Severity = severity,
+            Component = component2,
+            RunId = runId,
+            Pipeline = _activePipeline,
+            Action = DeriveAction(message, component2),
+            Agent = DeriveAgent(message),
+            Message = message,
+            SourceFile = sourceFile,
+        };
+
+        if (string.Equals(subTag, "Session", StringComparison.OrdinalIgnoreCase)
+            && SessionEndRegex().IsMatch(message))
+        {
+            _activeRunId = "";
+            _activePipeline = "";
+        }
+    }
+
+    /// <summary>Yield the final pending record (call once after the last line).</summary>
+    public IEnumerable<LogRecord> Flush()
+    {
+        if (_current is not null)
+        {
+            yield return _current;
+            _current = null;
+        }
     }
 
     /// <summary>Split "[corr?] [Category] message" — corr present only when the first bracket is hex.</summary>

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { apiGet, apiPost } from '../lib/api';
 import { useExecutionStore } from '../stores/executionStore';
+import { appLogger } from '../lib/logger';
 import type { ExecutionStatus, SessionsResponse } from '../types/api';
 import type { PipelineLockDto } from '../stores/lockStore';
 
@@ -44,7 +45,13 @@ export function useExecution() {
     params?: { buildNumber?: string; dropLocation?: string; parameters?: Record<string, string>; lockVersion?: number }
   ) => {
     try {
-      const data = await apiPost(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
+      const data = await apiPost<{ sessionId?: string }>(`/api/execution/trigger/${encodeURIComponent(tag)}`, params);
+      // Adopt the server-minted runId (sessionId) so the live logger focuses on
+      // this run immediately — one correlated trace from the click onward.
+      if (data?.sessionId) {
+        useExecutionStore.getState().setLogSessionFilter(data.sessionId);
+        appLogger.info('Execution', `Triggered ${tag} \u2192 run ${data.sessionId}`);
+      }
       await fetchSessions();
       return data;
     } catch (err: any) {
@@ -59,7 +66,11 @@ export function useExecution() {
 
   const triggerEvent = useCallback(async (tag: string, eventIndex: number) => {
     try {
-      const data = await apiPost(`/api/execution/trigger-event/${encodeURIComponent(tag)}/${eventIndex}`);
+      const data = await apiPost<{ sessionId?: string }>(`/api/execution/trigger-event/${encodeURIComponent(tag)}/${eventIndex}`);
+      if (data?.sessionId) {
+        useExecutionStore.getState().setLogSessionFilter(data.sessionId);
+        appLogger.info('Execution', `Triggered ${tag} \u2192 run ${data.sessionId}`);
+      }
       await fetchSessions();
       return data;
     } catch (err: any) {

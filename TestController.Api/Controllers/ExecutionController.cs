@@ -468,6 +468,22 @@ public class ExecutionController : ControllerBase
             LockToken = pipelineLockToken,
         };
 
+        // Bridge the client request id (X-Request-Id, also visible in the browser
+        // console + apiFetch logs) to the canonical run id (sessionId) so a single
+        // grep ties the WebClient action to the whole server/agent trace. runId is
+        // the sessionId — the same id SignalR live logs and agent gRPC events carry.
+        var clientCorr = HttpContext.Items["CorrelationId"] as string
+            ?? HttpContext.Request.Headers["X-Request-Id"].FirstOrDefault()
+            ?? "n/a";
+        _appLogger.LogStructured(
+            Microsoft.Extensions.Logging.LogLevel.Information,
+            category: "Execution",
+            message: $"\u25b6 Triggered '{watchItemTag}' (event {evt.Type}) by {displayName} [req {clientCorr}]",
+            agent: null,
+            runId: sessionId,
+            pipeline: watchItemTag,
+            action: "Trigger");
+
         // Broadcast lock state to all clients
         BroadcastLockChange("Pipeline started");
 

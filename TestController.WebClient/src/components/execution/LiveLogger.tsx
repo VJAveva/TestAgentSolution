@@ -31,6 +31,7 @@ export default function LiveLogger() {
     getScrollElement: () => parentRef.current,
     estimateSize: () => 24,
     overscan: 20,
+    measureElement: (el) => el.getBoundingClientRect().height,
   });
 
   // Auto-scroll to bottom when not paused
@@ -90,28 +91,49 @@ export default function LiveLogger() {
           <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
             {virtualizer.getVirtualItems().map(virtualRow => {
               const entry = filteredLogs[virtualRow.index];
+              const isError = entry.severity === 'error' || entry.kind === 'stderr';
               const color =
-                entry.severity === 'error' || entry.kind === 'stderr' ? 'text-acc-red'
+                isError ? 'text-acc-red'
                 : entry.severity === 'success' ? 'text-acc-green'
                 : entry.severity === 'warning' ? 'text-acc-yellow'
                 : 'text-text-primary';
+              const glyph =
+                isError ? '\u2717'
+                : entry.severity === 'success' ? '\u2713'
+                : entry.severity === 'warning' ? '\u26a0'
+                : '\u2022';
+              const ts = new Date(entry.timestamp);
+              const timeText = ts.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              const fullText = ts.toLocaleString('en-GB', { hour12: false });
+              const runId = entry.runId ?? entry.sessionId;
               return (
                 <div
                   key={virtualRow.index}
-                  className={`${color} whitespace-pre-wrap break-all absolute top-0 left-0 w-full`}
-                  style={{
-                    height: `${virtualRow.size}px`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  className={`${color} whitespace-pre-wrap break-all absolute top-0 left-0 w-full py-px`}
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <span className="text-text-muted mr-2">
-                    {new Date(entry.timestamp).toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
-                  {entry.sessionId && (
-                    <span className="text-accent/60 mr-1">[{entry.sessionId.slice(0, 6)}]</span>
+                  <span className="mr-1 select-none">{glyph}</span>
+                  <span className="text-text-muted mr-2" title={fullText}>{timeText}</span>
+                  {runId && (
+                    <button
+                      className="text-accent/70 hover:text-accent mr-1"
+                      title={`Filter to run ${runId}`}
+                      onClick={() => entry.sessionId && setSessionFilter(sessionFilter === entry.sessionId ? '' : entry.sessionId)}
+                    >
+                      [{runId.slice(0, 6)}]
+                    </button>
                   )}
+                  {entry.component && <span className="text-acc-blue/70 mr-1">[{entry.component}]</span>}
                   {entry.agent && <span className="text-acc-mauve mr-1">[{entry.agent}]</span>}
+                  {entry.action && <span className="text-text-muted mr-1">{entry.action}:</span>}
                   {entry.message}
+                  {entry.exception && (
+                    <div className="text-acc-red/80 mt-0.5 pl-6 border-l-2 border-acc-red/30 ml-1">
+                      {entry.exception}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -276,6 +276,14 @@ export interface LogEntry {
   timestamp: string;
   kind?: 'stdout' | 'stderr';
   severity?: 'info' | 'success' | 'warning' | 'error';
+  /** Component/category that emitted the entry (e.g. "Dispatch", "Action"). Distinct from {@link agent}. */
+  component?: string;
+  /** Run/execution id that groups every entry of one pipeline execution end-to-end. */
+  runId?: string;
+  /** Specific action/step identity within the pipeline (resolved tag). */
+  action?: string;
+  /** Exception / error detail captured as a single field (rendered expandable). */
+  exception?: string;
 }
 
 // ?? Tree node (UI-side flattened model) ?????????????????????????????

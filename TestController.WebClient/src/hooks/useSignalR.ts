@@ -229,12 +229,17 @@ export function useSignalR(enabled = true): HubConnection | null {
     // Pipeline log entries
     conn.on('LogEntry', (entry: {
       timestamp?: string; sessionId?: string; severity?: string;
-      category?: string; agentName?: string; message?: string;
+      category?: string; component?: string; agentName?: string;
+      message?: string; runId?: string; action?: string; exception?: string;
     }) => {
       useExecutionStore.getState().addLog({
         message: entry.message ?? '',
-        agent: entry.agentName || entry.category,
+        agent: entry.agentName || undefined,
+        component: entry.component ?? entry.category,
         sessionId: entry.sessionId,
+        runId: entry.runId ?? entry.sessionId,
+        action: entry.action,
+        exception: entry.exception,
         timestamp: entry.timestamp ?? new Date().toISOString(),
         severity: (entry.severity?.toLowerCase() as 'info' | 'success' | 'warning' | 'error') || 'info',
       });
