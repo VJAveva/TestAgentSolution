@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Hosting;
 using TestController.Api.Contracts;
 using TestControllerGrpc.Locking;
 
@@ -7,10 +8,12 @@ namespace TestController.Api.Hubs;
 /// <summary>
 /// Subscribes to ILockRegistry.OnLockEvent and broadcasts lock state changes
 /// to all connected SignalR clients via ControllerHub.
-/// Singleton — registered only in the WPF controller host.
+/// Hosted service — registered in any host that owns an ILockRegistry (WPF controller
+/// and the standalone WebApi). Must be activated (StartAsync) for the subscription to
+/// take effect; registering it as a plain singleton leaves it dormant.
 /// Per Pipeline_Lock_Coordination_Spec.md §4.6.
 /// </summary>
-public sealed class LockBroadcaster : IDisposable
+public sealed class LockBroadcaster : IHostedService, IDisposable
 {
     private readonly IHubContext<ControllerHub>? _hub;
     private readonly ILockRegistry _lockRegistry;
@@ -19,7 +22,18 @@ public sealed class LockBroadcaster : IDisposable
     {
         _hub = hub;
         _lockRegistry = lockRegistry;
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
         _lockRegistry.OnLockEvent += OnLockEvent;
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _lockRegistry.OnLockEvent -= OnLockEvent;
+        return Task.CompletedTask;
     }
 
     private void OnLockEvent(LockEvent evt)

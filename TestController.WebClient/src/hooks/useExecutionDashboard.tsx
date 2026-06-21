@@ -338,9 +338,14 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   const [fetchError, setFetchError] = useState<string | null>(null);
   const connection = useConnectionStore((s: { connection: any }) => s.connection);
 
-  // Fetch sessions from the shared ExecutionController endpoint
+  // Fetch sessions from the proxy-merge endpoint so the dashboard shows runs
+  // triggered from ANY client — the WPF controller's own sessions (relayed via
+  // ControllerProxyService) are merged with this WebApi's local sessions. The
+  // plain /dashboard-sessions endpoint only returns this host's local sessions,
+  // so WPF-origin runs never appeared via polling. Falls back to local data when
+  // no controller proxy is configured.
   const fetchProxySessions = useCallback(() => {
-    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/dashboard-sessions')
+    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/proxy/dashboard-sessions')
       .then(data => {
         setFetchError(null);
         const all = [

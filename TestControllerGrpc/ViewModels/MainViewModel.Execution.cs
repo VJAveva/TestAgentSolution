@@ -39,6 +39,19 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Stamps the triggering user's attribution onto the execution context so the run's
+    /// session (and every surface bound to it) shows "by &lt;user&gt;". Attribution only —
+    /// the OS execution identity remains the Controller.
+    /// </summary>
+    private void StampOwner(PipelineExecutionContext ctx)
+    {
+        var user = GetCurrentUserContext();
+        ctx.UserId = user.UserId;
+        ctx.UserDisplayName = user.DisplayName;
+        ctx.UserRole = user.Roles.FirstOrDefault() ?? "Default";
+    }
+
+    /// <summary>
     /// Acquires the single-run pipeline lock for a WPF-initiated trigger.
     /// Single-run: ANY active lock (any user, any role, the owner and Administrator
     /// included) blocks the trigger — the only path forward is Cancel. Returns the
@@ -119,6 +132,7 @@ public sealed partial class MainViewModel
             Parameters = CollectInitializeParameters(SelectedNode),
             SessionId = session.SessionId,
         };
+        StampOwner(ctx);
 
         // Acquire agent locks
         var requiredAgents = wiConfig != null
@@ -329,6 +343,7 @@ public sealed partial class MainViewModel
                     SessionId = session.SessionId,
                     Parameters = parameters,
                 };
+                StampOwner(ctx);
                 var evNode = wiNode.Children.FirstOrDefault(c =>
                     ReferenceEquals(c.ModelObject, ev));
                 if (evNode is not null) evNode.SetStatusRecursive("Running");
@@ -542,6 +557,7 @@ public sealed partial class MainViewModel
                         SessionId = session.SessionId,
                         Parameters = parameters,
                     };
+                    StampOwner(ctx);
                     try
                     {
                         await _executor.ExecuteEventTrackedAsync(wi.Tag, ev, ctx, session.Cts.Token);
@@ -632,6 +648,7 @@ public sealed partial class MainViewModel
             Parameters = CollectInitializeParameters(SelectedNode),
             SessionId = session.SessionId,
         };
+        StampOwner(ctx);
 
         // Acquire agent locks so Registry/Monitor reflect live status
         var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters);
@@ -738,6 +755,7 @@ public sealed partial class MainViewModel
             Parameters = CollectInitializeParameters(SelectedNode),
             SessionId = session.SessionId,
         };
+        StampOwner(ctx);
 
         // Acquire agent lock so Registry/Monitor reflect live status
         var requiredAgents = AgentResolver.ExtractAgentNames(action, ctx.Parameters);

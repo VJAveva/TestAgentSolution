@@ -247,7 +247,7 @@
                                                         <!-- User badge -->
                                                         <Border Background="{DynamicResource StatusIdleBg}" CornerRadius="3"
                                                                 Padding="4,1" Margin="4,0">
-                                                            <TextBlock Text="{Binding UserId}" FontSize="9"
+                                                            <TextBlock Text="{Binding OwnerLabel}" FontSize="9"
                                                                        FontFamily="Consolas"
                                                                        Foreground="{DynamicResource TextSecondary}"/>
                                                         </Border>

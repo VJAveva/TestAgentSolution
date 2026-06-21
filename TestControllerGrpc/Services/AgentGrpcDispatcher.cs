@@ -613,13 +613,17 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
                 if (success)
                 {
-                    _appLogger.Log(LogLevel.Information, "Dispatch",
-                        $"[{agentName}] ✓ OK: {cmdShort}", correlationId, (long)elapsed.TotalMilliseconds);
+                    _appLogger.LogStructured(LogLevel.Information, "Dispatch",
+                        $"[{agentName}] ✓ OK: {cmdShort}",
+                        agent: agentName, runId: correlationId,
+                        elapsedMs: (long)elapsed.TotalMilliseconds);
                 }
                 else
                 {
-                    _appLogger.Log(LogLevel.Error, "Dispatch",
-                        $"[{agentName}] ✗ FAILED (exit {exitCode}): {Truncate(errorMessage, 150)}", correlationId, (long)elapsed.TotalMilliseconds);
+                    _appLogger.LogStructured(LogLevel.Error, "Dispatch",
+                        $"[{agentName}] ✗ FAILED (exit {exitCode}): {Truncate(errorMessage, 150)}",
+                        agent: agentName, runId: correlationId,
+                        elapsedMs: (long)elapsed.TotalMilliseconds);
                 }
 
                 RecordSuccess(agentName);
@@ -953,11 +957,15 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             StatusChanged?.Invoke(agentName, success ? "Ready" : $"Failed (exit {exitCode}): {Truncate(errorMessage, 100)}");
 
             if (success)
-                _appLogger.Log(LogLevel.Information, "Dispatch",
-                    $"[{agentName}] \u2713 REBOOT OK: {cmdShort}", correlationId, (long)elapsed.TotalMilliseconds);
+                _appLogger.LogStructured(LogLevel.Information, "Dispatch",
+                    $"[{agentName}] \u2713 REBOOT OK: {cmdShort}",
+                    agent: agentName, runId: correlationId,
+                    elapsedMs: (long)elapsed.TotalMilliseconds);
             else
-                _appLogger.Log(LogLevel.Error, "Dispatch",
-                    $"[{agentName}] \u2717 REBOOT FAILED (exit {exitCode}): {Truncate(errorMessage, 150)}", correlationId, (long)elapsed.TotalMilliseconds);
+                _appLogger.LogStructured(LogLevel.Error, "Dispatch",
+                    $"[{agentName}] \u2717 REBOOT FAILED (exit {exitCode}): {Truncate(errorMessage, 150)}",
+                    agent: agentName, runId: correlationId,
+                    elapsedMs: (long)elapsed.TotalMilliseconds);
 
             RecordSuccess(agentName);
             return new ActionResult(success, exitCode, errorMessage);

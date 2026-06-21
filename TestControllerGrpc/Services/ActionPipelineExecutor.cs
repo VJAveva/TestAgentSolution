@@ -132,13 +132,18 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
             var cmdInfo = $"{resolved.Command} {resolved.Parameters}".Trim();
             if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "\u2026";
 
-            if (maxAttempts > 1)
-                Log("Action", $"\u2717 FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
-            else
-                Log("Action", $"\u2717 FAILED on {agentInfo}: {cmdInfo}");
-
-            Log("Action", $"  Exit code: {result.ExitCode}");
-            Log("Action", $"  Error: {result.ErrorMessage}");
+            // Coalesce the failure header + exit code + error into ONE structured
+            // entry so a single run failure is one queryable line, not three
+            // fragmented ones. The agent and action are carried as distinct
+            // fields (not overloaded into the category).
+            var attemptsNote = maxAttempts > 1 ? $" after {maxAttempts} attempts" : "";
+            Log("Action",
+                $"\u2717 FAILED on {agentInfo}{attemptsNote}: {cmdInfo} (exit {result.ExitCode}): {result.ErrorMessage}",
+                ctx,
+                severity: "Error",
+                agentName: agentInfo,
+                action: string.IsNullOrEmpty(resolved.Tag) ? null : resolved.Tag,
+                exception: result.ErrorMessage);
         }
 
         OnNodeFailed(action, result.ExitCode, result.ErrorMessage);

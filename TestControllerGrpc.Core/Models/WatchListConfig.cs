@@ -274,6 +274,15 @@ public sealed class PipelineExecutionContext
     /// Empty when the run was started without acquiring a pipeline lock.
     /// </summary>
     public string LockToken { get; set; } = "";
+
+    /// <summary>Who triggered this run (attribution only — NOT an authorization input).</summary>
+    public string UserId { get; set; } = "";
+
+    /// <summary>Display name of the triggering user, surfaced as "by &lt;user&gt;" on every surface.</summary>
+    public string UserDisplayName { get; set; } = "";
+
+    /// <summary>Role of the triggering user at trigger time ("Admin" | "User" | "Anonymous" | "Default").</summary>
+    public string UserRole { get; set; } = "";
 }
 
 // =============================================================================

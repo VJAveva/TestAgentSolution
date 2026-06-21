@@ -9,6 +9,13 @@ public sealed record ActionResult(bool Success, int ExitCode, string ErrorMessag
 /// added in P2-1 so the multi-session dashboard can filter logs per agent and
 /// per session. Existing callers that pass only the first three arguments
 /// remain source-compatible.
+/// <para>
+/// <see cref="RunId"/>, <see cref="Pipeline"/>, <see cref="Action"/> and
+/// <see cref="Exception"/> are the structured tracing fields: <see cref="RunId"/>
+/// groups every entry of one execution end-to-end (mirrors the gRPC
+/// <c>x-correlation-id</c>), while <see cref="Action"/>/<see cref="Pipeline"/>
+/// identify the failing step without overloading <see cref="Category"/>.
+/// </para>
 /// </remarks>
 public sealed record PipelineLogEntry(
     DateTime Timestamp,
@@ -16,7 +23,11 @@ public sealed record PipelineLogEntry(
     string Message,
     string? AgentName = null,
     string? SessionId = null,
-    string? Severity = null);
+    string? Severity = null,
+    string? RunId = null,
+    string? Pipeline = null,
+    string? Action = null,
+    string? Exception = null);
 
 /// <summary>A single step in agent diagnostic results.</summary>
 public sealed record DiagnosticStep(string Name, bool Passed, string Detail, bool IsFatal = true);

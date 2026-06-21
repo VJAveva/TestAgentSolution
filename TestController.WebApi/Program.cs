@@ -99,6 +99,20 @@ builder.Services.AddSingleton<IActionPipelineExecutor>(sp => new StandalonePipel
     sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>()));
 builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
+// Pipeline lock subsystem — the standalone WebApi executes web-origin runs locally
+// (StandalonePipelineExecutor), so it needs its own lock authority to enforce the
+// single-run gate and broadcast PipelineLock* events to web clients. Without this,
+// ExecutionController._lockRegistry is null and web triggers acquire no lock, leaving
+// the trigger button enabled during a run.
+builder.Services.Configure<TestControllerGrpc.Locking.LockOptions>(
+    builder.Configuration.GetSection(TestControllerGrpc.Locking.LockOptions.SectionName));
+builder.Services.AddSingleton<TestControllerGrpc.Locking.LockRegistry>();
+builder.Services.AddSingleton<TestControllerGrpc.Locking.ILockRegistry>(
+    sp => sp.GetRequiredService<TestControllerGrpc.Locking.LockRegistry>());
+builder.Services.AddHostedService<TestControllerGrpc.Locking.LockExpirySweeper>();
+builder.Services.AddSingleton<TestController.Api.Hubs.LockBroadcaster>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TestController.Api.Hubs.LockBroadcaster>());
+
 // RBAC feature (identity, authorization, audit — NO local DB; routes through controller)
 builder.Services.AddRbacFeature(builder.Configuration, isPrimaryHost: false);
 

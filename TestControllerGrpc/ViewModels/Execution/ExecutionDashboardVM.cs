@@ -279,6 +279,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                 SessionId = e.SessionId,
                 WatchItemTag = e.WatchItemTag,
                 UserId = session?.UserId ?? "",
+                UserDisplayName = session?.UserDisplayName ?? "",
                 Source = e.Source,
                 Status = "Running",
                 BuildNumber = session != null &&

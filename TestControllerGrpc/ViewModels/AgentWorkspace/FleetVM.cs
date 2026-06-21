@@ -185,9 +185,14 @@ public partial class FleetVM : ObservableObject, IDisposable
                 // Lock check takes priority — agent is executing work
                 card.SessionId = agentLock.SessionId;
                 card.GroupKey = agentLock.SessionId;
-                card.Owner = agentLock.UserId;
                 card.WatchItemTag = agentLock.WatchItemTag;
                 var session = _sessionManager.GetSession(agentLock.SessionId);
+                // Prefer the friendly attributed user from the session; fall back to the
+                // raw agent-lock identity (e.g. "WPF/user@machine") when not captured.
+                card.Owner =
+                    !string.IsNullOrWhiteSpace(session?.UserDisplayName) ? session!.UserDisplayName
+                    : !string.IsNullOrWhiteSpace(session?.UserId) ? session!.UserId
+                    : agentLock.UserId;
                 var agentSummary = session?.GetAgentSummaries()
                     .FirstOrDefault(s => string.Equals(s.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
 

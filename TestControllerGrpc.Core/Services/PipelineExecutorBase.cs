@@ -123,6 +123,21 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     }
 
     /// <summary>
+    /// Copies the triggering user's attribution from the context onto the session so every
+    /// surface can show "by &lt;user&gt;". Only fills fields the trigger path left unset, so a
+    /// host that already stamped the session (e.g. the WebApi <c>ExecutionController</c>) wins.
+    /// </summary>
+    private static void ApplyOwnerAttribution(ExecutionSession session, PipelineExecutionContext ctx)
+    {
+        if (string.IsNullOrEmpty(session.UserId) && !string.IsNullOrEmpty(ctx.UserId))
+            session.UserId = ctx.UserId;
+        if (string.IsNullOrEmpty(session.UserDisplayName) && !string.IsNullOrEmpty(ctx.UserDisplayName))
+            session.UserDisplayName = ctx.UserDisplayName;
+        if (string.IsNullOrEmpty(session.UserRole) && !string.IsNullOrEmpty(ctx.UserRole))
+            session.UserRole = ctx.UserRole;
+    }
+
+    /// <summary>
     /// Releases this run's single-run lock. No-op when there is no authority, no token, or
     /// the token is stale (a newer acquisition reused the pipeline) — so a torn-down run can
     /// never free someone else's lock.
@@ -148,6 +163,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
             snapshotChildren,
             callerSessionId);
+
+        ApplyOwnerAttribution(session, ctx);
 
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:{evt.Type}");
@@ -192,6 +209,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             snapshotChildren,
             callerSessionId);
 
+        ApplyOwnerAttribution(session, ctx);
+
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:Group:{group.Tag}");
 
@@ -227,6 +246,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
             [clonedAction],
             callerSessionId);
+
+        ApplyOwnerAttribution(session, ctx);
 
         ctx.SessionId = session.SessionId;
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:Action:{action.ResolvedTag}");
@@ -556,7 +577,33 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         OnLogEntry(new PipelineLogEntry(
             DateTime.Now, category, redactedMessage,
             AgentName: null,
-            SessionId: ctx.SessionId));
+            SessionId: ctx.SessionId,
+            RunId: ctx.SessionId));
+    }
+
+    /// <summary>
+    /// Structured log helper. Populates the distinct tracing fields
+    /// (<paramref name="agentName"/>, <paramref name="action"/>,
+    /// <paramref name="exception"/>) and the run id (from
+    /// <see cref="PipelineExecutionContext.SessionId"/>) so a failure becomes a
+    /// single queryable entry instead of several fragmented lines, and so the
+    /// component vs agent can be filtered independently.
+    /// </summary>
+    protected void Log(string category, string message, PipelineExecutionContext ctx,
+        string? severity, string? agentName = null, string? action = null,
+        string? pipeline = null, string? exception = null)
+    {
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        _logger.LogInformation("[{Category}] {Message}", category, redactedMessage);
+        OnLogEntry(new PipelineLogEntry(
+            DateTime.Now, category, redactedMessage,
+            AgentName: agentName,
+            SessionId: ctx.SessionId,
+            Severity: severity,
+            RunId: ctx.SessionId,
+            Pipeline: pipeline,
+            Action: action,
+            Exception: SecurityRedactor.Redact(exception)));
     }
 
     // ?? Deep clone for snapshot isolation ??????????????????????????????

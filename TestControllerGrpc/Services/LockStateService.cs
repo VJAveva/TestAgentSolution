@@ -3,22 +3,29 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Windows;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Hosting;
 using TestController.Api.Contracts;
 using TestControllerGrpc.Configuration;
+using TestControllerGrpc.Locking;
 
 namespace TestControllerGrpc.Services;
 
 /// <summary>
-/// Subscribes to pipeline lock SignalR events and maintains a thread-safe lock map
-/// keyed by WatchItem Tag. Raises LocksChanged on the Dispatcher thread.
+/// Maintains a thread-safe pipeline-lock map keyed by WatchItem Tag and raises
+/// LocksChanged on the Dispatcher thread. In the WPF controller host the locks are
+/// acquired in-process via <see cref="ILockRegistry"/>, so this service subscribes to
+/// <see cref="ILockRegistry.OnLockEvent"/> directly (activated as a hosted service) rather
+/// than round-tripping through SignalR. The SignalR path (<see cref="ConnectAsync"/>)
+/// remains for hosts that consume lock events over the wire.
 /// Singleton DI lifetime — registered in ControllerLockExtensions.
 /// </summary>
-public class LockStateService : IDisposable
+public class LockStateService : IHostedService, IDisposable
 {
     private readonly HttpClient _http;
     private readonly AuthClient _authClient;
     private readonly CurrentUserHolder _currentUserHolder;
     private readonly IAppLogger _logger;
+    private readonly ILockRegistry? _lockRegistry;
     private HubConnection? _hubConnection;
 
     private readonly ConcurrentDictionary<string, PipelineLockDto> _locks = new();
@@ -33,12 +40,53 @@ public class LockStateService : IDisposable
         IHttpClientFactory httpClientFactory,
         AuthClient authClient,
         CurrentUserHolder currentUserHolder,
-        IAppLogger logger)
+        IAppLogger logger,
+        ILockRegistry? lockRegistry = null)
     {
         _http = httpClientFactory.CreateClient("SystemMode");
         _authClient = authClient;
         _currentUserHolder = currentUserHolder;
         _logger = logger;
+        _lockRegistry = lockRegistry;
+    }
+
+    /// <summary>
+    /// Activated at host startup. Subscribes to the in-process lock registry so the WPF
+    /// surfaces (tree badge, dashboard, fleet) reflect every lock acquire/release/expiry
+    /// the moment it happens — including web-less, in-process WPF-origin runs.
+    /// </summary>
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (_lockRegistry is not null)
+            _lockRegistry.OnLockEvent += OnLocalLockEvent;
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_lockRegistry is not null)
+            _lockRegistry.OnLockEvent -= OnLocalLockEvent;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Maps an in-process <see cref="LockEvent"/> onto the same lock map the
+    /// SignalR handlers maintain, then raises LocksChanged on the UI thread.</summary>
+    private void OnLocalLockEvent(LockEvent evt)
+    {
+        var dto = LockMapper.ToDto(evt.Lock);
+        switch (evt.EventKind)
+        {
+            case LockEventKind.Acquired:
+            case LockEventKind.Rewritten:
+                _locks[dto.PipelineId] = dto;
+                break;
+            case LockEventKind.Released:
+            case LockEventKind.Expired:
+            case LockEventKind.ForceReleased:
+                _locks.TryRemove(dto.PipelineId, out _);
+                break;
+        }
+        RaiseLocksChanged();
     }
 
     /// <summary>Protected constructor for test fakes.</summary>

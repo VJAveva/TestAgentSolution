@@ -250,6 +250,7 @@ public class NotificationMuteTests : IDisposable
     {
         public void Log(Microsoft.Extensions.Logging.LogLevel level, string category, string message, Exception? ex = null) { }
         public void Log(Microsoft.Extensions.Logging.LogLevel level, string category, string message, string? correlationId, long elapsedMs = 0, Exception? ex = null) { }
+        public void LogStructured(Microsoft.Extensions.Logging.LogLevel level, string category, string message, string? agent = null, string? runId = null, string? pipeline = null, string? action = null, long elapsedMs = 0, Exception? ex = null) { }
         public void Info(string category, string message) { }
         public void Warn(string category, string message) { }
         public void Error(string category, string message, Exception? ex = null) { }

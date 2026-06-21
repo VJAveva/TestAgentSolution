@@ -157,7 +157,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         {
             _audit.Log("CommandRejected", severity: "Warning",
                 source: context.Peer, command: request.Command, arguments: request.Arguments,
-                detail: "Agent is busy (streamed)");
+                detail: "Agent is busy (streamed)", correlationId: correlationId);
 
             // Send a single FAILED event and close
             await responseStream.WriteAsync(new ExecutionEvent

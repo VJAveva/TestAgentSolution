@@ -28,10 +28,12 @@ public sealed class AppLogger : IAppLogger, IDisposable
     private StreamWriter? _componentWriter;
     private StreamWriter? _sharedWriter;
     private StreamWriter? _errorsWriter;
+    private StreamWriter? _jsonWriter;
     private string _currentDate = "";
     private int _componentRollover;
     private int _sharedRollover;
     private int _errorsRollover;
+    private int _jsonRollover;
     private static long _globalSequence;
 
     /// <summary>
@@ -72,9 +74,43 @@ public sealed class AppLogger : IAppLogger, IDisposable
             Message = redactedMessage,
             Exception = redactedException,
             CorrelationId = correlationId,
+            RunId = correlationId,
             ElapsedMs = elapsedMs,
+            StackTrace = ex?.StackTrace,
         };
 
+        Emit(entry);
+    }
+
+    public void LogStructured(LogLevel level, string category, string message,
+        string? agent = null, string? runId = null, string? pipeline = null,
+        string? action = null, long elapsedMs = 0, Exception? ex = null)
+    {
+        var seq = Interlocked.Increment(ref _globalSequence);
+        var redactedMessage = SecurityRedactor.Redact(message) ?? string.Empty;
+        var redactedException = SecurityRedactor.Redact(ex?.ToString());
+        var entry = new AppLogEntry
+        {
+            Sequence = seq,
+            Timestamp = DateTime.Now,
+            Level = level,
+            Category = category,
+            Message = redactedMessage,
+            Exception = redactedException,
+            CorrelationId = runId,
+            RunId = runId,
+            ElapsedMs = elapsedMs,
+            Agent = agent,
+            Pipeline = pipeline,
+            Action = action,
+            StackTrace = ex?.StackTrace,
+        };
+
+        Emit(entry);
+    }
+
+    private void Emit(AppLogEntry entry)
+    {
         lock (_lock)
         {
             _ringBuffer.Add(entry);
@@ -131,6 +167,10 @@ public sealed class AppLogger : IAppLogger, IDisposable
                     _errorsWriter?.WriteLine(line);
                     CheckSizeRollover(ref _errorsWriter, $"errors_{_currentDate}", ref _errorsRollover);
                 }
+
+                // 4. Structured JSON-lines file (machine-readable; one object per line)
+                _jsonWriter?.WriteLine(BuildJson(entry));
+                CheckSizeRollover(ref _jsonWriter, $"app_{_currentDate}", ref _jsonRollover, ".jsonl");
             }
         }
         catch
@@ -139,7 +179,7 @@ public sealed class AppLogger : IAppLogger, IDisposable
         }
     }
 
-    private void CheckSizeRollover(ref StreamWriter? writer, string baseName, ref int rolloverCount)
+    private void CheckSizeRollover(ref StreamWriter? writer, string baseName, ref int rolloverCount, string extension = ".log")
     {
         if (writer is null) return;
         try
@@ -148,7 +188,7 @@ public sealed class AppLogger : IAppLogger, IDisposable
             {
                 writer.Dispose();
                 rolloverCount++;
-                writer = OpenSharedWriter($"{baseName}.{rolloverCount}.log");
+                writer = OpenSharedWriter($"{baseName}.{rolloverCount}{extension}");
             }
         }
         catch
@@ -162,14 +202,17 @@ public sealed class AppLogger : IAppLogger, IDisposable
         _componentWriter?.Dispose();
         _sharedWriter?.Dispose();
         _errorsWriter?.Dispose();
+        _jsonWriter?.Dispose();
         _currentDate = date;
         _componentRollover = 0;
         _sharedRollover = 0;
         _errorsRollover = 0;
+        _jsonRollover = 0;
 
         _componentWriter = OpenSharedWriter($"{_appName}_{date}.log");
         _sharedWriter = OpenSharedWriter($"app_{date}.log");
         _errorsWriter = OpenSharedWriter($"errors_{date}.log");
+        _jsonWriter = OpenSharedWriter($"app_{date}.jsonl");
     }
 
     private StreamWriter OpenSharedWriter(string fileName)
@@ -198,6 +241,51 @@ public sealed class AppLogger : IAppLogger, IDisposable
         return line;
     }
 
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    /// <summary>
+    /// Serializes one entry to a single-line JSON object for the .jsonl sink.
+    /// Emits the full ISO-8601 timestamp and the distinct structured fields so
+    /// the file is queryable without parsing the human-readable layout.
+    /// </summary>
+    private static string BuildJson(AppLogEntry entry)
+    {
+        var level = entry.Level switch
+        {
+            LogLevel.Error => "Error",
+            LogLevel.Warning => "Warning",
+            LogLevel.Debug => "Debug",
+            _ => "Info",
+        };
+        var obj = new Dictionary<string, object?>
+        {
+            ["timestamp"] = entry.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffzzz"),
+            ["seq"] = entry.Sequence,
+            ["level"] = level,
+            ["component"] = entry.Category,
+            ["agent"] = entry.Agent,
+            ["runId"] = entry.RunId,
+            ["pipeline"] = entry.Pipeline,
+            ["action"] = entry.Action,
+            ["thread"] = entry.ThreadId,
+            ["elapsedMs"] = entry.ElapsedMs > 0 ? entry.ElapsedMs : null,
+            ["message"] = entry.Message,
+            ["exception"] = entry.Exception,
+            ["stackTrace"] = entry.StackTrace,
+        };
+        try
+        {
+            return System.Text.Json.JsonSerializer.Serialize(obj, JsonOptions);
+        }
+        catch
+        {
+            return $"{{\"timestamp\":\"{entry.Timestamp:O}\",\"level\":\"{level}\",\"message\":\"(serialization failed)\"}}";
+        }
+    }
+
     public void Dispose()
     {
         lock (_lock)
@@ -205,9 +293,11 @@ public sealed class AppLogger : IAppLogger, IDisposable
             _componentWriter?.Dispose();
             _sharedWriter?.Dispose();
             _errorsWriter?.Dispose();
+            _jsonWriter?.Dispose();
             _componentWriter = null;
             _sharedWriter = null;
             _errorsWriter = null;
+            _jsonWriter = null;
         }
     }
 }

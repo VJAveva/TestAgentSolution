@@ -10,7 +10,12 @@ public partial class SessionCardVM : ObservableObject
 {
     [ObservableProperty] private string _sessionId = "";
     [ObservableProperty] private string _watchItemTag = "";
-    [ObservableProperty] private string _userId = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OwnerLabel))]
+    private string _userId = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OwnerLabel))]
+    private string _userDisplayName = "";
     [ObservableProperty] private string _source = "";
     [ObservableProperty] private string _status = "Running";
     [ObservableProperty] private string _elapsed = "00:00";
@@ -25,6 +30,13 @@ public partial class SessionCardVM : ObservableObject
     [ObservableProperty] private string _lockedAgentsList = "";
 
     public ObservableCollection<AgentRowVM> Agents { get; } = new();
+
+    /// <summary>Friendly "by &lt;user&gt;" attribution: prefers the display name, falls back to the
+    /// raw user id, then to an em dash when nothing was captured.</summary>
+    public string OwnerLabel =>
+        !string.IsNullOrWhiteSpace(UserDisplayName) ? UserDisplayName
+        : !string.IsNullOrWhiteSpace(UserId) ? UserId
+        : "—";
 
     public string StatusBadge => Status switch
     {

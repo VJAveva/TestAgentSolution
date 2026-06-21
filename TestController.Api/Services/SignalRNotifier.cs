@@ -154,12 +154,23 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
 
         SendSafe("LogEntry", new
         {
-            timestamp = entry.Timestamp.ToString("HH:mm:ss.fff"),
+            // Full date-time so entries can be ordered across days and
+            // correlated with the on-disk *.log / *.jsonl files.
+            timestamp = entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"),
             sessionId,
             severity,
+            // component (category) and agent are now DISTINCT fields so the
+            // client can filter by either independently instead of decoding a
+            // single overloaded bracket.
+            component = entry.Category,
             category = entry.Category,
             agentName,
+            // Run id groups every line of one execution end-to-end (mirrors the
+            // gRPC x-correlation-id). Falls back to the session id.
+            runId = entry.RunId ?? sessionId,
+            action = entry.Action,
             message = SecurityRedactor.Redact(entry.Message),
+            exception = SecurityRedactor.Redact(entry.Exception),
         });
     }
 

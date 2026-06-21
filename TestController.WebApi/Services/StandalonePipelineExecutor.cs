@@ -109,13 +109,17 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
             var cmdInfo = SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters).Trim();
             if (cmdInfo.Length > 120) cmdInfo = cmdInfo[..120] + "\u2026";
 
-            if (maxAttempts > 1)
-                Log("Action", $"\u2717 FAILED on {agentInfo} after {maxAttempts} attempts: {cmdInfo}");
-            else
-                Log("Action", $"\u2717 FAILED on {agentInfo}: {cmdInfo}");
-
-            Log("Action", $"  Exit code: {result.ExitCode}");
-            Log("Action", $"  Error: {SecurityRedactor.Redact(result.ErrorMessage)}");
+            // Coalesce failure header + exit code + error into ONE structured
+            // entry (single queryable line) with agent/action as distinct fields.
+            var attemptsNote = maxAttempts > 1 ? $" after {maxAttempts} attempts" : "";
+            var err = SecurityRedactor.Redact(result.ErrorMessage) ?? string.Empty;
+            Log("Action",
+                $"\u2717 FAILED on {agentInfo}{attemptsNote}: {cmdInfo} (exit {result.ExitCode}): {err}",
+                ctx,
+                severity: "Error",
+                agentName: agentInfo,
+                action: string.IsNullOrEmpty(resolved.Tag) ? null : resolved.Tag,
+                exception: err);
         }
 
         OnNodeFailed(action, result.ExitCode, SecurityRedactor.Redact(result.ErrorMessage) ?? string.Empty);

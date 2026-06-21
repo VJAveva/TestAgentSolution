@@ -20,9 +20,16 @@ public static class ControllerLockExtensions
         services.AddSingleton<ILockRegistry>(sp => sp.GetRequiredService<LockRegistry>());
         services.AddHostedService<LockExpirySweeper>();
         services.AddSingleton<LockBroadcaster>();
+        // Activate the broadcaster: it subscribes to ILockRegistry.OnLockEvent in StartAsync.
+        // Without this hosted-service registration the singleton is never resolved and the
+        // PipelineLock* SignalR events are never broadcast.
+        services.AddHostedService(sp => sp.GetRequiredService<LockBroadcaster>());
 
         // Phase 3b: WPF lock state service (subscribes to SignalR lock events)
         services.AddSingleton<LockStateService>();
+        // Activate it: StartAsync subscribes to ILockRegistry.OnLockEvent in-process so the
+        // WPF tree/dashboard/fleet reflect locks for in-process WPF-origin runs.
+        services.AddHostedService(sp => sp.GetRequiredService<LockStateService>());
 
         return services;
     }

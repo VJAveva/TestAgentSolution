@@ -183,6 +183,7 @@ public class SecurityModeViewModelTests
         public void Error(string category, string message, Exception? ex = null) { }
         public void Log(Microsoft.Extensions.Logging.LogLevel level, string category, string message, Exception? ex = null) { }
         public void Log(Microsoft.Extensions.Logging.LogLevel level, string category, string message, string? correlationId, long elapsedMs = 0, Exception? ex = null) { }
+        public void LogStructured(Microsoft.Extensions.Logging.LogLevel level, string category, string message, string? agent = null, string? runId = null, string? pipeline = null, string? action = null, long elapsedMs = 0, Exception? ex = null) { }
         public IReadOnlyList<AppLogEntry> GetRecentEntries(int count = 500) => [];
         public event Action<AppLogEntry>? EntryAdded;
     }
