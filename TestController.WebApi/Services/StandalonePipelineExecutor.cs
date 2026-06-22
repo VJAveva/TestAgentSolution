@@ -19,8 +19,9 @@ public sealed class StandalonePipelineExecutor : PipelineExecutorBase
     public StandalonePipelineExecutor(
         IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager,
-        ILogger<StandalonePipelineExecutor> logger)
-        : base(sessionManager, logger)
+        ILogger<StandalonePipelineExecutor> logger,
+        TestControllerGrpc.Locking.ILockRegistry? lockRegistry = null)
+        : base(sessionManager, logger, lockRegistry)
     {
         _dispatcher = dispatcher;
     }

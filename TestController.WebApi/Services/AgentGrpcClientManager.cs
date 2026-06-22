@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Grpc.Net.Client;
 using TestAgentGrpc;
 using TestController.Api.Security;
+using TestControllerGrpc.Services;
 
 namespace TestController.WebApi.Services;
 
@@ -13,10 +14,12 @@ public sealed class AgentGrpcClientManager : IDisposable
 {
     private readonly ConcurrentDictionary<string, GrpcChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
     private readonly GrpcTlsChannelFactory? _tlsFactory;
+    private readonly ControllerTimeoutOptions _timeouts;
 
-    public AgentGrpcClientManager(GrpcTlsChannelFactory? tlsFactory = null)
+    public AgentGrpcClientManager(GrpcTlsChannelFactory? tlsFactory = null, ControllerTimeoutOptions? timeouts = null)
     {
         _tlsFactory = tlsFactory;
+        _timeouts = timeouts ?? new ControllerTimeoutOptions();
     }
 
     public TestAgentService.TestAgentServiceClient GetClient(string address)
@@ -32,11 +35,11 @@ public sealed class AgentGrpcClientManager : IDisposable
             var handler = new SocketsHttpHandler
             {
                 EnableMultipleHttp2Connections = true,
-                ConnectTimeout               = TimeSpan.FromSeconds(30),
-                KeepAlivePingDelay            = TimeSpan.FromSeconds(60),
-                KeepAlivePingTimeout          = TimeSpan.FromSeconds(30),
+                ConnectTimeout               = TimeSpan.FromSeconds(_timeouts.ChannelConnectTimeoutSeconds),
+                KeepAlivePingDelay            = TimeSpan.FromSeconds(_timeouts.KeepAlivePingDelaySeconds),
+                KeepAlivePingTimeout          = TimeSpan.FromSeconds(_timeouts.KeepAlivePingTimeoutSeconds),
                 KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
-                PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
+                PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(_timeouts.PooledConnectionIdleMinutes),
                 PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
             };
             var httpClient = new HttpClient(handler, disposeHandler: true)

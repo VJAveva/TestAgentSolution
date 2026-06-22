@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TestControllerGrpc.Services;
 
 namespace TestController.Api.Security;
 
@@ -15,14 +16,17 @@ public sealed class GrpcTlsChannelFactory : IDisposable
 {
     private readonly TransportSecurityOptions _transport;
     private readonly ILogger<GrpcTlsChannelFactory> _logger;
+    private readonly ControllerTimeoutOptions _timeouts;
     private readonly X509Certificate2? _clientCert;
 
     public GrpcTlsChannelFactory(
         IOptions<SecurityOptions> securityOptions,
-        ILogger<GrpcTlsChannelFactory> logger)
+        ILogger<GrpcTlsChannelFactory> logger,
+        ControllerTimeoutOptions? timeouts = null)
     {
         _transport = securityOptions.Value.Transport;
         _logger = logger;
+        _timeouts = timeouts ?? new ControllerTimeoutOptions();
 
         // Load a client certificate for mTLS if configured
         if (_transport.RequireMutualTls && !string.IsNullOrWhiteSpace(_transport.CertThumbprint))
@@ -55,11 +59,11 @@ public sealed class GrpcTlsChannelFactory : IDisposable
         var handler = new SocketsHttpHandler
         {
             EnableMultipleHttp2Connections = true,
-            ConnectTimeout = TimeSpan.FromSeconds(30),
-            KeepAlivePingDelay = TimeSpan.FromSeconds(60),
-            KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
+            ConnectTimeout = TimeSpan.FromSeconds(_timeouts.ChannelConnectTimeoutSeconds),
+            KeepAlivePingDelay = TimeSpan.FromSeconds(_timeouts.KeepAlivePingDelaySeconds),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(_timeouts.KeepAlivePingTimeoutSeconds),
             KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
-            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(_timeouts.PooledConnectionIdleMinutes),
             PooledConnectionLifetime = Timeout.InfiniteTimeSpan,
         };
 

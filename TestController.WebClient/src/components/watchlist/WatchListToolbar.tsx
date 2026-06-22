@@ -22,6 +22,7 @@ export default function WatchListToolbar() {
   const canRetry = useCan('Pipeline_Retry', selectedTag ?? undefined);
   const retryDeniedReason = useDisabledReason('Pipeline_Retry', selectedTag ?? undefined);
   const hasActiveLock = useLockStore(s => selectedTag ? s.hasActiveLock(selectedTag) : false);
+  const selectedLock = useLockStore(s => selectedTag ? s.getLock(selectedTag) : undefined);
   const selectedStatus = useWatchListStore(s => (selectedTag ? s.nodeStatus[selectedTag.toLowerCase()] : undefined) ?? 'Idle');
   const showRetry = selectedNode?.nodeKind === 'WatchItem' && selectedStatus === 'Failed';
 
@@ -31,6 +32,21 @@ export default function WatchListToolbar() {
     && (selectedNode.model as { isEnabled?: boolean } | undefined)?.isEnabled === false;
 
   const retryDisabled = busy || !canRetry || hasActiveLock || isPipelineDisabled;
+
+  // Single-run gate for the Trigger button: while the selected pipeline is locked
+  // (running) NOBODY may trigger a second run — the path forward is Cancel. Also
+  // blocked when the pipeline is disabled. Triggering with no WatchItem selected
+  // (triggerAll) is unaffected.
+  const triggerIsWatchItem = selectedNode?.nodeKind === 'WatchItem';
+  const triggerLockDisabled = triggerIsWatchItem && hasActiveLock;
+  const triggerPipelineDisabled = triggerIsWatchItem && isPipelineDisabled;
+  const triggerDisabled = busy || triggerLockDisabled || triggerPipelineDisabled;
+  const triggerTitle = triggerLockDisabled
+    ? `Pipeline is running — locked by ${selectedLock?.ownerDisplayName ?? 'another user'}`
+      + `${selectedLock?.ownerClientKind ? ` (${selectedLock.ownerClientKind})` : ''}`
+    : triggerPipelineDisabled
+      ? 'Pipeline is disabled'
+      : undefined;
 
   // Listen for 409 lock conflict events from useExecution
   useEffect(() => {
@@ -114,7 +130,7 @@ export default function WatchListToolbar() {
 
   return (
     <div className="flex flex-wrap gap-1 p-2 border-b border-bdr">
-      <ToolBtn icon={<PlayCircle size={14} />} label="Trigger" onClick={wrap(handleTrigger)} disabled={busy} accent />
+      <ToolBtn icon={<PlayCircle size={14} />} label="Trigger" onClick={wrap(handleTrigger)} disabled={triggerDisabled} accent title={triggerTitle} />
       <ToolBtn icon={<XCircle size={14} />} label="Cancel" onClick={wrap(cancelAll)} disabled={busy} danger />
       <div className="w-px bg-bdr mx-1" />
       <ToolBtn icon={<Upload size={14} />} label="Import" onClick={handleImport} disabled={busy} />

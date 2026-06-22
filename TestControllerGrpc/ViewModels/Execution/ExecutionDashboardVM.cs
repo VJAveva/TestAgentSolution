@@ -280,6 +280,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                 WatchItemTag = e.WatchItemTag,
                 UserId = session?.UserId ?? "",
                 UserDisplayName = session?.UserDisplayName ?? "",
+                UserRole = session?.UserRole ?? "",
                 Source = e.Source,
                 Status = "Running",
                 BuildNumber = session != null &&
@@ -320,6 +321,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                     SessionId = e.SessionId,
                     WatchItemTag = e.WatchItemTag,
                     UserId = session?.UserId ?? "",
+                    UserDisplayName = session?.UserDisplayName ?? "",
+                    UserRole = session?.UserRole ?? "",
                     Source = session?.Source ?? "",
                     BuildNumber = session != null &&
                         session.ResolvedParameters.TryGetValue(WatchListConstants.BuildNumberKey, out var bn)
@@ -363,6 +366,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                     SessionId = e.SessionId,
                     WatchItemTag = session?.WatchItemTag ?? e.SessionId,
                     UserId = session?.UserId ?? "",
+                    UserDisplayName = session?.UserDisplayName ?? "",
+                    UserRole = session?.UserRole ?? "",
                     Source = session?.Source ?? "",
                     Status = "Running",
                     BuildNumber = session != null &&
@@ -723,6 +728,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
                 SessionId = entry.SessionId,
                 WatchItemTag = entry.WatchItemTag,
                 UserId = entry.UserId,
+                UserDisplayName = entry.UserDisplayName,
+                UserRole = entry.UserRole,
                 Source = entry.Source + (entry.State == nameof(SessionState.Running) ? " (Crashed)" : " (Recovered)"),
                 Status = state,
                 BuildNumber = entry.ResolvedParameters?.TryGetValue(WatchListConstants.BuildNumberKey, out var bn) == true

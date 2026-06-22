@@ -591,6 +591,7 @@ public static class ExecutionEndpoints
             _ => "Running",
         },
         startedUtc = s.StartedUtc.ToString("o"),
+        completedUtc = s.CompletedUtc?.ToString("o"),
         elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
         lockedAgents = s.LockedAgents,
         buildNumber = s.ResolvedParameters

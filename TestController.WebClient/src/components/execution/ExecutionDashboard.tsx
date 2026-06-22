@@ -42,6 +42,12 @@ export default function ExecutionDashboard() {
     (s.userId || '').toLowerCase().includes(filterText.toLowerCase())
   );
 
+  // Only reserve space for the session panel when there is something to show.
+  // When idle, the log panel fills the full height instead of leaving an empty box.
+  const hasTopContent =
+    filteredActive.length > 0 ||
+    (showCompleted && completedSessions.length > 0);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Stats bar */}
@@ -78,77 +84,75 @@ export default function ExecutionDashboard() {
       {/* Split panels */}
       <div className="flex flex-col flex-1 overflow-hidden">
 
-        {/* Panel 1: Session cards */}
-        <div
-          className="overflow-auto px-4 py-3"
-          style={{ height: `${splitPercent}%` }}
-        >
-          {filteredActive.length === 0 && (
-            <div className="text-center py-12 text-text-muted text-sm">
-              No active sessions. Trigger a pipeline to see execution here.
-            </div>
-          )}
+        {/* Panel 1: Session cards (only when there is content to show) */}
+        {hasTopContent && (
+          <div
+            className="overflow-auto px-4 py-3"
+            style={{ height: `${splitPercent}%` }}
+          >
+            {filteredActive.map(session => (
+              <SessionCard
+                key={session.sessionId}
+                session={session}
+                isSelected={state.selectedSessionId === session.sessionId}
+                onSelect={() =>
+                  selectSession(
+                    state.selectedSessionId === session.sessionId
+                      ? null : session.sessionId)}
+              />
+            ))}
 
-          {filteredActive.map(session => (
-            <SessionCard
-              key={session.sessionId}
-              session={session}
-              isSelected={state.selectedSessionId === session.sessionId}
-              onSelect={() =>
-                selectSession(
-                  state.selectedSessionId === session.sessionId
-                    ? null : session.sessionId)}
-            />
-          ))}
+            {showCompleted && completedSessions.length > 0 && (
+              <>
+                <div className="text-[11px] font-medium text-text-muted uppercase tracking-widest mt-4 mb-2">
+                  Completed sessions
+                </div>
+                {completedSessions.map(session => (
+                  <SessionCard
+                    key={session.sessionId}
+                    session={session}
+                    isSelected={state.selectedSessionId === session.sessionId}
+                    onSelect={() => selectSession(session.sessionId)}
+                    collapsed
+                  />
+                ))}
+              </>
+            )}
+          </div>
+        )}
 
-          {showCompleted && completedSessions.length > 0 && (
-            <>
-              <div className="text-[11px] font-medium text-text-muted uppercase tracking-widest mt-4 mb-2">
-                Completed sessions
-              </div>
-              {completedSessions.map(session => (
-                <SessionCard
-                  key={session.sessionId}
-                  session={session}
-                  isSelected={state.selectedSessionId === session.sessionId}
-                  onSelect={() => selectSession(session.sessionId)}
-                  collapsed
-                />
-              ))}
-            </>
-          )}
-        </div>
+        {/* Splitter (only when the session panel is visible) */}
+        {hasTopContent && (
+          <div
+            className="h-1.5 cursor-row-resize bg-bg-surface border-y border-bdr flex items-center justify-center shrink-0"
+            onMouseDown={(e) => {
+              const startY = e.clientY;
+              const startPercent = splitPercent;
+              const container = e.currentTarget.parentElement;
+              if (!container) return;
+              const totalH = container.clientHeight;
 
-        {/* Splitter */}
-        <div
-          className="h-1.5 cursor-row-resize bg-bg-surface border-y border-bdr flex items-center justify-center shrink-0"
-          onMouseDown={(e) => {
-            const startY = e.clientY;
-            const startPercent = splitPercent;
-            const container = e.currentTarget.parentElement;
-            if (!container) return;
-            const totalH = container.clientHeight;
+              const onMove = (me: MouseEvent) => {
+                const delta = me.clientY - startY;
+                const newPercent = startPercent + (delta / totalH * 100);
+                setSplitPercent(Math.max(20, Math.min(80, newPercent)));
+              };
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          >
+            <div className="w-10 h-0.5 rounded bg-bdr" />
+          </div>
+        )}
 
-            const onMove = (me: MouseEvent) => {
-              const delta = me.clientY - startY;
-              const newPercent = startPercent + (delta / totalH * 100);
-              setSplitPercent(Math.max(20, Math.min(80, newPercent)));
-            };
-            const onUp = () => {
-              document.removeEventListener('mousemove', onMove);
-              document.removeEventListener('mouseup', onUp);
-            };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-          }}
-        >
-          <div className="w-10 h-0.5 rounded bg-bdr" />
-        </div>
-
-        {/* Panel 2: Log */}
+        {/* Panel 2: Log (fills remaining space, or full height when idle) */}
         <div
           className="overflow-hidden"
-          style={{ height: `${100 - splitPercent}%` }}
+          style={{ height: hasTopContent ? `${100 - splitPercent}%` : '100%' }}
         >
           <LogPanel />
         </div>

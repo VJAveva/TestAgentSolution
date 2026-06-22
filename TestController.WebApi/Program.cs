@@ -75,11 +75,15 @@ builder.Services.AddSingleton<IAppLogger>(sp =>
 
 // Web API specific services
 builder.Services.AddSingleton<AgentGrpcClientManager>(sp =>
-    new AgentGrpcClientManager(sp.GetRequiredService<GrpcTlsChannelFactory>()));
+    new AgentGrpcClientManager(
+        sp.GetRequiredService<GrpcTlsChannelFactory>(),
+        sp.GetRequiredService<TestControllerGrpc.Services.ControllerTimeoutOptions>()));
 builder.Services.AddSingleton<AgentRegistry>();
 builder.Services.AddSingleton<AgentTelemetryCache>();
 builder.Services.AddSingleton<WatchListFileService>();
 builder.Services.AddSingleton<ControllerProxyService>();
+// Lets the shared AgentsController proxy /api/agents/fleet to the co-located controller.
+builder.Services.AddSingleton<TestController.Api.Services.IControllerFleetProxy, ControllerFleetProxy>();
 builder.Services.AddSingleton<ConfigValidator>();
 builder.Services.AddHostedService<AgentEventRelayService>();
 // Bridges the WPF controller's hub events (live run + lock + owner) to this host's
@@ -92,11 +96,13 @@ builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabulary
 builder.Services.AddSingleton<IAgentGrpcDispatcher>(sp => new StandaloneAgentDispatcher(
     sp.GetRequiredService<AgentGrpcClientManager>(),
     sp.GetRequiredService<AgentRegistry>(),
-    sp.GetRequiredService<ILogger<StandaloneAgentDispatcher>>()));
+    sp.GetRequiredService<ILogger<StandaloneAgentDispatcher>>(),
+    sp.GetRequiredService<TestControllerGrpc.Services.ControllerTimeoutOptions>()));
 builder.Services.AddSingleton<IActionPipelineExecutor>(sp => new StandalonePipelineExecutor(
     sp.GetRequiredService<IAgentGrpcDispatcher>(),
     sp.GetRequiredService<ExecutionSessionManager>(),
-    sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>()));
+    sp.GetRequiredService<ILogger<StandalonePipelineExecutor>>(),
+    sp.GetRequiredService<TestControllerGrpc.Locking.ILockRegistry>()));
 builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
 // Pipeline lock subsystem — the standalone WebApi executes web-origin runs locally

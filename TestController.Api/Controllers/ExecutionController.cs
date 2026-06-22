@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
 using TestController.Api.Contracts;
 using TestController.Api.Hubs;
+using TestController.Api.Interceptors;
 using TestController.Api.Security;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Identity;
 using TestControllerGrpc.Locking;
 using TestControllerGrpc.Models;
@@ -801,8 +803,12 @@ public class ExecutionController : ControllerBase
         if (session == null || session.State != SessionState.Running)
             return NotFound(ApiErrorFactory.NotFound($"Session '{sessionId}' not found or not running"));
 
-        // Ownership check: only session owner or admin can cancel
-        if (!_ownershipChecker.CanAccessSession(HttpContext.User, session))
+        // Authorization: the session owner may always cancel their own run. Elevated
+        // users (Admin + Senior Manager) may cancel ANY user's run. CanAccessSession
+        // covers owner + legacy Admin; the RBAC Pipeline_CancelAll check additionally
+        // admits Senior Managers (and Administrators) in Secured mode.
+        if (!_ownershipChecker.CanAccessSession(HttpContext.User, session)
+            && !await CanCancelOthersAsync(session.WatchItemTag, HttpContext.RequestAborted))
         {
             _auditLogger.LogAuthorization(userId, "CancelSession", sessionId, "Denied");
             return StatusCode(403, ApiErrorFactory.Forbidden("Cannot cancel another user's session"));
@@ -824,6 +830,32 @@ public class ExecutionController : ControllerBase
         }, new CancellationTokenSource(BroadcastTimeout).Token);
 
         return Ok(new { message = "Cancellation requested", cancelledBy = userId });
+    }
+
+    /// <summary>
+    /// Returns true if the current caller is permitted to cancel ANOTHER user's run.
+    /// Maps to the RBAC <see cref="Permission.Pipeline_CancelAll"/> grant, which is held
+    /// only by Administrators and Senior Managers. Resolves the RBAC services lazily from
+    /// the request scope so hosts without RBAC wired (e.g. feed-only or minimal test hosts)
+    /// simply fall back to legacy ownership rules. Returns false (deny) on any gap.
+    /// </summary>
+    private async Task<bool> CanCancelOthersAsync(string pipelineId, CancellationToken ct)
+    {
+        var authzService = HttpContext.RequestServices
+            .GetService(typeof(TestControllerGrpc.Authorization.IAuthorizationService))
+            as TestControllerGrpc.Authorization.IAuthorizationService;
+        var authInterceptor = HttpContext.RequestServices
+            .GetService(typeof(SessionAuthInterceptor)) as SessionAuthInterceptor;
+        if (authzService is null || authInterceptor is null)
+            return false;
+
+        var authHeader = HttpContext.Request.Headers.Authorization.FirstOrDefault();
+        var user = await authInterceptor.ResolveUserAsync(authHeader, ClientKind.Web, ct);
+        if (user is null)
+            return false;
+
+        var decision = await authzService.CanAsync(user, Permission.Pipeline_CancelAll, pipelineId, ct);
+        return decision.Allowed;
     }
 
     // ?? Force-release endpoints (admin only) ?????????????????????????
@@ -971,6 +1003,7 @@ public class ExecutionController : ControllerBase
         source = s.Source,
         status = MapSessionStatus(s.State),
         startedUtc = s.StartedUtc.ToString("o"),
+        completedUtc = s.CompletedUtc?.ToString("o"),
         elapsed = (DateTime.UtcNow - s.StartedUtc).ToString(@"hh\:mm\:ss"),
         lockedAgents = s.LockedAgents,
         buildNumber = s.ResolvedParameters
@@ -982,16 +1015,31 @@ public class ExecutionController : ControllerBase
         progressPercent = s.SnapshotNodes.Count > 0
             ? (int)((double)s.ActionResults.Count / s.SnapshotNodes.Count * 100)
             : 0,
-        agents = s.GetAgentSummaries().Select(a => new
+        agents = BuildAgentDtos(s),
+    };
+
+    /// <summary>
+    /// Merges started/completed actions (from AgentSummaries) with not-yet-started
+    /// actions (from SnapshotNodes) so the WebClient renders the full pipeline scope
+    /// the moment a run is triggered, instead of revealing pills one-by-one.
+    /// </summary>
+    private static object[] BuildAgentDtos(ExecutionSession s)
+    {
+        var summaries = s.GetAgentSummaries();
+        var startedTags = new HashSet<string>(
+            summaries.SelectMany(a => a.Actions.Select(act => act.ActionTag)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var pendingByAgent = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+        CollectPendingFromSnapshot(s.SnapshotNodes, s.ResolvedParameters, startedTags, pendingByAgent);
+
+        var result = new List<object>();
+        var processedAgents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var a in summaries)
         {
-            agentName = a.AgentName,
-            status = a.Status,
-            completedCount = a.CompletedCount,
-            totalCount = a.TotalCount,
-            progressPercent = a.TotalCount > 0
-                ? (int)((double)a.CompletedCount / a.TotalCount * 100)
-                : 0,
-            actions = a.Actions.Select(act => new
+            processedAgents.Add(a.AgentName);
+            var actions = a.Actions.Select(act => (object)new
             {
                 tag = act.ActionTag,
                 actionType = act.ActionType,
@@ -1003,7 +1051,90 @@ public class ExecutionController : ControllerBase
                 duration = act.Duration.ToString(@"mm\:ss"),
                 startedUtc = act.StartedUtc.ToString("o"),
                 durationSeconds = (int)act.Duration.TotalSeconds,
-            }),
-        }),
-    };
+            }).ToList();
+
+            if (pendingByAgent.TryGetValue(a.AgentName, out var pending))
+                actions.AddRange(pending);
+
+            result.Add(new
+            {
+                agentName = a.AgentName,
+                status = a.Status,
+                completedCount = a.CompletedCount,
+                totalCount = actions.Count,
+                progressPercent = actions.Count > 0
+                    ? (int)((double)a.CompletedCount / actions.Count * 100)
+                    : 0,
+                actions,
+            });
+        }
+
+        foreach (var (agentName, pending) in pendingByAgent)
+        {
+            if (processedAgents.Contains(agentName)) continue;
+            result.Add(new
+            {
+                agentName,
+                status = "Idle",
+                completedCount = 0,
+                totalCount = pending.Count,
+                progressPercent = 0,
+                actions = pending,
+            });
+        }
+
+        return result.ToArray();
+    }
+
+    private static void CollectPendingFromSnapshot(
+        IReadOnlyList<IActionNode> nodes,
+        IReadOnlyDictionary<string, string>? parameters,
+        HashSet<string> startedTags,
+        Dictionary<string, List<object>> pendingByAgent)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionConfig action:
+                    if (startedTags.Contains(action.ResolvedTag)) break;
+                    var agent = ResolveAgentForApi(action.AgentName, parameters);
+                    if (!pendingByAgent.TryGetValue(agent, out var list))
+                    {
+                        list = new List<object>();
+                        pendingByAgent[agent] = list;
+                    }
+                    list.Add(new
+                    {
+                        tag = action.ResolvedTag,
+                        actionType = action.Type.ToString(),
+                        agentName = agent,
+                        command = action.Command,
+                        status = "Pending",
+                        exitCode = (int?)null,
+                        errorMessage = (string?)null,
+                        duration = (string?)null,
+                        startedUtc = (string?)null,
+                        durationSeconds = 0,
+                    });
+                    break;
+
+                case ActionGroupConfig group:
+                    CollectPendingFromSnapshot(group.Children, parameters, startedTags, pendingByAgent);
+                    break;
+            }
+        }
+    }
+
+    private static string ResolveAgentForApi(string agentName, IReadOnlyDictionary<string, string>? parameters)
+    {
+        if (string.IsNullOrEmpty(agentName)) return "Controller";
+        if (parameters != null && agentName.StartsWith('[') && agentName.EndsWith(']'))
+        {
+            var varName = agentName[1..^1];
+            if (parameters.TryGetValue(varName, out var resolved)) return resolved;
+            if (varName.StartsWith('_') && parameters.TryGetValue(varName[1..], out var resolved2)) return resolved2;
+        }
+        return agentName;
+    }
 }

@@ -244,12 +244,22 @@
                                                                    Visibility="{Binding BuildNumber, Converter={StaticResource NullToCollapsed}}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <!-- User badge -->
+                                                        <!-- User + role badge: who triggered this pipeline -->
                                                         <Border Background="{DynamicResource StatusIdleBg}" CornerRadius="3"
-                                                                Padding="4,1" Margin="4,0">
-                                                            <TextBlock Text="{Binding OwnerLabel}" FontSize="9"
-                                                                       FontFamily="Consolas"
-                                                                       Foreground="{DynamicResource TextSecondary}"/>
+                                                                Padding="4,1" Margin="4,0"
+                                                                ToolTip="{Binding OwnerTooltip}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding RoleIcon}" FontSize="9"
+                                                                           VerticalAlignment="Center" Margin="0,0,3,0"
+                                                                           Visibility="{Binding HasRole, Converter={StaticResource BoolToVis}}"/>
+                                                                <TextBlock Text="{Binding OwnerLabel}" FontSize="9"
+                                                                           FontFamily="Consolas"
+                                                                           Foreground="{DynamicResource TextSecondary}"/>
+                                                                <TextBlock Text="{Binding RoleLabel}" FontSize="9"
+                                                                           Margin="3,0,0,0"
+                                                                           Foreground="{DynamicResource TextDim}"
+                                                                           Visibility="{Binding HasRole, Converter={StaticResource BoolToVis}}"/>
+                                                            </StackPanel>
                                                         </Border>
                                                         <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="11"
                                                                    Margin="8,0" VerticalAlignment="Center">

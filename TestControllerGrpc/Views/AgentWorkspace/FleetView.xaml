@@ -112,13 +112,21 @@
 
                                         <!-- Title + Owner -->
                                         <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                                    VerticalAlignment="Center">
+                                                    VerticalAlignment="Center"
+                                                    ToolTip="{Binding OwnerTooltip}">
                                             <TextBlock Text="{Binding Title}" FontSize="12"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextP}"/>
+                                            <TextBlock Text="{Binding OwnerRoleIcon}" FontSize="10"
+                                                       Margin="6,0,0,0" VerticalAlignment="Center"
+                                                       Visibility="{Binding HasOwnerRole, Converter={StaticResource BoolVis}}"/>
                                             <TextBlock Text="{Binding OwnerDisplay}" FontSize="10"
-                                                       Margin="6,0,0,0"
+                                                       Margin="3,0,0,0"
                                                        Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding OwnerRoleLabel}" FontSize="10"
+                                                       Margin="4,0,0,0"
+                                                       Foreground="{DynamicResource TextS}"
+                                                       Visibility="{Binding HasOwnerRole, Converter={StaticResource BoolVis}}"/>
                                         </StackPanel>
 
                                         <!-- Agent count -->

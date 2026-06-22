@@ -99,8 +99,16 @@ public partial class App : Application
 
                 services.AddSingleton<IEventAggregator, EventAggregator>();
                 services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
-                services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
+                // ControllerTimeoutOptions: bind from "Controller:Timeouts" so the dispatcher's
+                // gRPC channel + recovery timeouts are driven by appsettings, not code defaults.
                 services.AddSingleton(sp =>
+                {
+                    var cfg = sp.GetRequiredService<IConfiguration>();
+                    var opts = new ControllerTimeoutOptions();
+                    cfg.GetSection(ControllerTimeoutOptions.SectionName).Bind(opts);
+                    return opts;
+                });
+                services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();                services.AddSingleton(sp =>
                 {
                     var cfg = sp.GetRequiredService<IConfiguration>();
                     var logDir = cfg.GetValue<string>("Logging:LogDirectory")

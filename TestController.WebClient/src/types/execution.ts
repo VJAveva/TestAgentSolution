@@ -6,6 +6,7 @@ export interface SessionSummary {
   source: string;
   status: SessionStatus;
   startedUtc: string;
+  completedUtc?: string;
   elapsed: string;
   agents: AgentExecution[];
   totalActions: number;

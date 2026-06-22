@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TestController.Api.Hubs;
@@ -29,6 +30,17 @@ public static class ControllerApiExtensions
             var lockFilePath = Path.Combine(AppLogger.DefaultLogDirectory, "agent-locks.json");
             services.AddSingleton(new AgentLockManager(lockFilePath));
         }
+
+        // ControllerTimeoutOptions: bind from "Controller:Timeouts" so all gRPC channel and
+        // recovery timeouts are configurable per-environment. Without this the dispatchers and
+        // channel factories silently fall back to code defaults. TryAdd so a host can override.
+        services.TryAddSingleton(sp =>
+        {
+            var cfg = sp.GetRequiredService<IConfiguration>();
+            var opts = new ControllerTimeoutOptions();
+            cfg.GetSection(ControllerTimeoutOptions.SectionName).Bind(opts);
+            return opts;
+        });
 
         services.AddSingleton<CachedBuildResultsProvider>();
         services.AddSingleton<FailurePatternAnalyzer>();

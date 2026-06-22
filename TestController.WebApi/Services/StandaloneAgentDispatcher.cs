@@ -23,6 +23,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
     private readonly AgentGrpcClientManager _clientManager;
     private readonly AgentRegistry _registry;
     private readonly ILogger<StandaloneAgentDispatcher> _logger;
+    private readonly ControllerTimeoutOptions _timeouts;
     private readonly ResiliencePipeline _resilience;
 
     public event Action<string, string, string>? OutputReceived;
@@ -31,16 +32,18 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
     public StandaloneAgentDispatcher(
         AgentGrpcClientManager clientManager,
         AgentRegistry registry,
-        ILogger<StandaloneAgentDispatcher> logger)
+        ILogger<StandaloneAgentDispatcher> logger,
+        ControllerTimeoutOptions? timeouts = null)
     {
         _clientManager = clientManager;
         _registry = registry;
         _logger = logger;
+        _timeouts = timeouts ?? new ControllerTimeoutOptions();
         _resilience = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
             {
-                MaxRetryAttempts = 3,
-                Delay = TimeSpan.FromSeconds(1),
+                MaxRetryAttempts = _timeouts.RetryMaxAttempts,
+                Delay = TimeSpan.FromSeconds(_timeouts.RetryDelaySeconds),
                 BackoffType = DelayBackoffType.Exponential,
                 ShouldHandle = new PredicateBuilder().Handle<RpcException>(ex =>
                     ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded),
@@ -57,9 +60,9 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                 FailureRatio = 0.5,
                 SamplingDuration = TimeSpan.FromSeconds(30),
                 MinimumThroughput = 5,
-                BreakDuration = TimeSpan.FromSeconds(30),
+                BreakDuration = TimeSpan.FromSeconds(_timeouts.CircuitBreakerBreakSeconds),
             })
-            .AddTimeout(TimeSpan.FromHours(24))
+            .AddTimeout(TimeSpan.FromHours(_timeouts.OuterSafetyNetTimeoutHours))
             .Build();
     }
 
@@ -85,15 +88,26 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         => _registry.TryGet(agentName, out var e) ? e.Address : null;
 
     public AgentHealthState? GetAgentHealth(string agentName)
-        => _registry.TryGet(agentName, out _)
-            ? new AgentHealthState { AgentName = agentName, IsHealthy = true }
-            : null;
+        => _registry.TryGet(agentName, out var entry) ? ToHealth(entry) : null;
 
     public IReadOnlyDictionary<string, AgentHealthState> GetAllAgentHealth()
         => _registry.GetAll().ToDictionary(
             a => a.Name,
-            a => new AgentHealthState { AgentName = a.Name, IsHealthy = true },
+            ToHealth,
             StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Projects the registry entry's connectivity status (updated by
+    /// <see cref="AgentEventRelayService"/>) onto the shared health model.
+    /// Previously this hard-coded <c>IsHealthy = true</c>, so <c>/api/agents</c>
+    /// reported every registered agent as Healthy even when offline.
+    /// </summary>
+    private static AgentHealthState ToHealth(AgentEntry entry) => new()
+    {
+        AgentName = entry.Name,
+        IsHealthy = AgentStatusVocabulary.IsOnline(entry.Status),
+        LastSuccessUtc = entry.LastCheckedUtc,
+    };
 
     public bool IsAgentExecuting(string agentName) => false; // WebApi doesn't run long-lived streams
 
@@ -194,7 +208,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3));
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.PingTimeoutSeconds));
             var client = _clientManager.GetClient(entry.Address);
             await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);
             return true;
@@ -256,13 +270,14 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                     agentName);
                 StatusChanged?.Invoke(agentName, "Agent busy \u2014 waiting to retry...");
 
-                for (int retryWait = 0; retryWait < 12; retryWait++)
+                var busyMaxAttempts = Math.Max(1, _timeouts.BusyRecoveryMaxSeconds / _timeouts.BusyRecoveryIntervalSeconds);
+                for (int retryWait = 0; retryWait < busyMaxAttempts; retryWait++)
                 {
-                    await Task.Delay(10_000, ct);
+                    await Task.Delay(_timeouts.BusyRecoveryIntervalSeconds * 1000, ct);
                     try
                     {
                         var state = await client.GetStateAsync(new Empty(),
-                            deadline: DateTime.UtcNow.AddSeconds(5),
+                            deadline: DateTime.UtcNow.AddSeconds(_timeouts.RecoveryControlRpcTimeoutSeconds),
                             cancellationToken: ct);
                         if (state.State != AgentState.Running)
                         {
@@ -270,7 +285,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                             break;
                         }
                         StatusChanged?.Invoke(agentName,
-                            $"Agent still busy \u2014 waiting ({retryWait + 1}/12)");
+                            $"Agent still busy \u2014 waiting ({retryWait + 1}/{busyMaxAttempts})");
                     }
                     catch (RpcException) { break; }
                 }
@@ -289,7 +304,7 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
             if (resolved.IsReboot && streamResult.ExitCode != -1)
             {
                 StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
-                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                await WaitForAgentReady(client, agentName, TimeSpan.FromSeconds(_timeouts.RebootWaitReadySeconds), ct);
             }
 
             var exitCode = streamResult.ExitCode;
@@ -307,9 +322,9 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         {
             if (resolved.IsReboot)
             {
-                StatusChanged?.Invoke(agentName, "Rebooting� waiting for agent");
+                StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
                 var client = _clientManager.GetClient(entry.Address);
-                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                await WaitForAgentReady(client, agentName, TimeSpan.FromSeconds(_timeouts.RebootWaitReadySeconds), ct);
                 return new ActionResult(true, 0, "Reboot completed");
             }
             return new ActionResult(false, -1, $"Agent {agentName} unavailable: {ex.Status.Detail}");
@@ -466,28 +481,29 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         TestAgentService.TestAgentServiceClient client,
         string agentName, CancellationToken ct)
     {
-        for (int attempt = 0; attempt < 6; attempt++)
+        var maxAttempts = Math.Max(1, _timeouts.WaitForAgentFreeMaxSeconds / 5);
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
         {
             try
             {
                 var reply = await client.GetStateAsync(new Empty(),
-                    deadline: DateTime.UtcNow.AddSeconds(5),
+                    deadline: DateTime.UtcNow.AddSeconds(_timeouts.RecoveryControlRpcTimeoutSeconds),
                     cancellationToken: ct);
 
                 if (reply.State != AgentState.Running)
                     return;
 
                 _logger.LogWarning(
-                    "Agent {Agent} still busy (attempt {N}/6). Waiting 5s for previous command to finish...",
-                    agentName, attempt + 1);
-                StatusChanged?.Invoke(agentName, $"Waiting for previous command to finish ({attempt + 1}/6)");
+                    "Agent {Agent} still busy (attempt {N}/{Max}). Waiting 5s for previous command to finish...",
+                    agentName, attempt + 1, maxAttempts);
+                StatusChanged?.Invoke(agentName, $"Waiting for previous command to finish ({attempt + 1}/{maxAttempts})");
                 await Task.Delay(5000, ct);
             }
             catch (RpcException) { return; }
             catch (OperationCanceledException) { throw; }
         }
 
-        _logger.LogWarning("Agent {Agent} still busy after 30s � proceeding anyway", agentName);
+        _logger.LogWarning("Agent {Agent} still busy after {Secs}s - proceeding anyway", agentName, _timeouts.WaitForAgentFreeMaxSeconds);
     }
 
     private async Task WaitForAgentReady(
@@ -499,11 +515,11 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
 
         while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            await Task.Delay(TimeSpan.FromSeconds(_timeouts.RebootRecoveryPollIntervalSeconds), ct);
             try
             {
                 var reply = await client.GetStateAsync(new Empty(),
-                    deadline: DateTime.UtcNow.AddSeconds(10),
+                    deadline: DateTime.UtcNow.AddSeconds(_timeouts.RecoveryControlRpcTimeoutSeconds),
                     cancellationToken: ct);
 
                 if (reply.State == AgentState.Ready)

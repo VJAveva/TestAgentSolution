@@ -65,6 +65,14 @@ describe('lockStore', () => {
     });
   });
 
+  describe('onForceReleased', () => {
+    it('Should_RemoveLock_When_ForceReleased', () => {
+      useLockStore.setState({ locks: { [mockLock.pipelineId]: mockLock } });
+      useLockStore.getState().onForceReleased(mockLock);
+      expect(useLockStore.getState().locks['WarmSetup-Four-Nodes']).toBeUndefined();
+    });
+  });
+
   describe('onRewritten', () => {
     it('Should_UpsertLock_When_Rewritten', () => {
       useLockStore.setState({ locks: { [mockLock.pipelineId]: mockLock } });

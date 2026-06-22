@@ -516,7 +516,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                         try
                         {
                             await client.ForceReadyAsync(new Empty(),
-                                deadline: DateTime.UtcNow.AddSeconds(5),
+                                deadline: DateTime.UtcNow.AddSeconds(_timeouts.RecoveryControlRpcTimeoutSeconds),
                                 cancellationToken: resilienceCt);
                             await Task.Delay(1_000, resilienceCt); // brief settle
                             _appLogger.Info("Dispatch",
@@ -532,18 +532,18 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                             try
                             {
                                 await client.TerminateExecutionAsync(new Empty(),
-                                    deadline: DateTime.UtcNow.AddSeconds(5),
+                                    deadline: DateTime.UtcNow.AddSeconds(_timeouts.RecoveryControlRpcTimeoutSeconds),
                                     cancellationToken: resilienceCt);
 
                                 // Agent's TerminateExecution has an internal 5s delay before
                                 // force-resetting state. Wait longer than that, then verify.
-                                await Task.Delay(6_000, resilienceCt);
+                                await Task.Delay(_timeouts.TerminateSettleSeconds * 1000, resilienceCt);
 
                                 // Verify the agent actually transitioned out of Running
                                 try
                                 {
                                     var verifyState = await client.GetStateAsync(new Empty(),
-                                        deadline: DateTime.UtcNow.AddSeconds(5),
+                                        deadline: DateTime.UtcNow.AddSeconds(_timeouts.RecoveryControlRpcTimeoutSeconds),
                                         cancellationToken: resilienceCt);
                                     if (verifyState.State == AgentState.Running)
                                     {
@@ -594,7 +594,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     _appLogger.Info("Dispatch",
                         $"[{agentName}] REBOOT initiated — waiting up to 5 min for agent to come back online");
                     StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
-                    await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), resilienceCt);
+                    await WaitForAgentReady(client, agentName, TimeSpan.FromSeconds(_timeouts.RebootWaitReadySeconds), resilienceCt);
                     _appLogger.Info("Dispatch",
                         $"[{agentName}] REBOOT complete — agent back online");
                 }
@@ -667,7 +667,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                         $"[{agentName}] Out-of-band remote shutdown issued — waiting for agent to come back online");
                     StatusChanged?.Invoke(agentName, "Rebooting (out-of-band)\u2026 waiting for agent");
                     var client = endpoint.GetClient();
-                    await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                    await WaitForAgentReady(client, agentName, TimeSpan.FromSeconds(_timeouts.RebootWaitReadySeconds), ct);
                     _appLogger.Info("Dispatch",
                         $"[{agentName}] REBOOT complete — agent back online (out-of-band recovery)");
                     RecordSuccess(agentName);
@@ -765,7 +765,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     bool agentRecovered = false;
                     while (!rebootCts.Token.IsCancellationRequested)
                     {
-                        try { await Task.Delay(10_000, rebootCts.Token); } catch (OperationCanceledException) { break; }
+                        try { await Task.Delay(_timeouts.RebootRecoveryPollIntervalSeconds * 1000, rebootCts.Token); } catch (OperationCanceledException) { break; }
                         try
                         {
                             // Re-read endpoint in case channel was reset during reboot
@@ -944,7 +944,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 _appLogger.Info("Dispatch",
                     $"[{agentName}] REBOOT initiated — waiting up to 5 min for agent to come back online");
                 StatusChanged?.Invoke(agentName, "Rebooting\u2026 waiting for agent");
-                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                await WaitForAgentReady(client, agentName, TimeSpan.FromSeconds(_timeouts.RebootWaitReadySeconds), ct);
                 _appLogger.Info("Dispatch",
                     $"[{agentName}] REBOOT complete — agent back online");
             }
@@ -986,7 +986,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     $"[{agentName}] Out-of-band remote shutdown issued — waiting for agent to come back online");
                 StatusChanged?.Invoke(agentName, "Rebooting (out-of-band)\u2026 waiting for agent");
                 var client = endpoint.GetClient();
-                await WaitForAgentReady(client, agentName, TimeSpan.FromMinutes(5), ct);
+                await WaitForAgentReady(client, agentName, TimeSpan.FromSeconds(_timeouts.RebootWaitReadySeconds), ct);
                 _appLogger.Info("Dispatch",
                     $"[{agentName}] REBOOT complete — agent back online (out-of-band recovery)");
                 RecordSuccess(agentName);
@@ -1288,9 +1288,9 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
             process.Start();
 
-            // Wait up to 30s for the shutdown command to complete
+            // Wait for the shutdown command to complete (configurable)
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_timeouts.OutOfBandRebootCommandTimeoutSeconds));
             await process.WaitForExitAsync(timeoutCts.Token);
 
             var stdout = await process.StandardOutput.ReadToEndAsync(ct);
@@ -1306,7 +1306,9 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             // Exit code non-zero — shutdown rejected (access denied, machine unreachable, etc.)
             var detail = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
             _appLogger.Error("Dispatch",
-                $"[{agentName}] Out-of-band reboot FAILED (exit {process.ExitCode}): {detail}");
+                $"[{agentName}] Out-of-band reboot FAILED (shutdown.exe exit {process.ExitCode}): {detail} " +
+                "— check the controller service account has local-admin rights on the agent and that " +
+                "RPC (135) + admin shares (445) are reachable.");
             return false;
         }
         catch (OperationCanceledException)
@@ -1337,7 +1339,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
 
         while (!cts.Token.IsCancellationRequested)
         {
-            await Task.Delay(10_000, cts.Token);
+            await Task.Delay(_timeouts.RebootRecoveryPollIntervalSeconds * 1000, cts.Token);
             try
             {
                 var reply = await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);

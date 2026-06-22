@@ -74,8 +74,8 @@ public sealed class ControllerTimeoutOptions
     /// <summary>Polly retry base delay (seconds). Default: 1.</summary>
     public int RetryDelaySeconds { get; set; } = 1;
 
-    /// <summary>Wait time (seconds) for agent recovery on UNAVAILABLE before failing. Default: 60. Set to 0 to disable.</summary>
-    public int UnavailableRecoverySeconds { get; set; } = 60;
+    /// <summary>Wait time (seconds) for agent recovery on UNAVAILABLE before failing. Default: 180. Set to 0 to disable.</summary>
+    public int UnavailableRecoverySeconds { get; set; } = 180;
 
     /// <summary>Poll interval (seconds) during unavailable recovery wait. Default: 10.</summary>
     public int UnavailableRecoveryPollIntervalSeconds { get; set; } = 10;
@@ -94,6 +94,21 @@ public sealed class ControllerTimeoutOptions
     /// Default: 300 (5 minutes).
     /// </summary>
     public int AutoRebootRecoverySeconds { get; set; } = 300;
+
+    /// <summary>Maximum wait time (seconds) for an agent to return to Ready after a normal reboot command. Default: 300 (5 minutes).</summary>
+    public int RebootWaitReadySeconds { get; set; } = 300;
+
+    /// <summary>Poll interval (seconds) while waiting for an agent to come back after a reboot. Default: 10.</summary>
+    public int RebootRecoveryPollIntervalSeconds { get; set; } = 10;
+
+    /// <summary>Deadline (seconds) for recovery control RPCs (ForceReady / TerminateExecution / GetState during recovery). Default: 5.</summary>
+    public int RecoveryControlRpcTimeoutSeconds { get; set; } = 5;
+
+    /// <summary>Settle wait (seconds) after a TerminateExecution before re-checking agent state. Default: 6.</summary>
+    public int TerminateSettleSeconds { get; set; } = 6;
+
+    /// <summary>Timeout (seconds) for the out-of-band remote shutdown.exe command. Default: 30.</summary>
+    public int OutOfBandRebootCommandTimeoutSeconds { get; set; } = 30;
 
     // ── Execution ──
 

@@ -486,7 +486,8 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   const completedSessions = sessions
     .filter((s: SessionSummary) => s.status !== 'Running' && s.status !== 'Queued')
     .sort((a: SessionSummary, b: SessionSummary) =>
-      new Date(b.startedUtc).getTime() - new Date(a.startedUtc).getTime())
+      new Date(b.completedUtc || b.startedUtc).getTime() -
+      new Date(a.completedUtc || a.startedUtc).getTime())
     .slice(0, 20);
 
   // Filtered logs based on selection

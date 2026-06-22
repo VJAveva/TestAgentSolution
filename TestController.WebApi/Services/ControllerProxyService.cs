@@ -247,7 +247,28 @@ public sealed class ControllerProxyService : IDisposable
                 "X-Source", string.IsNullOrWhiteSpace(source) ? "WebClient" : source);
 
             if (!string.IsNullOrEmpty(body))
-                request.Content = new StringContent(body, System.Text.Encoding.UTF8, contentType);
+            {
+                // The incoming Content-Type may carry parameters (e.g. "application/json; charset=utf-8").
+                // StringContent's mediaType ctor arg accepts only a bare media type and throws
+                // FormatException on parameters, so set the header via MediaTypeHeaderValue.Parse,
+                // which accepts the full value. Fall back to application/json when absent/invalid.
+                var content = new StringContent(body, System.Text.Encoding.UTF8);
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(contentType))
+                        content.Headers.ContentType =
+                            System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+                }
+                catch (FormatException)
+                {
+                    content.Headers.ContentType =
+                        new System.Net.Http.Headers.MediaTypeHeaderValue("application/json")
+                        {
+                            CharSet = "utf-8",
+                        };
+                }
+                request.Content = content;
+            }
 
             return await _http.SendAsync(request);
         }

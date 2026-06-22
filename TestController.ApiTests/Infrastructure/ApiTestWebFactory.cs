@@ -51,6 +51,18 @@ public sealed class ApiTestWebFactory : WebApplicationFactory<Program>
             </WatchList>
             """);
 
+        // The shipped appsettings.json points ControllerProxyUrl at a co-located WPF
+        // controller. In-process tests have no such controller and must execute pipelines
+        // locally (the executor/session manager/locks run for real here), so clear the proxy
+        // URL — otherwise the forwarding middleware intercepts every trigger/cancel.
+        builder.ConfigureAppConfiguration(config =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ControllerProxyUrl"] = string.Empty,
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             // 1. Strip production authentication (Negotiate requires Kestrel features).

@@ -21,7 +21,6 @@ public static class AgentEndpoints
         group.MapGet("/{name}/health", GetAgentHealth);
         group.MapGet("/{name}/history", GetAgentHistory);
         group.MapGet("/{name}/audit", GetAgentAudit);
-        group.MapGet("/fleet", GetFleet);
         group.MapGet("/{name}/details", GetDetails);
         group.MapGet("/{name}/telemetry", GetTelemetry);
         group.MapGet("/{name}/capabilities", GetAgentCapabilities);
@@ -439,37 +438,6 @@ public static class AgentEndpoints
         {
             return Results.Problem($"gRPC error: {ex.Status.Detail}", statusCode: 502);
         }
-    }
-
-    /// <summary>GET /api/agents/fleet — returns all agents with lock status and session info.</summary>
-    private static IResult GetFleet(
-        AgentRegistry registry,
-        AgentLockManager lockManager,
-        ExecutionSessionManager sessionManager)
-    {
-        var agents = registry.GetAll();
-        var locks = lockManager.GetAllLocks();
-        var lockLookup = locks.ToDictionary(l => l.AgentName, StringComparer.OrdinalIgnoreCase);
-
-        var fleet = agents.Select(a =>
-        {
-            lockLookup.TryGetValue(a.Name, out var agentLock);
-            return new
-            {
-                a.Name,
-                a.Address,
-                a.Status,
-                a.LastStatusDetail,
-                LastCheckedUtc = a.LastCheckedUtc,
-                IsLocked = agentLock != null,
-                LockedBy = agentLock?.SessionId,
-                LockSource = agentLock?.Source,
-                LockedAtUtc = agentLock?.LockedAtUtc,
-                WatchItemTag = agentLock?.WatchItemTag
-            };
-        });
-
-        return Results.Ok(new { agents = fleet, lockVersion = lockManager.Version });
     }
 
     /// <summary>GET /api/agents/{name}/details — combined snapshot + lock + session info.</summary>

@@ -71,9 +71,13 @@ export function SessionCard({
         </div>
 
         <div className="flex items-center gap-3 text-[11px] text-text-secondary">
-          {/* User badge */}
-          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-bg-surface">
-            {session.userId}
+          {/* Triggering user — show the friendly display name (and role) so other
+              users can see WHO is running the pipeline; fall back to the raw id. */}
+          <span
+            className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-bg-surface"
+            title={session.owner?.role ? `${session.owner.displayName} · ${session.owner.role}` : undefined}
+          >
+            {session.owner?.displayName || session.userId}
           </span>
 
           <span>{(session.agents || []).length} agents</span>

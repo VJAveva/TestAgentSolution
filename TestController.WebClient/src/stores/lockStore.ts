@@ -16,6 +16,7 @@ interface LockState {
   onAcquired: (dto: PipelineLockDto) => void;
   onReleased: (dto: PipelineLockDto) => void;
   onExpired: (dto: PipelineLockDto) => void;
+  onForceReleased: (dto: PipelineLockDto) => void;
   onStolen: (dto: PipelineLockDto) => void;
   onRewritten: (dto: PipelineLockDto) => void;
   setAll: (dtos: PipelineLockDto[]) => void;
@@ -35,6 +36,13 @@ export const useLockStore = create<LockState>((set, get) => ({
   }),
 
   onExpired: (dto) => set((s) => {
+    const { [dto.pipelineId]: _, ...rest } = s.locks;
+    return { locks: rest };
+  }),
+
+  // Admin force-release REMOVES the lock entirely (no new owner) so the pipeline
+  // immediately becomes retriggerable for everyone.
+  onForceReleased: (dto) => set((s) => {
     const { [dto.pipelineId]: _, ...rest } = s.locks;
     return { locks: rest };
   }),

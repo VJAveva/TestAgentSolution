@@ -24,12 +24,26 @@ export function registerLockEvents(conn: HubConnection): void {
     store.getState().onExpired(dto);
   });
 
-  conn.on('PipelineLockStolen', (dto: PipelineLockDto) => {
-    store.getState().onStolen(dto);
+  // Admin force-release. The server wraps the payload as
+  // { lock: PipelineLockDto, priorOwnerDisplayName: string }, so unwrap to the
+  // inner lock DTO. Tolerate Pascal/camel casing and a flat fallback.
+  const unwrapLock = (payload: unknown): PipelineLockDto => {
+    const p = payload as { lock?: PipelineLockDto; Lock?: PipelineLockDto };
+    return (p?.lock ?? p?.Lock ?? (payload as PipelineLockDto));
+  };
+
+  conn.on('PipelineLockForceReleased', (payload: unknown) => {
+    store.getState().onForceReleased(unwrapLock(payload));
   });
 
-  conn.on('PipelineLockRewritten', (dto: PipelineLockDto) => {
-    store.getState().onRewritten(dto);
+  // Legacy/defensive alias — the server does not currently emit this name, but
+  // keep the handler so an older controller build still clears the lock.
+  conn.on('PipelineLockStolen', (payload: unknown) => {
+    store.getState().onForceReleased(unwrapLock(payload));
+  });
+
+  conn.on('PipelineLockRewritten', (payload: unknown) => {
+    store.getState().onRewritten(unwrapLock(payload));
   });
 
   // Full resync on reconnect — events missed while disconnected = stale badges

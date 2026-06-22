@@ -12,10 +12,18 @@ public partial class SessionCardVM : ObservableObject
     [ObservableProperty] private string _watchItemTag = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OwnerLabel))]
+    [NotifyPropertyChangedFor(nameof(OwnerTooltip))]
     private string _userId = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OwnerLabel))]
+    [NotifyPropertyChangedFor(nameof(OwnerTooltip))]
     private string _userDisplayName = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RoleIcon))]
+    [NotifyPropertyChangedFor(nameof(RoleLabel))]
+    [NotifyPropertyChangedFor(nameof(HasRole))]
+    [NotifyPropertyChangedFor(nameof(OwnerTooltip))]
+    private string _userRole = "";
     [ObservableProperty] private string _source = "";
     [ObservableProperty] private string _status = "Running";
     [ObservableProperty] private string _elapsed = "00:00";
@@ -37,6 +45,19 @@ public partial class SessionCardVM : ObservableObject
         !string.IsNullOrWhiteSpace(UserDisplayName) ? UserDisplayName
         : !string.IsNullOrWhiteSpace(UserId) ? UserId
         : "—";
+
+    /// <summary>Whether a role was captured for the triggering user (drives badge visibility).</summary>
+    public bool HasRole => !string.IsNullOrWhiteSpace(UserRole);
+
+    /// <summary>Emoji glyph for the triggering user's role (shield/wrench/etc.).</summary>
+    public string RoleIcon => RoleGlyph.Icon(UserRole);
+
+    /// <summary>Short label for the triggering user's role ("Admin", "Engineer", …).</summary>
+    public string RoleLabel => RoleGlyph.Label(UserRole);
+
+    /// <summary>Hover text combining the triggering user and role for the owner badge.</summary>
+    public string OwnerTooltip =>
+        HasRole ? $"Triggered by {OwnerLabel} ({RoleLabel})" : $"Triggered by {OwnerLabel}";
 
     public string StatusBadge => Status switch
     {

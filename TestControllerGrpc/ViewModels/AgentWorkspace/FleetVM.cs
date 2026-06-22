@@ -193,6 +193,7 @@ public partial class FleetVM : ObservableObject, IDisposable
                     !string.IsNullOrWhiteSpace(session?.UserDisplayName) ? session!.UserDisplayName
                     : !string.IsNullOrWhiteSpace(session?.UserId) ? session!.UserId
                     : agentLock.UserId;
+                card.OwnerRole = session?.UserRole ?? "";
                 var agentSummary = session?.GetAgentSummaries()
                     .FirstOrDefault(s => string.Equals(s.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
 
@@ -239,6 +240,7 @@ public partial class FleetVM : ObservableObject, IDisposable
                 card.SessionId = "";
                 card.GroupKey = "";
                 card.Owner = "";
+                card.OwnerRole = "";
                 card.WatchItemTag = "";
                 card.CurrentActionTag = "";
                 card.ProgressPercent = -1;
@@ -252,6 +254,7 @@ public partial class FleetVM : ObservableObject, IDisposable
                 card.SessionId = "";
                 card.GroupKey = "";
                 card.Owner = "";
+                card.OwnerRole = "";
                 card.WatchItemTag = "";
                 card.CurrentActionTag = "";
                 card.ProgressPercent = -1;
@@ -278,6 +281,7 @@ public partial class FleetVM : ObservableObject, IDisposable
                 groupKey: g.Key,
                 title: g.First().WatchItemTag ?? g.Key,
                 owner: g.First().Owner,
+                ownerRole: g.First().OwnerRole,
                 isAvailablePool: false,
                 agents: g.OrderBy(c => c.AgentName).ToList()))
             .OrderBy(g => g.Title)
@@ -292,6 +296,7 @@ public partial class FleetVM : ObservableObject, IDisposable
             groupKey: "Available",
             title: "Available",
             owner: null,
+            ownerRole: null,
             isAvailablePool: true,
             agents: availableCards);
 
@@ -330,11 +335,12 @@ public partial class FleetVM : ObservableObject, IDisposable
 public partial class FleetGroupVM : ObservableObject
 {
     public FleetGroupVM(string groupKey, string title, string? owner,
-        bool isAvailablePool, IReadOnlyList<FleetCardVM> agents)
+        string? ownerRole, bool isAvailablePool, IReadOnlyList<FleetCardVM> agents)
     {
         GroupKey = groupKey;
         Title = title;
         Owner = owner;
+        OwnerRole = ownerRole;
         IsAvailablePool = isAvailablePool;
         Agents = new ObservableCollection<FleetCardVM>(agents);
     }
@@ -342,11 +348,23 @@ public partial class FleetGroupVM : ObservableObject
     public string GroupKey { get; }
     public string Title { get; }
     public string? Owner { get; }
+    public string? OwnerRole { get; }
     public bool IsAvailablePool { get; }
     public ObservableCollection<FleetCardVM> Agents { get; }
 
     public int Count => Agents.Count;
     public string OwnerDisplay => string.IsNullOrEmpty(Owner) ? "" : $"({Owner})";
+    /// <summary>Whether a triggering-user role was captured (drives role-glyph visibility).</summary>
+    public bool HasOwnerRole => !string.IsNullOrWhiteSpace(OwnerRole);
+    /// <summary>Emoji glyph for the triggering user's role.</summary>
+    public string OwnerRoleIcon => RoleGlyph.Icon(OwnerRole);
+    /// <summary>Short label for the triggering user's role.</summary>
+    public string OwnerRoleLabel => RoleGlyph.Label(OwnerRole);
+    /// <summary>Hover text attributing the running pipeline to a user and role.</summary>
+    public string OwnerTooltip =>
+        string.IsNullOrEmpty(Owner) ? ""
+        : HasOwnerRole ? $"Triggered by {Owner} ({OwnerRoleLabel})"
+        : $"Triggered by {Owner}";
     public bool HasAgents => Agents.Count > 0;
     public string AccentKind => IsAvailablePool ? "Idle" : "Running";
 }
@@ -360,6 +378,7 @@ public partial class FleetCardVM : ObservableObject
     [ObservableProperty] private string _sessionId = "";
     [ObservableProperty] private string _groupKey = "";
     [ObservableProperty] private string _owner = "";
+    [ObservableProperty] private string _ownerRole = "";
     [ObservableProperty] private string _watchItemTag = "";
     [ObservableProperty] private string _currentActionTag = "";
     [ObservableProperty] private int _progressPercent = -1;  // -1 = unknown
