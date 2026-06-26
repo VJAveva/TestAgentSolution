@@ -197,4 +197,28 @@
     <SolidColorBrush x:Key="TextDim"         Color="#FF999999" />
     <SolidColorBrush x:Key="MonoFont"        Color="#FF00FFFF" />
 
+    <!-- ══ Build Report Card palette (high contrast) ══ -->
+    <SolidColorBrush x:Key="BgCanvasBrush"       Color="#000000" />
+    <SolidColorBrush x:Key="BgPrimaryBrush"      Color="#000000" />
+    <SolidColorBrush x:Key="BgSecondaryBrush"    Color="#1A1A1A" />
+    <SolidColorBrush x:Key="BgChipBrush"         Color="#333333" />
+    <SolidColorBrush x:Key="BorderTertiaryBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="BorderInfoBrush"     Color="#00BFFF" />
+    <SolidColorBrush x:Key="BorderSuccessBrush"  Color="#00FF00" />
+    <SolidColorBrush x:Key="BorderDangerBrush"   Color="#FF4040" />
+    <SolidColorBrush x:Key="BorderWarningBrush"  Color="#FFD700" />
+    <SolidColorBrush x:Key="BgInfoBrush"         Color="#3300BFFF" />
+    <SolidColorBrush x:Key="BgSuccessBrush"      Color="#3300FF00" />
+    <SolidColorBrush x:Key="BgDangerBrush"       Color="#33FF4040" />
+    <SolidColorBrush x:Key="BgWarningBrush"      Color="#33FFD700" />
+    <SolidColorBrush x:Key="TextTertiaryBrush"   Color="#CCCCCC" />
+    <SolidColorBrush x:Key="TextInfoBrush"       Color="#00BFFF" />
+    <SolidColorBrush x:Key="TextSuccessBrush"    Color="#00FF00" />
+    <SolidColorBrush x:Key="TextDangerBrush"     Color="#FF4040" />
+    <SolidColorBrush x:Key="TextWarningBrush"    Color="#FFD700" />
+    <LinearGradientBrush x:Key="RcHeroBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#1A1A1A" Offset="0" />
+        <GradientStop Color="#000000" Offset="1" />
+    </LinearGradientBrush>
+
 </ResourceDictionary>

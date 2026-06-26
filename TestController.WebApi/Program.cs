@@ -65,6 +65,20 @@ builder.Services.AddSingleton<BuildTrendAnalyzer>();
 builder.Services.AddSingleton<ConsecutiveFailureDetector>();
 builder.Services.AddSingleton<BuildReportHtmlGenerator>();
 builder.Services.AddSingleton<ExecutionSessionManager>();
+
+// Build Report Card services — same aggregator the WPF host uses, exposed to
+// the React client via BuildReportCardController. FailurePatternAnalyzer is
+// already registered by AddControllerApi().
+builder.Services.AddSingleton(sp =>
+{
+    var rc = new BuildReportCardConfig();
+    builder.Configuration.GetSection("BuildReportCard").Bind(rc);
+    return rc;
+});
+builder.Services.AddSingleton<GradeCalculator>();
+builder.Services.AddSingleton<CiOwnerResolver>();
+builder.Services.AddSingleton<BuildSummaryStore>();
+builder.Services.AddSingleton<BuildReportAggregator>();
 builder.Services.AddSingleton<IAppLogger>(sp =>
 {
     var logDir = builder.Configuration["Logging:LogDirectory"]

@@ -1,0 +1,681 @@
+<Window x:Class="TestControllerGrpc.Views.Results.BuildReportCardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:TestControllerGrpc.Views.Results"
+        Title="Build Report Card - TestController"
+        Height="900" Width="1440" MinWidth="1000" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BgCanvasBrush}">
+
+    <Window.Resources>
+        <res:RateToHeightConverter x:Key="RateToHeight" />
+        <res:RateToWidthConverter x:Key="RateToWidth" />
+        <res:IntToStarConverter x:Key="IntToStar" />
+        <res:StringJoinConverter x:Key="StringJoin" />
+
+        <FontFamily x:Key="Mono">Consolas</FontFamily>
+
+        <!-- Card shell -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource BgPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+
+        <!-- Section header bar -->
+        <Style x:Key="SecHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Padding" Value="14,10" />
+        </Style>
+
+        <Style x:Key="KpiLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="KpiValue" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style x:Key="KpiSub" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+
+        <Style x:Key="ToolBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- ── Toolbar ─────────────────────────────────────────────── -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondaryBrush}"
+                BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+            <DockPanel>
+                <Button DockPanel.Dock="Left" Style="{StaticResource ToolBtn}"
+                        Command="{Binding RefreshCommand}" Content="⟳  Refresh" Margin="0,0,8,0" />
+                <Button DockPanel.Dock="Left" Style="{StaticResource ToolBtn}"
+                        Command="{Binding EmailReportCommand}" Content="✉  Email owners"
+                        ToolTip="Email this report card to all product owners"
+                        Margin="0,0,8,0" />
+                <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11"
+                           Text="Build:" Margin="0,0,6,0" />
+                <ComboBox DockPanel.Dock="Left" VerticalAlignment="Center" Width="220" Height="26"
+                          ItemsSource="{Binding AvailableBuilds}"
+                          SelectedItem="{Binding SelectedBuild, Mode=TwoWay}"
+                          ToolTip="Select a build folder under the ReportResults root"
+                          Margin="0,0,8,0" />
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11"
+                           Text="{Binding StatusMessage}" />
+                <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource TextInfoBrush}"
+                           FontSize="11" Text="Loading…" Margin="8,0,0,0"
+                           Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}" />
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+            <StackPanel>
+
+                <!-- ═══ Section 1: Hero + Grade ═══ -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid Margin="0">
+                            <Border CornerRadius="8,8,0,0" Padding="22,20"
+                                    Background="{DynamicResource RcHeroBrush}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Left -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="BUILD REPORT CARD" FontSize="11" FontWeight="Medium"
+                                                   Foreground="{DynamicResource TextTertiaryBrush}" />
+                                        <TextBlock Text="{Binding Card.BuildNumber}" FontFamily="{StaticResource Mono}"
+                                                   FontSize="24" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,4" />
+                                        <TextBlock FontFamily="{StaticResource Mono}" FontSize="11"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}">
+                                            <Run Text="Triggered by " /><Run Text="{Binding Card.TriggeredBy, Mode=OneWay}" />
+                                            <Run Text="  ·  Duration " /><Run Text="{Binding Card.Duration, Mode=OneWay, StringFormat=hh\\:mm\\:ss}" />
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <!-- Right: grade block -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border x:Name="GradeCircle" Width="90" Height="90" CornerRadius="45"
+                                                BorderThickness="2" VerticalAlignment="Center"
+                                                ToolTip="{Binding GradeBreakdownText}"
+                                                Background="{DynamicResource BgWarningBrush}"
+                                                BorderBrush="{DynamicResource BorderWarningBrush}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource BgWarningBrush}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderWarningBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Card.Grade.Severity}" Value="Pass">
+                                                            <Setter Property="Background" Value="{DynamicResource BgSuccessBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderSuccessBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Card.Grade.Severity}" Value="Fail">
+                                                            <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderDangerBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Card.Grade.Letter}" FontSize="38" FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                <TextBlock Text="{Binding Card.PassRate, StringFormat={}{0:0.0}%}" FontSize="10"
+                                                           FontFamily="{StaticResource Mono}" HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center" Margin="14,0,0,0">
+                                            <TextBlock Text="{Binding Card.Grade.Verdict}" FontSize="13" FontWeight="Medium"
+                                                       Foreground="{DynamicResource TextWarningBrush}" />
+                                            <TextBlock FontSize="10" FontFamily="{StaticResource Mono}" Margin="0,3,0,0"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}">
+                                                <Run Text="{Binding Card.PassedTests, Mode=OneWay}" /><Run Text=" pass / " />
+                                                <Run Text="{Binding Card.FailedTests, Mode=OneWay}" /><Run Text=" fail / " />
+                                                <Run Text="{Binding Card.SkippedTests, Mode=OneWay}" /><Run Text=" skip" />
+                                            </TextBlock>
+                                            <TextBlock FontSize="10" FontFamily="{StaticResource Mono}" Margin="0,3,0,0"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}">
+                                                <Run Text="{Binding Card.RegressionCount, Mode=OneWay}" /><Run Text=" regressions · " />
+                                                <Run Text="{Binding Card.FlakyCount, Mode=OneWay}" /><Run Text=" flaky · " />
+                                                <Run Text="{Binding Card.PsrErrorCount, Mode=OneWay}" /><Run Text=" PSR err" />
+                                            </TextBlock>
+                                            <TextBlock FontSize="10" FontFamily="{StaticResource Mono}" Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}"
+                                                       Text="{Binding Card.DeltaVsLast, StringFormat=vs avg: {0:+0.0;-0.0}%}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <!-- ═══ Section 2: KPI strip ═══ -->
+                        <UniformGrid Rows="1" Columns="6">
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource KpiLabel}" Text="TOTAL TESTS" />
+                                    <TextBlock Style="{StaticResource KpiValue}" Text="{Binding Card.TotalTests}" />
+                                    <TextBlock Style="{StaticResource KpiSub}" Text="{Binding Cis.Count, StringFormat=across {0} CIs}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource KpiLabel}" Text="PASS RATE" />
+                                    <TextBlock Style="{StaticResource KpiValue}" Foreground="{DynamicResource TextWarningBrush}" Text="{Binding Card.PassRate, StringFormat={}{0:0.0}%}" />
+                                    <TextBlock Style="{StaticResource KpiSub}" Text="target: 98%" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource KpiLabel}" Text="FAILURES" />
+                                    <TextBlock Style="{StaticResource KpiValue}" Foreground="{DynamicResource TextDangerBrush}" Text="{Binding Card.FailedTests}" />
+                                    <TextBlock Style="{StaticResource KpiSub}" Text="needs triage" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource KpiLabel}" Text="REGRESSIONS" />
+                                    <TextBlock Style="{StaticResource KpiValue}" Foreground="{DynamicResource TextDangerBrush}" Text="{Binding Card.RegressionCount}" />
+                                    <TextBlock Style="{StaticResource KpiSub}" Text="passed before" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource KpiLabel}" Text="AGENTS" />
+                                    <TextBlock Style="{StaticResource KpiValue}" Text="{Binding Agents.Count}" />
+                                    <TextBlock Style="{StaticResource KpiSub}" Text="execution units" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,0,0" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource KpiLabel}" Text="PSR RUNS" />
+                                    <TextBlock Style="{StaticResource KpiValue}">
+                                        <Run Text="{Binding Card.PsrPassCount, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding Card.PsrTotalCount, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Style="{StaticResource KpiSub}" Text="dummy data" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══ Section 3: CI grid ═══ -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1">
+                            <TextBlock Style="{StaticResource SecHeader}" Text="CI RESULTS · pass rate per Configuration Item" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Cis}" Margin="12">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><UniformGrid Columns="5" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="4" Padding="10" CornerRadius="6"
+                                            Background="{DynamicResource BgSecondaryBrush}" BorderThickness="1"
+                                            BorderBrush="{DynamicResource BorderTertiaryBrush}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+                                                <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Pass">
+                                                        <Setter Property="Background" Value="{DynamicResource BgSuccessBrush}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderSuccessBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Info">
+                                                        <Setter Property="Background" Value="{DynamicResource BgInfoBrush}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderInfoBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Warn">
+                                                        <Setter Property="Background" Value="{DynamicResource BgWarningBrush}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderWarningBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Fail">
+                                                        <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderDangerBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Setter Property="Fill" Value="{DynamicResource TextTertiaryBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Pass">
+                                                                    <Setter Property="Fill" Value="{DynamicResource TextSuccessBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Info">
+                                                                    <Setter Property="Fill" Value="{DynamicResource TextInfoBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Warn">
+                                                                    <Setter Property="Fill" Value="{DynamicResource TextWarningBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Fail">
+                                                                    <Setter Property="Fill" Value="{DynamicResource TextDangerBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock Text="{Binding Name}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                                           FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            </StackPanel>
+                                            <TextBlock FontFamily="{StaticResource Mono}" FontSize="10" Margin="0,4,0,6"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}">
+                                                <Run Text="{Binding Passed, Mode=OneWay}" /><Run Text=" / " />
+                                                <Run Text="{Binding Total, Mode=OneWay}" /><Run Text=" · " />
+                                                <Run Text="{Binding PassRate, Mode=OneWay, StringFormat={}{0:0.0}%}" />
+                                            </TextBlock>
+                                            <Border Height="4" CornerRadius="2" Background="{DynamicResource BgChipBrush}">
+                                                <Border HorizontalAlignment="Left" CornerRadius="2"
+                                                        Width="{Binding PassRate, Converter={StaticResource RateToWidth}, ConverterParameter=120}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{DynamicResource TextTertiaryBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Pass">
+                                                                    <Setter Property="Background" Value="{DynamicResource TextSuccessBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Info">
+                                                                    <Setter Property="Background" Value="{DynamicResource TextInfoBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Warn">
+                                                                    <Setter Property="Background" Value="{DynamicResource TextWarningBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Fail">
+                                                                    <Setter Property="Background" Value="{DynamicResource TextDangerBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══ Section 4: Agent table ═══ -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1">
+                            <TextBlock Style="{StaticResource SecHeader}" Text="USE CASE EXECUTION · per use case / agent results" />
+                        </Border>
+                        <!-- MaxHeight constrains the DataGrid so it scrolls INTERNALLY (its own
+                             scrollbar with frozen header) instead of letting the outer ScrollViewer
+                             grow it unbounded and take over the scroll. -->
+                        <DataGrid ItemsSource="{Binding Agents}" Margin="14,4,14,8" MaxHeight="440"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  Background="Transparent" RowBackground="Transparent"
+                                  BorderThickness="0" CanUserResizeColumns="False"
+                                  CanUserReorderColumns="False" CanUserSortColumns="False"
+                                  CanUserResizeRows="False" SelectionMode="Single"
+                                  Foreground="{DynamicResource TextPrimaryBrush}"
+                                  HorizontalGridLinesBrush="{DynamicResource BorderTertiaryBrush}"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  ScrollViewer.CanContentScroll="True"
+                                  EnableRowVirtualization="True"
+                                  ColumnWidth="Auto">
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Padding" Value="6,5" />
+                                    <Setter Property="FontSize" Value="11" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+                                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+                            <DataGrid.CellStyle>
+                                <Style TargetType="DataGridCell">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Padding" Value="6,8" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="DataGridCell">
+                                                <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </DataGrid.CellStyle>
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Severity}" Value="Warn">
+                                            <Setter Property="Background" Value="{DynamicResource BgWarningBrush}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Severity}" Value="Fail">
+                                            <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="USE CASE" Binding="{Binding UseCase}" Width="2.6*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                            <Setter Property="ToolTip" Value="{Binding UseCase}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="AGENT" Binding="{Binding AgentName}" Width="1.8*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                            <Setter Property="ToolTip" Value="{Binding AgentName}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="PASS / FAIL / SKIP" Width="1.4*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Height="8" CornerRadius="3" Margin="0,0,8,0"
+                                                    VerticalAlignment="Center" Background="{DynamicResource BgChipBrush}" ClipToBounds="True">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="{Binding Passed, Converter={StaticResource IntToStar}}" />
+                                                        <ColumnDefinition Width="{Binding Failed, Converter={StaticResource IntToStar}}" />
+                                                        <ColumnDefinition Width="{Binding Skipped, Converter={StaticResource IntToStar}}" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Rectangle Grid.Column="0" Fill="{DynamicResource TextSuccessBrush}" />
+                                                    <Rectangle Grid.Column="1" Fill="{DynamicResource TextDangerBrush}" />
+                                                    <Rectangle Grid.Column="2" Fill="{DynamicResource TextTertiaryBrush}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="PASS" Binding="{Binding Passed}" Width="60">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="FAIL" Binding="{Binding Failed}" Width="60">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextDangerBrush}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="SKIP" Binding="{Binding Skipped}" Width="60">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="TIME" Binding="{Binding Duration, StringFormat=hh\\:mm\\:ss}" Width="90">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="%" Binding="{Binding PassRate, StringFormat={}{0:0.0}%}" Width="70">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSuccessBrush}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══ Section 5: PSR + Trend ═══ -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,6,12">
+                        <StackPanel>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1">
+                                <TextBlock Style="{StaticResource SecHeader}" Text="PSR VALIDATION · customer scenarios (dummy data)" />
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding Psrs}" Margin="12">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><UniformGrid Columns="5" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="4" Padding="11" CornerRadius="6" Background="{DynamicResource BgSecondaryBrush}"
+                                                BorderThickness="1" BorderBrush="{DynamicResource BorderTertiaryBrush}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Outcome}" Value="Passed">
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderSuccessBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Outcome}" Value="PassedWithWarnings">
+                                                            <Setter Property="Background" Value="{DynamicResource BgWarningBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderWarningBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Outcome}" Value="Failed">
+                                                            <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderDangerBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel>
+                                                <TextBlock FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}">
+                                                    <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Scenario, Mode=OneWay}" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Outcome}" FontSize="9" FontFamily="{StaticResource Mono}" Margin="0,4,0,8"
+                                                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                <TextBlock FontSize="9" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource TextSecondaryBrush}">
+                                                    <Run Text="Tags " /><Run Text="{Binding Tags, Mode=OneWay}" />
+                                                </TextBlock>
+                                                <TextBlock FontSize="9" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource TextSecondaryBrush}">
+                                                    <Run Text="Errors " /><Run Text="{Binding Errors, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource Card}" Margin="6,0,0,12">
+                        <StackPanel>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1">
+                                <TextBlock Style="{StaticResource SecHeader}" Text="PASS RATE · recent builds" />
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding Trend}" Margin="14" Height="120">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Width="26" Margin="3,0" VerticalAlignment="Bottom">
+                                            <Border Width="18" Height="80" Background="{DynamicResource BgChipBrush}" CornerRadius="3"
+                                                    VerticalAlignment="Bottom" HorizontalAlignment="Center" ClipToBounds="True">
+                                                <Border VerticalAlignment="Bottom" CornerRadius="3"
+                                                        Height="{Binding PassRate, Converter={StaticResource RateToHeight}, ConverterParameter=80}"
+                                                        Background="{DynamicResource TextSuccessBrush}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource TextWarningBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                            </Border>
+                                            <TextBlock Text="{Binding Label}" FontSize="9" FontFamily="{StaticResource Mono}"
+                                                       HorizontalAlignment="Center" Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{Binding Card.DeltaVsLast, StringFormat=★ this build · {0:+0.0;-0.0}% vs avg}"
+                                       FontSize="10" FontFamily="{StaticResource Mono}" HorizontalAlignment="Center" Margin="0,0,0,12"
+                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- ═══ Section 6: Top failures ═══ -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1">
+                            <TextBlock Style="{StaticResource SecHeader}" Text="TOP FAILURES · prioritized for triage (REGRESSION → NEW → FLAKY → CHRONIC)" />
+                        </Border>
+                        <!-- header -->
+                        <Grid Margin="14,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*" />
+                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="1.2*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="TEST" Style="{StaticResource KpiLabel}" />
+                            <TextBlock Grid.Column="1" Text="CI" Style="{StaticResource KpiLabel}" />
+                            <TextBlock Grid.Column="2" Text="FAILED ON" Style="{StaticResource KpiLabel}" />
+                            <TextBlock Grid.Column="3" Text="PATTERN" Style="{StaticResource KpiLabel}" />
+                            <TextBlock Grid.Column="4" Text="OWNER" Style="{StaticResource KpiLabel}" />
+                            <TextBlock Grid.Column="5" Text="FIRST SEEN" Style="{StaticResource KpiLabel}" />
+                        </Grid>
+                        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Failures}" Margin="14,0,14,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1" Padding="0,9">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="3*" />
+                                                <ColumnDefinition Width="1.4*" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="1.4*" />
+                                                <ColumnDefinition Width="1.4*" />
+                                                <ColumnDefinition Width="1.2*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding TestName}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Ci}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding FailedOnAgents, Converter={StaticResource StringJoin}}" FontFamily="{StaticResource Mono}"
+                                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Border Grid.Column="3" CornerRadius="99" Padding="8,2" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                    Background="{DynamicResource BgChipBrush}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{DynamicResource BgChipBrush}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Pattern}" Value="Regression">
+                                                                <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Pattern}" Value="New">
+                                                                <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Pattern}" Value="Flaky">
+                                                                <Setter Property="Background" Value="{DynamicResource BgWarningBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding PatternLabel}" FontFamily="{StaticResource Mono}" FontSize="9" FontWeight="Medium"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            </Border>
+                                            <TextBlock Grid.Column="4" Text="{Binding Owner}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="5" Text="{Binding FirstSeen}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══ Footer ═══ -->
+                <Border Style="{StaticResource Card}">
+                    <DockPanel Margin="14,10">
+                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontSize="10"
+                                   Foreground="{DynamicResource TextTertiaryBrush}"
+                                   Text="{Binding Card.GeneratedUtc, StringFormat=Generated {0:yyyy-MM-dd HH:mm} UTC}" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource ToolBtn}" Command="{Binding CopyLinkCommand}" Content="Copy link" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

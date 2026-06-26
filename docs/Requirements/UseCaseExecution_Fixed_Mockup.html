@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Use Case Execution — Corrected Panel Mockup</title>
+<style>
+:root{
+  --bg-primary:#0F1119;
+  --bg-secondary:#171B27;
+  --bg-tertiary:#1F2535;
+  --border:#2A2F45;
+  --text-primary:#E4E6F0;
+  --text-secondary:#9099B8;
+  --text-tertiary:#5E6580;
+  --text-success:#22C55E;
+  --text-danger:#EF4444;
+  --text-warning:#F59E0B;
+  --bg-warning:#2D2418;
+  --bg-danger:#2D1818;
+  --font-sans:'Segoe UI','Segoe UI Web',Arial,sans-serif;
+  --font-mono:'Consolas','JetBrains Mono','Cascadia Code',monospace;
+  --radius:8px;
+
+  /* Single shared column template — header and rows BOTH use this,
+     so columns line up pixel-for-pixel at every width.
+     Star (fr) columns flex; numeric/time columns are fixed px. */
+  --cols: minmax(180px,2.6fr) minmax(120px,1.8fr) minmax(120px,1.4fr) 56px 56px 56px 76px 64px;
+  --rowpad: 12px;            /* left/right padding inside the panel */
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:#0a0c12;color:var(--text-primary);padding:24px;min-height:100vh;line-height:1.4}
+.page{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+
+/* Sibling cards to prove ONLY the panel scrolls, not these */
+.card{background:var(--bg-primary);border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.sec-h{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;background:var(--bg-secondary);border-bottom:0.5px solid var(--border);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-tertiary)}
+.note{padding:14px 16px;font-size:11px;color:var(--text-secondary);font-family:var(--font-mono)}
+
+/* ───────────────── Use Case Execution panel ───────────────── */
+.uce-card{display:flex;flex-direction:column;max-height:420px} /* bounded → its own scroll */
+
+/* Header row: NOT scrolled. Same grid template as rows.
+   The right padding reserves the scrollbar gutter width so the header
+   never shifts sideways when the body scrollbar appears. */
+.uce-head{
+  display:grid;
+  grid-template-columns:var(--cols);
+  background:var(--bg-secondary);
+  border-bottom:0.5px solid var(--border);
+  padding:0 calc(var(--rowpad) + var(--sbw, 14px)) 0 var(--rowpad); /* reserve gutter on right */
+}
+.uce-head > div{
+  padding:8px 6px;
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;
+  color:var(--text-secondary);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.uce-head > div.right{text-align:right}
+
+/* Body: the ONLY thing that scrolls. Fixed-height, own scrollbar,
+   stable gutter so width matches the header's reserved gutter. */
+.uce-body{
+  flex:1 1 auto;
+  overflow-y:scroll;          /* always show track so layout is stable */
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:var(--bg-tertiary) transparent;
+}
+.uce-body::-webkit-scrollbar{width:14px}
+.uce-body::-webkit-scrollbar-track{background:transparent}
+.uce-body::-webkit-scrollbar-thumb{background:var(--bg-tertiary);border-radius:7px;border:4px solid var(--bg-primary)}
+
+.uce-row{
+  display:grid;
+  grid-template-columns:var(--cols);
+  border-bottom:0.5px solid var(--border);
+  padding:0 var(--rowpad);
+}
+.uce-row:last-child{border-bottom:none}
+.uce-row.warn{background:var(--bg-warning)}
+.uce-row.fail{background:var(--bg-danger)}
+.uce-row > div{
+  padding:9px 6px;
+  font-family:var(--font-mono);font-size:13px;color:var(--text-secondary);
+  display:flex;align-items:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.uce-row > div.right{justify-content:flex-end;text-align:right}
+.cell-usecase{color:var(--text-primary)}
+.cell-fail{color:var(--text-danger)}
+.cell-pct{color:var(--text-success)}
+.cell-pct.bad{color:var(--text-danger);font-weight:600}
+.cell-pct.warn{color:var(--text-warning)}
+
+/* Pass / Fail / Skip bar (green pass over red/grey track), flexes with the * column */
+.bar{
+  width:100%;height:8px;border-radius:4px;overflow:hidden;
+  display:flex;background:var(--bg-tertiary);
+}
+.bar > span{height:100%;display:block}
+.bar .pass{background:var(--text-success)}
+.bar .fail{background:var(--text-danger)}
+.bar .skip{background:var(--text-tertiary)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- sibling 1 (must stay put while the panel scrolls) -->
+  <div class="card">
+    <div class="sec-h"><span>Score Card</span><span style="font-size:9px">does not move</span></div>
+    <div class="note">Grade B · 94.3% · 5,659 pass / 218 fail / 123 skip — this section stays fixed.</div>
+  </div>
+
+  <!-- ───── Use Case Execution panel (CORRECTED) ───── -->
+  <div class="card uce-card">
+    <div class="sec-h"><span>Use Case Execution · per use case / agent results</span><span style="font-size:9px">18 rows · scrolls internally</span></div>
+
+    <!-- Frozen, aligned header -->
+    <div class="uce-head">
+      <div>Use Case</div>
+      <div>Agent</div>
+      <div>Pass / Fail / Skip</div>
+      <div class="right">Pass</div>
+      <div class="right">Fail</div>
+      <div class="right">Skip</div>
+      <div class="right">Time</div>
+      <div class="right">%</div>
+    </div>
+
+    <!-- Scrolling rows (own scrollbar + reserved gutter) -->
+    <div class="uce-body" id="uceBody">
+      <!-- rows injected by script for brevity -->
+    </div>
+  </div>
+
+  <!-- sibling 2 (must stay put while the panel scrolls) -->
+  <div class="card">
+    <div class="sec-h"><span>CI Results · pass rate per Configuration Item</span><span style="font-size:9px">does not move</span></div>
+    <div class="note">10 CIs · App Server 99.7% · Historian 99.3% · … — this section stays fixed below the panel.</div>
+  </div>
+
+</div>
+
+<script>
+// 18 sample rows so the panel overflows and scrolls internally.
+const rows = [
+  ["GalaxyDeploy_FullCascade",      "jvgr1",   591, 6,  3,  "00:26:10", 98.5, ""],
+  ["Historian_BulkInsert_Stream",   "jvkpri",  587, 9,  4,  "00:28:02", 97.8, ""],
+  ["OIServer_SimConfig_Reload",     "jvkbak",  576, 15, 9,  "00:29:44", 96.0, ""],
+  ["Scripting_DeferredLog_Replay",  "jvhist",  532, 53, 15, "00:31:18", 88.7, "warn"],
+  ["Security_AuthFallback_Negot",   "warmpri", 571, 18, 11, "00:27:05", 95.2, ""],
+  ["IDE_GalaxyExport_RoundTrip",    "warmbak", 579, 12, 9,  "00:28:33", 96.5, ""],
+  ["PlatCommon_NetReconnect_Loop",  "warmhist",568, 21, 11, "00:30:12", 94.7, ""],
+  ["Bootstrap_FreshInstall_Cold",   "jvtest8", 535, 45, 20, "00:32:40", 89.2, "warn"],
+  ["DeadBand_StringAttr_Compare",   "jvtest9", 479, 112,9,  "00:38:21", 79.8, "fail"],
+  ["AppServer_FailoverPrimary",     "jvtest10",575, 17, 8,  "00:27:51", 95.8, ""],
+  ["AlarmMgr_ShelveUnshelve",       "jvgr1",   588, 8,  4,  "00:25:33", 98.0, ""],
+  ["Trend_HistoricalQuery_Wide",    "jvkpri",  564, 24, 12, "00:29:09", 94.0, ""],
+  ["ObjectViewer_AttrBrowse",       "jvkbak",  590, 7,  3,  "00:24:48", 98.3, ""],
+  ["Galaxy_Checkpoint_Restore",     "jvhist",  551, 36, 13, "00:33:27", 91.8, "warn"],
+  ["Security_RoleMapping_Sync",     "warmpri", 583, 11, 6,  "00:26:55", 97.2, ""],
+  ["OIServer_RedundancyFailover",   "warmbak", 522, 64, 14, "00:34:50", 87.0, "fail"],
+  ["Historian_Compaction_Nightly",  "warmhist",577, 16, 7,  "00:30:41", 96.2, ""],
+  ["IDE_TemplateInherit_DeepTree",  "jvtest8", 593, 5,  2,  "00:23:59", 98.8, ""],
+];
+
+function pct(v){return Math.max(v,0.5)}
+const body = document.getElementById('uceBody');
+body.innerHTML = rows.map(r=>{
+  const [uc,agent,pass,fail,skip,time,p,tint] = r;
+  const total = pass+fail+skip || 1;
+  const wp = pct(pass/total*100), wf = pct(fail/total*100), ws = pct(skip/total*100);
+  const pctClass = p < 90 ? (p < 85 ? 'bad' : 'warn') : '';
+  return `<div class="uce-row ${tint}">
+    <div class="cell-usecase" title="${uc}">${uc}</div>
+    <div title="${agent}">${agent}</div>
+    <div><div class="bar"><span class="pass" style="width:${wp}%"></span><span class="fail" style="width:${wf}%"></span><span class="skip" style="width:${ws}%"></span></div></div>
+    <div class="right">${pass}</div>
+    <div class="right cell-fail">${fail}</div>
+    <div class="right">${skip}</div>
+    <div class="right">${time}</div>
+    <div class="right cell-pct ${pctClass}">${p.toFixed(1)}%</div>
+  </div>`;
+}).join('');
+</script>
+</body>
+</html>

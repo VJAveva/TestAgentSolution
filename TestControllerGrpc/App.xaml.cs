@@ -212,6 +212,20 @@ public partial class App : Application
                 services.AddSingleton<FailurePatternAnalyzer>();
                 services.AddSingleton<ExecutionLogCorrelator>();
                 services.AddSingleton<BuildResultsViewModel>();
+
+                // Build Report Card services
+                services.AddSingleton(sp =>
+                {
+                    var config = sp.GetRequiredService<IConfiguration>();
+                    var rc = new BuildReportCardConfig();
+                    config.GetSection("BuildReportCard").Bind(rc);
+                    return rc;
+                });
+                services.AddSingleton<GradeCalculator>();
+                services.AddSingleton<CiOwnerResolver>();
+                services.AddSingleton<BuildSummaryStore>();
+                services.AddSingleton<BuildReportAggregator>();
+                services.AddSingleton<TestControllerGrpc.ViewModels.Results.BuildReportCardViewModel>();
             })
             .Build();
 

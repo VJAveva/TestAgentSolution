@@ -31,7 +31,10 @@ public class TrxResultsParser
     private static readonly XName DebugTraceName = TrxNs + "DebugTrace";
 
     private readonly ConcurrentDictionary<string, TrxTestRun> _fileCache = new();
-    private const int MaxFileCacheSize = 500;
+    // Tracks the current cache key for each file path so stale entries (older
+    // timestamps) can be evicted in O(1) instead of scanning every key.
+    private readonly ConcurrentDictionary<string, string> _pathToKey = new();
+    private const int MaxFileCacheSize = 4000;
 
     /// <summary>
     /// Scans a build folder with structure: [BuildFolder] > [UseCaseFolder] > *.trx
@@ -149,16 +152,13 @@ public class TrxResultsParser
             ? ParseFileStreaming(trxFilePath)
             : ParseFileBuffered(trxFilePath);
 
-        // Evict stale entries for the same file path (old timestamps) to prevent
-        // unbounded key growth when .trx files are rewritten.
-        var pathPrefix = trxFilePath + "|";
-        foreach (var existingKey in _fileCache.Keys)
-        {
-            if (existingKey.StartsWith(pathPrefix, StringComparison.Ordinal) && existingKey != cacheKey)
-                _fileCache.TryRemove(existingKey, out _);
-        }
+        // Evict the previous entry for this file path (old timestamp) in O(1)
+        // using the path→key index, instead of scanning every cache key.
+        if (_pathToKey.TryGetValue(trxFilePath, out var priorKey) && priorKey != cacheKey)
+            _fileCache.TryRemove(priorKey, out _);
 
         _fileCache[cacheKey] = result;
+        _pathToKey[trxFilePath] = cacheKey;
 
         // Size cap: if still over limit, clear the oldest half
         if (_fileCache.Count > MaxFileCacheSize)
@@ -325,6 +325,7 @@ public class TrxResultsParser
             TestName = r.Attribute("testName")?.Value ?? "",
             Outcome = r.Attribute("outcome")?.Value ?? "NotExecuted",
             Duration = duration,
+            ComputerName = r.Attribute("computerName")?.Value ?? "",
             ErrorMessage = errorMessage,
             StackTrace = stackTrace,
             StdOut = combinedStdOut,
@@ -347,6 +348,14 @@ public class TrxResultsParser
         var startTime = DateTime.TryParse(times?.Attribute("start")?.Value, out var st) ? st : DateTime.MinValue;
         var endTime = DateTime.TryParse(times?.Attribute("finish")?.Value, out var et) ? et : DateTime.MinValue;
 
+        var computerName = testCases
+            .Select(c => c.ComputerName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .GroupBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault() ?? "";
+
         return new TrxTestRun
         {
             FileName = fileName,
@@ -359,6 +368,7 @@ public class TrxResultsParser
             Timeout = int.TryParse(counters?.Attribute("timeout")?.Value, out var to) ? to : testCases.Count(c => c.Outcome == "Timeout"),
             NotExecuted = int.TryParse(counters?.Attribute("notExecuted")?.Value, out var ne) ? ne : testCases.Count(c => c.Outcome == "NotExecuted"),
             Duration = TimeSpan.FromTicks(totalDurationTicks),
+            ComputerName = computerName,
             TestCases = testCases,
         };
     }

@@ -97,6 +97,50 @@
   --badge-par: 129 140 248;    /* #818CF8 */
 }
 
+/*
+ * Build Report Card — adapts to the active theme.
+ * Dark values live on :root (default + [data-theme='dark']); the light theme
+ * overrides them below so the card reads correctly on light surfaces.
+ * RGB channels for Tailwind alpha modifiers; exposed as the `rc-*` colour scale.
+ */
+:root {
+  --rc-bg-primary: 15 17 25;     /* #0F1119 */
+  --rc-bg-secondary: 23 27 39;   /* #171B27 */
+  --rc-bg-tertiary: 31 37 53;    /* #1F2535 */
+  --rc-border: 42 47 69;         /* #2A2F45 */
+  --rc-text-primary: 228 230 240;   /* #E4E6F0 */
+  --rc-text-secondary: 144 153 184; /* #9099B8 */
+  --rc-text-tertiary: 94 101 128;   /* #5E6580 */
+  --rc-success: 34 197 94;       /* #22C55E */
+  --rc-bg-success: 14 40 24;     /* #0E2818 */
+  --rc-info: 77 156 245;         /* #4D9CF5 */
+  --rc-bg-info: 14 31 58;        /* #0E1F3A */
+  --rc-warning: 245 158 11;      /* #F59E0B */
+  --rc-bg-warning: 45 36 24;     /* #2D2418 */
+  --rc-danger: 239 68 68;        /* #EF4444 */
+  --rc-bg-danger: 45 24 24;      /* #2D1818 */
+  --rc-hero: linear-gradient(135deg, #1a2236 0%, #0F1119 100%);
+}
+
+[data-theme='light'] {
+  --rc-bg-primary: 255 255 255;     /* #FFFFFF card */
+  --rc-bg-secondary: 244 246 250;   /* #F4F6FA section header */
+  --rc-bg-tertiary: 230 233 240;    /* #E6E9F0 track/chip */
+  --rc-border: 226 229 238;         /* #E2E5EE */
+  --rc-text-primary: 28 35 51;      /* #1C2333 */
+  --rc-text-secondary: 74 81 105;   /* #4A5169 */
+  --rc-text-tertiary: 122 128 145;  /* #7A8091 */
+  --rc-success: 22 138 95;          /* #168A5F */
+  --rc-bg-success: 226 243 235;     /* #E2F3EB */
+  --rc-info: 37 99 235;             /* #2563EB */
+  --rc-bg-info: 224 233 251;        /* #E0E9FB */
+  --rc-warning: 180 121 31;         /* #B4791F */
+  --rc-bg-warning: 247 240 226;     /* #F7F0E2 */
+  --rc-danger: 220 38 60;           /* #DC263C */
+  --rc-bg-danger: 250 228 230;      /* #FAE4E6 */
+  --rc-hero: linear-gradient(135deg, #E8EDF7 0%, #F8FAFD 100%);
+}
+
 body {
   margin: 0;
   background: rgb(var(--bg-app));

@@ -78,6 +78,8 @@ public record TrxTestRun
     public int Failed { get; init; }
     public int Timeout { get; init; }
     public int NotExecuted { get; init; }
+    /// <summary>Machine that executed the run, from the TRX computerName attribute.</summary>
+    public string ComputerName { get; init; } = "";
     public List<TrxTestCase> TestCases { get; init; } = new();
 }
 
@@ -87,6 +89,8 @@ public record TrxTestCase
     public string ClassName { get; init; } = "";
     public string Outcome { get; init; } = "";
     public TimeSpan Duration { get; init; }
+    /// <summary>Machine that executed the test, from the TRX computerName attribute.</summary>
+    public string ComputerName { get; init; } = "";
     public string? ErrorMessage { get; init; }
     public string? StackTrace { get; init; }
     public string? StdOut { get; init; }

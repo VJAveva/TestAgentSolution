@@ -366,3 +366,103 @@ export interface ExecutionLogReport {
   stackTrace: string;
   mergedTimeline: MergedLogLine[];
 }
+
+// ── Build Report Card (matches BuildReportCardController projection) ──────────
+
+export type ReportSeverity = 'Pass' | 'Info' | 'Warn' | 'Fail';
+export type PsrOutcome = 'Passed' | 'PassedWithWarnings' | 'Failed' | 'Pending';
+export type FailurePatternKind =
+  | 'Regression'
+  | 'New'
+  | 'Flaky'
+  | 'Chronic'
+  | 'Cascading'
+  | 'Resolved'
+  | 'Unknown';
+
+export interface CiResult {
+  name: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  passRate: number;
+  severity: ReportSeverity;
+}
+
+export interface AgentResult {
+  useCase: string;
+  agentName: string;
+  ci: string;
+  passed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+  durationLabel: string;
+  passRate: number;
+  severity: ReportSeverity;
+}
+
+export interface PsrResult {
+  name: string;
+  scenario: string;
+  outcome: PsrOutcome;
+  durationLabel: string;
+  tags: number;
+  throughput: string;
+  errors: number;
+  warnings: number;
+  errorDetail?: string;
+}
+
+export interface FailureEntry {
+  testName: string;
+  ci: string;
+  failedOnAgents: string[];
+  pattern: FailurePatternKind;
+  patternLabel: string;
+  owner: string;
+  firstSeen: string;
+}
+
+export interface TrendPoint {
+  label: string;
+  passRate: number;
+  isCurrent: boolean;
+}
+
+export interface BuildGradeResult {
+  letter: string;
+  score: number;
+  basePassRate: number;
+  verdict: string;
+  breakdownLines: string[];
+  severity: ReportSeverity;
+}
+
+export interface BuildReportCard {
+  buildNumber: string;
+  generatedUtc: string;
+  triggeredBy: string;
+  startedUtc?: string;
+  completedUtc?: string;
+  durationLabel: string;
+  hasData: boolean;
+  grade: BuildGradeResult;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  skippedTests: number;
+  passRate: number;
+  regressionCount: number;
+  flakyCount: number;
+  psrErrorCount: number;
+  deltaVsLast?: number;
+  psrPassCount: number;
+  psrTotalCount: number;
+  cis: CiResult[];
+  agents: AgentResult[];
+  psrs: PsrResult[];
+  failures: FailureEntry[];
+  trend: TrendPoint[];
+}

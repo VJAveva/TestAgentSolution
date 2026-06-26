@@ -164,6 +164,15 @@ builder.Services.AddGrpc(options =>
     options.EnableDetailedErrors  = builder.Environment.IsDevelopment();
 });
 
+// ── gRPC health service (grpc.health.v1) ───────────────────────────────
+// Exposes the standard health endpoint the self-healing watchdog calls on
+// loopback (Part 2 of the self-healing spec). Reports Serving while the host
+// is up; can later reflect real internal state (e.g. NotServing when the
+// command executor is wedged) and the watchdog will react automatically.
+builder.Services.AddGrpcHealthChecks()
+    .AddCheck("agent-listener",
+        () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy());
+
 // ── Background services ───────────────────────────────────────────────
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogger>());
 builder.Services.AddSingleton<AgentLifecycleService>();
@@ -172,6 +181,7 @@ builder.Services.AddHostedService<GrpcListenerWatchdog>();
 var app = builder.Build();
 
 app.MapGrpcService<TestAgentGrpcService>();
+app.MapGrpcHealthChecksService();   // standard grpc.health.v1 Health/Check
 app.MapGet("/", () => "TestAgent gRPC service is running.");
 app.MapGet("/health", (CommandExecutor executor) => Results.Ok(new
 {

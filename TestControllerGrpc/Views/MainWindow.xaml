@@ -1232,6 +1232,10 @@
                                 ToolTip="Results Viewer" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
+                        <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenReportCardCommand}"
+                                ToolTip="Build Report Card" Height="28" MinWidth="28" Padding="4,2">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
+                        </Button>
                         <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
                                 ToolTip="Help (F1)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" FontSize="14" Foreground="{DynamicResource Accent}" />
@@ -1780,6 +1784,13 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Results Viewer" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenReportCardCommand}"
+                                                    ToolTip="Open the Build Report Card">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Report Card" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
