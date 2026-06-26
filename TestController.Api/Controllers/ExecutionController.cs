@@ -298,6 +298,11 @@ public class ExecutionController : ControllerBase
             displayName = userId;
         var role = _modeProvider.ResolveRole(HttpContext.User ?? new System.Security.Claims.ClaimsPrincipal()).ToString();
 
+        // P4-1: in Secured mode, require Pipeline_Trigger for the target pipeline.
+        // No-op in Default mode (preserves current behaviour).
+        if (!await IsRbacAuthorizedAsync(Permission.Pipeline_Trigger, watchItemTag, HttpContext.RequestAborted))
+            return StatusCode(403, ApiErrorFactory.Forbidden($"Not authorized to trigger pipeline '{watchItemTag}'."));
+
         var config = _vocabMonitor.CurrentConfig;
         var watchItem = config?.WatchItems
             .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
@@ -757,6 +762,10 @@ public class ExecutionController : ControllerBase
         var userId = HttpContext.Request.Headers["X-User-Id"].FirstOrDefault() ?? "anonymous";
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
 
+        // P4-1: cancelling ALL sessions requires Pipeline_CancelAll in Secured mode.
+        if (!await IsRbacAuthorizedAsync(Permission.Pipeline_CancelAll, null, HttpContext.RequestAborted))
+            return StatusCode(403, ApiErrorFactory.Forbidden("Not authorized to cancel all executions."));
+
         // Snapshot active sessions (ID + tag) before cancellation moves them to history
         var activeSessions = _sessionManager.GetActiveSessions()
             .Select(s => new { s.SessionId, s.WatchItemTag }).ToList();
@@ -858,15 +867,57 @@ public class ExecutionController : ControllerBase
         return decision.Allowed;
     }
 
+    /// <summary>
+    /// P4-1: enforces a fine-grained RBAC permission on a mutating execution action.
+    /// Fails OPEN when RBAC is disabled (Default mode) or its services are not wired,
+    /// preserving legacy behaviour; enforces <c>CanAsync</c> only in Secured mode.
+    /// Resolves RBAC services lazily so hosts without RBAC fall back to legacy rules.
+    /// </summary>
+    private async Task<bool> IsRbacAuthorizedAsync(Permission permission, string? resourceId, CancellationToken ct)
+    {
+        var rbacOptions = HttpContext.RequestServices
+            .GetService(typeof(Microsoft.Extensions.Options.IOptionsMonitor<TestControllerGrpc.Configuration.RbacOptions>))
+            as Microsoft.Extensions.Options.IOptionsMonitor<TestControllerGrpc.Configuration.RbacOptions>;
+
+        // Default mode (RBAC off) → preserve legacy behaviour (no fine-grained gate).
+        if (rbacOptions is null || !rbacOptions.CurrentValue.Enabled)
+            return true;
+
+        var authzService = HttpContext.RequestServices
+            .GetService(typeof(TestControllerGrpc.Authorization.IAuthorizationService))
+            as TestControllerGrpc.Authorization.IAuthorizationService;
+        var authInterceptor = HttpContext.RequestServices
+            .GetService(typeof(SessionAuthInterceptor)) as SessionAuthInterceptor;
+        if (authzService is null || authInterceptor is null)
+            return true; // host without RBAC wired → legacy behaviour
+
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault();
+        var clientKind = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase)
+            ? ClientKind.Wpf : ClientKind.Web;
+
+        var authHeader = HttpContext.Request.Headers.Authorization.FirstOrDefault();
+        var user = await authInterceptor.ResolveUserAsync(authHeader, clientKind, ct);
+        if (user is null)
+            return false; // Secured + unauthenticated → deny
+
+        var decision = await authzService.CanAsync(user, permission, resourceId, ct);
+        return decision.Allowed;
+    }
+
     // ?? Force-release endpoints (admin only) ?????????????????????????
 
     /// <summary>POST /api/execution/force-release/{agentName} — admin force-release a single agent.</summary>
     [HttpPost("force-release/{agentName}")]
     [Authorize(Policy = SecurityPolicies.Admin)]
-    public IActionResult ForceReleaseAgent(string agentName)
+    public async Task<IActionResult> ForceReleaseAgent(string agentName)
     {
         var userId = _ownershipChecker.GetUserSid(HttpContext.User);
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
+
+        // P4-1: in Secured mode also require the fine-grained Pipeline_ForceRelease
+        // permission (in addition to the coarse Admin policy) for a clean audit trail.
+        if (!await IsRbacAuthorizedAsync(Permission.Pipeline_ForceRelease, agentName, HttpContext.RequestAborted))
+            return StatusCode(403, ApiErrorFactory.Forbidden($"Not authorized to force-release agent '{agentName}'."));
 
         var currentLock = _lockManager.GetLock(agentName);
         if (currentLock == null)
@@ -892,10 +943,14 @@ public class ExecutionController : ControllerBase
     /// <summary>POST /api/execution/force-release-all — admin emergency release all locks.</summary>
     [HttpPost("force-release-all")]
     [Authorize(Policy = SecurityPolicies.Admin)]
-    public IActionResult ForceReleaseAll()
+    public async Task<IActionResult> ForceReleaseAll()
     {
         var userId = _ownershipChecker.GetUserSid(HttpContext.User);
         var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "Unknown";
+
+        // P4-1: in Secured mode also require the fine-grained Pipeline_ForceRelease permission.
+        if (!await IsRbacAuthorizedAsync(Permission.Pipeline_ForceRelease, null, HttpContext.RequestAborted))
+            return StatusCode(403, ApiErrorFactory.Forbidden("Not authorized to force-release all locks."));
 
         var count = _lockManager.ForceReleaseAll();
 

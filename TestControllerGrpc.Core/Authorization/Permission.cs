@@ -24,5 +24,6 @@ public enum Permission
     Report_Generate,
     Audit_View,
     Audit_Export,
-    Notification_Mute
+    Notification_Mute,
+    System_ChangeMode
 }

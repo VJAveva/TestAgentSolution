@@ -137,6 +137,9 @@ public partial class App : Application
                 // Phase 8: Automatic notification dispatcher
                 services.AddHostedService<NotificationDispatcher>();
 
+                // P2-4: Fleet alerting (agent-down + run-overrun)
+                services.AddHostedService<FleetAlertDispatcher>();
+
                 // Application logger (file + in-memory ring buffer)
                 services.AddSingleton<IAppLogger>(sp =>
                 {
@@ -144,7 +147,11 @@ public partial class App : Application
                     var logDir = cfg.GetValue<string>("Logging:LogDirectory")
                         ?? cfg.GetValue<string>("LogDirectory")
                         ?? AppLogger.DefaultLogDirectory;
-                    return new AppLogger("controller", logDir);
+                    var sinkOptions = new LogSinkOptions();
+                    cfg.GetSection(LogSinkOptions.SectionName).Bind(sinkOptions);
+                    var central = CentralLogSink.Create(sinkOptions);
+                    var sinks = central is null ? null : new[] { central };
+                    return new AppLogger("controller", logDir, sinks: sinks);
                 });
 
                 services.AddSingleton<MainViewModel>();

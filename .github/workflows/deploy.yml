@@ -1,0 +1,99 @@
+name: deploy
+
+# Manual, on-demand deploy/rollback on top of the build CI (build.yml).
+# Runs on a SELF-HOSTED runner because deployment reaches internal nodes via
+# admin shares (\\<node>\C$) and IIS remoting — GitHub-hosted runners cannot.
+# The heavy lifting + safety net (backup, smoke test, auto-rollback) lives in
+# deploy/Invoke-Deploy.ps1; this workflow is just a governed front door so
+# anyone with repo access can deploy and roll back from RUNBOOK.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Deploy a new build or roll back to the previous one'
+        type: choice
+        required: true
+        default: deploy
+        options:
+          - deploy
+          - rollback
+      component:
+        description: 'Component to act on'
+        type: choice
+        required: true
+        default: webapi
+        options:
+          - webapi
+          - controller
+          - agent
+      target_node:
+        description: 'Target machine name or IP'
+        type: string
+        required: true
+      base_url:
+        description: 'WebApi base URL for pre-deploy + smoke checks (webapi only), e.g. http://WEBSERVER01'
+        type: string
+        required: false
+      controller_node:
+        description: 'Controller node — required when component = agent'
+        type: string
+        required: false
+      iis_site_name:
+        description: 'IIS site name (webapi only)'
+        type: string
+        required: false
+        default: TestControllerWeb
+      backup_name:
+        description: 'Specific backup timestamp to restore (rollback only; blank = latest)'
+        type: string
+        required: false
+      force:
+        description: 'Override active-session pre-deploy block / skip rollback confirmation'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let two deploys to the same component+node run at once.
+  group: deploy-${{ inputs.component }}-${{ inputs.target_node }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.action }} ${{ inputs.component }} -> ${{ inputs.target_node }}
+    runs-on: [self-hosted, windows, deploy]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          dotnet-quality: preview
+
+      - name: Run orchestrator
+        shell: pwsh
+        run: |
+          $params = @{
+            Component  = '${{ inputs.component }}'
+            TargetNode = '${{ inputs.target_node }}'
+          }
+          if ('${{ inputs.base_url }}')        { $params.BaseUrl        = '${{ inputs.base_url }}' }
+          if ('${{ inputs.controller_node }}') { $params.ControllerNode = '${{ inputs.controller_node }}' }
+          if ('${{ inputs.iis_site_name }}')   { $params.IisSiteName    = '${{ inputs.iis_site_name }}' }
+          if ('${{ inputs.action }}' -eq 'rollback') {
+            $params.Rollback = $true
+            if ('${{ inputs.backup_name }}') { $params.BackupName = '${{ inputs.backup_name }}' }
+          }
+          if ('${{ inputs.force }}' -eq 'true') { $params.Force = $true }
+
+          Write-Host "Invoking deploy/Invoke-Deploy.ps1 with:" -ForegroundColor Cyan
+          $params.GetEnumerator() | ForEach-Object { Write-Host "  $($_.Key) = $($_.Value)" }
+
+          ./deploy/Invoke-Deploy.ps1 @params

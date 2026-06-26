@@ -14,18 +14,18 @@
   - Resets the failure counter after 60s of healthy running.
 
 .PARAMETER ServiceName
-  The Windows service name. Defaults to "TestAgentService".
+  The Windows service name. Defaults to "TestAgentGrpc".
 
 .NOTES
   Run as Administrator. Run on every agent (bake into provisioning / VM-revert
   scripts so the policy survives reverts).
 
 .EXAMPLE
-  .\Configure-AgentRecovery.ps1 -ServiceName TestAgentService
+  .\Configure-AgentRecovery.ps1 -ServiceName TestAgentGrpc
 #>
 
 param(
-    [string]$ServiceName = "TestAgentService"
+    [string]$ServiceName = "TestAgentGrpc"
 )
 
 $ErrorActionPreference = "Stop"

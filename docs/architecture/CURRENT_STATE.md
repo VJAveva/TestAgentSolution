@@ -6,18 +6,22 @@
 |---------|---------|
 | `TestControllerGrpc.Core` | Shared library: proto-generated gRPC types, domain models (`WatchListConfig`), service interfaces (`IActionPipelineExecutor`, `IAppLogger`, etc.), XML parser, session manager, logging infrastructure. |
 | `TestControllerGrpc` | WPF controller desktop app — hosts gRPC server, REST/SignalR WebApi, file watchers, and the full action-pipeline executor with MVVM UI. |
-| `TestController.Api` | ASP.NET Core class library of shared controllers, SignalR hubs, middleware, and security (multi-identity auth). Referenced by both WPF host and standalone WebApi. |
+| `TestController.Api` | ASP.NET Core class library of shared controllers, SignalR hubs, middleware, and security (multi-identity auth + `AddRbacFeature()` / `SessionAuthInterceptor`). Referenced by both WPF host and standalone WebApi. |
+| `TestController.Persistence` | EF Core + SQLite RBAC store (`OrchestratorDbContext`, entities, migrations, `AuthorizationService`, `SessionStore`, `QueuedAuditWriter` + `AuditDrainWorker`, `PasswordHasher`). Referenced by both hosts. |
 | `TestController.WebApi` | Standalone ASP.NET Core host — REST + SignalR for the React client, acts as proxy to agents via gRPC. |
 | `TestController.WebClient` | React 18 + TypeScript SPA (Vite, Tailwind, Zustand, SignalR) served by WebApi. |
 | `TestAgentGrpc` | Windows agent service — hosts gRPC server (`TestAgentService`), runs commands locally, system-tray UI (WinForms). |
 | `TestAgentDisplay` | WPF read-only agent display panel — gRPC client connecting to a running agent for monitoring. |
 | `TestController.Dashboard` | Standalone WPF dashboard — connects to controller via SignalR (read-only feed consumer). |
+| `TestAgent.Diagnostics` | WPF agent diagnostics utility. |
 | `TestControllerGrpc.Tests` | xUnit tests for the controller WPF app and Core library. |
 | `TestController.WebApi.Tests` | xUnit integration tests for the WebApi (uses `WebApplicationFactory`). |
+| `TestController.ApiTests` | xUnit shared-API contract tests. |
+| `TestController.LoadTests` | Performance / load test suite. |
 
-## Public Interfaces in ControlNode.Core
+## Public Authorization Interfaces (TestControllerGrpc.Core)
 
-**To be created in Phase 0.** Per `docs/Requirements/RoleBasedSecuritywithLocks/02_Implementation_Roadmap.md`, planned types include `IUserContext`, `Role`, `Permission`, `IAuthorizationService`, `IAuditWriter`. None exist yet.
+**Implemented (RBAC Phases 0–10).** `IUserContext`, `IAuthorizationService` (`CanAsync(user, permission, resourceId?)` with Default-mode short-circuit), `IAuditWriter` (fire-and-forget), and enums `Role` (Administrator/SeniorManager/Engineer/Guest), `ClientKind` (Wpf/Web/Cli), `Permission` (`TestControllerGrpc.Core/Authorization/Permission.cs`). Persistence + interceptors live in `TestController.Persistence` and `TestController.Api`. See the **RBAC Feature** sections at the end of this document for the full surface.
 
 ## gRPC Service Definitions
 
@@ -59,8 +63,8 @@ Single proto file duplicated across projects: `TestControllerGrpc.Core/Protos/te
 
 ## React Structure
 
-- **State management:** Zustand (stores in `src/stores/`: `agentStore`, `executionStore`, `watchlistStore`, `resultsStore`, `connectionStore`)
-- **API client:** Custom `apiFetch<T>()` wrapper in `src/lib/api.ts` with correlation ID tracking, HTML-detection, structured errors. Also `axios` instances in hooks.
+- **State management:** Zustand (stores in `src/stores/`: `agentStore`, `executionStore`, `watchlistStore`, `resultsStore`, `connectionStore`, `lockStore`, `authStore`, `systemModeStore`)
+- **API client:** Custom `apiFetch<T>()` wrapper in `src/lib/api.ts` with correlation ID tracking, HTML-detection, structured errors (401/403 → AuthDeniedToast).
 - **Routing:** No router — single-page tab-based layout (`AppShell.tsx` with `activeTab` state)
 - **Hook conventions:** One hook per domain (`useAgents`, `useExecution`, `useWatchList`, `useResults`, `useSignalR`, `useFleetState`). Hooks wrap axios calls + update Zustand stores.
 - **Real-time:** SignalR hub at `/hubs/controller` with indefinite exponential-backoff reconnect. Events: `ActionProgress`, `ExecutionStarted/Completed/Cancelled`, `AgentRegistered/StatusChanged`, `LogEntry`, `AgentOutputBatch`.
@@ -75,9 +79,9 @@ Single proto file duplicated across projects: `TestControllerGrpc.Core/Protos/te
 | Shared/Core | `IWatchListXmlParser`, `TrxResultsParser`, `BuildResultsConfig`, `BuildResultsAggregator`, `BuildTrendAnalyzer`, `ConsecutiveFailureDetector`, `BuildReportHtmlGenerator`, `ExecutionSessionManager`, `IAppLogger` |
 | Web-specific | `AgentGrpcClientManager`, `AgentRegistry`, `AgentTelemetryCache`, `WatchListFileService`, `ControllerProxyService`, `ConfigValidator` |
 | Adapters | `IVocabularyMonitor` → `StandaloneVocabularyMonitor`, `IAgentGrpcDispatcher` → `StandaloneAgentDispatcher`, `IActionPipelineExecutor` → `StandalonePipelineExecutor`, `IEventAggregator` → `EventAggregator` |
-| Security | `AddMultiIdentitySecurity()` — NTLM/negotiate + API-key + roles |
+| Security | `AddMultiIdentitySecurity()` — NTLM/negotiate + API-key + roles; `AddRbacFeature()` — RBAC session auth + `SessionAuthInterceptor` + audit drain |
 | API | `AddControllerApi()` — shared controllers + SignalR hub |
-| Infra | `AddSignalR()`, `AddCors()`, `AddRateLimiter()`, `AddOpenApi()`, `AddHealthChecks()`, `AddOpenTelemetry()` (Prometheus exporter) |
+| Infra | `AddSignalR()`, `AddCors()`, `AddRateLimiter()`, `AddOpenApi()` + `MapScalarApiReference()` (`/scalar`), `AddHealthChecks()` (live/ready), `AddOpenTelemetry()` (Prometheus `/metrics`) |
 | Background | `AgentEventRelayService` (hosted) |
 
 ### TestAgentGrpc/Program.cs
@@ -231,9 +235,7 @@ No Cake/MSBuild custom targets. Build uses `dotnet publish` with `win-x64`, self
 - `AgentLockManager` — still active for per-execution-session agent locking
 - `LockRecoveryService` (`TestController.Api/Services/`) — agent-layer recovery only; handles stale agent locks from `AgentLockManager`. Does NOT reference `LockRegistry` or `PipelineLock` types (verified Phase 3c). No interference with the pipeline-lock subsystem.
 
-Append a new section to docs/architecture/CURRENT_STATE.md:
-
-## RBAC Feature (Phase 0.5 complete — YYYY-MM-DD)
+## RBAC Feature (Phase 0.5 complete) — System Mode UI
 
 ### New WPF Views
 - Views/Settings/SettingsView.xaml — Settings tab in MainWindow
@@ -271,36 +273,7 @@ Append a new section to docs/architecture/CURRENT_STATE.md:
 - useSignalR.ts now subscribes to SystemModeChanged events
 - MainWindow.xaml has new Settings tab
 
-Output: only the diff to append. Do not regenerate the whole file.
-Append a new section to docs/architecture/CURRENT_STATE.md:
-
-## RBAC Feature (Phase 1a complete — 2026-06-11)
-
-### New REST Endpoints (TestController.Api)
-- GET /api/auth/me — returns current user + capabilities
-- POST /api/auth/login — username + password → session token
-- POST /api/auth/guest — anonymous short-lived session
-- POST /api/auth/logout — revokes server session
-- POST /api/auth/change-password — current + new password
-
-### New Static Catalog
-- TestController.Api/PermissionCatalog.cs — role → permissions[] mapping
-  used by /api/auth/me to populate the capabilities list
-
-### New WPF
-- Views/LoginPage.xaml + LoginViewModel
-- Views/ChangePasswordPage.xaml + ChangePasswordViewModel
-- Services/AuthClient.cs — HTTP client, in-memory token only
-- App.xaml.cs routing: Default → MainWindow; Secured → LoginPage first
-
-### New Web
-- src/stores/authStore.ts — Zustand, token in sessionStorage
-- src/views/LoginView.tsx — login form + Continue as Guest
-- src/views/ChangePasswordView.tsx — first-login forced change
-- src/App.tsx route guard: Default → AppShell, Secured+unauth → LoginView,
-Append a new section to docs/architecture/CURRENT_STATE.md:
-
-## RBAC Feature (Phase 1a complete — YYYY-MM-DD)
+## RBAC Feature (Phase 1a complete) — Auth & Login
 
 ### New REST Endpoints (TestController.Api)
 - GET /api/auth/me — returns current user + capabilities
@@ -326,8 +299,6 @@ Append a new section to docs/architecture/CURRENT_STATE.md:
 - src/App.tsx route guard: Default → AppShell, Secured+unauth → LoginView,
   mustChangePassword → ChangePasswordView
 - UserIdentityBadge now reads from useAuthStore in Secured mode
-
-Output only the diff to append.
 
 ## RBAC Feature (Phase 3 complete — 2026-06-12): Pipeline Lock Coordination
 
@@ -595,3 +566,37 @@ RBAC gating added to the **existing** report engine. No new report functionality
 | `TestController.WebClient/src/components/results/BuildDetail.tsx` | Email button gated by useCan('Report_Generate') |
 | `TestController.WebClient/src/hooks/useResults.ts` | sendReport → apiFetch for 403 handling |
 | `TestController.WebApi.Tests/Rbac/ReportAuthzTests.cs` | New — 9 tests |
+
+---
+
+## Observability & Operations (current)
+
+| Surface | Endpoint / Mechanism | Notes |
+|---------|----------------------|-------|
+| Liveness | `GET /healthz/live` | Always-200 process liveness |
+| Readiness | `GET /healthz/ready` | `AgentConnectivityHealthCheck` + `CertificateExpiryHealthCheck` |
+| Metrics | `GET /metrics` | OpenTelemetry → Prometheus exporter; custom `AppMetrics` |
+| API spec | `GET /openapi/v1.json` | `AddOpenApi()` document transformer (title/version/description) |
+| API reference UI | `GET /scalar` | `MapScalarApiReference()` (BluePlanet theme, Bearer scheme) |
+| Onboarding | `docs/ONBOARDING.md` | Zero-to-first-call guide (endpoints, auth, 401/403/409) |
+| Logging | `IAppLogger` (not Serilog) | Category-based; ring buffer + rolling files + optional Seq sink + `SecurityRedactor` |
+| Rate limiting | `telemetry` / `mutation` policies | `AddRateLimiter()` |
+
+## Deployment Topology (current)
+
+- `Deployment:Topology` config (`Auto` | `CoLocated` | `Standalone`) bound via `DeploymentOptions`, validated at startup by `ConfigValidator.ValidateDeploymentTopology()` (CoLocated requires `ControllerProxyUrl`; Standalone forbids it).
+- Canonical 5-agent roster: `JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST` (gRPC :5200, fallback :5201–5203).
+- Deploy/rollback automation: `deploy/Invoke-Deploy.ps1` (pre-deploy check → timestamped backup → deploy → smoke test → auto-rollback on failure; explicit `-Rollback`) and `.github/workflows/deploy.yml` (`workflow_dispatch`, self-hosted Windows deploy runner). See `docs/RUNBOOK.md` → "Deploy & Rollback".
+
+## Enhancements & Changelog (production-readiness)
+
+| Phase | What landed |
+|-------|-------------|
+| **P0** | Config hygiene; canonical 5-agent roster; `[pscredential]` in setup scripts. |
+| **P2** | Health checks (`/healthz/*`), OpenTelemetry/Prometheus (`/metrics`), structured `IAppLogger`. |
+| **P3** | Explicit `Deployment:Topology` + `ConfigValidator`; Vite dev proxy `VITE_DEV_PROXY_TARGET`. |
+| **P4-1** | `System_ChangeMode`; mode-gated permission checks (fail-open in Default mode). |
+| **P5-3** | `deploy/Invoke-Deploy.ps1` + `.github/workflows/deploy.yml` (deploy/rollback). |
+| **P5-4** | Scalar API reference UI (`/scalar`) + `docs/ONBOARDING.md`. |
+
+**Known gap (P5-1):** no run queue — `ExecutionController` dispatches fire-and-forget (`Task.Run`) and returns **409 Conflict** when target agents are busy; there is no server-side queue/backpressure.

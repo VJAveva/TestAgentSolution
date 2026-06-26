@@ -132,10 +132,12 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
 
         try
         {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.TestConnectionTimeoutSeconds));
             var client = _clientManager.GetClient(entry.Address);
-            var snapshot = await client.GetAgentSnapshotAsync(new Empty(), cancellationToken: ct);
-            _registry.UpdateStatus(agentName, $"Online � {snapshot.State}");
-            StatusChanged?.Invoke(agentName, $"Online � {snapshot.State}");
+            var snapshot = await client.GetAgentSnapshotAsync(new Empty(), cancellationToken: cts.Token);
+            _registry.UpdateStatus(agentName, $"Online \u2014 {snapshot.State}");
+            StatusChanged?.Invoke(agentName, $"Online \u2014 {snapshot.State}");
             return (snapshot, null);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
@@ -190,8 +192,10 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
         // gRPC GetState
         try
         {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeouts.DiagnosticsGrpcTimeoutSeconds));
             var client = _clientManager.GetClient(entry.Address);
-            var state = await client.GetStateAsync(new Empty(), cancellationToken: ct);
+            var state = await client.GetStateAsync(new Empty(), cancellationToken: cts.Token);
             steps.Add(new("gRPC GetState", true, $"Agent state: {state.State}"));
         }
         catch (Exception ex)

@@ -30,7 +30,7 @@ param(
     [int]    $HeartbeatSeconds  = 15,
     [switch] $InstallAsService,
     [string] $ServiceUser       = "LocalSystem",            # or "DOMAIN\user"
-    [string] $ServicePassword   = "",
+    [pscredential] $ServiceCredential,                      # required for a non-LocalSystem account; prompts if omitted
     [switch] $SkipFirewall,
     [switch] $SkipDotNetCheck,
     [switch] $VerifyEndpoint,
@@ -260,17 +260,27 @@ if (-not $InstallAsService) {
             StartupType = 'Automatic'
         }
         if ($ServiceUser -ne 'LocalSystem') {
-            if (-not $ServicePassword) { Write-Err "ServicePassword is required when ServiceUser is not LocalSystem."; exit 1 }
-            $cred = New-Object System.Management.Automation.PSCredential(
-                        $ServiceUser, (ConvertTo-SecureString $ServicePassword -AsPlainText -Force))
+            # Never accept a plaintext password. Use a SecureString-backed PSCredential,
+            # prompting interactively if one was not supplied on the command line.
+            $cred = $ServiceCredential
+            if (-not $cred) {
+                $cred = Get-Credential -UserName $ServiceUser -Message "Credentials for the '$ServiceName' service account ($ServiceUser)"
+            }
+            if (-not $cred) { Write-Err "A credential is required when ServiceUser is not LocalSystem."; exit 1 }
             New-Service @common -Credential $cred | Out-Null
         } else {
             New-Service @common | Out-Null
         }
         # Delayed auto-start (network is ready) + auto-restart on failure.
         sc.exe config  $ServiceName start= delayed-auto | Out-Null
-        sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/none/0 | Out-Null
-        Write-Ok "Installed service '$ServiceName' (delayed auto-start, auto-restart on failure)"
+        # Escalating restart delays (5s, 10s, 30s); reset the failure counter
+        # after 60s of healthy running.
+        sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+        # CRITICAL: treat NON-ZERO exit codes as failures so the watchdog's
+        # Environment.Exit(3) triggers an SCM restart. Without this flag, a clean
+        # exit(3) is treated as a normal stop and the agent is NOT restarted.
+        sc.exe failureflag $ServiceName 1 | Out-Null
+        Write-Ok "Installed service '$ServiceName' (delayed auto-start; restart 5s/10s/30s; non-zero exit = failure)"
         Write-Cyan "Start it with:  Start-Service $ServiceName"
     }
 }

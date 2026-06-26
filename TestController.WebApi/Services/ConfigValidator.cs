@@ -100,6 +100,9 @@ public sealed class ConfigValidator
         // Security configuration validation
         ValidateSecurityConfig(errors, warnings);
 
+        // Deployment topology validation (co-located vs standalone)
+        ValidateDeploymentTopology(errors, warnings);
+
         // Log results
         foreach (var w in warnings)
             _logger.LogWarning("[ConfigValidator] {Warning}", w);
@@ -108,6 +111,58 @@ public sealed class ConfigValidator
             _logger.LogError("[ConfigValidator] {Error}", e);
 
         return new ConfigValidationResult(errors, warnings);
+    }
+
+    /// <summary>
+    /// Validates the declared deployment topology against the presence of a
+    /// co-located controller URL, and logs the effective mode loudly so the
+    /// running topology is never a surprise. A declared topology that
+    /// contradicts <c>ControllerProxyUrl</c> is a critical misconfiguration.
+    /// </summary>
+    private void ValidateDeploymentTopology(List<string> errors, List<string> warnings)
+    {
+        var options = new DeploymentOptions
+        {
+            ControllerProxyUrl = _config["ControllerProxyUrl"],
+        };
+        var declaredRaw = _config[$"{DeploymentOptions.SectionName}:Topology"];
+        if (!string.IsNullOrWhiteSpace(declaredRaw)
+            && Enum.TryParse<DeploymentTopology>(declaredRaw, ignoreCase: true, out var declared))
+        {
+            options.Topology = declared;
+        }
+
+        var hasProxy = !string.IsNullOrWhiteSpace(options.ControllerProxyUrl);
+
+        // Contradictions between the explicit declaration and the proxy URL are
+        // critical: they mean the operator believes one topology while the wiring
+        // implies another.
+        if (options.Topology == DeploymentTopology.CoLocated && !hasProxy)
+        {
+            errors.Add(
+                "Deployment:Topology is 'CoLocated' but 'ControllerProxyUrl' is not set. " +
+                "Co-located mode requires the WPF Controller URL.");
+        }
+        else if (options.Topology == DeploymentTopology.Standalone && hasProxy)
+        {
+            errors.Add(
+                "Deployment:Topology is 'Standalone' but 'ControllerProxyUrl' is set " +
+                $"('{options.ControllerProxyUrl}'). Standalone mode runs with no WPF Controller; " +
+                "remove ControllerProxyUrl or change the topology to CoLocated.");
+        }
+
+        var effective = options.ResolveEffective();
+        if (options.Topology == DeploymentTopology.Auto)
+        {
+            warnings.Add(
+                $"Deployment:Topology not set explicitly; inferred '{effective}' from " +
+                $"ControllerProxyUrl ({(hasProxy ? "present" : "absent")}). " +
+                "Set Deployment:Topology to make this an explicit choice.");
+        }
+
+        _logger.LogInformation(
+            "[ConfigValidator] Deployment topology: {Effective} (declared: {Declared}, ControllerProxyUrl: {Proxy})",
+            effective, options.Topology, hasProxy ? options.ControllerProxyUrl : "(none)");
     }
 
     private void ValidateSecurityConfig(List<string> errors, List<string> warnings)

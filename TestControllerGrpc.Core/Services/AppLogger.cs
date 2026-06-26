@@ -37,6 +37,13 @@ public sealed class AppLogger : IAppLogger, IDisposable
     private static long _globalSequence;
 
     /// <summary>
+    /// Optional external sinks (e.g. a central Seq/ELK sink) that receive every
+    /// emitted entry in addition to the local file + ring-buffer sinks. Empty by
+    /// default so local-only logging behaviour is unchanged.
+    /// </summary>
+    private readonly ILogSink[] _externalSinks;
+
+    /// <summary>
     /// Default shared log directory. All hosts (WPF, WebApi, Agent) should
     /// point here so logs are co-located for debugging.
     /// Override via appsettings "Logging:LogDirectory".
@@ -48,12 +55,14 @@ public sealed class AppLogger : IAppLogger, IDisposable
 
     public event Action<AppLogEntry>? EntryAdded;
 
-    public AppLogger(string appName, string logDirectory, int maxBuffer = 5000, long maxFileSizeBytes = 50 * 1024 * 1024)
+    public AppLogger(string appName, string logDirectory, int maxBuffer = 5000, long maxFileSizeBytes = 50 * 1024 * 1024,
+        IEnumerable<ILogSink>? sinks = null)
     {
         _appName = appName;
         _logDirectory = logDirectory;
         _maxBuffer = maxBuffer;
         _maxFileSizeBytes = maxFileSizeBytes;
+        _externalSinks = sinks?.Where(s => s is not null).ToArray() ?? Array.Empty<ILogSink>();
         Directory.CreateDirectory(logDirectory);
     }
 
@@ -119,7 +128,18 @@ public sealed class AppLogger : IAppLogger, IDisposable
         }
 
         WriteToFile(entry);
+        ForwardToSinks(entry);
         EntryAdded?.Invoke(entry);
+    }
+
+    private void ForwardToSinks(AppLogEntry entry)
+    {
+        if (_externalSinks.Length == 0) return;
+        foreach (var sink in _externalSinks)
+        {
+            try { sink.Emit(entry); }
+            catch { /* a sink failure must never break logging */ }
+        }
     }
 
     public void Info(string category, string message) =>
@@ -298,6 +318,12 @@ public sealed class AppLogger : IAppLogger, IDisposable
             _sharedWriter = null;
             _errorsWriter = null;
             _jsonWriter = null;
+        }
+
+        foreach (var sink in _externalSinks)
+        {
+            try { sink.Dispose(); }
+            catch { /* best-effort */ }
         }
     }
 }

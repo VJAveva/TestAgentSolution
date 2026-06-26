@@ -1,6 +1,6 @@
-# TestAgentSolution — Architecture & System Design
+# TestAgentSolution ï¿½ Architecture & System Design
 
-> **Generated:** 2025 · **Target:** .NET 10 · **Branch:** `upgrade-to-NET10`
+> **Generated:** 2025 ï¿½ **Target:** .NET 10 ï¿½ **Branch:** `upgrade-to-NET10`
 
 ---
 
@@ -21,6 +21,9 @@
 13. [Key Design Decisions](#13-key-design-decisions)
 14. [Test Architecture](#14-test-architecture)
 15. [File & Folder Index](#15-file--folder-index)
+16. [Security & RBAC](#16-security--rbac)
+17. [Observability & Operations](#17-observability--operations)
+18. [Enhancements & Changelog](#18-enhancements--changelog)
 
 ---
 
@@ -94,7 +97,7 @@ TestAgentSolution is a **distributed test execution orchestration platform** con
 
 The system supports **two mutually exclusive hosting modes** that share 100% of the API surface through `TestController.Api`:
 
-### Mode A — WPF Desktop Controller (TestControllerGrpc)
+### Mode A ï¿½ WPF Desktop Controller (TestControllerGrpc)
 
 ```
 ??????????????????????????????????????????????????
@@ -111,13 +114,13 @@ The system supports **two mutually exclusive hosting modes** that share 100% of 
 ?                ? Shared Singletons              ?
 ?  ??????????????????????????????????????        ?
 ?  ? DI Container (Microsoft.Hosting)   ?        ?
-?  ? • ExecutionSessionManager          ?        ?
-?  ? • AgentLockManager (persisted)     ?        ?
-?  ? • ActionPipelineExecutor           ?        ?
-?  ? • AgentGrpcDispatcher              ?        ?
-?  ? • VocabularyMonitor                ?        ?
-?  ? • EventAggregator                  ?        ?
-?  ? • AppLogger                        ?        ?
+?  ? ï¿½ ExecutionSessionManager          ?        ?
+?  ? ï¿½ AgentLockManager (persisted)     ?        ?
+?  ? ï¿½ ActionPipelineExecutor           ?        ?
+?  ? ï¿½ AgentGrpcDispatcher              ?        ?
+?  ? ï¿½ VocabularyMonitor                ?        ?
+?  ? ï¿½ EventAggregator                  ?        ?
+?  ? ï¿½ AppLogger                        ?        ?
 ?  ??????????????????????????????????????        ?
 ?                                                 ?
 ?  ???????????????????????????????????????       ?
@@ -133,7 +136,7 @@ The system supports **two mutually exclusive hosting modes** that share 100% of 
 - **Trigger parity**: Browser and WPF trigger the same `IActionPipelineExecutor`
 - **Primary use**: Desktop operator on the controller machine
 
-### Mode B — Standalone WebApi (TestController.WebApi)
+### Mode B ï¿½ Standalone WebApi (TestController.WebApi)
 
 ```
 ??????????????????????????????????????????????????
@@ -148,23 +151,23 @@ The system supports **two mutually exclusive hosting modes** that share 100% of 
 ?                                                 ?
 ?  ????????????????????????????????????????????  ?
 ?  ? Standalone Service Adapters              ?  ?
-?  ? • StandalonePipelineExecutor             ?  ?
+?  ? ï¿½ StandalonePipelineExecutor             ?  ?
 ?  ?   (implements IActionPipelineExecutor)    ?  ?
-?  ? • StandaloneAgentDispatcher              ?  ?
+?  ? ï¿½ StandaloneAgentDispatcher              ?  ?
 ?  ?   (implements IAgentGrpcDispatcher)       ?  ?
-?  ? • StandaloneVocabularyMonitor            ?  ?
+?  ? ï¿½ StandaloneVocabularyMonitor            ?  ?
 ?  ?   (wraps WatchListFileService)           ?  ?
-?  ? • AgentGrpcClientManager                 ?  ?
-?  ? • AgentRegistry (config-driven)          ?  ?
-?  ? • WatchListFileService                   ?  ?
+?  ? ï¿½ AgentGrpcClientManager                 ?  ?
+?  ? ï¿½ AgentRegistry (config-driven)          ?  ?
+?  ? ï¿½ WatchListFileService                   ?  ?
 ?  ????????????????????????????????????????????  ?
 ?                                                 ?
 ?  ????????????????????????????????????????????  ?
 ?  ? Standalone-Only Minimal API Endpoints    ?  ?
-?  ? • /api/watchlist  (file I/O, XML import) ?  ?
-?  ? • /api/agents     (gRPC queries)         ?  ?
-?  ? • /api/execution  (trigger-all, retry)   ?  ?
-?  ? • /api/results    (TRX export, reports)  ?  ?
+?  ? ï¿½ /api/watchlist  (file I/O, XML import) ?  ?
+?  ? ï¿½ /api/agents     (gRPC queries)         ?  ?
+?  ? ï¿½ /api/execution  (trigger-all, retry)   ?  ?
+?  ? ï¿½ /api/results    (TRX export, reports)  ?  ?
 ?  ????????????????????????????????????????????  ?
 ??????????????????????????????????????????????????
 ```
@@ -213,7 +216,7 @@ TestController.WebClient         ? React SPA (npm, not .csproj reference)
 
 ## 4. Project Inventory
 
-### TestControllerGrpc.Core — Shared Domain Layer
+### TestControllerGrpc.Core ï¿½ Shared Domain Layer
 
 Zero-dependency library containing the canonical domain model, service interfaces, and infrastructure:
 
@@ -241,7 +244,7 @@ Zero-dependency library containing the canonical domain model, service interface
 | **Infra** | `AppLogger.cs` | File + in-memory ring-buffer logger |
 | **Proto** | `test_agent.proto` | gRPC contract (2 services, 30+ message types) |
 
-### TestController.Api — Shared API Layer
+### TestController.Api ï¿½ Shared API Layer
 
 ASP.NET controllers and SignalR hub used identically by both hosts:
 
@@ -252,14 +255,14 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | `AgentsController.cs` | `GET /api/agents`, agent status |
 | `HealthController.cs` | `GET /api/health`, `GET /api/health/diagnostics` (includes agentLocks section), `GET /api/health/logs`, `GET /api/health/log-files` |
 | `ResultsController.cs` | `GET /api/results/builds`, `GET /api/results/builds/{id}`, trend data |
-| `ControllerHub.cs` | SignalR hub at `/hubs/controller` — `JoinSession`, `LeaveSession`, `JoinAsUser`, `JoinGlobal` |
+| `ControllerHub.cs` | SignalR hub at `/hubs/controller` ï¿½ `JoinSession`, `LeaveSession`, `JoinAsUser`, `JoinGlobal` |
 | `SignalRNotifier.cs` | Bridges `IEventAggregator` + C# events ? SignalR broadcasts (12 event types including `AgentLocksChanged`) |
-| `LockRecoveryService.cs` | `BackgroundService` — startup lock validation against agents + periodic orphan detection |
-| `ControllerApiExtensions.cs` | `AddControllerApi()` / `UseControllerApi()` — DI registration and pipeline |
+| `LockRecoveryService.cs` | `BackgroundService` ï¿½ startup lock validation against agents + periodic orphan detection |
+| `ControllerApiExtensions.cs` | `AddControllerApi()` / `UseControllerApi()` ï¿½ DI registration and pipeline |
 | `RequestLoggingMiddleware.cs` | Correlation ID injection and request/response logging |
 | `WatchListHelpers.cs` | Shared parameter file resolution |
 
-### TestControllerGrpc — WPF Desktop Controller
+### TestControllerGrpc ï¿½ WPF Desktop Controller
 
 | Category | Key Files | Purpose |
 |----------|-----------|---------|
@@ -278,7 +281,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | **ViewModel** | `AgentLockDisplayItem.cs` | Lock display model for WPF admin panel |
 | **Models** | `PipelineSession.cs` | WPF-specific session tracking with CTS and progress |
 
-### TestController.WebApi — Standalone Controller
+### TestController.WebApi ï¿½ Standalone Controller
 
 | Category | Key Files | Purpose |
 |----------|-----------|---------|
@@ -295,7 +298,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | **Endpoints** | `ExecutionEndpoints.cs` | Standalone-only: trigger-all, trigger-event, retry |
 | **Endpoints** | `ResultsEndpoints.cs` | Standalone-only: TRX export, email reports |
 
-### TestAgentGrpc — Remote Agent
+### TestAgentGrpc ï¿½ Remote Agent
 
 | File | Purpose |
 |------|---------|
@@ -315,7 +318,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | `UI/ExecutionMonitorForm.cs` | Real-time execution output form |
 | `UI/ConnectionDetailForm.cs` | Connection diagnostics form |
 
-### TestAgentDisplay — Agent Monitor Dashboard
+### TestAgentDisplay ï¿½ Agent Monitor Dashboard
 
 | File | Purpose |
 |------|---------|
@@ -410,8 +413,8 @@ ExecutionSession fields:
 ```
 
 **Proto file:** `test_agent.proto` (shared across all projects)
-- `TestControllerService` — hosted by Controller (4 RPCs: Register, UnRegister, UpdateClientState, Heartbeat, PushExecutionEvents)
-- `TestAgentService` — hosted by each Agent (10 RPCs: GetState, RunCommand, RunCommandStreamed, GetAgentSnapshot, GetExecutionHistory, GetAuditLog, GetConnectionHealth, GetLastExitCode, GetLastError, TerminateExecution, SubscribeAgentEvents)
+- `TestControllerService` ï¿½ hosted by Controller (4 RPCs: Register, UnRegister, UpdateClientState, Heartbeat, PushExecutionEvents)
+- `TestAgentService` ï¿½ hosted by each Agent (10 RPCs: GetState, RunCommand, RunCommandStreamed, GetAgentSnapshot, GetExecutionHistory, GetAuditLog, GetConnectionHealth, GetLastExitCode, GetLastError, TerminateExecution, SubscribeAgentEvents)
 
 ### REST API (Browser ? Controller)
 
@@ -443,7 +446,7 @@ Single hub: `/hubs/controller`
 | `AgentRegistered` | `IEventAggregator<AgentRegisteredEvent>` | agentName, address |
 | `AgentUnregistered` | `IEventAggregator<AgentUnregisteredEvent>` | agentName |
 | `AgentLocksChanged` | `IEventAggregator<AgentLocksChangedEvent>` | locks[], reason |
-| `WatchListReloaded` | `IVocabularyMonitor.ConfigReloaded` | _(empty — client refetches)_ |
+| `WatchListReloaded` | `IVocabularyMonitor.ConfigReloaded` | _(empty ï¿½ client refetches)_ |
 | `ExecutionCancelled` | `ExecutionController` direct | sessionId |
 
 Client groups: `global` (auto-joined on connect), `session:{id}`, `user:{userId}`
@@ -569,21 +572,21 @@ ExecuteEventTrackedAsync:
 Layer 1: Source Events
   ???????????????????????     ????????????????????????
   ? C# events:          ?     ? IEventAggregator:     ?
-  ? • Executor.LogEntry ?     ? • AgentRegistered     ?
-  ? • Executor.NodeProg.?     ? • AgentUnregistered   ?
-  ? • Dispatcher.Output ?     ? • AgentHeartbeat      ?
-  ? • Dispatcher.Status ?     ? • ExecutionStarted    ?
-  ? • VocabMon.Reloaded ?     ? • ExecutionCompleted  ?
-  ???????????????????????     ? • AgentLocksChanged   ?
+  ? ï¿½ Executor.LogEntry ?     ? ï¿½ AgentRegistered     ?
+  ? ï¿½ Executor.NodeProg.?     ? ï¿½ AgentUnregistered   ?
+  ? ï¿½ Dispatcher.Output ?     ? ï¿½ AgentHeartbeat      ?
+  ? ï¿½ Dispatcher.Status ?     ? ï¿½ ExecutionStarted    ?
+  ? ï¿½ VocabMon.Reloaded ?     ? ï¿½ ExecutionCompleted  ?
+  ???????????????????????     ? ï¿½ AgentLocksChanged   ?
             ?                  ?????????????????????????
             ?                              ?
 Layer 2: SignalRNotifier (Bridge)          ?
   ??????????????????????????????????????????????????????
   ? SignalRNotifier                                      ?
-  ? • Subscribes to all C# events + IEventAggregator    ?
-  ? • Formats payloads for JSON serialization            ?
-  ? • Heartbeat throttling: batch flush per second       ?
-  ? • SendSafe: swallows errors (never crash publisher)  ?
+  ? ï¿½ Subscribes to all C# events + IEventAggregator    ?
+  ? ï¿½ Formats payloads for JSON serialization            ?
+  ? ï¿½ Heartbeat throttling: batch flush per second       ?
+  ? ï¿½ SendSafe: swallows errors (never crash publisher)  ?
   ??????????????????????????????????????????????????????
                             ?
 Layer 3: SignalR Hub        ?
@@ -595,8 +598,8 @@ Layer 3: SignalR Hub        ?
 Layer 4: React Client       ?
   ??????????????????????????????????????????????????????
   ? useSignalR hook:                                    ?
-  ? • conn.on("LogEntry", ...) ? executionStore.addLog  ?
-  ? • conn.on("AgentLocksChanged", ...)                 ?
+  ? ï¿½ conn.on("LogEntry", ...) ? executionStore.addLog  ?
+  ? ï¿½ conn.on("AgentLocksChanged", ...)                 ?
   ?   ? window.dispatchEvent("agent-locks-changed")     ?
   ?   ? AgentLockPanel / TriggerDialog auto-update      ?
   ??????????????????????????????????????????????????????
@@ -647,12 +650,12 @@ WPF: BuildResultsViewModel + ResultsDashboardWindow
 
 | Layer | Technology |
 |-------|-----------|
-| Build | Vite 5.x |
+| Build | Vite 6.x |
 | Language | TypeScript (strict) |
 | Framework | React 18 (`react-jsx` transform) |
 | Styling | Tailwind CSS (dark theme) |
-| State | Zustand stores (5 stores) |
-| HTTP | Axios |
+| State | Zustand stores (7 stores) |
+| HTTP | Custom `apiFetch` wrapper (`src/lib/api.ts`) â€” no Axios |
 | Real-time | `@microsoft/signalr` |
 | Icons | `lucide-react` |
 
@@ -681,6 +684,9 @@ src/
 ?   ??? agentStore.ts                # Agent status map
 ?   ??? connectionStore.ts           # SignalR connection state
 ?   ??? resultsStore.ts              # Build results cache
+?   ??? lockStore.ts                 # Pipeline lock state (owner per pipeline)
+?   ??? authStore.ts                 # User identity + token (Secured mode)
+?   ??? systemModeStore.ts           # Default vs Secured mode (broadcast-driven)
 ?
 ??? components/
 ?   ??? layout/
@@ -752,6 +758,13 @@ useSignalR (singleton)
 | Results cache | In-memory | `CachedBuildResultsProvider` | Invalidated on `ExecutionCompleted` |
 | Agent audit logs | JSON files | Per-agent `C:\TestAgentService\Audit\` | Permanent with rotation |
 | User identity | `localStorage` | Browser | Permanent per browser |
+| **RBAC store** (users, sessions, pipeline assignments, audit, notification mutes) | **SQLite (EF Core)** via `TestController.Persistence` | `orchestrator.db` (path = `RBAC:DatabasePath`) | Permanent (WAL) |
+| Auth session token (Secured mode) | `sessionStorage` | Browser | Per-tab |
+
+> The RBAC database is owned by the **primary host only** (WPF Controller, or the
+> WebApi in Standalone topology). `OrchestratorDbContext` is the single **Scoped**
+> service; Singletons access it via `IDbContextFactory<OrchestratorDbContext>`.
+> See [Â§16 Security & RBAC](#16-security--rbac).
 
 ---
 
@@ -775,11 +788,11 @@ All `IEventAggregator.Publish` calls dispatch handlers via `ThreadPool.QueueUser
 
 ### 5. Optimistic Concurrency via Lock Version
 
-Every lock mutation increments a monotonic `Version` counter. The `can-trigger` API returns the current `lockVersion`, the `TriggerDialog` tracks it, and the `trigger` POST sends it back. If the version changed between check and trigger, the server rejects with 409 — no stale-state triggers possible.
+Every lock mutation increments a monotonic `Version` counter. The `can-trigger` API returns the current `lockVersion`, the `TriggerDialog` tracks it, and the `trigger` POST sends it back. If the version changed between check and trigger, the server rejects with 409 ï¿½ no stale-state triggers possible.
 
 ### 6. Fire-and-Forget Persistence
 
-Lock file writes are `ThreadPool.QueueUserWorkItem` with `lock (_persistLock)` and error swallowing. Persistence is best-effort — a crash mid-persist just means the lock file is one mutation behind, and `LockRecoveryService` reconciles on next startup.
+Lock file writes are `ThreadPool.QueueUserWorkItem` with `lock (_persistLock)` and error swallowing. Persistence is best-effort ï¿½ a crash mid-persist just means the lock file is one mutation behind, and `LockRecoveryService` reconciles on next startup.
 
 ### 7. DOM Custom Events for Cross-Component Lock Updates
 
@@ -822,7 +835,7 @@ When an agent accumulates `AutoResetFailureThreshold` (default: 10) consecutive 
 | `VocabularyMonitorTests.cs` | File change detection | varies |
 | `ConsecutiveFailureDetectorTests.cs` | Streak detection | varies |
 | `BuildResultsAggregatorTests.cs` | TRX aggregation | varies |
-| + 7 more test files | Various services and models | — |
+| + 7 more test files | Various services and models | ï¿½ |
 
 ### TestController.WebApi.Tests (92 tests, xUnit + WebApplicationFactory)
 
@@ -835,7 +848,7 @@ When an agent accumulates `AutoResetFailureThreshold` (default: 10) consecutive 
 | `WatchListEndpointsTests.cs` | XML CRUD | varies |
 | `WatchListJsonContractTests.cs` | JSON serialization contracts | varies |
 | `ResultsEndpointsTests.cs` | TRX results API | varies |
-| `TestWebAppFactory.cs` | Shared test fixture with in-memory services | — |
+| `TestWebAppFactory.cs` | Shared test fixture with in-memory services | ï¿½ |
 
 ---
 
@@ -986,4 +999,89 @@ TestAgentSolution/
 
 ---
 
-_Total: **8 projects** + 1 React SPA + 2 test projects · **371 tests** · .NET 10 + TypeScript + gRPC + SignalR_
+## 16. Security & RBAC
+
+Two authentication layers coexist on different request paths:
+
+1. **Multi-Identity Security** â€” `AddMultiIdentitySecurity()` in `TestController.Api`. HTTP auth for REST routes (NTLM/Negotiate + bearer + API key), surfaced as `SecurityPolicies.Admin` / `.User` / `.Anonymous`. Pre-existing; unchanged by RBAC.
+2. **RBAC session auth** â€” `AddRbacFeature()`. Runs on the gRPC path via `SessionAuthInterceptor.ResolveUserAsync(authHeader, clientKind, ct)`.
+
+### Default vs Secured mode
+
+`RbacOptions.Enabled` (from `RBAC:Enabled`) selects the mode at runtime:
+
+| Mode | Token required | WPF clients | Web clients |
+|------|----------------|-------------|-------------|
+| **Default** (`Enabled=false`) | No | Full access | Read-only |
+| **Secured** (`Enabled=true`) | Yes (Bearer) | Per-role/assignment | Per-role/assignment |
+
+In Default mode, `SessionAuthInterceptor` injects `DefaultUser.ForClient(clientKind)` (stable UUID `00000000-0000-0000-0000-000000000001` for audit correlation) and `AuthorizationService.CanAsync` short-circuits to Allow. In Secured mode, login issues a token stored in `ISessionStore` (SQLite); 60-minute inactivity + guest TTL apply.
+
+Mode is toggled by `SystemModeController` (gated by `System_ChangeMode` once an admin exists) and broadcast over SignalR (`SystemModeChanged`) so every client updates live.
+
+### Permission model
+
+`Permission` enum (`TestControllerGrpc.Core/Authorization/Permission.cs`), `Resource_Action` naming:
+`Pipeline_View/Trigger/Cancel/Retry/TriggerAll/CancelAll/Enable/Disable/ForceRelease`,
+`User_Create/Update/Delete/Assign/Revoke`, `Report_View/Generate`, `Audit_View/Export`,
+`Notification_Mute`, `System_ChangeMode`.
+
+Enforcement is **mode-gated / fail-open in Default mode**: controllers call a helper
+(`ExecutionController.IsRbacAuthorizedAsync`, `UserController.AuthorizeAsync`,
+`SystemModeController.AuthorizeModeChangeAsync`) that returns Allow when RBAC is off and only
+invokes `CanAsync` in Secured mode â€” so Default-mode behavior is byte-for-byte unchanged.
+
+### Persistence (TestController.Persistence)
+
+`OrchestratorDbContext` (EF Core + SQLite, WAL, app-generated lowercase GUID TEXT keys).
+Entities: `User`, `Session`, `PipelineAssignment`, `AuditEntry`, `NotificationMute`,
+`NotificationCooldown`. Migrations: `Initial`, `AddNotificationTables`. `DatabaseInitializerService`
+applies migrations on startup; passwords hashed via `PasswordHasher` (BCrypt).
+
+**Audit is fire-and-forget**: request paths enqueue to `QueuedAuditWriter` (bounded channel,
+never awaited); `AuditDrainWorker` batches to SQLite; a retention worker purges old entries.
+
+---
+
+## 17. Observability & Operations
+
+| Concern | Endpoint / mechanism |
+|---------|----------------------|
+| Liveness | `GET /healthz/live` (always OK) |
+| Readiness | `GET /healthz/ready` (`AgentConnectivityHealthCheck` + `CertificateExpiryHealthCheck`) |
+| Metrics | `GET /metrics` (OpenTelemetry â†’ Prometheus; custom `AppMetrics` meters) |
+| API spec | `GET /openapi/v1.json` (Microsoft.AspNetCore.OpenApi) |
+| API reference UI | `GET /scalar` (Scalar.AspNetCore; Bearer preselected) |
+| Logging | `IAppLogger` â€” category-based `Info`/`Warn`/`Error` (**not** Serilog); ring buffer + rolling files + optional Seq sink; `SecurityRedactor` strips secrets |
+| Rate limiting | `telemetry` (reads) + `mutation` (writes) fixed-window policies; 429 + RFC 7807 |
+| Onboarding | `docs/ONBOARDING.md` (first-run via `/scalar`) |
+
+### Deploy & rollback
+
+Per-component deploy scripts in `deploy/` are wrapped by `deploy/Invoke-Deploy.ps1`
+(pre-deploy check â†’ timestamped backup â†’ deploy â†’ smoke test â†’ **auto-rollback** on failure)
+and surfaced via the `workflow_dispatch` workflow `.github/workflows/deploy.yml`. See
+`docs/RUNBOOK.md` â†’ "Deploy & Rollback".
+
+---
+
+## 18. Enhancements & Changelog
+
+Production-readiness work delivered in phases (P0â€“P5); see
+`docs/Requirements/TestAgentSolution-Implementation-Plan.md`.
+
+| Phase | Area | What landed |
+|-------|------|-------------|
+| **P0** | Config hygiene | Canonical 5-agent roster (`JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST`) identical across hosts; fixed `JVKBAK` typo; `Setup-AgentNode.ps1` now takes a `[pscredential]` instead of a plaintext password. |
+| **P2** | Observability | Health checks, OpenTelemetry/Prometheus `/metrics`, structured `IAppLogger` with correlation IDs + Seq sink. |
+| **P3** | Decoupling | `Deployment:Topology` (`Auto`/`CoLocated`/`Standalone`) + `ConfigValidator.ValidateDeploymentTopology()`; Vite dev proxy via `VITE_DEV_PROXY_TARGET`. |
+| **P4** | RBAC enforcement | Added `System_ChangeMode`; mode-gated permission checks in `ExecutionController`, `UserController`, `SystemModeController` (fail-open in Default mode). |
+| **P5-3** | Deploy/rollback | `deploy/Invoke-Deploy.ps1` + `.github/workflows/deploy.yml`. |
+| **P5-4** | API discovery + onboarding | Scalar UI at `/scalar`; `docs/ONBOARDING.md`. |
+
+**Known gap (P5-1):** no run queue. `ExecutionController` dispatches fire-and-forget and
+returns **409 Conflict** when agents are busy â€” multi-team use is "collide and 409", not queued.
+
+---
+
+_Total: **13 projects** (incl. `TestController.Persistence`, `TestController.Dashboard`, `TestAgent.Diagnostics`, `TestController.ApiTests`, `TestController.LoadTests`) + 1 React SPA Â· .NET 10 + TypeScript + gRPC + SignalR + EF Core/SQLite_

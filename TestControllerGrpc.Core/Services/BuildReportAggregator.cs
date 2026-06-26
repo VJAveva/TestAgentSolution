@@ -215,12 +215,32 @@ public sealed class BuildReportAggregator
         var grade = _grader.Compute(passRate, regressionCount, psrFailures, psrWarnings, cisBelow90);
 
         // ── Trend + vs-last delta ─────────────────────────────────────────
-        var history = _summaryStore.Save(new BuildSummaryRecord
+        // Persisting the trend touches the (possibly slow or locked) results
+        // share. The card itself is already fully computed above, so bound the
+        // write: if the share is unresponsive, degrade to a single-point trend
+        // rather than letting a hung File I/O call freeze the whole report card.
+        var currentRecord = new BuildSummaryRecord
         {
             BuildNumber = buildNumber,
             GeneratedUtc = generatedUtc,
             PassRate = passRate,
-        });
+        };
+
+        List<BuildSummaryRecord> history;
+        var saveTask = Task.Run(() => _summaryStore.Save(currentRecord), ct);
+        if (saveTask.Wait(TimeSpan.FromSeconds(5), ct))
+        {
+            history = saveTask.Result;
+        }
+        else
+        {
+            // Abandon the slow write (it is best-effort and self-recovers next run).
+            history = new List<BuildSummaryRecord> { currentRecord };
+            _logger.Warn("BuildReportCard",
+                "Summary store write exceeded 5s (slow/locked results share); " +
+                "trend limited to the current build for this load.");
+        }
+
         var (trend, delta) = BuildTrend(history, buildNumber);
         _logger.Log(LogLevel.Information, "BuildReportCard",
             $"Post-processing complete: {cis.Count} CIs, {agents.Count} agents, {failures.Count} failures",

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OpenTelemetry.Metrics;
+using Scalar.AspNetCore;
 using TestController.Api;
 using TestController.Api.Security;
 using TestController.WebApi.Endpoints;
@@ -84,7 +85,11 @@ builder.Services.AddSingleton<IAppLogger>(sp =>
     var logDir = builder.Configuration["Logging:LogDirectory"]
         ?? builder.Configuration["LogDirectory"]
         ?? AppLogger.DefaultLogDirectory;
-    return new AppLogger("webapi", logDir);
+    var sinkOptions = new LogSinkOptions();
+    builder.Configuration.GetSection(LogSinkOptions.SectionName).Bind(sinkOptions);
+    var central = CentralLogSink.Create(sinkOptions);
+    var sinks = central is null ? null : new[] { central };
+    return new AppLogger("webapi", logDir, sinks: sinks);
 });
 
 // Web API specific services
@@ -260,8 +265,23 @@ builder.Services.AddRateLimiter(options =>
 });
 } // end if (rateLimitOptions.Enabled)
 
-// OpenAPI document for API discovery and tooling
-builder.Services.AddOpenApi();
+// OpenAPI document for API discovery and tooling. Document metadata drives the
+// Scalar API reference UI (mapped below) used for self-service onboarding.
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info = new()
+        {
+            Title = "TestController WebApi",
+            Version = "v1",
+            Description = "REST + SignalR surface for the TestAgentSolution test-orchestration "
+                + "platform. Use the bearer token issued by /api/auth/login (Secured mode) "
+                + "to authorize requests. See docs/ONBOARDING.md for a first-run walkthrough.",
+        };
+        return Task.CompletedTask;
+    });
+});
 
 // Health checks: liveness (always OK) + readiness (verifies agent connectivity) + cert expiry
 builder.Services.AddHealthChecks()
@@ -394,6 +414,16 @@ app.MapPrometheusScrapingEndpoint("/metrics").AllowAnonymous();
 
 // OpenAPI endpoint
 app.MapOpenApi();
+
+// Scalar API reference UI over the OpenAPI document — self-service API discovery
+// for onboarding teams. Served at /scalar; the raw spec stays at /openapi/v1.json.
+app.MapScalarApiReference(options =>
+{
+    options.WithTitle("TestController WebApi")
+        .WithTheme(ScalarTheme.BluePlanet)
+        .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient)
+        .AddPreferredSecuritySchemes("Bearer");
+});
 
 // Standalone-only minimal API endpoints (features not in the shared library):
 // - WatchList file I/O (import/export/xml/refresh/save)

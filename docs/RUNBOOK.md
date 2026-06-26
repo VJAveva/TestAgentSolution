@@ -6,17 +6,139 @@ Operational procedures for monitoring, troubleshooting, and recovering the TestA
 
 ## Table of Contents
 
-1. [Health Checks](#health-checks)
-2. [Agent Down / Unreachable](#agent-down--unreachable)
-3. [Session Stuck / Orphaned](#session-stuck--orphaned)
-4. [Lock Orphaned](#lock-orphaned)
-5. [Controller Restart](#controller-restart)
-6. [WebApi / IIS Issues](#webapi--iis-issues)
-7. [SignalR Disconnections](#signalr-disconnections)
-8. [High Memory / TRX Parsing](#high-memory--trx-parsing)
-9. [Channel Reset Storm](#channel-reset-storm)
-10. [Log Retention & Cleanup](#log-retention--cleanup)
-11. [Escalation Contacts](#escalation-contacts)
+1. [Deployment Topology](#deployment-topology)
+2. [Deploy & Rollback](#deploy--rollback)
+3. [Agent Roster (Canonical Source of Truth)](#agent-roster-canonical-source-of-truth)
+4. [Health Checks](#health-checks)
+5. [Agent Down / Unreachable](#agent-down--unreachable)
+6. [Session Stuck / Orphaned](#session-stuck--orphaned)
+7. [Lock Orphaned](#lock-orphaned)
+8. [Controller Restart](#controller-restart)
+9. [WebApi / IIS Issues](#webapi--iis-issues)
+10. [SignalR Disconnections](#signalr-disconnections)
+11. [High Memory / TRX Parsing](#high-memory--trx-parsing)
+12. [Channel Reset Storm](#channel-reset-storm)
+13. [Log Retention & Cleanup](#log-retention--cleanup)
+14. [Escalation Contacts](#escalation-contacts)
+
+---
+
+## Deployment Topology
+
+The standalone `TestController.WebApi` host runs in exactly one of two topologies.
+The choice is **explicit**: set `Deployment:Topology` in `appsettings.json`. It is
+validated at startup by `ConfigValidator`, which cross-checks it against
+`ControllerProxyUrl` and logs the effective mode (`[ConfigValidator] Deployment
+topology: ...`).
+
+| Topology | `ControllerProxyUrl` | Who executes runs | WPF Controller required |
+|------------|----------------------|----------------------------------|-------------------------|
+| `CoLocated` | **set** (e.g. `http://localhost:5200`) | WPF Controller (WebApi proxies) | **Yes** |
+| `Standalone` | **empty / removed** | WebApi (`StandalonePipelineExecutor`) | **No** |
+| `Auto` | either | inferred from URL presence | depends |
+
+### CoLocated mode
+
+WebApi is a thin web gateway in front of the WPF Controller. Execution,
+dashboard, and fleet calls are proxied over gRPC to the Controller, which is the
+single authority and SQLite DB owner.
+
+- `Deployment:Topology` = `CoLocated`
+- `ControllerProxyUrl` = the running Controller's URL (required)
+- Startup **fails fast** if `ControllerProxyUrl` is missing.
+
+### Standalone mode (no WPF anywhere)
+
+WebApi is the sole host. It executes the full submit → watch pipeline locally,
+owns its own lock authority, and runs with **no WPF Controller running anywhere**.
+
+1. Set `Deployment:Topology` = `Standalone`.
+2. **Remove** (or blank) `ControllerProxyUrl` in `appsettings.json` /
+   `appsettings.Production.json`.
+3. Confirm at startup: `[ConfigValidator] Deployment topology: Standalone`.
+4. Verify the path end-to-end: `POST /api/execution/...` (submit) then watch via
+   `/hubs/controller` SignalR — both served entirely by the WebApi process.
+
+---
+
+## Deploy & Rollback
+
+Deployments go through `deploy/Invoke-Deploy.ps1`, which wraps the per-component
+deploy scripts with a backup → deploy → smoke-test → auto-rollback safety net.
+**Anyone with repo + node access can deploy and roll back** — you do not need the
+original author. Run it locally or via the **deploy** GitHub Actions workflow
+(`.github/workflows/deploy.yml`, `Run workflow` → choose `deploy`/`rollback`).
+
+### Deploy a new build
+
+```powershell
+# WebApi (with pre-deploy session check, snapshot, smoke test, auto-rollback on failure)
+.\deploy\Invoke-Deploy.ps1 -Component webapi -TargetNode WEBSERVER01 -BaseUrl http://WEBSERVER01
+
+# Controller / Agent
+.\deploy\Invoke-Deploy.ps1 -Component controller -TargetNode CONTROLLER01
+.\deploy\Invoke-Deploy.ps1 -Component agent -TargetNode JVGR1 -ControllerNode CONTROLLER01
+```
+
+What happens, in order:
+
+1. **Pre-deploy check** (`Invoke-PreDeployCheck.ps1`) — blocks if active sessions
+   are running. Add `-Force` to override.
+2. **Backup** — the current remote deployment is snapshotted to
+   `publish\_backups\<component>-<node>\<timestamp>` **before** the destructive
+   `robocopy /MIR`. This is what makes rollback possible.
+3. **Deploy** — calls the matching `deploy-*.bat`.
+4. **Smoke test** (`Invoke-SmokeTest.ps1`, webapi only) — on failure the script
+   **automatically restores the pre-deploy snapshot**.
+
+### Roll back
+
+```powershell
+# Restore the most recent snapshot
+.\deploy\Invoke-Deploy.ps1 -Component webapi -TargetNode WEBSERVER01 -BaseUrl http://WEBSERVER01 -Rollback
+
+# Restore a specific snapshot (folder name under publish\_backups\<component>-<node>)
+.\deploy\Invoke-Deploy.ps1 -Component webapi -TargetNode WEBSERVER01 -Rollback -BackupName 20260626-141200
+```
+
+Rollback stops the IIS site (webapi), `robocopy /MIR` the backup back over the
+remote folder, restarts the site, then re-runs the smoke test to confirm health.
+
+> Backups accumulate under `publish\_backups\`. Prune old snapshots with
+> `Invoke-LogCleanup.ps1` conventions or manually; keep at least the last known-good.
+
+Startup **fails fast** if `Standalone` is declared while `ControllerProxyUrl` is
+still set (the contradiction would otherwise silently fall back to proxying).
+
+> The React WebClient is topology-agnostic: it uses same-origin relative URLs by
+> default (`VITE_API_BASE_URL` empty), so the **same build** serves either host
+> with no rebuild. See `TestController.WebClient/.env.example`.
+
+---
+
+## Agent Roster (Canonical Source of Truth)
+
+The agent fleet is defined in **four** config files. They MUST stay in sync —
+divergence (a missing agent or a mistyped host) is a silent production defect.
+Agent names are matched **case-insensitively** in code, so casing is cosmetic;
+the canonical convention is **UPPERCASE**.
+
+| Agent | Host | Address |
+|-------|------|---------|
+| JVGR1  | JVGR1  | `http://JVGR1:5200`  |
+| JVGR2  | JVGR2  | `http://JVGR2:5200`  |
+| JVKPRI | JVKPRI | `http://JVKPRI:5200` |
+| JVKBAK | JVKBAK | `http://JVKBAK:5200` |
+| JVHIST | JVHIST | `http://JVHIST:5200` |
+
+Files that must carry the identical roster:
+
+1. `TestControllerGrpc/appsettings.json` (WPF host) — `Agents[]`
+2. `TestController.WebApi/appsettings.json` (WebApi base) — `Agents[]`
+3. `TestController.WebApi/appsettings.Production.json` — `Agents[]`
+4. `TestAgentDisplay/appsettings.json` — `DefaultAgents[]` (URL-only schema)
+
+When adding/removing an agent, update all four and diff them before deploying.
 
 ---
 

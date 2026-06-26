@@ -5,6 +5,8 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.WindowsServices;
+using OpenTelemetry.Metrics;
 using TestAgentGrpc;
 using TestAgentGrpc.Clients;
 using TestAgentGrpc.Services;
@@ -85,6 +87,15 @@ try
 {
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Windows Service hosting ────────────────────────────────────────────
+// Enables the Service Control Manager to start/stop/monitor this process and
+// — crucially — to apply its recovery policy (Configure-AgentRecovery.ps1,
+// failureflag=1) so the GrpcListenerWatchdog's Environment.Exit(3) results in
+// an automatic restart. This is a no-op when launched interactively, so it is
+// always safe to call. Whether the WinForms tray UI starts is decided later
+// via WindowsServiceHelpers.IsWindowsService() — Session 0 has no desktop.
+builder.Host.UseWindowsService(o => o.ServiceName = "TestAgentGrpc");
+
 builder.Services.Configure<AgentSettings>(
     builder.Configuration.GetSection("AgentSettings"));
 builder.Services.Configure<AgentKestrelOptions>(
@@ -102,6 +113,8 @@ builder.Services.Configure<HostOptions>(opts =>
     opts.ShutdownTimeout = TimeSpan.FromSeconds(30);
     opts.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
 });
+
+var metricsSettings = builder.Configuration.GetSection("AgentSettings").Get<AgentSettings>() ?? new();
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -139,6 +152,13 @@ builder.WebHost.ConfigureKestrel(options =>
         options.Limits.MinRequestBodyDataRate = null;
     if (kestrelOpts.DisableMinResponseDataRate)
         options.Limits.MinResponseDataRate = null;
+
+    // Dedicated HTTP/1.1 listener for the Prometheus /metrics endpoint. The gRPC
+    // port above is HTTP/2-only, which Prometheus scrapers cannot consume.
+    if (metricsSettings.MetricsEndpointEnabled)
+    {
+        options.ListenAnyIP(metricsSettings.MetricsPort, o => o.Protocols = HttpProtocols.Http1);
+    }
 });
 
 // ── Core services ──────────────────────────────────────────────────────
@@ -155,6 +175,18 @@ builder.Services.AddSingleton<CommandExecutor>();
 builder.Services.AddSingleton<SystemMetricsCollector>();
 builder.Services.AddSingleton<TestControllerClient>();
 builder.Services.AddSingleton<ConnectionHealthMonitor>();
+
+// ── OpenTelemetry metrics: agent meters + Prometheus exporter on /metrics ──
+if (metricsSettings.MetricsEndpointEnabled)
+{
+    builder.Services.AddSingleton<AgentMetrics>();
+    builder.Services.AddOpenTelemetry()
+        .WithMetrics(metrics =>
+        {
+            metrics.AddMeter(AgentMetrics.MeterName);
+            metrics.AddPrometheusExporter();
+        });
+}
 
 // ── gRPC server ────────────────────────────────────────────────────────
 builder.Services.AddGrpc(options =>
@@ -191,6 +223,12 @@ app.MapGet("/health", (CommandExecutor executor) => Results.Ok(new
     uptime = (DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).ToString(@"d\.hh\:mm\:ss"),
 }));
 
+// Prometheus /metrics scraping endpoint (served on the dedicated HTTP/1.1 listener)
+if (metricsSettings.MetricsEndpointEnabled)
+{
+    app.MapPrometheusScrapingEndpoint("/metrics");
+}
+
 // ── Startup validation: warn if running plaintext HTTP/2 in production ─
 var kestrelConfig = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentKestrelOptions>>().Value;
 if (kestrelConfig.WarnOnPlaintextHttp2 && !app.Environment.IsDevelopment())
@@ -202,78 +240,93 @@ if (kestrelConfig.WarnOnPlaintextHttp2 && !app.Environment.IsDevelopment())
         "Set AgentKestrel:WarnOnPlaintextHttp2 = false to suppress this warning.");
 }
 
-// ── Run host on background thread, WinForms on dedicated STA thread ───
-// Top-level statements compile to async Main which the CLR runs on an MTA
-// thread (STAThread is ignored on async entry points). OLE operations
-// (Clipboard, SaveFileDialog) require STA, so we spin up a dedicated
-// STA thread for the WinForms message loop.
-var hostTask = app.RunAsync();
-
-// Resolve services on the main thread (DI is thread-safe).
-var cmdExec     = app.Services.GetRequiredService<CommandExecutor>();
-var broadcaster = app.Services.GetRequiredService<EventBroadcaster>();
-var tracker     = app.Services.GetRequiredService<ExecutionTracker>();
-var metrics     = app.Services.GetRequiredService<SystemMetricsCollector>();
-var healthMon   = app.Services.GetRequiredService<ConnectionHealthMonitor>();
-var ctrlClient  = app.Services.GetRequiredService<TestControllerClient>();
-var lifecycle   = app.Services.GetRequiredService<AgentLifecycleService>();
-var appLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-var agentOpts   = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>();
-var notifOpts   = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NotificationSettings>>();
-var trayLogger  = app.Services.GetRequiredService<ILogger<TrayApplicationContext>>();
-
-var uiThread = new Thread(() =>
+// ── Run host; attach interactive tray UI only when NOT a Windows service ──
+// Under the Service Control Manager the process runs in Session 0 with no
+// interactive desktop, so a WinForms tray icon is invisible and its message
+// pump can wedge. In service mode we run headless and let SCM own the
+// lifecycle — including restart-on-failure when GrpcListenerWatchdog exits
+// with code 3 (recovery policy from Configure-AgentRecovery.ps1). When
+// launched interactively we keep the tray on a dedicated STA thread because
+// OLE operations (Clipboard, SaveFileDialog) require STA.
+if (WindowsServiceHelpers.IsWindowsService())
 {
-    Application.EnableVisualStyles();
-    Application.SetCompatibleTextRenderingDefault(false);
-
-    var trayApp = new TrayApplicationContext(
-        cmdExec, broadcaster, tracker, metrics, healthMon,
-        ctrlClient, lifecycle, appLifetime, agentOpts, notifOpts, trayLogger);
-
-    Application.Run(trayApp);
-});
-uiThread.SetApartmentState(ApartmentState.STA);
-uiThread.IsBackground = true;
-uiThread.Name = "WinFormsUI";
-uiThread.Start();
-
-// Wait for EITHER the UI thread to exit OR the host to signal shutdown.
-// Previously, uiThread.Join() meant closing the tray icon would unconditionally
-// kill the gRPC host. Now, the host stays alive (serving gRPC) even if the
-// tray app exits — the process only terminates when IHostApplicationLifetime
-// requests shutdown (e.g., from GrpcListenerWatchdog or an explicit stop).
-await Task.WhenAny(
-    hostTask,
-    Task.Run(() => uiThread.Join()));
-
-// If the host task hasn't completed yet (UI exited first), check if agent is busy.
-// Only stop the host if NOT actively executing — this prevents pipeline interruption
-// from a simple tray-icon close.
-if (!hostTask.IsCompleted)
-{
-    if (cmdExec.CurrentState == AgentState.Running)
-    {
-        var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Shutdown");
-        startupLogger.LogWarning(
-            "Tray application exited while agent is executing a command. " +
-            "Host will remain alive until execution completes or host shutdown is requested.");
-        CrashDumpHelper.AppendCrashLog(
-            "[Lifecycle] Tray app exited during active execution — host kept alive");
-
-        // Wait for the host to stop naturally (via IHostApplicationLifetime)
-        await hostTask;
-    }
-    else
-    {
-        await app.StopAsync();
-        await hostTask;
-    }
+    // Headless: SCM owns start/stop/restart. Run the host to completion;
+    // a watchdog Environment.Exit(3) propagates to SCM as a failure.
+    await app.RunAsync();
 }
 else
 {
-    // Host stopped first (explicit shutdown or listener watchdog)
-    await hostTask;
+    // Top-level statements compile to async Main which the CLR runs on an MTA
+    // thread (STAThread is ignored on async entry points), so we spin up a
+    // dedicated STA thread for the WinForms message loop.
+    var hostTask = app.RunAsync();
+
+    // Resolve services on the main thread (DI is thread-safe).
+    var cmdExec     = app.Services.GetRequiredService<CommandExecutor>();
+    var broadcaster = app.Services.GetRequiredService<EventBroadcaster>();
+    var tracker     = app.Services.GetRequiredService<ExecutionTracker>();
+    var metrics     = app.Services.GetRequiredService<SystemMetricsCollector>();
+    var healthMon   = app.Services.GetRequiredService<ConnectionHealthMonitor>();
+    var ctrlClient  = app.Services.GetRequiredService<TestControllerClient>();
+    var lifecycle   = app.Services.GetRequiredService<AgentLifecycleService>();
+    var appLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    var agentOpts   = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>();
+    var notifOpts   = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NotificationSettings>>();
+    var trayLogger  = app.Services.GetRequiredService<ILogger<TrayApplicationContext>>();
+
+    var uiThread = new Thread(() =>
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
+        var trayApp = new TrayApplicationContext(
+            cmdExec, broadcaster, tracker, metrics, healthMon,
+            ctrlClient, lifecycle, appLifetime, agentOpts, notifOpts, trayLogger);
+
+        Application.Run(trayApp);
+    });
+    uiThread.SetApartmentState(ApartmentState.STA);
+    uiThread.IsBackground = true;
+    uiThread.Name = "WinFormsUI";
+    uiThread.Start();
+
+    // Wait for EITHER the UI thread to exit OR the host to signal shutdown.
+    // Previously, uiThread.Join() meant closing the tray icon would unconditionally
+    // kill the gRPC host. Now, the host stays alive (serving gRPC) even if the
+    // tray app exits — the process only terminates when IHostApplicationLifetime
+    // requests shutdown (e.g., from GrpcListenerWatchdog or an explicit stop).
+    await Task.WhenAny(
+        hostTask,
+        Task.Run(() => uiThread.Join()));
+
+    // If the host task hasn't completed yet (UI exited first), check if agent is busy.
+    // Only stop the host if NOT actively executing — this prevents pipeline interruption
+    // from a simple tray-icon close.
+    if (!hostTask.IsCompleted)
+    {
+        if (cmdExec.CurrentState == AgentState.Running)
+        {
+            var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Shutdown");
+            startupLogger.LogWarning(
+                "Tray application exited while agent is executing a command. " +
+                "Host will remain alive until execution completes or host shutdown is requested.");
+            CrashDumpHelper.AppendCrashLog(
+                "[Lifecycle] Tray app exited during active execution — host kept alive");
+
+            // Wait for the host to stop naturally (via IHostApplicationLifetime)
+            await hostTask;
+        }
+        else
+        {
+            await app.StopAsync();
+            await hostTask;
+        }
+    }
+    else
+    {
+        // Host stopped first (explicit shutdown or listener watchdog)
+        await hostTask;
+    }
 }
 }
 catch (Exception ex)

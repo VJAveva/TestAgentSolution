@@ -184,6 +184,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Logging.SetMinimumLevel(LogLevel.Information);
             builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
+            // Prometheus /metrics endpoint so the WPF host ships telemetry too (P2-2).
+            builder.Services.AddControllerHostMetrics();
+
             _app = builder.Build();
 
             _app.UseCors("WebClient");
@@ -194,6 +197,9 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             // Map shared controllers, hub, and start the SignalR bridge
             // (UseControllerApi registers RequestLoggingMiddleware)
             _app.UseControllerApi();
+
+            // Prometheus scraping endpoint on this host's listener.
+            _app.MapControllerHostMetrics(_app.Services);
 
             _logger.LogInformation("WebApi + SignalR server listening on port {Port}", _port);
             await _app.RunAsync(ct);

@@ -40,6 +40,17 @@ public sealed class AgentSettings
     public bool CollectSystemMetrics { get; set; } = true;
 
     /// <summary>
+    /// When true, exposes a Prometheus <c>/metrics</c> scraping endpoint on a
+    /// dedicated HTTP/1.1 listener (the gRPC port is HTTP/2-only). Default: true.
+    /// </summary>
+    public bool MetricsEndpointEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Port for the Prometheus <c>/metrics</c> HTTP/1.1 listener. Default: 5210.
+    /// </summary>
+    public int MetricsPort { get; set; } = 5210;
+
+    /// <summary>
     /// Hard safety-net timeout (in minutes) for executions with no explicit timeout (Timeout=0).
     /// Prevents the agent from being permanently stuck in "busy" state if a process hangs.
     /// Default: 120 minutes (2 hours).

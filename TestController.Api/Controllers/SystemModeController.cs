@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using TestController.Api.Hubs;
+using TestController.Api.Interceptors;
 using TestController.Api.SystemMode;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Configuration;
 using TestControllerGrpc.Identity;
 
@@ -19,15 +21,40 @@ public class SystemModeController : ControllerBase
     private readonly IOptionsMonitor<RbacOptions> _rbacOptions;
     private readonly RbacModeTransitionService _transitionService;
     private readonly SystemModeBroadcaster _broadcaster;
+    private readonly SessionAuthInterceptor _authInterceptor;
+    private readonly TestControllerGrpc.Authorization.IAuthorizationService _authService;
 
     public SystemModeController(
         IOptionsMonitor<RbacOptions> rbacOptions,
         RbacModeTransitionService transitionService,
-        SystemModeBroadcaster broadcaster)
+        SystemModeBroadcaster broadcaster,
+        SessionAuthInterceptor authInterceptor,
+        TestControllerGrpc.Authorization.IAuthorizationService authService)
     {
         _rbacOptions = rbacOptions;
         _transitionService = transitionService;
         _broadcaster = broadcaster;
+        _authInterceptor = authInterceptor;
+        _authService = authService;
+    }
+
+    /// <summary>
+    /// P4-1 conditional-admin gate for mode transitions. Resolves the caller via the
+    /// session interceptor (Default mode yields the synthetic WPF/Web user) and requires
+    /// the System_ChangeMode permission. In Default mode this admits the trusted WPF host
+    /// and denies the read-only Web client; in Secured mode it requires an authenticated
+    /// Administrator. Returns the authorized actor, or null when unauthenticated/denied.
+    /// </summary>
+    private async Task<IUserContext?> AuthorizeModeChangeAsync(CancellationToken ct)
+    {
+        var source = Request.Headers["X-Source"].FirstOrDefault();
+        var clientKind = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase)
+            ? ClientKind.Wpf : ClientKind.Web;
+        var authHeader = Request.Headers.Authorization.FirstOrDefault();
+        var user = await _authInterceptor.ResolveUserAsync(authHeader, clientKind, ct);
+        if (user is null) return null;
+        var decision = await _authService.CanAsync(user, Permission.System_ChangeMode, null, ct);
+        return decision.Allowed ? user : null;
     }
 
     /// <summary>GET /api/system/mode — current RBAC mode.</summary>
@@ -49,6 +76,14 @@ public class SystemModeController : ControllerBase
     {
         try
         {
+            // Bootstrap is open only while no Administrator exists yet (first-run wizard).
+            // Once an admin exists, re-securing requires System_ChangeMode (conditional admin gate).
+            if (await _transitionService.HasExistingAdminAsync(ct)
+                && await AuthorizeModeChangeAsync(ct) is null)
+            {
+                return StatusCode(403, ApiErrorFactory.Forbidden("Not authorized to change system mode."));
+            }
+
             var (success, error) = await _transitionService.SwitchToSecuredAsync(
                 request.Username, request.Email, request.Password, ct);
 
@@ -86,6 +121,10 @@ public class SystemModeController : ControllerBase
     {
         try
         {
+            // Reactivation implies admins already exist → require System_ChangeMode.
+            if (await AuthorizeModeChangeAsync(ct) is null)
+                return StatusCode(403, ApiErrorFactory.Forbidden("Not authorized to change system mode."));
+
             var (success, error) = await _transitionService.SwitchToSecuredReactivateAsync(ct);
 
             if (!success)
@@ -106,9 +145,11 @@ public class SystemModeController : ControllerBase
     {
         try
         {
-            // In a full impl, resolve the current user from auth context.
-            // For Phase 0.5 the WPF client is the only caller and it passes through the gRPC path.
-            var actor = DefaultUser.ForClient(ClientKind.Wpf);
+            // Disabling RBAC requires System_ChangeMode (Administrator in Secured mode,
+            // or the trusted WPF host in Default mode).
+            var actor = await AuthorizeModeChangeAsync(ct);
+            if (actor is null)
+                return StatusCode(403, ApiErrorFactory.Forbidden("Not authorized to change system mode."));
 
             var (success, error) = await _transitionService.SwitchToDefaultAsync(actor, ct);
 

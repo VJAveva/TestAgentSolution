@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
 using TestController.Api.Hubs;
 using TestController.Api.Interceptors;
 using TestController.Api.Services;
+using TestControllerGrpc.Authorization;
+using TestControllerGrpc.Configuration;
 using TestControllerGrpc.Identity;
 
 namespace TestController.Api.Controllers;
@@ -18,12 +21,21 @@ public class UserController : ControllerBase
     private readonly UserService _userService;
     private readonly SessionAuthInterceptor _authInterceptor;
     private readonly IHubContext<ControllerHub> _hub;
+    private readonly IOptionsMonitor<RbacOptions> _rbacOptions;
+    private readonly IAuthorizationService _authService;
 
-    public UserController(UserService userService, SessionAuthInterceptor authInterceptor, IHubContext<ControllerHub> hub)
+    public UserController(
+        UserService userService,
+        SessionAuthInterceptor authInterceptor,
+        IHubContext<ControllerHub> hub,
+        IOptionsMonitor<RbacOptions> rbacOptions,
+        IAuthorizationService authService)
     {
         _userService = userService;
         _authInterceptor = authInterceptor;
         _hub = hub;
+        _rbacOptions = rbacOptions;
+        _authService = authService;
     }
 
     private async Task<IUserContext?> ResolveUser(CancellationToken ct)
@@ -36,6 +48,19 @@ public class UserController : ControllerBase
     {
         // Admin-only: check role directly
         return user.Roles.Contains(Role.Administrator.ToString());
+    }
+
+    /// <summary>
+    /// P4-1: fine-grained permission gate for mutating user-management actions. In Secured
+    /// mode it delegates to <c>IAuthorizationService.CanAsync</c> (proper RBAC evaluation +
+    /// audit entry); in Default mode it preserves the legacy Administrator-role gate.
+    /// </summary>
+    private async Task<bool> AuthorizeAsync(IUserContext user, Permission permission, CancellationToken ct)
+    {
+        if (!_rbacOptions.CurrentValue.Enabled)
+            return user.Roles.Contains(Role.Administrator.ToString());
+        var decision = await _authService.CanAsync(user, permission, null, ct);
+        return decision.Allowed;
     }
 
     /// <summary>GET /api/users — list all users.</summary>
@@ -69,7 +94,7 @@ public class UserController : ControllerBase
     {
         var user = await ResolveUser(ct);
         if (user is null) return Unauthorized(new { error = "Not authenticated" });
-        if (!HasPermission(user, "User_Create")) return Forbid();
+        if (!await AuthorizeAsync(user, Permission.User_Create, ct)) return Forbid();
 
         var (dto, generatedPassword, error) = await _userService.CreateUserAsync(request, user.UserId, ct);
         if (dto is null)
@@ -88,7 +113,7 @@ public class UserController : ControllerBase
     {
         var user = await ResolveUser(ct);
         if (user is null) return Unauthorized(new { error = "Not authenticated" });
-        if (!HasPermission(user, "User_Update")) return Forbid();
+        if (!await AuthorizeAsync(user, Permission.User_Update, ct)) return Forbid();
 
         var (success, error) = await _userService.UpdateUserAsync(id, request, user.UserId, ct);
         if (!success) return BadRequest(new { error });
@@ -101,7 +126,7 @@ public class UserController : ControllerBase
     {
         var user = await ResolveUser(ct);
         if (user is null) return Unauthorized(new { error = "Not authenticated" });
-        if (!HasPermission(user, "User_Delete")) return Forbid();
+        if (!await AuthorizeAsync(user, Permission.User_Delete, ct)) return Forbid();
 
         var (success, error) = await _userService.DeleteUserAsync(id, user.UserId, ct);
         if (!success)
@@ -119,7 +144,7 @@ public class UserController : ControllerBase
     {
         var user = await ResolveUser(ct);
         if (user is null) return Unauthorized(new { error = "Not authenticated" });
-        if (!HasPermission(user, "User_Assign")) return Forbid();
+        if (!await AuthorizeAsync(user, Permission.User_Assign, ct)) return Forbid();
 
         var (success, error) = await _userService.SetAssignmentsAsync(id, request.PipelineIds, user.UserId, ct);
         if (!success) return BadRequest(new { error });
@@ -148,7 +173,7 @@ public class UserController : ControllerBase
     {
         var user = await ResolveUser(ct);
         if (user is null) return Unauthorized(new { error = "Not authenticated" });
-        if (!HasPermission(user, "User_Update")) return Forbid();
+        if (!await AuthorizeAsync(user, Permission.User_Update, ct)) return Forbid();
 
         var (newPassword, error) = await _userService.ResetPasswordAsync(id, user.UserId, ct);
         if (newPassword is null) return BadRequest(new { error });

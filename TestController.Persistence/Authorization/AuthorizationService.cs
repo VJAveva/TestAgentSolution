@@ -153,7 +153,8 @@ public sealed class AuthorizationService : IAuthorizationService
         Permission.Pipeline_Enable or
         Permission.Pipeline_Disable or
         Permission.Audit_View or
-        Permission.Audit_Export;
+        Permission.Audit_Export or
+        Permission.System_ChangeMode;
 
     private static bool IsSeniorManagerOnlyPermission(Permission p) => p is
         Permission.Pipeline_TriggerAll or
