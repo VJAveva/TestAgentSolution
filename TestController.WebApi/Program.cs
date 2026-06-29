@@ -36,9 +36,12 @@ ThreadPool.SetMinThreads(workerThreads: 200, completionPortThreads: 200);
 // Allow long-running executions triggered via WebClient.
 // Without these, Kestrel defaults (130s keepalive, minimum data rates)
 // kill connections during long test runs that produce no output for minutes.
+// KeepAlive is configurable for week-long PSR soak runs (default 4h); the agent
+// keeps the real test alive regardless — this only bounds the live operator stream.
+var webApiKeepAliveHours = builder.Configuration.GetValue("WebApiKestrel:KeepAliveTimeoutHours", 4);
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
-    kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
+    kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(webApiKeepAliveHours);
     kestrel.Limits.MinRequestBodyDataRate = null;
     kestrel.Limits.MinResponseDataRate = null;
 });

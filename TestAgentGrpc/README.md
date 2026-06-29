@@ -95,6 +95,55 @@ Start-Service TestAgentGrpc
 > The `failureflag` is important: the agent's watchdog calls `Environment.Exit(3)`
 > when stuck, and this flag lets the Service Control Manager restart it.
 
+#### Running as a domain service account
+
+Use a domain account when remote commands need network access (shares, other nodes).
+The agent **executes every `RunRemoteCommand` as its own service identity** — not as
+the Controller or the WPF operator. Three things must be in place on the agent node:
+
+```powershell
+$acct = "DOMAIN\svc_testagent"
+
+# 1. "Log on as a service" right (REQUIRED — missing right = SCM error 1069/1385)
+#    GUI: secpol.msc -> Local Policies -> User Rights Assignment -> Log on as a service
+#    (In a domain this may be governed by GPO; add the account there if a GPO resets it.)
+
+# 2. NTFS access to the install + Logs folder
+icacls "C:\TestAgentService" /grant "${acct}:(OI)(CI)RX" /T
+icacls "C:\TestAgentService\Logs" /grant "${acct}:(OI)(CI)M" /T
+
+# 3. Create the service under that account (prompts securely — do not pass plaintext)
+$cred = Get-Credential $acct
+New-Service -Name TestAgentGrpc -DisplayName "TestAgent gRPC Service" `
+  -BinaryPathName '"C:\TestAgentService\TestAgentGrpc.exe"' -StartupType Automatic -Credential $cred
+Start-Service TestAgentGrpc
+```
+
+> `Setup-AgentNode.ps1 -InstallAsService -ServiceUser "DOMAIN\svc_testagent"` does the
+> service creation with a secure `-ServiceCredential` prompt. It does **not** grant the
+> logon-as-service right or folder ACLs — do those first.
+
+### Execution identity model (why remote commands fail)
+
+There are two command kinds, run by two different identities:
+
+| Command | Runs on | Under whose identity |
+|---------|---------|----------------------|
+| `RunRemoteCommand` (AgentName set) | the **agent** machine | the **TestAgent service account** |
+| `RunCommand` (local) | the **Controller** machine | the **Controller app** identity |
+
+Key consequences:
+
+- Elevating or changing the **WPF Controller** identity does **not** affect
+  `RunRemoteCommand` — the Controller only dispatches over gRPC; the agent executes.
+- For a remote command to reach `\\other\share`, the **agent's service account** must
+  have rights there.
+- **Avoid `c$` / admin shares** (`\\node\c$\...`). They are reachable only by a *local
+  administrator* of the target, so a normal domain service account gets
+  `Invalid drive specification`. Use a regular shared folder
+  (`\\node\TestControllerService\...`) with share + NTFS read granted to the service
+  account (or its machine account) instead.
+
 > **No system tray when run as a service.** Windows services run in the isolated
 > **Session 0**, which has no access to the interactive desktop, so the WinForms
 > tray icon is created but never visible. The gRPC server, registration, heartbeat,
@@ -178,3 +227,6 @@ To build + copy + configure from a central machine, see
 | Port 5200 in use | Set `AllowPortFallback: true` (uses `FallbackPorts` 5201–5203) or change `GrpcPort`. |
 | Service installed but won't restart after crash | Ensure `sc.exe failureflag TestAgentGrpc 1` was applied. |
 | Tray icon missing under a service | Expected — services run non-interactively; use the tray only in interactive mode. |
+| Service won't start (SCM 1069/1385) | Domain account lacks **Log on as a service** — grant it (secpol.msc / GPO). Verify the password too. |
+| Remote `RunRemoteCommand` fails with `Invalid drive specification` / `0 File(s) copied` | Command targets a `c$` admin share; the agent's service account isn't a local admin on the target. Use a regular shared folder with read access granted. |
+| Remote command fails with Access denied | The **agent's service account** (not the WPF app) lacks rights on the target path/share. Grant access to that account. |

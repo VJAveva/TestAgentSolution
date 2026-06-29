@@ -123,11 +123,17 @@ public sealed class EnhancedCommandPolicyEvaluator : IDisposable
         if (policy.BlockOnUnknown != true)
             return CommandPolicyResult.Allowed(); // Not blocking unknown commands
 
-        var cmdName = Path.GetFileName(command).ToLowerInvariant();
+        // Normalize so 'cmd' matches 'cmd.exe' — the controller may launch either the bare
+        // name or the .exe; the allowlist should match regardless of extension.
+        static string NormalizeExe(string name) =>
+            Path.GetFileName(name).ToLowerInvariant() is var n && n.EndsWith(".exe", StringComparison.Ordinal)
+                ? n[..^4] : n;
+
+        var cmdName = NormalizeExe(command);
 
         foreach (var entry in policy.Allowlist)
         {
-            var entryCmd = Path.GetFileName(entry.Command ?? "").ToLowerInvariant();
+            var entryCmd = NormalizeExe(entry.Command ?? "");
             if (!string.Equals(cmdName, entryCmd, StringComparison.OrdinalIgnoreCase))
                 continue;
 
