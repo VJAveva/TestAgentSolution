@@ -2088,12 +2088,25 @@
                                             Foreground="{DynamicResource TextS}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                             Command="{Binding ClearTreeSearchCommand}" ToolTip="Clear search" />
                                 </Grid>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,3,0,0">
+                                    <Button Content="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="11" Padding="4,2" Margin="0,0,4,0"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Foreground="{DynamicResource TextS}"
+                                            Command="{Binding ExpandAllWatchTreeCommand}" ToolTip="Expand all" />
+                                    <Button Content="&#xE70E;" FontFamily="Segoe MDL2 Assets" FontSize="11" Padding="4,2"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Foreground="{DynamicResource TextS}"
+                                            Command="{Binding CollapseAllWatchTreeCommand}" ToolTip="Collapse all" />
+                                </StackPanel>
                             </StackPanel>
                             <TreeView x:Name="WatchListTreeView" ItemsSource="{Binding TreeRoots}"
                                       Background="Transparent" Foreground="{DynamicResource TextDefaultBrush}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
                                       ItemContainerStyle="{StaticResource SpecTVI}"
                                       ItemTemplate="{StaticResource WatchTreeSpecTemplate}"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
                                       AllowDrop="True" />
                         </DockPanel>
                     </TabItem>
@@ -2120,12 +2133,25 @@
                                             Foreground="{DynamicResource TextS}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                             Command="{Binding ClearTemplateSearchCommand}" ToolTip="Clear search" />
                                 </Grid>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,3,0,0">
+                                    <Button Content="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="11" Padding="4,2" Margin="0,0,4,0"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Foreground="{DynamicResource TextS}"
+                                            Command="{Binding ExpandAllTemplateTreeCommand}" ToolTip="Expand all" />
+                                    <Button Content="&#xE70E;" FontFamily="Segoe MDL2 Assets" FontSize="11" Padding="4,2"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Foreground="{DynamicResource TextS}"
+                                            Command="{Binding CollapseAllTemplateTreeCommand}" ToolTip="Collapse all" />
+                                </StackPanel>
                             </StackPanel>
                             <TreeView x:Name="TemplateTreeView" ItemsSource="{Binding TemplateRoots}"
                                       Background="Transparent" Foreground="{DynamicResource TextDefaultBrush}"
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
                                       ItemContainerStyle="{StaticResource SpecTVI}"
-                                      ItemTemplate="{StaticResource WatchTreeSpecTemplate}" />
+                                      ItemTemplate="{StaticResource WatchTreeSpecTemplate}"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel" />
                         </DockPanel>
                     </TabItem>
 

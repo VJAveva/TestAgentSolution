@@ -1589,6 +1589,8 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             {
                 HttpClient = httpClient,
                 DisposeHttpClient = true,
+                MaxReceiveMessageSize = t.MaxReceiveMessageSizeBytes,
+                MaxSendMessageSize = t.MaxSendMessageSizeBytes,
             });
             _client = new TestAgentService.TestAgentServiceClient(_channel);
             Resilience = new ResiliencePipelineBuilder()

@@ -24,6 +24,7 @@ public sealed partial class MainViewModel
             node.Parent = WatchListRoot;
             WatchListRoot.Children.Add(node);
             WatchListRoot.RefreshDisplayText();
+            node.IsSelected = true;
         }
         IsDirty = true;
         AddLog($"Added: {tag}");
@@ -40,6 +41,7 @@ public sealed partial class MainViewModel
             if (SelectedNode.ModelObject is WatchItemConfig wi) wi.Events.Add(ev);
             var n = TreeNodeViewModel.FromEvent(ev); n.Parent = SelectedNode;
             SelectedNode.Children.Add(n);
+            n.IsSelected = true;
         }
         else if (SelectedNode.NodeKind is NodeKinds.Event or NodeKinds.ActionGroup)
         {
@@ -78,7 +80,7 @@ public sealed partial class MainViewModel
         if (SelectedNode is null) return;
         if (SelectedNode.NodeKind is NodeKinds.WatchItem)
         {
-            // WatchItem cannot hold ActionGroup directly — it must go under an Event.
+            // WatchItem cannot hold ActionGroup directly - it must go under an Event.
             // If the WatchItem has no events, create one first.
             if (SelectedNode.ModelObject is WatchItemConfig wi)
             {

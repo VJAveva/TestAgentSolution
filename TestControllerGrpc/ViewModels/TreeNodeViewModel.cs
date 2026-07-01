@@ -298,6 +298,22 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public object? ModelObject { get; set; }
     public TreeNodeViewModel? Parent { get; set; }
 
+    /// <summary>
+    /// Expands every ancestor so this node is reachable in the tree. Combined with
+    /// <see cref="Views.Behaviors.TreeViewItemBehavior"/>, selecting a node (e.g. after
+    /// creation or a search jump) also scrolls it into view.
+    /// </summary>
+    public void ExpandAncestors()
+    {
+        for (var p = Parent; p is not null; p = p.Parent)
+            p.IsExpanded = true;
+    }
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        if (value) ExpandAncestors();
+    }
+
     // ── Token resolution for display ────────────────────────────────
 
     private static readonly Regex TokenPattern = new(@"\[(\w+)\]", RegexOptions.Compiled);

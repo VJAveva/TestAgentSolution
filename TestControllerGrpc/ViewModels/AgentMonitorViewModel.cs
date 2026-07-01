@@ -74,6 +74,8 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
             {
                 HttpHandler = handler,
                 DisposeHttpClient = true,
+                MaxReceiveMessageSize = 16 * 1024 * 1024,
+                MaxSendMessageSize = 16 * 1024 * 1024,
             });
 
             var client = new TestAgentGrpc.TestAgentService.TestAgentServiceClient(_channel);

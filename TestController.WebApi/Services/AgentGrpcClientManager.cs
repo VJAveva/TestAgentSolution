@@ -52,6 +52,8 @@ public sealed class AgentGrpcClientManager : IDisposable
             {
                 HttpClient = httpClient,
                 DisposeHttpClient = true,
+                MaxReceiveMessageSize = _timeouts.MaxReceiveMessageSizeBytes,
+                MaxSendMessageSize = _timeouts.MaxSendMessageSizeBytes,
             });
         });
         return new TestAgentService.TestAgentServiceClient(channel);

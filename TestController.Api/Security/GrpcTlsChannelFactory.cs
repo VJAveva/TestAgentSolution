@@ -101,6 +101,8 @@ public sealed class GrpcTlsChannelFactory : IDisposable
         {
             HttpClient = httpClient,
             DisposeHttpClient = true,
+            MaxReceiveMessageSize = _timeouts.MaxReceiveMessageSizeBytes,
+            MaxSendMessageSize = _timeouts.MaxSendMessageSizeBytes,
         });
     }
 
