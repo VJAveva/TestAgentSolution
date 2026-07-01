@@ -170,7 +170,16 @@ public sealed class AgentConnectionManager : IDisposable
                 EnableMultipleHttp2Connections = true,
                 KeepAlivePingDelay = TimeSpan.FromSeconds(60),
                 KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
+                // Without "Always", pings only fire while SubscribeAgentEvents has data
+                // flowing; a quiet agent (no events for a while) can otherwise look idle
+                // to intermediary firewalls/NATs and get dropped.
+                KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
                 ConnectTimeout = TimeSpan.FromSeconds(15),
+                // This channel backs a long-lived streaming subscription for the
+                // lifetime of the display session — don't recycle it out from under
+                // the stream.
+                PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
+                PooledConnectionLifetime = Timeout.InfiniteTimeSpan,
             };
 
             // Enable TLS when address uses HTTPS

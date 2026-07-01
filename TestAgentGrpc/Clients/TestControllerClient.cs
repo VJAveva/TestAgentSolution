@@ -41,10 +41,19 @@ public sealed class TestControllerClient : IDisposable
                 {
                     EnableMultipleHttp2Connections = true,
                     ConnectTimeout               = TimeSpan.FromSeconds(10),
+                    // Ping on the interval below even when no RPC is in flight (e.g. the
+                    // gaps between heartbeats) — without this, KeepAlivePingDelay only
+                    // takes effect while PushEventsAsync/RunAsync has an active stream,
+                    // letting idle firewalls/NATs drop the connection between calls.
                     KeepAlivePingDelay            = TimeSpan.FromSeconds(30),
                     KeepAlivePingTimeout          = TimeSpan.FromSeconds(10),
-                    PooledConnectionIdleTimeout   = TimeSpan.FromSeconds(90),
-                    PooledConnectionLifetime      = TimeSpan.FromMinutes(30),
+                    KeepAlivePingPolicy           = HttpKeepAlivePingPolicy.Always,
+                    PooledConnectionIdleTimeout   = TimeSpan.FromMinutes(5),
+                    // Long test executions stream events to the controller for hours;
+                    // a finite lifetime here would force the pooled connection to be
+                    // recycled mid-stream. Reconnection is handled explicitly via
+                    // ResetChannel()/retry loops instead.
+                    PooledConnectionLifetime      = Timeout.InfiniteTimeSpan,
                 };
 
                 // Enable TLS when the controller address uses HTTPS

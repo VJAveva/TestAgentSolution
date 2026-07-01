@@ -26,6 +26,7 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
     private readonly IEventAggregator _events;
     private readonly ILogger<ControllerGrpcServerHost> _logger;
     private readonly int _port;
+    private readonly int _keepAliveHours;
     private WebApplication? _app;
     private Task? _serverTask;
 
@@ -39,6 +40,10 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
         _events = events;
         _logger = logger;
         _port = config.GetValue<int>("ControllerGrpcPort", 5100);
+        // Default (24h) matches Controller:Timeouts:OuterSafetyNetTimeoutHours so a
+        // long-running agent PushExecutionEvents stream is never cut off by Kestrel
+        // before the dispatcher's own safety-net timeout would end the execution.
+        _keepAliveHours = config.GetValue<int>("ControllerGrpcKeepAliveHours", 24);
     }
 
     public Task StartAsync(CancellationToken ct)
@@ -59,7 +64,7 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
                 // Allow long-running gRPC streams (test executions can take hours).
                 // Default MinDataRate kills connections with minutes of silence
                 // between stdout lines (e.g., during installs).
-                kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(4);
+                kestrel.Limits.KeepAliveTimeout = TimeSpan.FromHours(_keepAliveHours);
                 kestrel.Limits.MinRequestBodyDataRate = null;
                 kestrel.Limits.MinResponseDataRate = null;
             });
