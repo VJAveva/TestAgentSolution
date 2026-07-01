@@ -6,7 +6,13 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:52857;http://localhost:52858"
+      // Plaintext HTTP/2 (h2c) only. The agent's gRPC listener is HTTP/2 without TLS
+      // by default (AgentKestrel:EnableTls = false), so advertising an https:// URL here
+      // makes Visual Studio probe a TLS endpoint that doesn't exist and produces
+      // "SSL routines::wrong version number" handshake failures. The actual gRPC bind is
+      // driven by AgentSettings:GrpcPort in ConfigureKestrel; this URL is only for the
+      // dev-time metrics/health listener.
+      "applicationUrl": "http://localhost:5210"
     }
   }
 }

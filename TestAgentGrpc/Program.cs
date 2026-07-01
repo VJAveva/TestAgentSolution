@@ -100,6 +100,17 @@ builder.Services.Configure<AgentSettings>(
     builder.Configuration.GetSection("AgentSettings"));
 builder.Services.Configure<AgentKestrelOptions>(
     builder.Configuration.GetSection("AgentKestrel"));
+
+// Keep the advertised endpoint scheme in lockstep with the actual listener transport.
+// AgentSettings has no knowledge of TLS on its own, so we project EnableTls onto
+// AgentSettings.AdvertiseTls here. Without this, GetResolvedEndpoint() could advertise
+// http:// for a TLS-only listener (or vice-versa), producing gRPC handshake failures
+// ("SSL routines::wrong version number") on the controller side.
+builder.Services.PostConfigure<AgentSettings>(agent =>
+{
+    var kestrel = builder.Configuration.GetSection("AgentKestrel").Get<AgentKestrelOptions>() ?? new();
+    agent.AdvertiseTls = kestrel.EnableTls;
+});
 builder.Services.Configure<CommandPolicySettings>(
     builder.Configuration.GetSection("CommandPolicy"));
 builder.Services.Configure<NotificationSettings>(
@@ -231,6 +242,26 @@ if (metricsSettings.MetricsEndpointEnabled)
 
 // ── Startup validation: warn if running plaintext HTTP/2 in production ─
 var kestrelConfig = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentKestrelOptions>>().Value;
+
+// ── Startup validation: advertised endpoint scheme must match listener transport ─
+// If an operator hard-codes AgentSettings:AgentEndpoint, verify its scheme agrees with
+// AgentKestrel:EnableTls. A mismatch is the root cause of gRPC "wrong version number"
+// handshake failures, so fail fast at startup rather than at first connection.
+var agentConfig = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentSettings>>().Value;
+if (!string.IsNullOrWhiteSpace(agentConfig.AgentEndpoint) &&
+    Uri.TryCreate(agentConfig.AgentEndpoint, UriKind.Absolute, out var advertisedUri))
+{
+    var advertisesTls = string.Equals(advertisedUri.Scheme, "https", StringComparison.OrdinalIgnoreCase);
+    if (advertisesTls != kestrelConfig.EnableTls)
+    {
+        throw new InvalidOperationException(
+            $"Transport scheme mismatch: AgentSettings:AgentEndpoint is '{agentConfig.AgentEndpoint}' " +
+            $"({(advertisesTls ? "TLS" : "plaintext")}) but AgentKestrel:EnableTls = {kestrelConfig.EnableTls}. " +
+            "The advertised endpoint scheme must match the listener transport (use http:// when EnableTls=false, " +
+            "https:// when EnableTls=true), otherwise gRPC clients fail with 'SSL routines::wrong version number'.");
+    }
+}
+
 if (kestrelConfig.WarnOnPlaintextHttp2 && !app.Environment.IsDevelopment())
 {
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");

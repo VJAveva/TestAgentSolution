@@ -58,7 +58,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Polly.Core" Version="8.7.0" />
-    <PackageReference Include="Svg.Skia" Version="5.0.0" />
+    <PackageReference Include="Svg.Skia" Version="5.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.9" />
   </ItemGroup>
 

@@ -25,6 +25,16 @@ public sealed class AgentSettings
     public string ControllerAddress { get; set; } = "http://localhost:5100";
     public string? AgentEndpoint { get; set; }
 
+    /// <summary>
+    /// Whether the advertised endpoint should use the <c>https://</c> scheme.
+    /// This is NOT bound from configuration directly — it is set at startup from
+    /// <c>AgentKestrel:EnableTls</c> so the endpoint the agent advertises to the
+    /// controller always matches the actual Kestrel listener transport.
+    /// Advertising the wrong scheme (e.g. http:// for a TLS-only listener) causes
+    /// gRPC "SSL routines::wrong version number" handshake failures.
+    /// Default: false (plaintext HTTP/2, matching AgentKestrel:EnableTls default).
+    /// </summary>
+    public bool AdvertiseTls { get; set; }
     // Registration
     public int RegistrationRetryCount { get; set; } = 3;
     public int RegistrationRetryIntervalSeconds { get; set; } = 30;
@@ -65,5 +75,5 @@ public sealed class AgentSettings
     public int WatchdogGraceMinutes { get; set; } = 5;
 
     public string GetResolvedEndpoint() =>
-        AgentEndpoint ?? $"http://{Environment.MachineName}:{GrpcPort}";
+        AgentEndpoint ?? $"{(AdvertiseTls ? "https" : "http")}://{Environment.MachineName}:{GrpcPort}";
 }
