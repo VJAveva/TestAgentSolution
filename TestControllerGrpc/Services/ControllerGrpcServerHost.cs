@@ -27,6 +27,8 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
     private readonly ILogger<ControllerGrpcServerHost> _logger;
     private readonly int _port;
     private readonly int _keepAliveHours;
+    private readonly int _maxReceiveMessageSize;
+    private readonly int _maxSendMessageSize;
     private WebApplication? _app;
     private Task? _serverTask;
 
@@ -44,6 +46,14 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
         // long-running agent PushExecutionEvents stream is never cut off by Kestrel
         // before the dispatcher's own safety-net timeout would end the execution.
         _keepAliveHours = config.GetValue<int>("ControllerGrpcKeepAliveHours", 24);
+
+        // Bound to the same Controller:Timeouts section used by the outbound
+        // agent channels, so a fleet running past ~100 agents can raise both
+        // directions' message-size ceiling with a single appsettings edit.
+        var timeouts = config.GetSection(ControllerTimeoutOptions.SectionName).Get<ControllerTimeoutOptions>()
+            ?? new ControllerTimeoutOptions();
+        _maxReceiveMessageSize = timeouts.MaxReceiveMessageSizeBytes;
+        _maxSendMessageSize = timeouts.MaxSendMessageSizeBytes;
     }
 
     public Task StartAsync(CancellationToken ct)
@@ -69,7 +79,11 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
                 kestrel.Limits.MinResponseDataRate = null;
             });
 
-            builder.Services.AddGrpc();
+            builder.Services.AddGrpc(o =>
+            {
+                o.MaxReceiveMessageSize = _maxReceiveMessageSize;
+                o.MaxSendMessageSize = _maxSendMessageSize;
+            });
 
             // Share singletons from WPF DI into the gRPC server's DI container
             builder.Services.AddSingleton(_dispatcher);

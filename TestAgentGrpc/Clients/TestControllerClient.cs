@@ -68,6 +68,11 @@ public sealed class TestControllerClient : IDisposable
                 _channel = GrpcChannel.ForAddress(_settings.ControllerAddress, new GrpcChannelOptions
                 {
                     HttpHandler = handler,
+                    // Matches the controller's AddGrpc()/Controller:Timeouts limits so a
+                    // 100+ agent fleet's audit-log/history replies and heartbeat payloads
+                    // aren't rejected by the 4 MB Grpc.Net default.
+                    MaxReceiveMessageSize = 16 * 1024 * 1024,
+                    MaxSendMessageSize = 16 * 1024 * 1024,
                 });
             }
 

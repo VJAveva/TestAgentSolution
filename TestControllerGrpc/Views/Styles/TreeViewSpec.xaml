@@ -3,7 +3,8 @@
                     xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
                     xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels"
                     xmlns:controls="clr-namespace:TestControllerGrpc.Controls"
-                    xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels.Converters">
+                    xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels.Converters"
+                    xmlns:behaviors="clr-namespace:TestControllerGrpc.Views.Behaviors">
 
     <!--
         TreeViewSpec.xaml
@@ -681,6 +682,7 @@
     <Style x:Key="SpecTVI" TargetType="TreeViewItem">
         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
         <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+        <Setter Property="behaviors:TreeViewItemBehavior.IsBroughtIntoViewWhenSelected" Value="True" />
         <Setter Property="Visibility" Value="{Binding IsFilterVisible, Converter={StaticResource BoolVis}}" />
         <Setter Property="Foreground" Value="{DynamicResource TextDefaultBrush}" />
         <Setter Property="ItemTemplate" Value="{StaticResource WatchTreeSpecTemplate}" />

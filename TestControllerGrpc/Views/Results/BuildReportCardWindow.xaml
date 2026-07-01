@@ -609,9 +609,30 @@
                             <TextBlock Grid.Column="4" Text="OWNER" Style="{StaticResource KpiLabel}" />
                             <TextBlock Grid.Column="5" Text="FIRST SEEN" Style="{StaticResource KpiLabel}" />
                         </Grid>
-                        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding Failures}" Margin="14,0,14,8">
-                            <ItemsControl.ItemTemplate>
+                        <ListBox ItemsSource="{Binding Failures}" Margin="14,0,14,8" MaxHeight="360"
+                                 Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.CanContentScroll="True"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                 VirtualizingPanel.ScrollUnit="Pixel">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <ContentPresenter />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1" Padding="0,9">
                                         <Grid>
@@ -657,9 +678,8 @@
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        </ScrollViewer>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </StackPanel>
                 </Border>
 

@@ -26,11 +26,11 @@ public sealed partial class BuildReportCardViewModel : ObservableObject
     [ObservableProperty] private string? _selectedBuild;
 
     public ObservableCollection<string> AvailableBuilds { get; } = [];
-    public ObservableCollection<CiResult> Cis { get; } = [];
-    public ObservableCollection<AgentResult> Agents { get; } = [];
-    public ObservableCollection<PsrResult> Psrs { get; } = [];
-    public ObservableCollection<FailureEntry> Failures { get; } = [];
-    public ObservableCollection<TrendPoint> Trend { get; } = [];
+    public RangeObservableCollection<CiResult> Cis { get; } = [];
+    public RangeObservableCollection<AgentResult> Agents { get; } = [];
+    public RangeObservableCollection<PsrResult> Psrs { get; } = [];
+    public RangeObservableCollection<FailureEntry> Failures { get; } = [];
+    public RangeObservableCollection<TrendPoint> Trend { get; } = [];
 
     public BuildReportCardViewModel(
         BuildReportAggregator aggregator,
@@ -134,10 +134,10 @@ public sealed partial class BuildReportCardViewModel : ObservableObject
         }
     }
 
-    private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)
+    private static void Replace<T>(RangeObservableCollection<T> target, IReadOnlyList<T> source)
     {
         target.Clear();
-        foreach (var item in source) target.Add(item);
+        target.AddRange(source);
     }
 
     // ── Email the report card to all product owners (RC-Email) ──────────

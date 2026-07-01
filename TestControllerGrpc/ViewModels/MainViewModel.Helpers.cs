@@ -86,9 +86,48 @@ public sealed partial class MainViewModel
             SetTreeVisibilityRecursive(child, visible);
     }
 
+    // ── Expand all / Collapse all ──────────────────────────────────────
+
+    [RelayCommand]
+    private void ExpandAllWatchTree()
+    {
+        if (WatchListRoot is not null) SetExpandedRecursive(WatchListRoot, true);
+    }
+
+    [RelayCommand]
+    private void CollapseAllWatchTree()
+    {
+        if (WatchListRoot is not null) SetExpandedRecursive(WatchListRoot, false);
+    }
+
+    [RelayCommand]
+    private void ExpandAllTemplateTree()
+    {
+        if (TemplateListRoot is not null) SetExpandedRecursive(TemplateListRoot, true);
+    }
+
+    [RelayCommand]
+    private void CollapseAllTemplateTree()
+    {
+        if (TemplateListRoot is not null) SetExpandedRecursive(TemplateListRoot, false);
+    }
+
+    private static void SetExpandedRecursive(TreeNodeViewModel node, bool expanded)
+    {
+        node.IsExpanded = expanded;
+        foreach (var child in node.Children)
+            SetExpandedRecursive(child, expanded);
+    }
+
     // ?? Child addition helpers ??????????????????????????????????????
 
-    private void AddChild(TreeNodeViewModel parent, IActionNode child)
+    /// <summary>
+    /// Adds <paramref name="child"/> under <paramref name="parent"/> in both the tree and the
+    /// underlying model, and selects the new node so it auto-expands its ancestors and scrolls
+    /// into view (see <see cref="TreeNodeViewModel.ExpandAncestors"/> /
+    /// <see cref="Views.Behaviors.TreeViewItemBehavior"/>).
+    /// </summary>
+    private TreeNodeViewModel AddChild(TreeNodeViewModel parent, IActionNode child)
     {
         var n = TreeNodeViewModel.FromActionNode(child); n.Parent = parent;
         parent.Children.Add(n);
@@ -97,9 +136,11 @@ public sealed partial class MainViewModel
             case EventConfig ev: ev.Children.Add(child); break;
             case ActionGroupConfig ag: ag.Children.Add(child); break;
         }
+        n.IsSelected = true;
+        return n;
     }
 
-    private void AddChildT(TreeNodeViewModel parent, IActionNode child)
+    private TreeNodeViewModel AddChildT(TreeNodeViewModel parent, IActionNode child)
     {
         var n = TreeNodeViewModel.FromActionNode(child); n.Parent = parent;
         parent.Children.Add(n);
@@ -109,6 +150,8 @@ public sealed partial class MainViewModel
             case ActionGroupConfig ag: ag.Children.Add(child); break;
             case EventConfig ev: ev.Children.Add(child); break;
         }
+        n.IsSelected = true;
+        return n;
     }
 
     private bool RemoveDeep(TreeNodeViewModel parent, TreeNodeViewModel target)

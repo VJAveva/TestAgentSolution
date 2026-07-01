@@ -195,6 +195,8 @@ public sealed class AgentConnectionManager : IDisposable
             {
                 HttpHandler = handler,
                 DisposeHttpClient = true,
+                MaxReceiveMessageSize = 16 * 1024 * 1024,
+                MaxSendMessageSize = 16 * 1024 * 1024,
             });
 
             Client = new TestAgentService.TestAgentServiceClient(_channel);

@@ -48,14 +48,24 @@ public sealed class SimulatedAgent : IAsyncDisposable
             // Plaintext HTTP/2 (h2c) — matches how the controller dials agents.
             k.ListenLocalhost(_port, o => o.Protocols = HttpProtocols.Http2);
         });
-        builder.Services.AddGrpc();
+        // Matches the production message-size ceiling (Controller:Timeouts) so
+        // fleet-scale load tests exercise the same limits real deployments do.
+        builder.Services.AddGrpc(o =>
+        {
+            o.MaxReceiveMessageSize = 16 * 1024 * 1024;
+            o.MaxSendMessageSize = 16 * 1024 * 1024;
+        });
         builder.Services.AddSingleton(new SimulatedAgentService(Name, _opts.OutputLinesPerSecond));
 
         _app = builder.Build();
         _app.MapGrpcService<SimulatedAgentService>();
         await _app.StartAsync(ct);
 
-        _controllerChannel = GrpcChannel.ForAddress(_opts.ControllerGrpcUrl);
+        _controllerChannel = GrpcChannel.ForAddress(_opts.ControllerGrpcUrl, new GrpcChannelOptions
+        {
+            MaxReceiveMessageSize = 16 * 1024 * 1024,
+            MaxSendMessageSize = 16 * 1024 * 1024,
+        });
         _controller = new TestControllerService.TestControllerServiceClient(_controllerChannel);
 
         await _controller.RegisterAsync(new TestAgentRef

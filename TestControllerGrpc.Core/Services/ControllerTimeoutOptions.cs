@@ -55,6 +55,18 @@ public sealed class ControllerTimeoutOptions
     /// <summary>Consecutive failures before auto-resetting channel. Default: 10.</summary>
     public int AutoResetFailureThreshold { get; set; } = 10;
 
+    /// <summary>
+    /// Max gRPC receive message size (bytes) for channels/servers to agents.
+    /// Default: 16 MB. The 4 MB Grpc.Net default gets tight once a fleet grows
+    /// past ~100 agents (aggregate audit-log/history replies, fleet-wide
+    /// snapshots) — raise alongside <see cref="MaxSendMessageSizeBytes"/> if
+    /// running larger fleets or verbose test output.
+    /// </summary>
+    public int MaxReceiveMessageSizeBytes { get; set; } = 16 * 1024 * 1024;
+
+    /// <summary>Max gRPC send message size (bytes) for channels/servers to agents. Default: 16 MB.</summary>
+    public int MaxSendMessageSizeBytes { get; set; } = 16 * 1024 * 1024;
+
     // ── Monitor polling ──
 
     /// <summary>Telemetry polling interval (milliseconds). Default: 2000.</summary>
