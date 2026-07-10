@@ -50,8 +50,12 @@ public sealed partial class MainViewModel
                 LoadTokensFromConfig(_config);
             });
 
-        if (Application.Current.MainWindow is { } mainWindow)
+        if (Application.Current.MainWindow is { } mainWindow
+            && !ReferenceEquals(mainWindow, dlg)
+            && mainWindow.IsVisible)
+        {
             dlg.Owner = mainWindow;
+        }
 
         dlg.ShowDialog();
 

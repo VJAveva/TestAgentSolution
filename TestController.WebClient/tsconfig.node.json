@@ -13,7 +13,7 @@
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "strict": true,
-    "types": ["vitest/config"]
+    "types": ["vitest/config", "node"]
   },
   "include": ["vite.config.ts"]
 }

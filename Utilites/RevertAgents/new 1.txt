@@ -1,0 +1,1 @@
+powershell C:\TestSetup\RevertAgents\RevertRcloudMachine.ps1 AppServerPool2 jvgr1 teamautotest1 popcorn

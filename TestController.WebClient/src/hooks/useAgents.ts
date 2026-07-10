@@ -3,6 +3,30 @@ import { apiGet, apiPost, apiDelete } from '../lib/api';
 import { useAgentStore } from '../stores/agentStore';
 import type { AgentInfo, DiagnosticStep } from '../types/api';
 
+/** Outcome of a bulk register/unregister operation. */
+export interface BulkResult {
+  succeeded: string[];
+  failed: { name: string; error: string }[];
+}
+
+/** Maps Promise.allSettled results back to agent names for a bulk summary. */
+function summarizeBulk(
+  names: string[],
+  results: PromiseSettledResult<unknown>[]
+): BulkResult {
+  const succeeded: string[] = [];
+  const failed: { name: string; error: string }[] = [];
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      succeeded.push(names[i]);
+    } else {
+      const reason = r.reason as { detail?: string; error?: string } | undefined;
+      failed.push({ name: names[i], error: reason?.detail || reason?.error || 'Failed' });
+    }
+  });
+  return { succeeded, failed };
+}
+
 export function useAgents() {
   const setAgents = useAgentStore(s => s.setAgents);
 
@@ -21,6 +45,24 @@ export function useAgents() {
   const unregisterAgent = useCallback(async (name: string) => {
     await apiDelete(`/api/agents/${encodeURIComponent(name)}`);
     await fetchAgents();
+  }, [fetchAgents]);
+
+  // Bulk register: fire every registration simultaneously, refresh once at the end.
+  const registerMany = useCallback(async (list: { name: string; address: string }[]): Promise<BulkResult> => {
+    const results = await Promise.allSettled(
+      list.map(a => apiPost('/api/agents/register', { name: a.name, address: a.address }))
+    );
+    await fetchAgents();
+    return summarizeBulk(list.map(a => a.name), results);
+  }, [fetchAgents]);
+
+  // Bulk unregister: fire every delete simultaneously, refresh once at the end.
+  const unregisterMany = useCallback(async (names: string[]): Promise<BulkResult> => {
+    const results = await Promise.allSettled(
+      names.map(n => apiDelete(`/api/agents/${encodeURIComponent(n)}`))
+    );
+    await fetchAgents();
+    return summarizeBulk(names, results);
   }, [fetchAgents]);
 
   const testAgent = useCallback(async (name: string) => {
@@ -50,5 +92,5 @@ export function useAgents() {
     return apiGet<Record<string, unknown>[]>(`/api/agents/${encodeURIComponent(name)}/audit?max=${max}`);
   }, []);
 
-  return { fetchAgents, registerAgent, unregisterAgent, testAgent, diagnoseAgent, getSnapshot, getHealth, getHistory, getAudit };
+  return { fetchAgents, registerAgent, unregisterAgent, registerMany, unregisterMany, testAgent, diagnoseAgent, getSnapshot, getHealth, getHistory, getAudit };
 }

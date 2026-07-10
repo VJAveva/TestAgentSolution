@@ -42,13 +42,14 @@
     on a different machine than the WebAPI).
 
 .PARAMETER ControllerUrlConfigKey
-    The appsettings key the WebAPI reads for the Controller upstream address.
-    Default: "ControllerProxyUrl" (a top-level key read by ControllerProxyService
-    via config["ControllerProxyUrl"]). Override only if that service changes.
+    The appsettings key (colon-delimited path) the WebAPI reads for the Controller
+    upstream address. Default: "Controller:BaseUrl".
+    CONFIRM this matches the key your TestController.WebApi actually reads (search
+    Program.cs / the proxy or gRPC channel setup) and override if different.
 
 .PARAMETER HealthPath
-    Anonymous health endpoint used for validation. Default: "/healthz/live"
-    (mapped anonymously in Program.cs; "/healthz/ready" also exists).
+    Anonymous health endpoint used for validation. Default: "/api/health".
+    CONFIRM this route exists and requires no auth (HealthController / system-mode).
 
 .PARAMETER RequireBackend
     If set, the script FAILS when the WPF Controller is not reachable. Default off
@@ -88,8 +89,8 @@ param(
     [string]$Configuration = "Release",
     # ── NEW (db / proxy context) ─────────────────────────────────────
     [string]$ControllerUrl = "http://localhost:5200",
-    [string]$ControllerUrlConfigKey = "ControllerProxyUrl",
-    [string]$HealthPath = "/healthz/live",
+    [string]$ControllerUrlConfigKey = "Controller:BaseUrl",
+    [string]$HealthPath = "/api/health",
     [switch]$RequireBackend,
     # ─────────────────────────────────────────────────────────────────
     [switch]$SkipBuild,
@@ -241,19 +242,6 @@ Write-Host ""
 # ═════════════════════════════════════════════════════════════════════
 Log "═══ STEP 0: Preflight checks ═══" "STEP"
 
-# Elevation: local IIS configuration uses appcmd / icacls / firewall / Windows
-# features, all of which require Administrator. Fail fast here (before the long
-# build) rather than half-deploying and dying at the first IIS call. A remote
-# target or -SkipIIS run doesn't touch local IIS, so elevation isn't required.
-if ($isLocal -and -not $SkipIIS) {
-    $principal = New-Object Security.Principal.WindowsPrincipal(
-        [Security.Principal.WindowsIdentity]::GetCurrent())
-    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Fail "Local IIS deploy requires an elevated (Run as Administrator) PowerShell session. Re-run elevated, or use -SkipIIS to deploy files only."
-    }
-    Log "Running elevated" "OK"
-}
-
 # IIS + hosting bundle + WebSocket feature (local IIS deploys only)
 if ($isLocal -and -not $SkipIIS) {
     $appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
@@ -305,13 +293,10 @@ if (-not $SkipBuild) {
     Set-Content -Path $envProd -Value "# Production: API served from same origin`nVITE_API_BASE_URL=" -Encoding UTF8
     Log "Wrote .env.production (same-origin API)" "OK"
 
-    # Install deps — stop any running dev server that may lock node_modules.
-    # Use CIM for the command line: Process.CommandLine is not available on
-    # Windows PowerShell 5.1 (added in PS 7), so the old Get-Process filter
-    # silently matched nothing and never killed the locking dev server.
-    $viteProc = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -match "vite" } |
-        ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }
+    # Install deps — stop any running dev server that may lock node_modules
+    $viteProc = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
+        $_.CommandLine -match "vite" -or $_.MainWindowTitle -match "vite"
+    }
     if ($viteProc) {
         Log "Stopping Vite dev server (PID $($viteProc.Id -join ', '))..." "WARN"
         $viteProc | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -566,16 +551,10 @@ if (-not $SkipIIS) {
         icacls (Join-Path $DeployPath "logs") /grant "IIS AppPool\${SiteName}:(OI)(CI)M" /T /Q 2>$null | Out-Null
         Log "Permissions set" "OK"
 
-        # Firewall rule (non-fatal: a disabled firewall service or missing
-        # NetSecurity cmdlets must not abort an otherwise-deployed site).
-        try {
-            Remove-NetFirewallRule -DisplayName "TestControllerWeb" -ErrorAction SilentlyContinue
-            New-NetFirewallRule -DisplayName "TestControllerWeb" -Direction Inbound -Protocol TCP -LocalPort $SitePort -Action Allow -Profile Any -ErrorAction Stop | Out-Null
-            Log "Firewall rule: port $SitePort open" "OK"
-        }
-        catch {
-            Log "Could not set firewall rule for port $SitePort - open it manually if the site is unreachable. $($_.Exception.Message)" "WARN"
-        }
+        # Firewall rule
+        Remove-NetFirewallRule -DisplayName "TestControllerWeb" -ErrorAction SilentlyContinue
+        New-NetFirewallRule -DisplayName "TestControllerWeb" -Direction Inbound -Protocol TCP -LocalPort $SitePort -Action Allow -Profile Any | Out-Null
+        Log "Firewall rule: port $SitePort open" "OK"
 
         # Start
         & $appcmd start apppool /apppool.name:"$SiteName" 2>$null | Out-Null

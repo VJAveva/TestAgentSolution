@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Server, Lock, Unlock, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useFleetState } from '../../hooks/useFleetState';
 import { isAgentOnline } from '../../lib/agentStatus';
+import FleetBulkActions from './FleetBulkActions';
 import type { FleetAgent } from '../../types/agentWorkspace';
 
 const COLS = 3; // Cards per row (matches xl:grid-cols-3)
@@ -41,12 +42,19 @@ export default function FleetPage({ onSelectAgent }: FleetPageProps) {
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 border-b border-bdr">
         <h2 className="text-sm font-semibold text-text-primary">Fleet Overview</h2>
-        <button
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-muted hover:bg-white/5"
-          onClick={refresh}
-        >
-          <RefreshCw size={12} /> Refresh
-        </button>
+        <div className="flex items-center gap-1">
+          <FleetBulkActions
+            agents={fleet.map(a => ({ name: a.name, address: a.address }))}
+            onChanged={refresh}
+          />
+          <div className="w-px h-4 bg-bdr mx-1" />
+          <button
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-muted hover:bg-white/5"
+            onClick={refresh}
+          >
+            <RefreshCw size={12} /> Refresh
+          </button>
+        </div>
       </div>
 
       {fleet.length === 0 ? (

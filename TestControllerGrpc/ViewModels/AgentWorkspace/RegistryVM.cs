@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -407,6 +409,174 @@ public partial class RegistryVM : ObservableObject, IDisposable
         HasDiagnosticResult = false;
     }
 
+    // ── Bulk fleet operations ───────────────────────────────────────────
+
+    private static readonly JsonSerializerOptions ExportJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    /// <summary>Exports every registered agent (name + address) to a JSON file.</summary>
+    [RelayCommand]
+    private void ExportAgents()
+    {
+        if (Rows.Count == 0)
+        {
+            ThemedMessageBox.Show("No agents to export.", "Export Agents", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "JSON Files|*.json|All Files|*.*",
+            Title = "Export Agents to JSON",
+            DefaultExt = ".json",
+            FileName = $"agents-{DateTime.Now:yyyy-MM-dd}.json",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            var export = new AgentExportFile
+            {
+                ExportedUtc = DateTime.UtcNow,
+                Agents = Rows.Select(r => new AgentExportEntry { Name = r.Name, Address = r.Address }).ToList(),
+            };
+            File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(export, ExportJsonOptions));
+            ThemedMessageBox.Show(
+                $"Exported {export.Agents.Count} agent(s) to:\n{dlg.FileName}",
+                "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ThemedMessageBox.Show($"Export failed: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>Imports an agent list from JSON and registers every entry simultaneously.</summary>
+    [RelayCommand]
+    private void ImportAgents()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "JSON Files|*.json|All Files|*.*",
+            Title = "Import Agents from JSON",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        List<AgentExportEntry> entries;
+        try
+        {
+            entries = ParseAgentImport(File.ReadAllText(dlg.FileName));
+        }
+        catch (Exception ex)
+        {
+            ThemedMessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (entries.Count == 0)
+        {
+            ThemedMessageBox.Show(
+                "No valid agents found in file.\nExpected { \"agents\": [ { \"name\", \"address\" } ] }.",
+                "Import Agents", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        int added = 0, updated = 0;
+        foreach (var e in entries)
+        {
+            var existed = _dispatcher.GetAgentAddress(e.Name) != null;
+            _dispatcher.RegisterAgent(e.Name, e.Address);
+            if (existed) updated++; else added++;
+        }
+
+        Refresh();
+        ThemedMessageBox.Show(
+            $"Import complete: {added} added, {updated} updated.",
+            "Import Agents", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>Re-registers all currently listed agents simultaneously.</summary>
+    [RelayCommand]
+    private void RegisterAll()
+    {
+        if (Rows.Count == 0)
+        {
+            ThemedMessageBox.Show("No agents to register.", "Register All", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var snapshot = Rows.Select(r => (r.Name, r.Address)).ToList();
+        foreach (var (name, address) in snapshot)
+            _dispatcher.RegisterAgent(name, address);
+
+        Refresh();
+        ThemedMessageBox.Show($"Registered {snapshot.Count} agent(s).", "Register All", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>Unregisters every listed agent simultaneously (confirmed, destructive).</summary>
+    [RelayCommand]
+    private void UnregisterAll()
+    {
+        if (Rows.Count == 0)
+        {
+            ThemedMessageBox.Show("No agents to unregister.", "Unregister All", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var result = ThemedMessageBox.Show(
+            $"Unregister all {Rows.Count} agent(s)?\n\nPipelines using these agents will fail until they are re-registered. Export the list first if you want a backup.",
+            "Unregister All Agents", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        var names = Rows.Select(r => r.Name).ToList();
+        int removed = 0;
+        foreach (var name in names)
+            if (_dispatcher.UnregisterAgent(name)) removed++;
+
+        Refresh();
+        ClearForm();
+        ThemedMessageBox.Show($"Unregistered {removed} agent(s).", "Unregister All", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>Parses an exported agent file. Accepts { "agents": [...] } or a bare [...] array.</summary>
+    private static List<AgentExportEntry> ParseAgentImport(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        JsonElement arr;
+        if (root.ValueKind == JsonValueKind.Array)
+            arr = root;
+        else if (root.ValueKind == JsonValueKind.Object &&
+                 root.TryGetProperty("agents", out var a) && a.ValueKind == JsonValueKind.Array)
+            arr = a;
+        else
+            return new List<AgentExportEntry>();
+
+        static string? GetProp(JsonElement el, string name)
+        {
+            foreach (var p in el.EnumerateObject())
+                if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                    p.Value.ValueKind == JsonValueKind.String)
+                    return p.Value.GetString();
+            return null;
+        }
+
+        var list = new List<AgentExportEntry>();
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var name = GetProp(item, "name")?.Trim();
+            var address = GetProp(item, "address")?.Trim();
+            if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(address))
+                list.Add(new AgentExportEntry { Name = name!, Address = address! });
+        }
+        return list;
+    }
+
     /// <summary>Clears the form and hides the edit panel.</summary>
     private void ClearForm()
     {
@@ -436,4 +606,18 @@ public partial class RegistryRowVM : ObservableObject
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private string _lastSeen = "";
     [ObservableProperty] private int _latencyMs = -1;  // -1 = not measured
+}
+
+/// <summary>Serialized shape of an exported agent list file.</summary>
+public sealed class AgentExportFile
+{
+    public DateTime ExportedUtc { get; set; }
+    public List<AgentExportEntry> Agents { get; set; } = new();
+}
+
+/// <summary>A single agent entry (name + gRPC address) within an export file.</summary>
+public sealed class AgentExportEntry
+{
+    public string Name { get; set; } = "";
+    public string Address { get; set; } = "";
 }

@@ -3,6 +3,73 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace">
 
+    <UserControl.Resources>
+        <!-- View-local styles used throughout the registry view.
+             These are referenced by both DynamicResource *and* (critically)
+             StaticResource (see the ToolBtn "BasedOn" below), which must
+             resolve at XAML parse time — so they must be defined in scope. -->
+
+        <!-- Compact, flat, themed button. Honors the per-button Background /
+             Foreground supplied at each call site. -->
+        <Style x:Key="SmBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BgSurface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="4"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True"
+                                TextElement.Foreground="{TemplateBinding Foreground}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.70"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.40"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Field caption label -->
+        <Style x:Key="Lbl" TargetType="Label">
+            <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+
+        <!-- Single-line text field -->
+        <Style x:Key="Fld" TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource FieldBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -22,27 +89,111 @@
 
         <!-- Left: Agent table -->
         <DockPanel Grid.Column="0" Margin="6">
-            <Border DockPanel.Dock="Top" Padding="8,6">
+            <!-- Title row: heading + primary action -->
+            <Border DockPanel.Dock="Top" Padding="8,6,8,2">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button Content="+ Add Agent" FontSize="10"
-                                Style="{DynamicResource SmBtn}"
-                                Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
-                                Command="{Binding AddNewCommand}" Margin="0,0,4,0"/>
-                        <Button FontSize="10"
-                                Style="{DynamicResource SmBtn}"
-                                Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                                Command="{Binding TestAllCommand}" Margin="0,0,4,0"
-                                ToolTip="Test connectivity for all registered agents">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8AF;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                <TextBlock Text="Test All" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
+                    <Button Content="+ Add Agent" FontSize="10" DockPanel.Dock="Right" Height="26" Margin="0"
+                            Style="{DynamicResource SmBtn}" VerticalAlignment="Center"
+                            Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
+                            Command="{Binding AddNewCommand}"
+                            ToolTip="Register a new agent"/>
                     <TextBlock Text="Registered Agents" FontSize="12" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}" VerticalAlignment="Center"/>
                 </DockPanel>
+            </Border>
+
+            <!-- Toolbar row: grouped bulk operations (captions on top baseline, buttons on one baseline) -->
+            <Border DockPanel.Dock="Top" Padding="8,4,8,6">
+                <Border.Resources>
+                    <!-- Uniform toolbar button: fixed height + consistent spacing so every button aligns -->
+                    <Style x:Key="ToolBtn" TargetType="Button" BasedOn="{StaticResource SmBtn}">
+                        <Setter Property="Height" Value="26"/>
+                        <Setter Property="Margin" Value="0,0,4,0"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                    </Style>
+                    <Style x:Key="ToolCaption" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="8"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="Opacity" Value="0.6"/>
+                        <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+                        <Setter Property="Margin" Value="2,0,0,3"/>
+                    </Style>
+                    <Style x:Key="ToolGroup" TargetType="StackPanel">
+                        <Setter Property="Orientation" Value="Vertical"/>
+                        <Setter Property="VerticalAlignment" Value="Top"/>
+                        <Setter Property="Margin" Value="0,0,0,0"/>
+                    </Style>
+                </Border.Resources>
+                <WrapPanel Orientation="Horizontal">
+                    <!-- Group: Diagnostics -->
+                    <StackPanel Style="{StaticResource ToolGroup}">
+                        <TextBlock Text="DIAGNOSTICS" Style="{StaticResource ToolCaption}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource ToolBtn}"
+                                    Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
+                                    Command="{Binding TestAllCommand}"
+                                    ToolTip="Test connectivity for all registered agents">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8AF;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Test All" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Width="1" Height="26" VerticalAlignment="Bottom" Margin="8,0,12,0" Background="{DynamicResource Bdr}"/>
+
+                    <!-- Group: Backup -->
+                    <StackPanel Style="{StaticResource ToolGroup}">
+                        <TextBlock Text="BACKUP" Style="{StaticResource ToolCaption}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource ToolBtn}"
+                                    Command="{Binding ExportAgentsCommand}"
+                                    ToolTip="Export all registered agents to a JSON file">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Export" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource ToolBtn}"
+                                    Command="{Binding ImportAgentsCommand}"
+                                    ToolTip="Import a JSON agent list and register all entries">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Import" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Width="1" Height="26" VerticalAlignment="Bottom" Margin="8,0,12,0" Background="{DynamicResource Bdr}"/>
+
+                    <!-- Group: Fleet (bulk register/unregister) -->
+                    <StackPanel Style="{StaticResource ToolGroup}">
+                        <TextBlock Text="FLEET" Style="{StaticResource ToolCaption}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource ToolBtn}"
+                                    Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
+                                    Command="{Binding RegisterAllCommand}"
+                                    ToolTip="Re-register all listed agents simultaneously">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Register All" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource ToolBtn}" Margin="0"
+                                    Background="{DynamicResource DangerBtnBg}" Foreground="{DynamicResource AccRed}"
+                                    Command="{Binding UnregisterAllCommand}"
+                                    ToolTip="Unregister all agents simultaneously">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Unregister All" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </WrapPanel>
             </Border>
 
             <!-- Diagnostic results banner -->
