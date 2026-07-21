@@ -53,6 +53,15 @@ public sealed class EventBroadcaster : IDisposable
     /// <summary>
     /// Publishes an event to every active subscriber.
     /// Non-blocking; drops if a subscriber's buffer is full.
+    ///
+    /// Each subscriber receives its OWN deep clone of the event. This is
+    /// critical: subscribers are independent gRPC stream writers (the
+    /// controller push stream, the SubscribeAgentEvents firehose, the tray UI)
+    /// that each serialize the message on a different thread. Sharing one
+    /// <see cref="ExecutionEvent"/> instance across them means the same object
+    /// can be mutated (e.g. RunCommandStreamed stamps CorrelationId) or
+    /// serialized concurrently, which corrupts the gRPC 5-byte frame header and
+    /// surfaces as "Unexpected compressed flag value in message header".
     /// </summary>
     public void Publish(ExecutionEvent evt)
     {
@@ -60,7 +69,9 @@ public sealed class EventBroadcaster : IDisposable
         {
             foreach (var writer in _subscribers)
             {
-                writer.TryWrite(evt);
+                // Clone per subscriber so no two stream writers ever touch the
+                // same message instance concurrently.
+                writer.TryWrite(evt.Clone());
             }
         }
     }

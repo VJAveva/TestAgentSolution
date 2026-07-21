@@ -146,8 +146,11 @@ public sealed partial class MainViewModel
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
 
-        // Set owner to main window for CenterOwner positioning
-        if (Application.Current.MainWindow is { } mainWindow)
+        // Set owner to main window for CenterOwner positioning. FindOwnerWindow
+        // returns only a window that has actually been shown, preventing the WPF
+        // "Cannot set Owner property to a Window that has not been shown
+        // previously." crash.
+        if (FindOwnerWindow() is { } mainWindow && !ReferenceEquals(mainWindow, editorWindow))
             editorWindow.Owner = mainWindow;
 
         var result = editorWindow.ShowDialog();
@@ -210,7 +213,7 @@ public sealed partial class MainViewModel
         editorVm.WindowTitle = "WatchList XML Editor � Full";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
-        if (Application.Current.MainWindow is { } mainWindow)
+        if (FindOwnerWindow() is { } mainWindow && !ReferenceEquals(mainWindow, editorWindow))
             editorWindow.Owner = mainWindow;
 
         var result = editorWindow.ShowDialog();

@@ -209,7 +209,7 @@ public sealed partial class MainViewModel
         var vm = new AgentMonitorViewModel(agent.Name, address);
         var window = new Views.AgentMonitorWindow { DataContext = vm };
 
-        if (Application.Current.MainWindow is { } main)
+        if (FindOwnerWindow() is { } main && !ReferenceEquals(main, window))
             window.Owner = main;
 
         window.Closed += (_, _) => vm.Dispose();

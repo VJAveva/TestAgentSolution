@@ -169,11 +169,21 @@ public sealed partial class MainViewModel
     private static Window? FindOwnerWindow()
     {
         // Prefer the actual MainWindow type; fall back to the active window.
+        // Only return a window that has actually been shown — WPF throws
+        // "Cannot set Owner property to a Window that has not been shown
+        // previously." when the candidate owner has no native handle yet
+        // (Application.Current.MainWindow can transiently point at a
+        // not-yet-shown window, e.g. during login/startup transitions).
         if (Application.Current is null) return null;
+
+        static bool IsShown(Window w) =>
+            new System.Windows.Interop.WindowInteropHelper(w).Handle != IntPtr.Zero;
+
         foreach (Window w in Application.Current.Windows)
         {
-            if (w is MainWindow) return w;
+            if (w is MainWindow && IsShown(w)) return w;
         }
-        return Application.Current.MainWindow;
+
+        return Application.Current.MainWindow is { } main && IsShown(main) ? main : null;
     }
 }

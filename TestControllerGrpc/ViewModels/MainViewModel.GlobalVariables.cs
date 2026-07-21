@@ -50,9 +50,8 @@ public sealed partial class MainViewModel
                 LoadTokensFromConfig(_config);
             });
 
-        if (Application.Current.MainWindow is { } mainWindow
-            && !ReferenceEquals(mainWindow, dlg)
-            && mainWindow.IsVisible)
+        if (FindOwnerWindow() is { } mainWindow
+            && !ReferenceEquals(mainWindow, dlg))
         {
             dlg.Owner = mainWindow;
         }

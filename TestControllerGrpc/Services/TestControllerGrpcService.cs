@@ -94,6 +94,15 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
         {
             _logger.LogInformation("Agent event push stream from {Peer} was cancelled.", context.Peer);
         }
+        catch (Exception ex)
+        {
+            // Any other failure (e.g. gRPC framing errors surfacing as
+            // InvalidDataException during TryReadMessage) must be logged with
+            // the real exception so it can never be masked as a generic
+            // "Exception was thrown by handler." on the agent side.
+            _logger.LogError(ex, "PushExecutionEvents failed for {Peer}", context.Peer);
+            throw;
+        }
 
         return new Empty();
     }

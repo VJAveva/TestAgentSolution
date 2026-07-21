@@ -104,6 +104,32 @@ function Get-VMState($s) {
     }
 }
 
+function Wait-EntityIdle($s, [int]$TimeoutSec = 180) {
+    # vCloud rejects operations while a task (e.g. VAPP_UNDEPLOY_POWER_OFF)
+    # is still running on the VM or its vApp, even after Status flips to
+    # PoweredOff. Poll until no running/queued tasks remain.
+    $end = (Get-Date).AddSeconds($TimeoutSec)
+    do {
+        $vm = Get-VMState $s
+        if (-not $vm) { return }
+        $running = @()
+        try {
+            foreach ($entity in @($vm.ExtensionData, $vm.VApp.ExtensionData)) {
+                if ($entity -and $entity.Tasks -and $entity.Tasks.Task) {
+                    $running += @($entity.Tasks.Task | Where-Object {
+                        $_.Status -in @("running", "queued", "preRunning")
+                    })
+                }
+            }
+        }
+        catch { }
+        if ($running.Count -eq 0) { return }
+        Log "$($s.Name): waiting for $($running.Count) running task(s) [$($running[0].OperationName)]..."
+        Start-Sleep -Seconds 10
+    } while ((Get-Date) -lt $end)
+    Log "$($s.Name): entity still busy after ${TimeoutSec}s - proceeding anyway" "WARN"
+}
+
 Log "=================================================="
 Log "REVERT RCLOUD MACHINES (parallel, single session)"
 Log "Organization : $OrgName"
@@ -113,42 +139,77 @@ Log "PowerShell   : $($PSVersionTable.PSVersion)"
 Log "Log file     : $script:LogFile"
 Log "=================================================="
 
-# ---------------- Step 0: Self-heal VMware.PowerCLI ----------------
-Log "Checking VMware.PowerCLI module..." "STEP"
-$moduleReady = $false
-try {
-    Import-Module VMware.PowerCLI -ErrorAction Stop
-    $moduleReady = $true
-    Log "VMware.PowerCLI $((Get-Module VMware.PowerCLI).Version) loaded" "OK"
+# ---------------- Step 0: Self-heal PowerCLI ----------------
+# Accepts classic VMware.PowerCLI (13.x) OR rebranded VCF.PowerCLI (9.x+).
+# Both provide Connect-CIServer / Get-CIVM / Stop-CIVM / Start-CIVM.
+$script:PowerCliCandidates = @("VMware.PowerCLI", "VCF.PowerCLI")
+
+function Import-AnyPowerCli([switch]$SkipEditionCheck) {
+    foreach ($m in $script:PowerCliCandidates) {
+        try {
+            if ($SkipEditionCheck) { Import-Module $m -ErrorAction Stop -SkipEditionCheck }
+            else                   { Import-Module $m -ErrorAction Stop }
+            Log "$m $((Get-Module $m).Version) loaded" "OK"
+            return $true
+        }
+        catch { }
+    }
+    return $false
 }
-catch { Log "Module not loaded, attempting self-heal..." "WARN" }
+
+Log "Checking PowerCLI module (VMware.PowerCLI / VCF.PowerCLI)..." "STEP"
+$moduleReady = Import-AnyPowerCli
+if (-not $moduleReady) { Log "PowerCLI not loaded, attempting self-heal..." "WARN" }
 
 if (-not $moduleReady) {
     try {
+        # TLS 1.2 is required for PSGallery on Windows PowerShell 5.1
+        [Net.ServicePointManager]::SecurityProtocol = `
+            [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+        # AllUsers when elevated so service accounts can also see the
+        # module (CurrentUser installs land in a profile the pipeline
+        # service account cannot resolve). CurrentUser otherwise.
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        $scope = if ($isAdmin) { "AllUsers" } else { "CurrentUser" }
+        Log "Installing PowerCLI from PSGallery (scope: $scope)..."
+
         $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
         if (-not $nuget -or $nuget.Version -lt [Version]"2.8.5.201") {
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope $scope | Out-Null
         }
         $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
         if ($repo -and $repo.InstallationPolicy -ne "Trusted") {
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
         }
-        Install-Module VMware.PowerCLI -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-        Import-Module VMware.PowerCLI -ErrorAction Stop
-        $moduleReady = $true
-        Log "VMware.PowerCLI installed and loaded" "OK"
+
+        $installed = $false
+        foreach ($m in $script:PowerCliCandidates) {
+            try {
+                Install-Module $m -Scope $scope -Force -AllowClobber -ErrorAction Stop
+                Log "$m installed from PSGallery" "OK"
+                $installed = $true
+                break
+            }
+            catch { Log "Install of $m failed: $($_.Exception.Message)" "WARN" }
+        }
+        if ($installed) { $moduleReady = Import-AnyPowerCli }
     }
     catch { Log "Auto-install failed: $($_.Exception.Message)" "WARN" }
 }
 
 if (-not $moduleReady -and $PSVersionTable.PSVersion.Major -ge 7) {
+    # PS7 heal: borrow the module from the Windows PowerShell 5.1 path
     try {
         $winPS = "C:\Program Files\WindowsPowerShell\Modules"
-        if (Test-Path "$winPS\VMware.PowerCLI") {
+        $found = $false
+        foreach ($m in $script:PowerCliCandidates) {
+            if (Test-Path "$winPS\$m") { $found = $true }
+        }
+        if ($found) {
             $env:PSModulePath = "$winPS;$env:PSModulePath"
-            Import-Module VMware.PowerCLI -ErrorAction Stop -SkipEditionCheck
-            $moduleReady = $true
-            Log "Loaded from Windows PS 5.1 module path" "OK"
+            $moduleReady = Import-AnyPowerCli -SkipEditionCheck
+            if ($moduleReady) { Log "Loaded from Windows PS 5.1 module path" "OK" }
         }
     }
     catch { }
@@ -157,7 +218,9 @@ if (-not $moduleReady -and $PSVersionTable.PSVersion.Major -ge 7) {
 if (-not $moduleReady) {
     try { Add-PSSnapin VMware.VimAutomation.Cloud -ErrorAction Stop; $moduleReady = $true } catch { }
 }
-if (-not $moduleReady) { AbortAll "VMware.PowerCLI could not be loaded" }
+if (-not $moduleReady) {
+    AbortAll "PowerCLI could not be loaded. Manual install: run 'Install-Module VMware.PowerCLI -Scope AllUsers -Force -AllowClobber' as admin, or download the offline ZIP from https://developer.broadcom.com/tools/vmware-powercli/latest"
+}
 
 # ---------------- Step 1: Connect (once) ----------------
 Log "Connecting to vCloud..." "STEP"
@@ -193,10 +256,15 @@ if (-not (Active)) { AbortAll "No machines found - nothing to revert" }
 
 # ---------------- Step 3: Stop ALL (async), then wait together ----------------
 Log "Stopping all machines..." "STEP"
+$stopTasks = @{}
 foreach ($s in Active) {
     $vm = Get-VMState $s
     if ($vm -and $vm.Status -eq "PoweredOn") {
-        try { Stop-CIVM -VM $vm -Confirm:$false -RunAsync -ErrorAction Stop | Out-Null; Log "$($s.Name): stop issued" }
+        try {
+            $t = Stop-CIVM -VM $vm -Confirm:$false -RunAsync -ErrorAction Stop
+            if ($t) { $stopTasks[$s.Name] = $t }
+            Log "$($s.Name): stop issued"
+        }
         catch { Log "$($s.Name): stop error, will retry in poll: $($_.Exception.Message)" "WARN" }
     }
     else { Log "$($s.Name): already stopped ($(if ($vm) { $vm.Status } else { 'unknown' }))" }
@@ -226,11 +294,23 @@ foreach ($s in Active) {
 Log "$(@(Active).Count) machine(s) stopped" "OK"
 if (-not (Active)) { AbortAll "All machines failed during stop" }
 
+# Status flips to PoweredOff while VAPP_UNDEPLOY_POWER_OFF is still
+# running; a revert issued at that moment fails with "Unable to
+# perform this action". Wait for stop tasks and entity idle first.
+Log "Waiting for undeploy tasks to complete..." "STEP"
+foreach ($s in Active) {
+    if ($stopTasks.ContainsKey($s.Name)) {
+        try { Wait-Task -Task $stopTasks[$s.Name] -ErrorAction SilentlyContinue | Out-Null } catch { }
+    }
+    Wait-EntityIdle $s
+}
+Log "All machines idle - safe to revert" "OK"
+
 # ---------------- Step 4: Revert ALL, then wait together ----------------
 Log "Reverting all machines to current snapshot..." "STEP"
 foreach ($s in Active) {
     $sent = $false
-    for ($try = 1; $try -le 2 -and -not $sent; $try++) {
+    for ($try = 1; $try -le 4 -and -not $sent; $try++) {
         try {
             $vm = Get-VMState $s
             if (-not $vm) { throw "VM query returned nothing" }
@@ -241,8 +321,20 @@ foreach ($s in Active) {
             $sent = $true
         }
         catch {
-            if ($try -lt 2) { Log "$($s.Name): revert failed, retrying in 15s: $($_.Exception.Message)" "WARN"; Start-Sleep -Seconds 15 }
-            else { Fail $s "Revert failed after retry: $($_.Exception.Message)" }
+            $err = $_.Exception.Message
+            $busy = $err -match "Unable to perform this action|VAPP_UNDEPLOY|is busy|BUSY_ENTITY"
+            if ($try -lt 4) {
+                if ($busy) {
+                    Log "$($s.Name): entity busy (attempt $try/4) - waiting for tasks to clear..." "WARN"
+                    Start-Sleep -Seconds 20
+                    Wait-EntityIdle $s
+                }
+                else {
+                    Log "$($s.Name): revert failed (attempt $try/4), retrying in 15s: $err" "WARN"
+                    Start-Sleep -Seconds 15
+                }
+            }
+            else { Fail $s "Revert failed after 4 attempts: $err" }
         }
     }
 }

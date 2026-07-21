@@ -27,7 +27,7 @@ public sealed partial class MainViewModel
         editorVm.WindowTitle = $"Template XML Editor - {string.Join(", ", ids)}";
 
         var editorWindow = new Views.TemplateXmlEditorWindow(editorVm);
-        if (Application.Current.MainWindow is { } mainWindow)
+        if (FindOwnerWindow() is { } mainWindow && !ReferenceEquals(mainWindow, editorWindow))
             editorWindow.Owner = mainWindow;
 
         var result = editorWindow.ShowDialog();
@@ -90,7 +90,7 @@ public sealed partial class MainViewModel
         editorVm.WindowTitle = $"Template XML Editor - {selectedTemplate.ID}";
 
         var editorWindow = new Views.TemplateXmlEditorWindow(editorVm);
-        if (Application.Current.MainWindow is { } mainWindow)
+        if (FindOwnerWindow() is { } mainWindow && !ReferenceEquals(mainWindow, editorWindow))
             editorWindow.Owner = mainWindow;
 
         var result = editorWindow.ShowDialog();
