@@ -20,6 +20,12 @@
     <SolidColorBrush x:Key="AccMauve"  Color="#FF9333EA" />
     <SolidColorBrush x:Key="AccYellow" Color="#FFCA8A04" />
 
+    <!-- Execution log severity (theme-aware, ~4.5:1 on log panel bg) -->
+    <SolidColorBrush x:Key="LogInfoBrush"    Color="#FF1E293B" />
+    <SolidColorBrush x:Key="LogSuccessBrush" Color="#FF059669" />
+    <SolidColorBrush x:Key="LogWarnBrush"    Color="#FFB45309" />
+    <SolidColorBrush x:Key="LogErrorBrush"   Color="#FFC62828" />
+
     <!-- Text -->
     <SolidColorBrush x:Key="TextP"     Color="#FF161B29" />
     <SolidColorBrush x:Key="TextS"     Color="#FF4B566B" />

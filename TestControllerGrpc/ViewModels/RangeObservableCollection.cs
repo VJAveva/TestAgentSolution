@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -46,14 +47,14 @@ public sealed class RangeObservableCollection<T> : ObservableCollection<T>
             _suppressNotification = false;
         }
 
-        OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        RaiseReset();
     }
 
     /// <summary>
     /// Removes <paramref name="count"/> items from the beginning of the list
     /// in a single batch, firing one <see cref="NotifyCollectionChangedAction.Reset"/>.
     ///
-    /// Replaces the O(n²) pattern:
+    /// Replaces the O(nï¿½) pattern:
     /// <code>while (Count &gt; max) RemoveAt(0);</code>
     /// which fires n notifications and shifts items n times.
     /// </summary>
@@ -73,6 +74,24 @@ public sealed class RangeObservableCollection<T> : ObservableCollection<T>
             _suppressNotification = false;
         }
 
+        RaiseReset();
+    }
+
+    /// <summary>
+    /// Fires a single <see cref="NotifyCollectionChangedAction.Reset"/> for the
+    /// batched change AND the <c>Count</c>/<c>Item[]</c> property notifications.
+    ///
+    /// Because batch mutations go through <see cref="Collection{T}.Items"/> (which
+    /// bypasses the base <c>ObservableCollection</c> notifications), a bare
+    /// <c>Reset</c> refreshes an <c>ItemsControl</c> but leaves
+    /// <c>{Binding SomeCollection.Count}</c> bindings stale â€” the header entry
+    /// counter would sit at its initial value while rows stream in. Raising the
+    /// property changes here keeps count bindings in sync.
+    /// </summary>
+    private void RaiseReset()
+    {
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+        OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
         OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
     }
 

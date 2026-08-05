@@ -20,6 +20,12 @@
     <SolidColorBrush x:Key="AccMauve"  Color="#FFFF00FF" />
     <SolidColorBrush x:Key="AccYellow" Color="#FFFFFF00" />
 
+    <!-- Execution log severity (maximum contrast on black) -->
+    <SolidColorBrush x:Key="LogInfoBrush"    Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="LogSuccessBrush" Color="#FF00FF00" />
+    <SolidColorBrush x:Key="LogWarnBrush"    Color="#FFFFFF00" />
+    <SolidColorBrush x:Key="LogErrorBrush"   Color="#FFFF6B6B" />
+
     <!-- Text -->
     <SolidColorBrush x:Key="TextP"     Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="TextS"     Color="#FFCCCCCC" />

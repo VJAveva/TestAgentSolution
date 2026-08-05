@@ -3110,17 +3110,17 @@
                                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource LogInfoBrush}" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Severity}" Value="Error">
-                                                        <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
-                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource LogErrorBrush}" />
+                                                        <Setter Property="FontWeight" Value="Bold" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                                                        <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource LogWarnBrush}" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Severity}" Value="Success">
-                                                        <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource LogSuccessBrush}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
