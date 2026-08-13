@@ -134,6 +134,44 @@ public sealed partial class BuildReportCardViewModel : ObservableObject
         }
     }
 
+    // ── Export the report card as a self-contained HTML file (RC-Export) ──
+    // HTML (not PDF) keeps the export dependency-free; the saved file is fully
+    // styled and can be printed to PDF from any browser (Ctrl+P → Save as PDF).
+    [RelayCommand(CanExecute = nameof(CanExportReport))]
+    private void ExportHtml()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Export Build Report Card",
+                Filter = "HTML report (*.html)|*.html",
+                DefaultExt = ".html",
+                FileName = $"ReportCard_{SafeFileName(Card.BuildNumber)}.html",
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            var html = BuildReportEmailHtml(Card);
+            System.IO.File.WriteAllText(dialog.FileName, html, System.Text.Encoding.UTF8);
+            StatusMessage = $"Report card exported to {dialog.FileName}";
+            _logger.Info("BuildReportCard", $"Report card for '{Card.BuildNumber}' exported to {dialog.FileName}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("BuildReportCard", "Failed to export report card", ex);
+            StatusMessage = $"Failed to export report card: {ex.Message}";
+        }
+    }
+
+    private bool CanExportReport() => HasData && !IsLoading;
+
+    private static string SafeFileName(string raw)
+    {
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var cleaned = new string((raw ?? "").Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+        return string.IsNullOrWhiteSpace(cleaned) ? "build" : cleaned;
+    }
+
     private static void Replace<T>(RangeObservableCollection<T> target, IReadOnlyList<T> source)
     {
         target.Clear();
@@ -179,8 +217,17 @@ public sealed partial class BuildReportCardViewModel : ObservableObject
 
     private bool CanEmailReport() => HasData && !IsLoading;
 
-    partial void OnHasDataChanged(bool value) => EmailReportCommand.NotifyCanExecuteChanged();
-    partial void OnIsLoadingChanged(bool value) => EmailReportCommand.NotifyCanExecuteChanged();
+    partial void OnHasDataChanged(bool value)
+    {
+        EmailReportCommand.NotifyCanExecuteChanged();
+        ExportHtmlCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsLoadingChanged(bool value)
+    {
+        EmailReportCommand.NotifyCanExecuteChanged();
+        ExportHtmlCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>Distinct, comma-separated product-owner emails; falls back to BuildResults:ReportRecipients.</summary>
     private string ResolveOwnerRecipients()

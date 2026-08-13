@@ -1,5 +1,6 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using TestControllerGrpc.Services;
 
 namespace TestAgentGrpc.Services;
 
@@ -25,6 +26,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     private readonly EnhancedCommandPolicyEvaluator _policyEvaluator;
     private readonly AgentSettings _settings;
     private readonly ILogger<TestAgentGrpcService> _logger;
+    private readonly IAppLogger _appLogger;
     private readonly DateTime _agentStartedUtc = DateTime.UtcNow;
 
     public TestAgentGrpcService(
@@ -36,7 +38,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         ConnectionHealthMonitor healthMonitor,
         EnhancedCommandPolicyEvaluator policyEvaluator,
         Microsoft.Extensions.Options.IOptions<AgentSettings> settings,
-        ILogger<TestAgentGrpcService> logger)
+        ILogger<TestAgentGrpcService> logger,
+        IAppLogger appLogger)
     {
         _executor        = executor;
         _broadcaster     = broadcaster;
@@ -47,6 +50,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         _policyEvaluator = policyEvaluator;
         _settings        = settings.Value;
         _logger          = logger;
+        _appLogger       = appLogger;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -54,14 +58,16 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     // ═══════════════════════════════════════════════════════════════════
 
     public override Task<StateReply> GetState(Empty request, ServerCallContext context)
-    {
-        // Include hostname in response headers for auto-discovery
-        context.ResponseTrailers.Add("x-agent-hostname", Environment.MachineName);
-        return Task.FromResult(new StateReply { State = _executor.CurrentState });
-    }
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetState", context, () =>
+        {
+            // Include hostname in response headers for auto-discovery
+            context.ResponseTrailers.Add("x-agent-hostname", Environment.MachineName);
+            return Task.FromResult(new StateReply { State = _executor.CurrentState });
+        });
 
     public override Task<RunCommandReply> RunCommand(RunCommandRequest request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.RunCommand", context, () =>
+        {
         _logger.LogInformation("RunCommand: {CmdLine}",
             SecurityRedactor.RedactCommandLine(request.Command, request.Arguments));
 
@@ -92,31 +98,31 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             ExecutionId = execId,
             Message = "Command accepted.",
         });
-    }
+        });
 
     public override Task<ExitCodeReply> GetLastExitCode(Empty request, ServerCallContext context)
-    {
-        return Task.FromResult(new ExitCodeReply { ExitCode = _executor.LastExitCode });
-    }
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetLastExitCode", context, () =>
+            Task.FromResult(new ExitCodeReply { ExitCode = _executor.LastExitCode }));
 
     public override Task<ErrorReply> GetLastError(Empty request, ServerCallContext context)
-    {
-        return Task.FromResult(new ErrorReply { ErrorMessage = _executor.LastError });
-    }
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetLastError", context, () =>
+            Task.FromResult(new ErrorReply { ErrorMessage = _executor.LastError }));
 
     public override Task<Empty> TerminateExecution(Empty request, ServerCallContext context)
-    {
-        _logger.LogWarning("TerminateExecution requested");
-        _executor.TerminateExecution();
-        return Task.FromResult(new Empty());
-    }
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.TerminateExecution", context, () =>
+        {
+            _logger.LogWarning("TerminateExecution requested");
+            _executor.TerminateExecution();
+            return Task.FromResult(new Empty());
+        });
 
     public override Task<Empty> ForceReady(Empty request, ServerCallContext context)
-    {
-        _logger.LogWarning("ForceReady requested — forcibly resetting agent state");
-        _executor.ForceReady();
-        return Task.FromResult(new Empty());
-    }
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.ForceReady", context, () =>
+        {
+            _logger.LogWarning("ForceReady requested — forcibly resetting agent state");
+            _executor.ForceReady();
+            return Task.FromResult(new Empty());
+        });
 
     // ═══════════════════════════════════════════════════════════════════
     // NEW: Real-time execution monitoring RPCs
@@ -128,11 +134,12 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     ///
     /// The stream closes when the process exits.
     /// </summary>
-    public override async Task RunCommandStreamed(
+    public override Task RunCommandStreamed(
         RunCommandRequest request,
         IServerStreamWriter<ExecutionEvent> responseStream,
         ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.RunCommandStreamed", context, async () =>
+        {
         var correlationId = context.RequestHeaders
             .FirstOrDefault(h => h.Key == "x-correlation-id")?.Value ?? "";
 
@@ -197,7 +204,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             // so the channel completes cleanly.
             _logger.LogInformation("RunCommandStreamed client disconnected for {Id}", execId);
         }
-    }
+        });
 
     /// <summary>
     /// Firehose subscription: streams ALL agent events (execution output,
@@ -206,11 +213,12 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     /// The controller can open one of these per agent node to build a
     /// centralised real-time dashboard.
     /// </summary>
-    public override async Task SubscribeAgentEvents(
+    public override Task SubscribeAgentEvents(
         Empty request,
         IServerStreamWriter<ExecutionEvent> responseStream,
         ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.SubscribeAgentEvents", context, async () =>
+        {
         _logger.LogInformation("Client subscribed to agent event stream");
 
         var (reader, subscription) = _broadcaster.Subscribe();
@@ -228,14 +236,15 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
                 _logger.LogInformation("Agent event subscription ended (client disconnected)");
             }
         }
-    }
+        });
 
     /// <summary>
     /// Returns a list of past executions with full stdout/stderr capture.
     /// </summary>
     public override Task<ExecutionHistoryReply> GetExecutionHistory(
         ExecutionHistoryRequest request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetExecutionHistory", context, () =>
+        {
         var reply = new ExecutionHistoryReply();
         reply.Records.AddRange(_tracker.GetHistory(
             max: request.MaxResults,
@@ -258,14 +267,15 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             return rec;
         }));
         return Task.FromResult(reply);
-    }
+        });
 
     /// <summary>
     /// Returns a one-shot snapshot of the agent's current state, activity,
     /// resource metrics, and execution counters.
     /// </summary>
     public override Task<AgentSnapshot> GetAgentSnapshot(Empty request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetAgentSnapshot", context, () =>
+        {
         var snapshot = new AgentSnapshot
         {
             AgentName          = _settings.AgentName,
@@ -285,7 +295,7 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             snapshot.ExecutionStarted = Timestamp.FromDateTime(DateTime.SpecifyKind(started, DateTimeKind.Utc));
 
         return Task.FromResult(snapshot);
-    }
+        });
 
     private static readonly string[] AgentCapabilities =
     [
@@ -302,7 +312,8 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
     /// Returns audit log entries matching the requested date range and filters.
     /// </summary>
     public override Task<AuditLogReply> GetAuditLog(AuditLogRequest request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetAuditLog", context, () =>
+        {
         var entries = _audit.ReadEntries(
             request.FromDate, request.ToDate,
             request.EventFilter,
@@ -323,14 +334,15 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
         }));
 
         return Task.FromResult(reply);
-    }
+        });
 
     /// <summary>
     /// Returns connection health information for the agent's link to the controller.
     /// </summary>
     public override Task<ConnectionHealthReply> GetConnectionHealth(
         ConnectionHealthRequest request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.GetConnectionHealth", context, () =>
+        {
         var reply = new ConnectionHealthReply
         {
             ControllerName    = _healthMonitor.ControllerName ?? "",
@@ -357,14 +369,15 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             reply.LastDowntimeDuration = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(downtime);
 
         return Task.FromResult(reply);
-    }
+        });
 
     // ═══════════════════════════════════════════════════════════════════
     // Command Policy Management
     // ═══════════════════════════════════════════════════════════════════
 
     public override Task<CommandPolicyReply> ReloadCommandPolicy(Empty request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "AgentGrpc.ReloadCommandPolicy", context, () =>
+        {
         _logger.LogInformation("ReloadCommandPolicy RPC invoked");
         _policyEvaluator.Reload();
 
@@ -375,5 +388,5 @@ public sealed class TestAgentGrpcService : TestAgentService.TestAgentServiceBase
             Message = "Command policy reloaded successfully"
         };
         return Task.FromResult(reply);
-    }
+        });
 }

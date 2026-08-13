@@ -53,6 +53,15 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     // Output batching: coalesces rapid output lines into batch pushes (500ms)
     private readonly object _outputLock = new();
     private readonly List<object> _pendingOutputLines = new();
+
+    /// <summary>Upper bound on buffered output lines. Beyond this the oldest are dropped.</summary>
+    private const int MaxPendingOutputLines = 5_000;
+
+    /// <summary>Max lines per AgentOutputBatch frame, so no single broadcast is oversized.</summary>
+    private const int OutputChunkSize = 500;
+
+    /// <summary>Guard so the 500ms flush timer cannot stack concurrent broadcasts.</summary>
+    private int _flushInFlight;
     private Timer? _outputTimer;
 
     public SignalRNotifier(
@@ -253,20 +262,49 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         lock (_outputLock)
         {
             _pendingOutputLines.Add(payload);
+
+            // Bounded buffer: when clients cannot keep up, drop the oldest lines
+            // instead of growing without limit. An unbounded list produced multi-MB
+            // frames that exceeded the 5s broadcast timeout and aborted the
+            // "global" group connection, which surfaced as the WebClient going offline.
+            var overflow = _pendingOutputLines.Count - MaxPendingOutputLines;
+            if (overflow > 0)
+                _pendingOutputLines.RemoveRange(0, overflow);
         }
     }
 
     private void FlushOutput(object? state)
     {
-        List<object> batch;
-        lock (_outputLock)
-        {
-            if (_pendingOutputLines.Count == 0) return;
-            batch = new List<object>(_pendingOutputLines);
-            _pendingOutputLines.Clear();
-        }
+        // If a previous flush is still draining to a slow client, skip this tick.
+        // Without this the 500ms timer stacked concurrent group broadcasts whenever
+        // a send stalled, compounding buffer pressure until the connection dropped.
+        if (Interlocked.Exchange(ref _flushInFlight, 1) == 1) return;
+        _ = FlushOutputAsync();
+    }
 
-        SendSafe("AgentOutputBatch", batch);
+    private async Task FlushOutputAsync()
+    {
+        try
+        {
+            while (true)
+            {
+                List<object> chunk;
+                lock (_outputLock)
+                {
+                    if (_pendingOutputLines.Count == 0) return;
+                    var take = Math.Min(OutputChunkSize, _pendingOutputLines.Count);
+                    chunk = _pendingOutputLines.GetRange(0, take);
+                    _pendingOutputLines.RemoveRange(0, take);
+                }
+
+                // Awaited (not fire-and-forget) so chunks are serialised on the wire.
+                await SendSafeAsync("AgentOutputBatch", chunk);
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _flushInFlight, 0);
+        }
     }
 
     private void OnOutputReceived(string agentName, string line, string kind)

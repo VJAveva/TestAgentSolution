@@ -74,6 +74,18 @@ public sealed class AgentSettings
     /// </summary>
     public int WatchdogGraceMinutes { get; set; } = 5;
 
+    /// <summary>
+    /// Seconds of zero stdout/stderr before the agent flags an execution as
+    /// "likely hung" (advisory only; does not kill the process). The
+    /// StuckExecutionWatchdog remains the nuclear fallback. Default: 90.
+    /// Set to 0 to disable the silence detector.
+    /// </summary>
+    public int SilenceHungSeconds { get; set; } = 90;
+
+    /// <summary>Derived threshold; <see cref="TimeSpan.Zero"/> disables the check.</summary>
+    public TimeSpan SilenceHungThreshold =>
+        SilenceHungSeconds > 0 ? TimeSpan.FromSeconds(SilenceHungSeconds) : TimeSpan.Zero;
+
     public string GetResolvedEndpoint() =>
         AgentEndpoint ?? $"{(AdvertiseTls ? "https" : "http")}://{Environment.MachineName}:{GrpcPort}";
 }

@@ -73,6 +73,10 @@
                         Command="{Binding EmailReportCommand}" Content="✉  Email owners"
                         ToolTip="Email this report card to all product owners"
                         Margin="0,0,8,0" />
+                <Button DockPanel.Dock="Left" Style="{StaticResource ToolBtn}"
+                        Command="{Binding ExportHtmlCommand}" Content="⭳  Export HTML"
+                        ToolTip="Export this report card as a self-contained HTML file (print to PDF from a browser)"
+                        Margin="0,0,8,0" />
                 <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
                            Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11"
                            Text="Build:" Margin="0,0,6,0" />

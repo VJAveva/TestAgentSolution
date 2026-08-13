@@ -233,6 +233,9 @@ public partial class App : Application
                 services.AddSingleton<BuildSummaryStore>();
                 services.AddSingleton<BuildReportAggregator>();
                 services.AddSingleton<TestControllerGrpc.ViewModels.Results.BuildReportCardViewModel>();
+                // WatchItem Builder (Tier3 §5): transient so each open deep-clones the
+                // current vocabulary config fresh from the monitor.
+                services.AddTransient<TestControllerGrpc.ViewModels.WatchBuilder.WatchBuilderViewModel>();
             })
             .Build();
 

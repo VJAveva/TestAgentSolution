@@ -106,6 +106,7 @@ public sealed class AgentEventRelayService : BackgroundService
                 var kind = evt.EventType == ExecutionEventType.EventStdoutLine ? "stdout" : "stderr";
                 await _notifier.NotifyAgentOutput(new
                 {
+                    sessionId = evt.ExecutionId,
                     agentName,
                     line = SecurityRedactor.Redact(evt.OutputLine),
                     kind,

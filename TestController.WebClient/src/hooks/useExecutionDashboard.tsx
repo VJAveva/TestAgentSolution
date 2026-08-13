@@ -441,14 +441,16 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
       dispatch({ type: 'EXECUTION_COMPLETED', data: { ...data, state: 'Cancelled' } });
     };
 
+    const onOutputBatch = (batch: any[]) => {
+      for (const data of batch) onOutput(data);
+    };
+
     connection.on('ExecutionStarted', onStarted);
     connection.on('ExecutionCompleted', onCompleted);
     connection.on('ExecutionCancelled', onCancelled);
     connection.on('ActionProgress', onProgress);
     connection.on('AgentOutput', onOutput);
-    connection.on('AgentOutputBatch', (batch: any[]) => {
-      for (const data of batch) onOutput(data);
-    });
+    connection.on('AgentOutputBatch', onOutputBatch);
     connection.on('LogEntry', onLog);
 
     return () => {
@@ -457,7 +459,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
       connection.off('ExecutionCancelled', onCancelled);
       connection.off('ActionProgress', onProgress);
       connection.off('AgentOutput', onOutput);
-      connection.off('AgentOutputBatch');
+      connection.off('AgentOutputBatch', onOutputBatch);
       connection.off('LogEntry', onLog);
     };
   }, [connection]);

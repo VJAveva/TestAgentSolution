@@ -173,6 +173,7 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 // ── Core services ──────────────────────────────────────────────────────
+builder.Services.AddSingleton<IAppLogger>(_ => new AppLogger("agent", AppLogger.DefaultLogDirectory));
 builder.Services.AddSingleton<EventBroadcaster>();
 builder.Services.AddSingleton<ExecutionTracker>();
 builder.Services.AddSingleton<AuditLogger>();

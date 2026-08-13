@@ -81,4 +81,26 @@ public class AgentSettingsTests
         Assert.Equal("http://custom:5200", settings.AgentEndpoint);
         Assert.Equal(60, settings.HeartbeatIntervalSeconds);
     }
+
+    [Fact]
+    public void AgentSettings_Should_DefaultSilenceHungTo90Seconds_When_Created()
+    {
+        var settings = new AgentSettings();
+        Assert.Equal(90, settings.SilenceHungSeconds);
+        Assert.Equal(TimeSpan.FromSeconds(90), settings.SilenceHungThreshold);
+    }
+
+    [Fact]
+    public void AgentSettings_Should_DisableSilenceDetector_When_SilenceHungSecondsIsZero()
+    {
+        var settings = new AgentSettings { SilenceHungSeconds = 0 };
+        Assert.Equal(TimeSpan.Zero, settings.SilenceHungThreshold);
+    }
+
+    [Fact]
+    public void AgentSettings_Should_DeriveSilenceThreshold_When_SilenceHungSecondsSet()
+    {
+        var settings = new AgentSettings { SilenceHungSeconds = 45 };
+        Assert.Equal(TimeSpan.FromSeconds(45), settings.SilenceHungThreshold);
+    }
 }

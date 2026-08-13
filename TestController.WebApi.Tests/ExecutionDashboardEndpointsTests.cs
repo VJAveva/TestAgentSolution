@@ -35,6 +35,27 @@ public class ExecutionDashboardEndpointsTests : IClassFixture<TestWebAppFactory>
         Assert.Equal(JsonValueKind.Object, json.ValueKind);
     }
 
+    // ── Regression guard: WebClient blank page in Secured mode ─────────
+    // docs/Issues/WEBCLIENT_BLANK_PAGE_SECURED_MODE.md — the React dashboard
+    // polls /api/execution/proxy/dashboard-sessions. When that route was not
+    // mapped, the SPA fallback returned index.html on an /api/ path; apiFetch
+    // detected HTML and synthesized a 404, leaving the dashboard blank. Guard
+    // that the endpoint exists and returns JSON (never an HTML SPA fallback).
+    [Fact]
+    public async Task ProxyDashboardSessions_Should_ReturnJsonNotHtml_When_Requested()
+    {
+        var response = await _client.GetAsync("/api/execution/proxy/dashboard-sessions");
+
+        Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var contentType = response.Content.Headers.ContentType?.MediaType;
+        Assert.Equal("application/json", contentType);
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Object, json.ValueKind);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // GET /api/execution/demo-sessions
     // ═══════════════════════════════════════════════════════════════════

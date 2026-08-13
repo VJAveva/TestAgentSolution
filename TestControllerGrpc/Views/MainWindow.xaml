@@ -1236,6 +1236,10 @@
                                 ToolTip="Build Report Card" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
+                        <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenWatchBuilderCommand}"
+                                ToolTip="WatchItem Builder" Height="28" MinWidth="28" Padding="4,2">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
+                        </Button>
                         <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
                                 ToolTip="Help (F1)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" FontSize="14" Foreground="{DynamicResource Accent}" />

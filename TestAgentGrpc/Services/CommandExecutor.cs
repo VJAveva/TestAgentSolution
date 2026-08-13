@@ -43,6 +43,20 @@ public sealed class CommandExecutor : IDisposable
     private volatile ExecutionLifecycleState? _lifecycle;
     private volatile int _currentTimeoutMinutes;
 
+    // ── Silence detector (B2) ──────────────────────────────────────────
+    private long _lastOutputTicks = DateTime.UtcNow.Ticks;
+    private volatile bool _silenceFlagged;
+
+    /// <summary>Records that output was observed (called on every streamed line).</summary>
+    private void MarkOutput()
+    {
+        Interlocked.Exchange(ref _lastOutputTicks, DateTime.UtcNow.Ticks);
+        _silenceFlagged = false;
+    }
+
+    private TimeSpan SinceLastOutput =>
+        DateTime.UtcNow - new DateTime(Interlocked.Read(ref _lastOutputTicks), DateTimeKind.Utc);
+
     public event EventHandler<AgentState>? StateChanged;
     public event EventHandler<string>? ActivityChanged;
 
@@ -304,6 +318,7 @@ public sealed class CommandExecutor : IDisposable
                 UseShellExecute        = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
+                RedirectStandardInput  = true,
                 CreateNoWindow         = true,
             };
 
@@ -320,6 +335,10 @@ public sealed class CommandExecutor : IDisposable
                 throw new InvalidOperationException("Process.Start returned null");
             }
 
+            // EOF on stdin: any interactive prompt fails fast instead of blocking the batch.
+            try { _currentProcess.StandardInput.Close(); }
+            catch (Exception ex) { _logger.LogDebug(ex, "stdin close no-op"); }
+
             _audit.Log("CommandStarted", executionId: executionId,
                 command: resolvedFile, arguments: resolvedArgs,
                 pid: _currentProcess.Id,
@@ -332,6 +351,10 @@ public sealed class CommandExecutor : IDisposable
 
             SetActivity($"Executing: {SecurityRedactor.RedactCommandLine(command, arguments)}");
             _lastError = string.Empty;
+
+            // Reset the silence detector for this execution (B2).
+            Interlocked.Exchange(ref _lastOutputTicks, DateTime.UtcNow.Ticks);
+            _silenceFlagged = false;
 
             // ── STREAM STDOUT + STDERR concurrently ────────────────
             // We pass `ct` so streams are cancelled when execution is cancelled/terminated.
@@ -379,6 +402,26 @@ public sealed class CommandExecutor : IDisposable
                     EmitEvent(executionId, ExecutionEventType.EventProgress,
                         detail: detail, progressPct: percent,
                         perCallChannel: perCallChannel);
+
+                    // Silence detector (B2): flag "likely hung" after a configurable
+                    // silent stretch. Advisory only — StuckExecutionWatchdog is the
+                    // nuclear fallback. One-shot per silent stretch; re-arms on output.
+                    if (_settings.SilenceHungThreshold > TimeSpan.Zero)
+                    {
+                        var silence = SinceLastOutput;
+                        if (silence > _settings.SilenceHungThreshold && !_silenceFlagged)
+                        {
+                            _silenceFlagged = true;
+                            EmitEvent(executionId, ExecutionEventType.EventProgress,
+                                detail: $"\u26A0 No output for {silence:mm\\:ss} \u2014 command may be hung (PID {cachedPid})",
+                                progressPct: percent,
+                                perCallChannel: perCallChannel);
+
+                            _logger.LogWarning(
+                                "Execution {Id}: silent for {Silence}s \u2014 likely hung (PID {Pid})",
+                                executionId, (int)silence.TotalSeconds, cachedPid);
+                        }
+                    }
                 }
 
                 // Final 100% when process exits
@@ -628,6 +671,7 @@ public sealed class CommandExecutor : IDisposable
         {
             while (await reader.ReadLineAsync(ct) is { } line)
             {
+                MarkOutput();
                 record.AddOutputLine(kind, line);
 
                 EmitEvent(executionId, eventType,

@@ -21,19 +21,23 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IEventAggregator _events;
     private readonly ILogger<TestControllerGrpcService> _logger;
+    private readonly IAppLogger _appLogger;
 
     public TestControllerGrpcService(
         IAgentGrpcDispatcher dispatcher,
         IEventAggregator events,
-        ILogger<TestControllerGrpcService> logger)
+        ILogger<TestControllerGrpcService> logger,
+        IAppLogger appLogger)
     {
         _dispatcher = dispatcher;
         _events = events;
         _logger = logger;
+        _appLogger = appLogger;
     }
 
     public override Task<Empty> Register(TestAgentRef request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "ControllerGrpc.Register", context, () =>
+        {
         // Use the explicit endpoint when provided; fall back to peer-derived address
         var agentGrpcAddress = !string.IsNullOrEmpty(request.Endpoint)
             ? request.Endpoint
@@ -48,29 +52,32 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
         _dispatcher.RegisterAgent(request.Name, agentGrpcAddress);
 
         return Task.FromResult(new Empty());
-    }
+        });
 
     public override Task<Empty> UnRegister(TestAgentRef request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "ControllerGrpc.UnRegister", context, () =>
+        {
         _logger.LogInformation("Agent unregistered via gRPC: {Name}", request.Name);
         // Dispatcher publishes AgentUnregisteredEvent internally
         _dispatcher.UnregisterAgent(request.Name);
         return Task.FromResult(new Empty());
-    }
+        });
 
     public override Task<Empty> UpdateClientState(TestAgentRef request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "ControllerGrpc.UpdateClientState", context, () =>
+        {
         _logger.LogInformation("Agent {Name} state → {State}", request.Name, request.State);
         _events.Publish(new AgentStateChangedEvent(request.Name, request.State));
         return Task.FromResult(new Empty());
-    }
+        });
 
     public override Task<Empty> Heartbeat(HeartbeatRequest request, ServerCallContext context)
-    {
+        => GrpcGuard.RunAsync(_appLogger, "ControllerGrpc.Heartbeat", context, () =>
+        {
         _logger.LogDebug("Heartbeat from {Name}: {State}", request.AgentName, request.State);
         _events.Publish(new AgentHeartbeatEvent(request.AgentName, request.State, request.Metrics));
         return Task.FromResult(new Empty());
-    }
+        });
 
     public override async Task<Empty> PushExecutionEvents(
         IAsyncStreamReader<ExecutionEvent> requestStream, ServerCallContext context)

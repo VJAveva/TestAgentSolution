@@ -41,6 +41,53 @@ public sealed class ConcurrentExecutionTests : IClassFixture<ApiTestFixture>
     }
 
     [Fact]
+    public async Task Trigger_Should_RunAllConcurrently_When_DistinctWatchItems()
+    {
+        if (_fixture.IsLive)
+            return;
+
+        _fixture.ResetFake();
+        _fixture.Fake!.ExecutionDelay = TimeSpan.FromSeconds(3);
+
+        var tags = TestWatchItems.InMemoryDistinctTags;
+
+        // Fire all triggers as close to simultaneously as possible.
+        var responses = await Task.WhenAll(tags.Select(t => Api.TriggerAsync(t)));
+
+        var sessionIds = new List<string>();
+        foreach (var response in responses)
+        {
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            var body = await ApiClient.ReadAsync<TriggerResponse>(response);
+            Assert.NotNull(body);
+            sessionIds.Add(body!.SessionId);
+        }
+
+        // Distinct WatchItems produce distinct sessions (no cross-item serialization).
+        Assert.Equal(tags.Length, sessionIds.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        // Every session must be active at the same time — proves concurrent execution.
+        foreach (var id in sessionIds)
+            Assert.True(await WorkflowHelpers.WaitUntilActiveAsync(Api, id, TimeSpan.FromSeconds(5)),
+                $"Session '{id}' never became active");
+
+        var status = await Api.GetStatusAsync();
+        Assert.True(status.ActiveCount >= tags.Length,
+            $"Expected >= {tags.Length} concurrent sessions, saw {status.ActiveCount}");
+
+        // Every session reaches a terminal state with a valid per-session id.
+        var finals = await Task.WhenAll(sessionIds.Select(id =>
+            WorkflowHelpers.PollUntilTerminalAsync(Api, id, TimeSpan.FromSeconds(15))));
+
+        Assert.All(finals, s =>
+        {
+            Assert.NotNull(s);
+            Assert.True(SessionStates.IsTerminal(s!.State),
+                $"Session '{s.SessionId}' did not reach a terminal state (was '{s.State}')");
+        });
+    }
+
+    [Fact]
     public async Task Status_Should_ReflectActiveExecution_When_Running()
     {
         if (_fixture.IsLive)

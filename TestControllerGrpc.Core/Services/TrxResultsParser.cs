@@ -36,6 +36,12 @@ public class TrxResultsParser
     private readonly ConcurrentDictionary<string, string> _pathToKey = new();
     private const int MaxFileCacheSize = 4000;
 
+    // Bounded parallelism for TRX file parsing. Capped so a build folder with
+    // hundreds of files does not spawn unbounded work or thrash a network share.
+    // ParseFile is thread-safe (the caches above are ConcurrentDictionary), so
+    // ordered PLINQ produces identical output to the sequential path.
+    private static readonly int ParseParallelism = Math.Min(Environment.ProcessorCount, 8);
+
     /// <summary>
     /// Scans a build folder with structure: [BuildFolder] > [UseCaseFolder] > *.trx
     /// and returns a fully populated <see cref="BuildNode"/>.
@@ -69,7 +75,14 @@ public class TrxResultsParser
                 var trxFiles = Directory.GetFiles(useCaseDir, "*.trx");
                 if (trxFiles.Length == 0) continue;
 
-                var runs = trxFiles.Select(ParseFile).ToList();
+                // Ordered PLINQ preserves the on-disk file order while parsing
+                // files in parallel; ParseFile is thread-safe via its caches.
+                var runs = trxFiles
+                    .AsParallel()
+                    .AsOrdered()
+                    .WithDegreeOfParallelism(ParseParallelism)
+                    .Select(ParseFile)
+                    .ToList();
                 var uc = AggregateToUseCase(useCaseName, runs);
                 useCases.Add(uc);
 
@@ -377,7 +390,11 @@ public class TrxResultsParser
     public List<TrxTestRun> ParseDirectory(string directoryPath)
     {
         if (!Directory.Exists(directoryPath)) return new();
+        // Parse in parallel (thread-safe caches); the trailing OrderBy makes the
+        // final ordering deterministic regardless of completion order.
         return Directory.GetFiles(directoryPath, "*.trx")
+            .AsParallel()
+            .WithDegreeOfParallelism(ParseParallelism)
             .Select(ParseFile)
             .OrderBy(r => r.FeatureName)
             .ToList();

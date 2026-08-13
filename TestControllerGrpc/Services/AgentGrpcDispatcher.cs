@@ -1046,6 +1046,7 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = true,
                 CreateNoWindow = true,
                 WorkingDirectory = !string.IsNullOrEmpty(ctx.WatchItemPath)
                     ? ctx.WatchItemPath : Environment.CurrentDirectory,
@@ -1073,6 +1074,10 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
             using var process = System.Diagnostics.Process.Start(psi);
             if (process is null)
                 return new ActionResult(false, -1, "Failed to start process");
+
+            // EOF on stdin: any interactive prompt fails fast instead of blocking the batch.
+            try { process.StandardInput.Close(); }
+            catch (Exception ex) { _logger.LogDebug(ex, "stdin close no-op"); }
 
             OutputReceived?.Invoke("Controller", $"PID {process.Id}: {SecurityRedactor.RedactCommandLine(fileName, arguments)}", "info");
 

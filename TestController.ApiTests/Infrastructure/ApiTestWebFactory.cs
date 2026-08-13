@@ -45,6 +45,26 @@ public sealed class ApiTestWebFactory : WebApplicationFactory<Program>
                   <Action Type="RunCommand" Command="echo" Parameters="hello" />
                 </Event>
               </WatchItem>
+              <WatchItem Tag="TestBuild2" Path="C:\Trigger_2" Filter="trigger.txt">
+                <Event Type="Renamed" ExecutionType="Sequential">
+                  <Action Type="RunCommand" Command="echo" Parameters="hello" />
+                </Event>
+              </WatchItem>
+              <WatchItem Tag="TestBuild3" Path="C:\Trigger_3" Filter="trigger.txt">
+                <Event Type="Renamed" ExecutionType="Sequential">
+                  <Action Type="RunCommand" Command="echo" Parameters="hello" />
+                </Event>
+              </WatchItem>
+              <WatchItem Tag="TestBuild4" Path="C:\Trigger_4" Filter="trigger.txt">
+                <Event Type="Renamed" ExecutionType="Sequential">
+                  <Action Type="RunCommand" Command="echo" Parameters="hello" />
+                </Event>
+              </WatchItem>
+              <WatchItem Tag="TestBuild5" Path="C:\Trigger_5" Filter="trigger.txt">
+                <Event Type="Renamed" ExecutionType="Sequential">
+                  <Action Type="RunCommand" Command="echo" Parameters="hello" />
+                </Event>
+              </WatchItem>
               <WatchItem Tag="DisabledBuild" Path="C:\Trigger2" Filter="trigger2.txt" IsEnabled="false">
                 <Event Type="Renamed" ExecutionType="Sequential" />
               </WatchItem>

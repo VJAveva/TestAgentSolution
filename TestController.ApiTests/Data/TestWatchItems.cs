@@ -15,6 +15,13 @@ public static class TestWatchItems
     public const string InMemoryEnabledTag = "TestBuild";
 
     /// <summary>
+    /// The five distinct enabled tags seeded by ApiTestWebFactory in InMemory mode,
+    /// used to prove concurrent execution of different WatchItems.
+    /// </summary>
+    public static readonly string[] InMemoryDistinctTags =
+        ["TestBuild", "TestBuild2", "TestBuild3", "TestBuild4", "TestBuild5"];
+
+    /// <summary>
     /// Returns the tag of the first enabled WatchItem reported by GET /api/watchlist.
     /// Falls back to <see cref="InMemoryEnabledTag"/> if none can be determined.
     /// </summary>

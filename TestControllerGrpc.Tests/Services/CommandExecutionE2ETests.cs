@@ -103,6 +103,49 @@ public sealed class CommandExecutionE2ETests : IDisposable
             e.OutputLine.Contains("TestOutput123"));
     }
 
+    // ── Regression guard: stdin-hang (Tier 1 B1) ───────────────────────
+    // A child process that reads stdin (here `clip`, which drains stdin until
+    // EOF then exits with code 0) must NOT hang the agent. The B1 fix redirects
+    // stdin and closes it so the process sees immediate EOF and exits cleanly →
+    // EventCompleted / exit 0. Without the fix `clip` blocks forever on the
+    // never-written pipe and is only stopped by the timeout force-kill →
+    // EventFailed / exit -1. A short timeout makes the broken case observable
+    // and keeps the two outcomes distinguishable by terminal event type.
+    [Fact]
+    public async Task RunCommandStreamed_Should_CompleteNotTimeout_When_CommandReadsStdin()
+    {
+        var executor = CreateExecutor();
+
+        var (accepted, _, stream) = executor.RunCommandStreamed(
+            "clip", "", isReboot: false, timeoutMs: 5000);
+
+        Assert.True(accepted);
+        Assert.NotNull(stream);
+
+        ExecutionEvent? terminal = null;
+        var drain = Task.Run(async () =>
+        {
+            await foreach (var evt in stream!.ReadAllAsync())
+            {
+                if (evt.EventType is ExecutionEventType.EventCompleted
+                                  or ExecutionEventType.EventFailed)
+                {
+                    terminal = evt;
+                    break;
+                }
+            }
+        });
+
+        var finished = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(25)));
+        Assert.True(finished == drain,
+            "Command reading stdin produced no terminal event within 25s.");
+
+        // Closed stdin ⇒ clip EOFs and completes; open stdin ⇒ timeout kill (EventFailed).
+        Assert.NotNull(terminal);
+        Assert.Equal(ExecutionEventType.EventCompleted, terminal!.EventType);
+        Assert.Equal(0, terminal.ExitCode);
+    }
+
     [Fact]
     public async Task RunCommandStreamed_ReportsCorrectExitCode_OnSuccess()
     {
