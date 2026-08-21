@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regression &mdash; redesigned</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+ --bg:#191727;--panel:#221F35;--panel2:#292640;--head:#2E2B47;--sunken:#141222;
+ --line:#37335A;--line2:#2E2B4A;
+ --tx:#EAE7F7;--tx2:#A9A3CC;--tx3:#6E6994;
+ --blue:#6BA5FF;--blue2:#3C6FD8;
+ --ok:#46C892;--okd:#1B5340;
+ --amber:#E5A94B;--amberd:#513A1C;
+ --red:#E8637A;--redd:#55212D;
+ --violet:#A688F0;--violetd:#372A5E;
+ --cyan:#4FCEDF;--cyand:#194851;
+ --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;
+ --r:4px;--mono:'IBM Plex Mono',Consolas,monospace;--ui:'Inter','Segoe UI',system-ui,sans-serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--tx);font:12.5px/1.5 var(--ui);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+
+/* ============ 1. CONNECTION BAR — thin, quiet, never competes ============ */
+.conn{display:flex;align-items:center;gap:var(--s3);height:28px;padding:0 var(--s4);
+ background:var(--sunken);border-bottom:1px solid var(--line2);font-size:11px;color:var(--tx3)}
+.conn .live{display:flex;align-items:center;gap:6px;color:var(--tx2)}
+.conn .live i{width:6px;height:6px;border-radius:50%;background:var(--ok);
+ box-shadow:0 0 0 3px rgba(70,200,146,.16)}
+.conn .path{font-family:var(--mono);color:var(--tx2)}
+.conn .sp{flex:1}
+.conn .warn{display:inline-flex;align-items:center;gap:5px;color:var(--amber);
+ border:1px solid var(--amberd);background:var(--amberd);border-radius:var(--r);padding:1px 7px;
+ font-size:10px;font-family:var(--mono)}
+.conn .warn::before{content:"\26A0";font-size:9px}
+.conn a{color:var(--tx3);text-decoration:none;border-bottom:1px dotted var(--line)}
+.conn a:hover{color:var(--tx2)}
+
+/* ============ 2. CONTEXT BAR — what am I looking at + primary actions ============ */
+.ctx{display:flex;align-items:flex-end;gap:var(--s4);padding:var(--s3) var(--s4);
+ background:var(--panel);border-bottom:1px solid var(--line)}
+.fieldset{display:flex;flex-direction:column;gap:5px;min-width:0}
+.fieldset > label{font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--tx3);
+ font-weight:600;padding-left:1px}
+.row{display:flex;align-items:center;gap:var(--s2)}
+.sep{width:1px;align-self:stretch;background:var(--line2);margin:0 var(--s1)}
+
+.segment{display:inline-flex;background:var(--sunken);border:1px solid var(--line);
+ border-radius:var(--r);padding:2px;gap:2px}
+.segment button{background:none;border:0;border-radius:3px;color:var(--tx2);font-size:11.5px;
+ padding:5px 13px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}
+.segment button:hover{color:var(--tx);background:var(--panel2)}
+.segment button[aria-pressed=true]{background:var(--violet);color:#16122B;font-weight:600}
+
+.range{display:inline-flex;align-items:center;gap:6px;background:var(--sunken);
+ border:1px solid var(--line);border-radius:var(--r);padding:3px 4px 3px 10px}
+.range input{background:none;border:0;color:var(--tx);font:11.5px var(--mono);width:96px;
+ padding:2px;color-scheme:dark}
+.range .arrow{color:var(--tx3);font-size:11px}
+.range.off{opacity:.45;pointer-events:none}
+
+.pick{background:var(--sunken);border:1px solid var(--line);border-radius:var(--r);
+ color:var(--tx);font-size:11.5px;padding:6px 26px 6px 10px;min-width:150px;
+ appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--tx3) 50%),
+  linear-gradient(135deg,var(--tx3) 50%,transparent 50%);
+ background-position:calc(100% - 14px) 12px,calc(100% - 9px) 12px;
+ background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.pick:hover{border-color:var(--tx3)}
+
+.acts{margin-left:auto;display:flex;align-items:flex-end;gap:var(--s2)}
+.btn{border-radius:var(--r);font-size:11.5px;padding:7px 15px;cursor:pointer;white-space:nowrap;
+ border:1px solid transparent;transition:filter .12s}
+.btn:hover{filter:brightness(1.13)}
+.btn.primary{background:var(--blue2);border-color:var(--blue);color:#fff;font-weight:600}
+.btn.primary:disabled{background:var(--panel2);border-color:var(--line);color:var(--tx3);
+ cursor:default;filter:none;font-weight:400}
+.btn.secondary{background:none;border-color:var(--line);color:var(--tx2)}
+.btn.secondary:hover{border-color:var(--tx3);color:var(--tx)}
+.btn.quiet{background:none;border-color:transparent;color:var(--tx3);padding:7px 10px}
+.btn.quiet:hover{color:var(--tx2);background:var(--panel2)}
+
+/* ============ 3. REFINE BAR — narrowing only ============ */
+.refine{display:flex;align-items:center;gap:var(--s3);padding:var(--s2) var(--s4);
+ background:var(--panel);border-bottom:1px solid var(--line2)}
+.tog{display:inline-flex;background:var(--sunken);border:1px solid var(--line);
+ border-radius:var(--r);padding:2px;gap:2px}
+.tog button{background:none;border:0;border-radius:3px;padding:4px 11px;cursor:pointer;
+ font-size:11px;color:var(--tx3);display:inline-flex;align-items:center;gap:6px}
+.tog button i{width:7px;height:7px;border-radius:2px;background:currentColor;opacity:.4}
+.tog button[aria-pressed=true]{color:var(--tx);background:var(--panel2)}
+.tog button[aria-pressed=true] i{opacity:1}
+.tog button[data-k=runtime][aria-pressed=true] i{background:var(--amber)}
+.tog button[data-k=config][aria-pressed=true] i{background:var(--cyan)}
+
+.chipset{display:inline-flex;gap:5px}
+.wchip{background:var(--sunken);border:1px solid var(--line);border-radius:20px;color:var(--tx3);
+ font-size:10.5px;padding:4px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+ font-family:var(--mono)}
+.wchip::before{font-size:9px}
+.wchip[data-k=ims]::before{content:"\25C6"}
+.wchip[data-k=bug]::before{content:"\25CF"}
+.wchip[data-k=story]::before{content:"\25B2"}
+.wchip:hover{border-color:var(--tx3);color:var(--tx2)}
+.wchip[aria-pressed=true][data-k=ims]{color:var(--violet);border-color:var(--violet);background:var(--violetd)}
+.wchip[aria-pressed=true][data-k=bug]{color:var(--red);border-color:var(--red);background:var(--redd)}
+.wchip[aria-pressed=true][data-k=story]{color:var(--ok);border-color:var(--ok);background:var(--okd)}
+
+.search{position:relative;margin-left:auto}
+.search input{background:var(--sunken);border:1px solid var(--line);border-radius:var(--r);
+ color:var(--tx);font-size:11.5px;padding:6px 10px 6px 28px;width:230px}
+.search::before{content:"\2315";position:absolute;left:9px;top:5px;color:var(--tx3);font-size:12px}
+.search input:focus{width:280px;border-color:var(--blue)}
+.reset{font-size:10.5px;color:var(--tx3);background:none;border:0;cursor:pointer;
+ border-bottom:1px dotted var(--line);padding:0}
+.reset:hover{color:var(--red);border-color:var(--red)}
+
+/* ============ 4. COUNTER STRIP — clickable filters, one cohesive block ============ */
+.counters{display:flex;align-items:stretch;gap:0;padding:0 var(--s4);background:var(--panel);
+ border-bottom:1px solid var(--line)}
+.cnt{background:none;border:0;border-bottom:2px solid transparent;padding:9px 16px 8px;
+ cursor:pointer;text-align:left;display:flex;align-items:baseline;gap:8px}
+.cnt:hover{background:var(--panel2)}
+.cnt b{font-size:17px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.cnt span{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);font-weight:600}
+.cnt[data-k=runtime] b{color:var(--amber)}
+.cnt[data-k=config] b{color:var(--cyan)}
+.cnt[data-k=none] b{color:var(--red)}
+.cnt[data-k=all] b{color:var(--tx)}
+.cnt[aria-pressed=true]{background:var(--panel2)}
+.cnt[data-k=runtime][aria-pressed=true]{border-bottom-color:var(--amber)}
+.cnt[data-k=config][aria-pressed=true]{border-bottom-color:var(--cyan)}
+.cnt[data-k=none][aria-pressed=true]{border-bottom-color:var(--red)}
+.cnt[data-k=all][aria-pressed=true]{border-bottom-color:var(--tx2)}
+.cmeta{margin-left:auto;display:flex;align-items:center;gap:var(--s4);color:var(--tx3);
+ font-size:11px;font-family:var(--mono)}
+.cmeta b{color:var(--tx2);font-weight:500}
+
+/* ============ 5. GRID ============ */
+.gridwrap{position:absolute;top:0;left:0;right:0;bottom:22px;overflow:auto}
+.stage{position:relative;height:calc(100vh - 28px - 65px - 41px - 39px - 22px);margin:0}
+table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:12px}
+thead th{position:sticky;top:0;z-index:3;background:var(--head);color:var(--tx3);
+ font-size:9px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;text-align:left;
+ padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer}
+thead th:hover{color:var(--tx2)}
+thead th.on{color:var(--tx)}
+thead th .ar{opacity:0;margin-left:5px;color:var(--violet)}
+thead th.on .ar{opacity:1}
+thead th:hover .ar{opacity:.4}
+th.num,td.num{text-align:right}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+tbody tr:hover td{background:var(--panel2)}
+/* frozen identity columns */
+.f1{position:sticky;left:0;z-index:2}
+.f2{position:sticky;left:44px;z-index:2}
+.f3{position:sticky;left:130px;z-index:2}
+thead .f1,thead .f2,thead .f3{z-index:4}
+tbody .f1,tbody .f2,tbody .f3{background:var(--panel)}
+tbody tr:hover .f1,tbody tr:hover .f2,tbody tr:hover .f3{background:var(--panel2)}
+.f3{box-shadow:1px 0 0 var(--line)}
+td.idx{color:var(--tx3);font-family:var(--mono);font-size:10.5px}
+td.comp{font-weight:600}
+td.comp em{display:block;font-style:normal;font-family:var(--mono);font-size:9.5px;color:var(--tx3);
+ font-weight:400;margin-top:2px}
+.badge{font-size:9px;letter-spacing:.06em;font-weight:700;padding:2px 7px;border-radius:3px;
+ font-family:var(--mono);display:inline-block}
+.b-runtime{color:var(--amber);background:var(--amberd)}
+.b-config{color:var(--cyan);background:var(--cyand)}
+.b-both{color:var(--violet);background:var(--violetd)}
+.b-unclassified{color:var(--tx3);background:var(--panel2)}
+.b-critical{color:var(--red);background:var(--redd)}
+.b-high{color:var(--amber);background:var(--amberd)}
+.b-medium{color:var(--tx3);background:var(--panel2)}
+.mono{font-family:var(--mono);font-size:10.5px;color:var(--tx2)}
+.paths{font-family:var(--mono);font-size:10.5px;color:var(--tx2);line-height:1.7}
+.paths .n{color:var(--tx3)}
+.sum{max-width:290px;line-height:1.45}
+.sum em{display:block;font-style:normal;font-family:var(--mono);font-size:9.5px;color:var(--tx3);margin-top:3px}
+.lk{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;text-decoration:none;
+ display:inline-flex;align-items:center;gap:5px;margin:0 4px 4px 0;white-space:nowrap;border:1px solid}
+.lk::before{font-size:8px}
+.lk-ims{color:var(--violet);border-color:var(--violetd);background:var(--violetd)}
+.lk-ims::before{content:"\25C6"}
+.lk-bug{color:var(--red);border-color:var(--redd);background:var(--redd)}
+.lk-bug::before{content:"\25CF"}
+.lk-story{color:var(--ok);border-color:var(--okd);background:var(--okd)}
+.lk-story::before{content:"\25B2"}
+.lk-feature{color:var(--amber);border-color:var(--amberd);background:var(--amberd)}
+.lk-feature::before{content:"\2726"}
+.lk-pr,.lk-commit,.lk-changeset{color:var(--tx3);border-color:var(--line);background:var(--sunken)}
+.lk-pr::before{content:"\21C4"}
+.lk:hover{filter:brightness(1.3)}
+.suite{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid;
+ display:inline-flex;align-items:center;gap:5px;margin:0 4px 4px 0}
+.s-auto{color:var(--ok);border-color:var(--okd);background:var(--okd)}
+.s-man{color:var(--violet);border-color:var(--violetd);background:var(--violetd)}
+.s-man.nolink{border-style:dashed;opacity:.85}
+.suite x{cursor:pointer;opacity:.5;font-style:normal;font-weight:700}
+.suite x:hover{opacity:1}
+.add{font-family:var(--mono);font-size:10px;background:none;border:1px dashed var(--line);
+ color:var(--tx3);border-radius:3px;padding:2px 9px;cursor:pointer}
+.add:hover{border-color:var(--blue);color:var(--blue)}
+.gap{font-family:var(--mono);font-size:10px;color:var(--red);border:1px solid var(--redd);
+ background:var(--redd);border-radius:3px;padding:2px 7px;display:inline-block}
+.dash{color:var(--tx3);font-family:var(--mono)}
+
+/* ============ 6. EMPTY STATE — actually helps ============ */
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+ justify-content:center;gap:var(--s3);padding:var(--s5);text-align:center}
+.empty .mark{width:42px;height:42px;border:2px dashed var(--line);border-radius:50%;
+ display:grid;place-items:center;color:var(--tx3);font-size:18px}
+.empty h3{margin:0;font-size:15px;font-weight:600;color:var(--tx2)}
+.empty p{margin:0;max-width:400px;color:var(--tx3);font-size:12.5px;line-height:1.6}
+.empty .opts{display:flex;gap:var(--s2);margin-top:var(--s1);flex-wrap:wrap;justify-content:center}
+
+/* ============ 7. STATUS ============ */
+.status{position:fixed;bottom:0;left:0;right:0;height:22px;background:var(--head);
+ border-top:1px solid var(--line);display:flex;align-items:center;gap:var(--s4);padding:0 var(--s4);
+ font:10px var(--mono);color:var(--tx3)}
+.status b{color:var(--tx2);font-weight:500}
+.status .sp{flex:1}
+.status .dirty{color:var(--amber)}
+</style>
+</head>
+<body>
+
+<!-- 1 · connection -->
+<div class="conn">
+  <span class="live"><i></i>Connected</span>
+  <span class="path" id="cpath"></span>
+  <span class="sp"></span>
+  <span class="warn" id="cwarn"></span>
+  <span>synced <b style="color:var(--tx2)" id="csync"></b></span>
+  <a href="#">Settings</a>
+</div>
+
+<!-- 2 · context + primary actions -->
+<div class="ctx">
+  <div class="fieldset">
+    <label>Track changes</label>
+    <div class="segment" id="scope">
+      <button data-s="build">Build</button>
+      <button data-s="week">Weekly</button>
+      <button data-s="custom">Custom</button>
+      <button data-s="release">Release</button>
+    </div>
+  </div>
+
+  <div class="fieldset">
+    <label>Timeline</label>
+    <div class="range" id="range">
+      <input type="date" id="d1"><span class="arrow">&rarr;</span><input type="date" id="d2">
+    </div>
+  </div>
+
+  <span class="sep"></span>
+
+  <div class="fieldset">
+    <label>Component</label>
+    <select class="pick" id="fcomp"></select>
+  </div>
+
+  <div class="fieldset">
+    <label>Build</label>
+    <select class="pick" id="fbuild"></select>
+  </div>
+
+  <div class="acts">
+    <button class="btn quiet">Export</button>
+    <button class="btn secondary" id="bman">Assign manual</button>
+    <button class="btn primary" id="bdisp">Dispatch automated</button>
+  </div>
+</div>
+
+<!-- 3 · refine -->
+<div class="refine">
+  <div class="tog" id="cats">
+    <button data-k="runtime" aria-pressed="true"><i></i>Runtime</button>
+    <button data-k="config" aria-pressed="true"><i></i>Config</button>
+  </div>
+  <span class="sep"></span>
+  <div class="chipset" id="wtypes">
+    <button class="wchip" data-k="ims" aria-pressed="false">IMS</button>
+    <button class="wchip" data-k="bug" aria-pressed="false">Bug</button>
+    <button class="wchip" data-k="story" aria-pressed="false">User Story</button>
+  </div>
+  <button class="reset" id="reset">clear filters</button>
+  <div class="search"><input type="text" id="q" placeholder="Subsystem, file, work item, suite"></div>
+</div>
+
+<!-- 4 · counters double as filters -->
+<div class="counters" id="counters"></div>
+
+<!-- 5 · grid -->
+<div class="stage">
+  <div class="gridwrap" id="gridwrap">
+    <table><thead><tr id="head"></tr></thead><tbody id="tbody"></tbody></table>
+  </div>
+  <div class="empty" id="empty" hidden></div>
+</div>
+
+<div class="status">
+  <span id="stSrc"></span><span>map <b id="stMap"></b></span>
+  <span>unresolved repos <b id="stUnres"></b></span>
+  <span class="sp"></span>
+  <span class="dirty" id="stDirty"></span>
+  <span id="stCounts"></span>
+</div>
+
+<script>
+const D={"ado": {"org": "AVEVA-VSTS", "url": {"ims": "https://dev.azure.com/{org}/{project}/_workitems/edit/{id}", "bug": "https://dev.azure.com/{org}/{project}/_workitems/edit/{id}", "story": "https://dev.azure.com/{org}/{project}/_workitems/edit/{id}", "feature": "https://dev.azure.com/{org}/{project}/_workitems/edit/{id}", "pr": "https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}", "changeset": "https://dev.azure.com/{org}/{project}/_versionControl/changeset/{id}", "commit": "https://dev.azure.com/{org}/{project}/_git/{repo}/commit/{id}", "repo": "https://dev.azure.com/{org}/{project}/_git/{repo}", "suite": "https://dev.azure.com/{org}/{project}/_search?type=workitem&text={id}"}, "note": "Repo names provisional except AASysObjects and AABootstrap."}, "sources": {"release": {"name": "SP2023R2SP1P03"}, "build": {"name": "SP 20260817.3", "id": "8694743", "result": "partiallySucceeded"}}, "span": {"min": "2026-05-04", "max": "2026-08-18"}, "rows": [{"id": "R001", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.AAMxCore", "component": "AAMxCore", "subs": ["Lmx"], "files": ["/src/Lmx/AccessManager.cpp", "/src/Lmx/Reference.h"], "nfiles": 2, "summary": "Alarm Ack Request not getting processed from one AlarmProvider due to LMX version of remote platform not retrieved.", "ref": "Pull request 934179", "wis": [{"type": "pr", "id": "934179", "label": "PR 934179"}], "risk": "critical", "cat": "runtime", "auto": [{"label": "FR829777.EACRuntime", "kind": "auto", "linked": true, "query": "FR829777"}], "manual": [], "ucs": ["UC008", "UC016", "UC088", "UC580"], "okBuild": "26.0.0_20260816.1"}, {"id": "R002", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.AAMxCore", "component": "AAMxCore", "subs": ["Lmx"], "files": ["/src/Lmx/AccessManager.cpp", "/src/Lmx/MxConnection.cpp", "/src/Lmx/preboundreference.cpp"], "nfiles": 4, "summary": "xref 3742715 Hierarchal name not resolving in the runtime", "ref": "Pull request 933803", "wis": [{"type": "pr", "id": "933803", "label": "PR 933803"}], "risk": "critical", "cat": "runtime", "auto": [{"label": "UC006.Deploy.Symbol.Runtime", "kind": "auto", "linked": true, "query": "UC006"}, {"label": "UC006.Galaxy.Deploy.Symbol.Reference", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC006", "UC008", "UC016", "UC088", "UC580"], "okBuild": "26.0.0_20260816.1"}, {"id": "R003", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.AACategoryPkg", "component": "AACategoryPkg", "subs": ["GlobalHeder.cs, .h"], "files": ["/GlobalHeder.cs, .h"], "nfiles": 1, "summary": "", "ref": "124292", "wis": [{"type": "changeset", "id": "124292", "label": "CS 124292"}], "risk": "high", "cat": "unclassified", "auto": [], "manual": [{"label": "Upgrade Scenarios", "kind": "manual", "linked": false, "query": null}], "ucs": ["UC013", "UC071", "UC072"], "okBuild": "26.0.0_20260815.2"}, {"id": "R004", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.AASysObjects", "component": "AASysObjects", "subs": ["AppEngine"], "files": ["/src/AppEngine/AppEnginePrimitive/Undeploy.cpp"], "nfiles": 1, "summary": "Force undeployment of objects on object ID mismatch", "ref": "Pull request 940109", "wis": [{"type": "ims", "id": "3896938", "label": "IMS 3896938"}, {"type": "pr", "id": "940109", "label": "PR 940109"}], "risk": "medium", "cat": "runtime", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260811.1"}, {"id": "R005", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.AdminUser", "component": "AdminUser", "subs": ["AdminUser"], "files": ["/src/AdminUser/aaAdminUserPostInstall/aaAdminUserPostInstall.csproj", "/src/AdminUser/aaAdminUserPostInstall/AdminAccountInterop.cs", "/src/AdminUser/aaAdminUserPostInstall/RunWLUtility.cs"], "nfiles": 6, "summary": "AVEVA code analysis ruleset-Enable/disable Safe loading of DLL", "ref": "Pull request 960375", "wis": [{"type": "story", "id": "4105526", "label": "US 4105526"}, {"type": "pr", "id": "960375", "label": "PR 960375"}], "risk": "medium", "cat": "config", "auto": [{"label": "FR1245266.OPCUA.Boolean.Read/Write", "kind": "auto", "linked": true, "query": "FR1245266"}, {"label": "FR1245266.OPCUA.DataType.Read/Write", "kind": "auto", "linked": true, "query": "FR1245266"}, {"label": "FR1245266.OPCUA.Double.Read/Write", "kind": "auto", "linked": true, "query": "FR1245266"}, {"label": "UC054.ChangeNetworkAccount.Delete", "kind": "auto", "linked": true, "query": "UC054"}, {"label": "UC054_ChangeNetworkAccount_DomainUser_001", "kind": "auto", "linked": true, "query": "UC054"}, {"label": "UC054_ChangeNetworkAccount_DomainUser_RemoteNode_004", "kind": "auto", "linked": true, "query": "UC054"}], "manual": [], "ucs": ["UC054"], "okBuild": "26.0.0_20260815.1"}, {"id": "R006", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.ArchSvc", "component": "ArchSvc", "subs": ["MXDataServer"], "files": ["/src/MXDataServer/MxDataProvider/MxDataProvider/DataProvider.cpp", "/src/MXDataServer/MxDataProvider/MxDataProvider/TypeConversion.cpp"], "nfiles": 2, "summary": "Add Logging and Improvements in data conversion for attributes of type array", "ref": "Pull request 960322", "wis": [{"type": "ims", "id": "4114169", "label": "IMS 4114169"}, {"type": "pr", "id": "960322", "label": "PR 960322"}], "risk": "high", "cat": "runtime", "auto": [{"label": "IMS4114169.Porsche.DataLoad.Runtime", "kind": "auto", "linked": true, "query": "IMS4114169"}], "manual": [], "ucs": [], "okBuild": "26.0.0_20260810.1"}, {"id": "R007", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.ArchSvc", "component": "ArchSvc", "subs": ["MXDataServer"], "files": ["/Pull request 940104: Files"], "nfiles": 1, "summary": "Merging HF 4025769 to 2023R2SP1P03", "ref": "Pull request 940104", "wis": [{"type": "ims", "id": "3896938", "label": "IMS 3896938"}, {"type": "pr", "id": "940104", "label": "PR 940104"}], "risk": "high", "cat": "runtime", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260810.1"}, {"id": "R008", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.ArchScript", "component": "ArchScript", "subs": ["Scripting"], "files": ["/src/Scripting/QuickScript/Runtime/ClientScriptRuntime.cs"], "nfiles": 1, "summary": "", "ref": "119009\n119095", "wis": [{"type": "pr", "id": "119009", "label": "PR 119009"}, {"type": "commit", "id": "10fa3c6f", "label": "10fa3c6f"}], "risk": "high", "cat": "runtime", "auto": [], "manual": [], "ucs": ["UC141", "UC142", "UC145"], "okBuild": "26.0.0_20260818.2"}, {"id": "R009", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.ArchScript", "component": "ArchScript", "subs": ["Version"], "files": ["/Build/Version/GlobalVersion.cs", "/Build/Version/GlobalVersion.h"], "nfiles": 2, "summary": "", "ref": "123704", "wis": [{"type": "story", "id": "1667478", "label": "US 1667478"}, {"type": "pr", "id": "123704", "label": "PR 123704"}, {"type": "commit", "id": "8dcf42a6", "label": "8dcf42a6"}], "risk": "high", "cat": "config", "auto": [], "manual": [], "ucs": ["UC141", "UC142", "UC145"], "okBuild": "26.0.0_20260818.2"}, {"id": "R010", "src": "release", "date": "2026-05-24", "project": "AppServer OMI", "repo": "AppServer.Cybersecurity", "component": "Cybersecurity", "subs": ["CryptoUtils"], "files": ["/src/CryptoUtils/CryptoUtils/PasswordHash.cs"], "nfiles": 1, "summary": "", "ref": "Commit e018bec3: Updated PasswordHash.cs", "wis": [], "risk": "unmapped", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260816.4"}, {"id": "R011", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.DiCommon", "component": "DiCommon", "subs": ["CCVersioning.ps1", "VersionInfo", "ScanGroup"], "files": ["/Build/CCVersioning.ps1", "/interfaces/VersionInfo/GlobalVersion.cs", "/interfaces/VersionInfo/GlobalVersion.h"], "nfiles": 4, "summary": "", "ref": "124008", "wis": [{"type": "story", "id": "1667478", "label": "US 1667478"}, {"type": "pr", "id": "124008", "label": "PR 124008"}, {"type": "commit", "id": "1c32d14d", "label": "1c32d14d"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260811.4"}, {"id": "R012", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.DDESuiteLinkClientObj", "component": "DDESuiteLinkClientObj", "subs": ["SuiteLinkDDEProxyPrimitive"], "files": ["/src/SuiteLinkDDEProxyPrimitive/DDESuiteLinkClientEditor/DDESuiteLinkClientEditor.cs"], "nfiles": 1, "summary": "", "ref": "120787", "wis": [{"type": "changeset", "id": "120787", "label": "CS 120787"}, {"type": "commit", "id": "39b5e4a8", "label": "39b5e4a8"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": ["UC100"], "okBuild": "26.0.0_20260811.2"}, {"id": "R013", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.DDESuiteLinkClientObj", "component": "DDESuiteLinkClientObj", "subs": ["(unspecified)"], "files": [], "nfiles": 0, "summary": "", "ref": "124563", "wis": [{"type": "story", "id": "1667478", "label": "US 1667478"}, {"type": "pr", "id": "124563", "label": "PR 124563"}, {"type": "commit", "id": "e3acd516", "label": "e3acd516"}], "risk": "medium", "cat": "unclassified", "auto": [], "manual": [], "ucs": ["UC100"], "okBuild": "26.0.0_20260811.2"}, {"id": "R014", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.GRAccess", "component": "GRAccess", "subs": ["VersionInfo"], "files": ["/interfaces/VersionInfo/GlobalVersion.wxi", "/interfaces/VersionInfo/GlobalVersion.cs", "/interfaces/VersionInfo/GlobalVersion.h"], "nfiles": 3, "summary": "", "ref": "123426", "wis": [{"type": "story", "id": "1667478", "label": "US 1667478"}, {"type": "pr", "id": "123426", "label": "PR 123426"}, {"type": "commit", "id": "65e78627", "label": "65e78627"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260810.1"}, {"id": "R015", "src": "release", "date": "2026-05-04", "project": "AppServer OMI", "repo": "AppServer.IntouchProxyObj", "component": "IntouchProxyObj", "subs": ["Scripts", "VersionInfo", "InTouchProxyObject"], "files": ["/Build/Scripts/CCVersioning.ps1", "/interfaces/VersionInfo/GlobalVersion.cs", "/interfaces/VersionInfo/GlobalVersion.h"], "nfiles": 4, "summary": "", "ref": null, "wis": [], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": ["UC100"], "okBuild": "26.0.0_20260810.2"}, {"id": "R016", "src": "release", "date": "2026-05-05", "project": "AppServer OMI", "repo": "AppServer.IOClient", "component": "IOClient", "subs": ["CALWrapper", "VersionInfo"], "files": ["/interfaces/CALWrapper/Minidump.h", "/interfaces/VersionInfo/GlobalVersion.h"], "nfiles": 2, "summary": "", "ref": null, "wis": [{"type": "story", "id": "1667478", "label": "US 1667478"}, {"type": "pr", "id": "125051", "label": "PR 125051"}, {"type": "commit", "id": "0375c96d", "label": "0375c96d"}], "risk": "medium", "cat": "both", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260813.1"}, {"id": "R017", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.IOMBLS", "component": "IOMBLS", "subs": ["GalaxyBrowserService"], "files": ["/src/GalaxyBrowserService/GalaxyBrowserDataAccess/Constants.cs", "/src/GalaxyBrowserService/GalaxyBrowserDataAccess/GalaxyRepositoryAccess.cs"], "nfiles": 2, "summary": "Deploying a managed InTouch application on System Platform 2023 R2 SP1 take long time", "ref": "Pull request 935233", "wis": [{"type": "ims", "id": "4063313", "label": "IMS 4063313"}, {"type": "pr", "id": "935233", "label": "PR 935233"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260819.4"}, {"id": "R018", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.IOMBLS", "component": "IOMBLS", "subs": ["GalaxyBrowserService"], "files": ["/src/GalaxyBrowserService/GalaxyBrowserDataAccess/GalaxyRepositoryAccess.cs"], "nfiles": 1, "summary": "viewapp deployment issue", "ref": "Pull request 945793", "wis": [{"type": "bug", "id": "4092633", "label": "Bug 4092633"}, {"type": "pr", "id": "945793", "label": "PR 945793"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260819.4"}, {"id": "R019", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.IOMBLS", "component": "IOMBLS", "subs": ["Common"], "files": ["/src/Common/ITABLSServiceASBContracts/ITABLS_ASBBinaryUptake/App.config", "/src/Common/ITABLSServiceASBContracts/ITABLS_ASBBinaryUptake/ITABLS_ASBBinaryUptake.csproj", "/src/Common/ITABLSServiceASBContracts/ITABLS_ASBBinaryUptake/packages.config"], "nfiles": 3, "summary": "Updated System.IdentityModel.Tokens.Jwt.dll v6.5 to v8.9.0", "ref": "Pull request 952852", "wis": [{"type": "story", "id": "4098113", "label": "US 4098113"}, {"type": "pr", "id": "952852", "label": "PR 952852"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260819.4"}, {"id": "R020", "src": "release", "date": "2026-06-14", "project": "AppServer OMI", "repo": "AppServer.IOMBLS", "component": "IOMBLS", "subs": ["IOMBLSService"], "files": ["/src/IOMBLSService/IOMBLSServiceHost/Host.cs", "/src/IOMBLSService/IOMBLSServiceHost/IOMBLSServiceHost.csproj"], "nfiles": 2, "summary": "Aveva RuleSet", "ref": "Pull request 966539", "wis": [{"type": "story", "id": "4107241", "label": "US 4107241"}, {"type": "pr", "id": "966539", "label": "PR 966539"}], "risk": "medium", "cat": "unclassified", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260819.4"}, {"id": "R021", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.MagellanHistory", "component": "MagellanHistory", "subs": ["interfaces", "AlarmHistoryCommon"], "files": ["/interfaces/AlarmHistoryCommon/AlarmDataPacker.h"], "nfiles": 1, "summary": "warnings/Errors from ITAlarmProvider and notificationDistributor After the Restart of Redundant Active Engines", "ref": "Pull request 932688", "wis": [{"type": "bug", "id": "4003455", "label": "Bug 4003455"}, {"type": "pr", "id": "932688", "label": "PR 932688"}], "risk": "high", "cat": "runtime", "auto": [], "manual": [], "ucs": ["UC076", "UC163", "UC164"], "okBuild": "26.0.0_20260810.2"}, {"id": "R022", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.MagellanHistory", "component": "MagellanHistory", "subs": ["interfaces", "AlarmHistoryCommon"], "files": ["/interfaces/AlarmHistoryCommon/AlarmPrimitiveRuntimeImpl.h"], "nfiles": 1, "summary": "AlarmShelving warnings in the standby engine", "ref": "Pull request 935140", "wis": [{"type": "ims", "id": "4063324", "label": "IMS 4063324"}, {"type": "pr", "id": "935140", "label": "PR 935140"}], "risk": "high", "cat": "runtime", "auto": [{"label": "FR1359112.Area.AlarmShelveDisabled", "kind": "auto", "linked": true, "query": "FR1359112"}], "manual": [], "ucs": ["UC076", "UC163", "UC164"], "okBuild": "26.0.0_20260810.2"}, {"id": "R023", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.MagellanHistory", "component": "MagellanHistory", "subs": ["AlarmHistory"], "files": ["/src/AlarmHistory/AlarmExtensionRuntimeServer/AlarmExtensionRuntime.cpp"], "nfiles": 1, "summary": "State alarm is not triggered if the attribute is boolean and buffered communication via the Telemetry Server", "ref": "Pull request 940731", "wis": [{"type": "ims", "id": "4079930", "label": "IMS 4079930"}, {"type": "pr", "id": "940731", "label": "PR 940731"}], "risk": "high", "cat": "runtime", "auto": [], "manual": [], "ucs": ["UC076", "UC163", "UC164"], "okBuild": "26.0.0_20260810.2"}, {"id": "R024", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.MagellanPublic", "component": "MagellanPublic", "subs": ["ExtInterfaces", "ClassUtilities"], "files": ["/ExtInterfaces/ClassUtilities/SafeDllLoadHelper.cs"], "nfiles": 1, "summary": "AVEVA code analysis ruleset-Enable/disable Safe loading of DLL", "ref": "Pull request 960370", "wis": [{"type": "story", "id": "4105526", "label": "US 4105526"}, {"type": "pr", "id": "960370", "label": "PR 960370"}], "risk": "high", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260814.4"}, {"id": "R025", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.ObjectFramework", "component": "ObjectFramework", "subs": ["AttributesTabHost"], "files": ["/src/AttributesTabHost/AttributesTab/ViewModel/Wizard/Wizard.cs"], "nfiles": 1, "summary": "ioscalling issue", "ref": "Pull request 927733", "wis": [{"type": "ims", "id": "3984518", "label": "IMS 3984518"}, {"type": "pr", "id": "927733", "label": "PR 927733"}], "risk": "high", "cat": "config", "auto": [{"label": "FR1359724.WP.IO.Scaling", "kind": "auto", "linked": true, "query": "FR1359724"}], "manual": [], "ucs": [], "okBuild": "26.0.0_20260812.1"}, {"id": "R026", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.ObjectFramework", "component": "ObjectFramework", "subs": ["AttributesTabHost"], "files": ["/src/AttributesTabHost/AttributesTab/View/Editor/Editor.xaml", "/src/AttributesTabHost/AttributesTab/View/AttributeList.xaml.cs"], "nfiles": 2, "summary": "Freezing issue with IDE when scrolling attributes", "ref": "Pull request 930767", "wis": [{"type": "ims", "id": "4004915", "label": "IMS 4004915"}, {"type": "pr", "id": "930767", "label": "PR 930767"}], "risk": "high", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260812.1"}, {"id": "R027", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.ObjectFramework", "component": "ObjectFramework", "subs": ["AttributesTabHost"], "files": ["/src/AttributesTabHost/AttributesTab/ViewModel/Wizard/ChoiceGroup.cs", "/src/AttributesTabHost/AttributesTab/ViewModel/Wizard/Wizard.cs"], "nfiles": 2, "summary": "Issues with Choice and Options behavior.", "ref": "Pull request 933812", "wis": [{"type": "ims", "id": "4005067", "label": "IMS 4005067"}, {"type": "pr", "id": "933812", "label": "PR 933812"}], "risk": "high", "cat": "config", "auto": [{"label": "FR1359724.WP.SettingsDisplayBasedOnVisibility", "kind": "auto", "linked": true, "query": "FR1359724"}], "manual": [], "ucs": [], "okBuild": "26.0.0_20260812.1"}, {"id": "R028", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServerPublic", "component": "PFServerPublic", "subs": ["ExtInterfaces", "WWCdi"], "files": ["/ExtInterfaces/WWCdi/DBSupport.h"], "nfiles": 1, "summary": "Import missing parent node", "ref": "Pull request 930756", "wis": [{"type": "ims", "id": "3992554", "label": "IMS 3992554"}, {"type": "pr", "id": "930756", "label": "PR 930756"}], "risk": "high", "cat": "config", "auto": [{"label": "FR1025703.ASBDropTesting.MGC.EnablingUDS", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1025703.ASBDropTesting.MGC.GalaxyBrowserService", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1025703.ASBDropTesting.MGC.SecuredVerifiedWrites", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1025703.ASBDropTesting.MGC.UnPair", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1074657.IDEConnecttoGalaxy.MGC.DifferArchestrAUser.002", "kind": "auto", "linked": true, "query": "FR1074657"}, {"label": "FR1074657.IDEConnecttoGalaxy.MGC.SameArchestrAUser.001", "kind": "auto", "linked": true, "query": "FR1074657"}, {"label": "FR1074657.MGC.GalaxyWithOutLogging.RemoteGalaxy", "kind": "auto", "linked": true, "query": "FR1074657"}, {"label": "FR1349109.MGC.Pairing.ClickCancelButton", "kind": "auto", "linked": true, "query": "FR1349109"}], "manual": [], "ucs": [], "okBuild": "26.0.0_20260811.2"}, {"id": "R029", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServerPublic", "component": "PFServerPublic", "subs": ["GraphicHelper"], "files": ["/src/GraphicHelper/GraphicHelper/ClientControlInfo.cs"], "nfiles": 1, "summary": "Issue with custom Client Control import – dependent DLLs not imported", "ref": "Pull request 946663", "wis": [{"type": "ims", "id": "4093790", "label": "IMS 4093790"}, {"type": "pr", "id": "946663", "label": "PR 946663"}], "risk": "high", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260811.2"}, {"id": "R030", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServerPublic", "component": "PFServerPublic", "subs": ["NugetPackage"], "files": ["/src/NugetPackage/NugetPackage.csproj", "/src/NugetPackage/packages.config"], "nfiles": 2, "summary": "Updated AVEVA.Connect sdk", "ref": "Pull request 966312", "wis": [{"type": "story", "id": "4107241", "label": "US 4107241"}, {"type": "pr", "id": "966312", "label": "PR 966312"}], "risk": "high", "cat": "config", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp.Authenticationfailed.Browserclosed.ProcessKill", "kind": "auto", "linked": true, "query": "FR2429655"}, {"label": "FR2429655.AvevaConnect.Login.OMIApp.Authenticationfailed.Browserclosed.ProcessKill2", "kind": "auto", "linked": true, "query": "FR2429655"}, {"label": "FR2429655.AvevaConnect.Login.OMIApp.Authenticationfailed.Browserclosed.SecondSession.ProcessKill2", "kind": "auto", "linked": true, "query": "FR2429655"}, {"label": "FR2429655.AvevaConnect.Login.OMIApp.Authenticationfailed.Browserclosed.SecondSessionProcessKill", "kind": "auto", "linked": true, "query": "FR2429655"}, {"label": "FR2429655.AvevaConnect.Login.OMIApp.Authenticationfailed.NoLoginonSecondSession", "kind": "auto", "linked": true, "query": "FR2429655"}, {"label": "FR2429655.AvevaConnect.ObjectViewer.Authentication", "kind": "auto", "linked": true, "query": "FR2429655"}, {"label": "FR2429655.AvevaConnect.Web.OMIApp.Logout", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": [], "okBuild": "26.0.0_20260811.2"}, {"id": "R031", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFClient", "component": "PFClient", "subs": ["WWPackageManager"], "files": ["/src/WWPackageManager/PackageManager.cpp"], "nfiles": 1, "summary": "ToEnsure ObjectIdToRetrieve passed to GetObject API is greater than zero", "ref": "Pull request 957464", "wis": [{"type": "ims", "id": "4026448", "label": "IMS 4026448"}, {"type": "pr", "id": "957464", "label": "PR 957464"}], "risk": "high", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260819.3"}, {"id": "R032", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWFsObject"], "files": ["/src/WWFsObject/GObject.cpp"], "nfiles": 1, "summary": "Importing missing parent node", "ref": "Pull request 927732", "wis": [{"type": "ims", "id": "3984518", "label": "IMS 3984518"}, {"type": "pr", "id": "927732", "label": "PR 927732"}], "risk": "critical", "cat": "config", "auto": [{"label": "FR1359724.CP.ObjectWizard.Sibiling.InstanceOverrideSetting", "kind": "auto", "linked": true, "query": "FR1359724"}, {"label": "FR1359724.WP.IO.Scaling", "kind": "auto", "linked": true, "query": "FR1359724"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R033", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/internal_ow_streamline_primitive_instance.sql"], "nfiles": 1, "summary": "Errors in logger on validation of objects resulting in the memory growth of aaGR.exe", "ref": "Pull request 930761", "wis": [{"type": "ims", "id": "4000519", "label": "IMS 4000519"}, {"type": "pr", "id": "930761", "label": "PR 930761"}], "risk": "critical", "cat": "config", "auto": [{"label": "FR2072868.Validateobject", "kind": "auto", "linked": true, "query": "FR2072868"}, {"label": "FR3293455.Validate", "kind": "auto", "linked": true, "query": "FR3293455"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R034", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/internal_bind_visual_element_references.sql"], "nfiles": 1, "summary": "Poor performance of Intouch Maker.", "ref": "Pull request 933800", "wis": [{"type": "ims", "id": "4016669", "label": "IMS 4016669"}, {"type": "pr", "id": "933800", "label": "PR 933800"}], "risk": "critical", "cat": "config", "auto": [{"label": "FR2072868.WindowMakerPerformance", "kind": "auto", "linked": true, "query": "FR2072868"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R035", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/internal_filter_gObjects_to_populate_alarm_default_messages.sql", "/src/WWCdi/internal_migrate_objects_info.sql"], "nfiles": 2, "summary": "Translating alarm messages takes a very long time In SP2023 and later", "ref": "Pull request 935279", "wis": [{"type": "ims", "id": "4063321", "label": "IMS 4063321"}, {"type": "pr", "id": "935279", "label": "PR 935279"}], "risk": "critical", "cat": "config", "auto": [{"label": "FR1303826.Export.AlarmTranslation.LGCEvents", "kind": "auto", "linked": true, "query": "FR1303826"}, {"label": "FR1303826.Export.AlarmTranslation.LGCEvents.AreaSpecific", "kind": "auto", "linked": true, "query": "FR1303826"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R036", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWPackageServer"], "files": ["/src/WWPackageServer/MigrateOperation.cpp"], "nfiles": 1, "summary": "process fails when the user selects the Engineering Server (Foxview) in CS8.1 and attempts to perform a restore", "ref": "Pull request 936049", "wis": [{"type": "story", "id": "4084538", "label": "US 4084538"}, {"type": "pr", "id": "936049", "label": "PR 936049"}], "risk": "critical", "cat": "config", "auto": [], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R037", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/internal_add_visual_element_references_from_parent.sql"], "nfiles": 1, "summary": "Missing code changes in CASE statement", "ref": "Pull request 936148", "wis": [{"type": "story", "id": "4056012", "label": "US 4056012"}, {"type": "pr", "id": "936148", "label": "PR 936148"}], "risk": "critical", "cat": "config", "auto": [], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R038", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/internal_delete_old_packages_after_checkin.sql"], "nfiles": 1, "summary": "GraphicLibrary errors during import migration of packages and script libraries.", "ref": "Pull request 937723", "wis": [{"type": "bug", "id": "4074166", "label": "Bug 4074166"}, {"type": "pr", "id": "937723", "label": "PR 937723"}], "risk": "critical", "cat": "config", "auto": [{"label": "UC006.3795445.Import.Package", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R039", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWPackageServer"], "files": ["/src/WWPackageServer/ImportExp.cpp", "/src/WWPackageServer/ImportObjects.cpp"], "nfiles": 2, "summary": "Record Set fields count check before accessing the extra information", "ref": "Pull request 949357", "wis": [{"type": "ims", "id": "3992554", "label": "IMS 3992554"}, {"type": "pr", "id": "949357", "label": "PR 949357"}], "risk": "critical", "cat": "config", "auto": [{"label": "UC006.Deploy.Symbol.Runtime", "kind": "auto", "linked": true, "query": "UC006"}, {"label": "UC006.Galaxy.Deploy.Symbol.Reference", "kind": "auto", "linked": true, "query": "UC006"}, {"label": "UC006.ImportCC", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R040", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/trigger_delete_visual_element_version.sql"], "nfiles": 1, "summary": "Infloat 68K SET1 delete trigger performance improvement", "ref": "Pull request 951600", "wis": [{"type": "story", "id": "4094143", "label": "US 4094143"}, {"type": "pr", "id": "951600", "label": "PR 951600"}], "risk": "critical", "cat": "config", "auto": [], "manual": [{"label": "Infloat PSR", "kind": "manual", "linked": false, "query": null}], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R041", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/internal_get_visual_element_primitives_deployment_view.sql"], "nfiles": 1, "summary": "Deploying a managed InTouch application on System Platform 2023 R2 SP1 take long time", "ref": "Pull request 957774", "wis": [{"type": "ims", "id": "4063313", "label": "IMS 4063313"}, {"type": "pr", "id": "957774", "label": "PR 957774"}], "risk": "critical", "cat": "config", "auto": [{"label": "FR641628.ManagedIntouchApplication.Deploy", "kind": "auto", "linked": true, "query": "FR641628"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R042", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["ScriptPrimitive"], "files": ["/src/ScriptPrimitive/ScriptRuntime/DllMain.cpp", "/src/ScriptPrimitive/ScriptRuntime/MxClient.cpp", "/src/ScriptPrimitive/ScriptRuntime/ScriptRuntime.cpp"], "nfiles": 5, "summary": "Avoid duplicate reference entries for data consumer references", "ref": "Pull request 940106", "wis": [{"type": "ims", "id": "3896938", "label": "IMS 3896938"}, {"type": "pr", "id": "940106", "label": "PR 940106"}], "risk": "critical", "cat": "runtime", "auto": [{"label": "FR1025703.ASBDropTesting.MGC.EnablingUDS", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1025703.ASBDropTesting.MGC.GalaxyBrowserService", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1025703.ASBDropTesting.MGC.SecuredVerifiedWrites", "kind": "auto", "linked": true, "query": "FR1025703"}, {"label": "FR1025703.ASBDropTesting.MGC.UnPair", "kind": "auto", "linked": true, "query": "FR1025703"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R043", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["CRLink"], "files": ["/src/CRLink/CRLinkService/CRLinkService.cpp"], "nfiles": 1, "summary": "AVEVA code analysis ruleset-Enable/disable Safe loading of DLL", "ref": "Pull request 960379", "wis": [{"type": "story", "id": "4105526", "label": "US 4105526"}, {"type": "pr", "id": "960379", "label": "PR 960379"}], "risk": "critical", "cat": "runtime", "auto": [], "manual": [{"label": "CI results with safe loading enabled", "kind": "manual", "linked": false, "query": null}], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R044", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWCdi"], "files": ["/src/WWCdi/tsql_migrate47to48.sql"], "nfiles": 1, "summary": "Intouch viewapp deploymnt performance improvement", "ref": "Pull request 963082", "wis": [{"type": "ims", "id": "4063313", "label": "IMS 4063313"}, {"type": "pr", "id": "963082", "label": "PR 963082"}], "risk": "critical", "cat": "config", "auto": [{"label": "FR641628.ManagedIntouchApplication.Deploy", "kind": "auto", "linked": true, "query": "FR641628"}], "manual": [], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R045", "src": "release", "date": "2026-06-13", "project": "AppServer OMI", "repo": "AppServer.PFServer", "component": "PFServer", "subs": ["WWPackageServer"], "files": ["/src/WWPackageServer/PShlpHelperFuncs.CPP"], "nfiles": 1, "summary": "Some of the Historian Client Control binaries are not updated to Patch 03 version", "ref": "Pull request 964816", "wis": [{"type": "ims", "id": "4092930", "label": "IMS 4092930"}, {"type": "pr", "id": "964816", "label": "PR 964816"}], "risk": "critical", "cat": "config", "auto": [], "manual": [{"label": "Node by Node Patching scenarios", "kind": "manual", "linked": false, "query": null}], "ucs": ["UC006", "UC152", "UC160", "UC177"], "okBuild": "26.0.0_20260818.2"}, {"id": "R046", "src": "release", "date": "2026-06-12", "project": "AppServer OMI", "repo": "AppServer.RTCommon", "component": "RTCommon", "subs": ["ExtInterfaces", "EngineServicesCommon"], "files": ["/ExtInterfaces/EngineServicesCommon/bro/UploadSupport.h"], "nfiles": 1, "summary": "warnings/Errors from ITAlarmProvider and notificationDistributor After the Restart of Redundant Active Engines", "ref": "Pull request 929459", "wis": [{"type": "bug", "id": "4003455", "label": "Bug 4003455"}, {"type": "pr", "id": "929459", "label": "PR 929459"}], "risk": "high", "cat": "runtime", "auto": [], "manual": [], "ucs": ["UC170"], "okBuild": "26.0.0_20260815.1"}, {"id": "B001", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["(unspecified)"], "files": [], "nfiles": 0, "summary": "Merged PR 1338495: Updating branding to reflect RTP", "ref": "#1338495", "wis": [{"type": "pr", "id": "1338495", "label": "PR 1338495"}], "risk": "medium", "cat": "config", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260818.1"}, {"id": "B002", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["PCS FWK", "PCSFramework"], "files": [], "nfiles": 0, "summary": "Merged PR 1338564: Summary: Update the PCS FWK 9.0.0 RTM AVEVA-PCSFramework-9.0.0.cat.", "ref": "#1338564", "wis": [{"type": "pr", "id": "1338564", "label": "PR 1338564"}], "risk": "medium", "cat": "config", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B003", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["CDP"], "files": [], "nfiles": 0, "summary": "Merged PR 1338718: Publish CDP", "ref": "#1338718", "wis": [{"type": "pr", "id": "1338718", "label": "PR 1338718"}], "risk": "high", "cat": "unclassified", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260818.1"}, {"id": "B004", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["(unspecified)"], "files": [], "nfiles": 0, "summary": "(no commit message)", "ref": "#1338840", "wis": [{"type": "pr", "id": "1338840", "label": "PR 1338840"}], "risk": "high", "cat": "unclassified", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260818.1"}, {"id": "B005", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["Catalogs", "EnterpriseLicensing"], "files": [], "nfiles": 0, "summary": "Merged PR 1338855: Added AVEVA-EnterpriseLicensing-4.2.0.cat to /Catalogs", "ref": "#1338855", "wis": [{"type": "pr", "id": "1338855", "label": "PR 1338855"}], "risk": "medium", "cat": "config", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B006", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["OI-Engine"], "files": [], "nfiles": 0, "summary": "Merged PR 1339184: Updated AVEVA-OI-Engine-2026.cat", "ref": "#1339184", "wis": [{"type": "pr", "id": "1339184", "label": "PR 1339184"}], "risk": "medium", "cat": "config", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B007", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["SystemMonitor"], "files": [], "nfiles": 0, "summary": "Merged PR 1340686: Updated AVEVA-SystemMonitor-2.0.cat", "ref": "#1340686", "wis": [{"type": "pr", "id": "1340686", "label": "PR 1340686"}], "risk": "medium", "cat": "config", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B008", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["Catalogs"], "files": [], "nfiles": 0, "summary": "Merged PR 1340604: Added 2 files to /Catalogs", "ref": "#1340604", "wis": [{"type": "pr", "id": "1340604", "label": "PR 1340604"}], "risk": "medium", "cat": "config", "auto": [{"label": "UC006.ImportCC", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC013", "UC071", "UC072"], "okBuild": "26.0.0_20260818.1"}, {"id": "B009", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["(unspecified)"], "files": [], "nfiles": 0, "summary": "Merged PR 1340570: Update Cat files", "ref": "#1340570", "wis": [{"type": "pr", "id": "1340570", "label": "PR 1340570"}], "risk": "medium", "cat": "unclassified", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260818.1"}, {"id": "B010", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["InTouch.Services"], "files": [], "nfiles": 0, "summary": "Merged PR 1340507: Updated AVEVA-InTouch.Services-2026.cat", "ref": "#1340507", "wis": [{"type": "pr", "id": "1340507", "label": "PR 1340507"}], "risk": "medium", "cat": "config", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B011", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["InTouchGerman"], "files": [], "nfiles": 0, "summary": "Merged PR 1340322: Updated InTouchGerman", "ref": "#1340322", "wis": [{"type": "pr", "id": "1340322", "label": "PR 1340322"}], "risk": "medium", "cat": "unclassified", "auto": [], "manual": [], "ucs": [], "okBuild": "26.0.0_20260818.1"}, {"id": "B012", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["System Monitor"], "files": [], "nfiles": 0, "summary": "Merged PR 1340112: Reverted the System Monitor #2.0.0-2026081810 build to #2.0.0-202608161.", "ref": "#1340112", "wis": [{"type": "pr", "id": "1340112", "label": "PR 1340112"}], "risk": "high", "cat": "unclassified", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B013", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["Catalogs"], "files": [], "nfiles": 0, "summary": "Merged PR 1340111: Updated 6 files under /Catalogs", "ref": "#1340111", "wis": [{"type": "pr", "id": "1340111", "label": "PR 1340111"}], "risk": "medium", "cat": "config", "auto": [{"label": "UC006.ImportCC", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC013", "UC071", "UC072"], "okBuild": "26.0.0_20260818.1"}, {"id": "B014", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["Readme"], "files": [], "nfiles": 0, "summary": "Merged PR 1340088: Readme.html removal changes and final RT build", "ref": "#1340088", "wis": [{"type": "pr", "id": "1340088", "label": "PR 1340088"}], "risk": "medium", "cat": "config", "auto": [{"label": "UC006.ImportCC", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC013", "UC071", "UC072"], "okBuild": "26.0.0_20260818.1"}, {"id": "B015", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["Historian"], "files": [], "nfiles": 0, "summary": "Merged PR 1340007: Historian ASB updated", "ref": "#1340007", "wis": [{"type": "pr", "id": "1340007", "label": "PR 1340007"}], "risk": "medium", "cat": "runtime", "auto": [{"label": "FR2429655.AvevaConnect.Login.OMIApp", "kind": "auto", "linked": true, "query": "FR2429655"}], "manual": [], "ucs": ["UC107", "UC108"], "okBuild": "26.0.0_20260818.1"}, {"id": "B016", "src": "build", "date": "2026-08-18", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["SP_Install_Guide"], "files": [], "nfiles": 0, "summary": "Merged PR 1339795: Updated SP_Install_Guide.pdf", "ref": "#1339795", "wis": [{"type": "pr", "id": "1339795", "label": "PR 1339795"}], "risk": "medium", "cat": "config", "auto": [{"label": "UC006.ImportCC", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC013", "UC071", "UC072"], "okBuild": "26.0.0_20260818.1"}, {"id": "B017", "src": "build", "date": "2026-08-17", "project": "System Platform", "repo": "AppServer.SP", "component": "SP", "subs": ["OMI"], "files": [], "nfiles": 0, "summary": "Merged PR 1339533: Renamed AVEVA-OMI-SP2026.cat to AVEVA-OMI-2026.cat", "ref": "#1339533", "wis": [{"type": "pr", "id": "1339533", "label": "PR 1339533"}], "risk": "medium", "cat": "config", "auto": [{"label": "UC006.ImportCC", "kind": "auto", "linked": true, "query": "UC006"}], "manual": [], "ucs": ["UC013", "UC071", "UC072"], "okBuild": "26.0.0_20260818.1"}], "latestOk": {"AACategoryPkg": "26.0.0_20260815.2", "AAMxCore": "26.0.0_20260816.1", "AASysObjects": "26.0.0_20260811.1", "AdminUser": "26.0.0_20260815.1", "ArchScript": "26.0.0_20260818.2", "ArchSvc": "26.0.0_20260810.1", "Cybersecurity": "26.0.0_20260816.4", "DDESuiteLinkClientObj": "26.0.0_20260811.2", "DiCommon": "26.0.0_20260811.4", "GRAccess": "26.0.0_20260810.1", "IOClient": "26.0.0_20260813.1", "IOMBLS": "26.0.0_20260819.4", "IntouchProxyObj": "26.0.0_20260810.2", "MagellanHistory": "26.0.0_20260810.2", "MagellanPublic": "26.0.0_20260814.4", "ObjectFramework": "26.0.0_20260812.1", "PFClient": "26.0.0_20260819.3", "PFServer": "26.0.0_20260818.2", "PFServerPublic": "26.0.0_20260811.2", "RTCommon": "26.0.0_20260815.1", "SP": "26.0.0_20260818.1"}, "conn": {"state": "on", "org": "AVEVA-VSTS", "project": "AppServer OMI", "mode": "Components", "auth": "PAT (Basic)", "authTemp": true, "lastSync": "06:02", "unresolvedRepos": 33, "mapVersion": "2.0"}};
+const el=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const CAT={runtime:'Runtime',config:'Config',both:'C+R',unclassified:'Unclassified'};
+const WT=['ims','bug','story'];
+let scope='custom',d1='2026-08-14',d2='2026-08-21',cats={runtime:true,config:true},
+    wt=new Set(),comp='',build='',q='',counter='all',sortK='cat',sortD=1,edits={},dirty=new Set();
+
+el('cpath').textContent=D.conn.org+' / '+D.conn.project+'  \u00b7  mode '+D.conn.mode;
+el('csync').textContent=D.conn.lastSync;
+el('cwarn').textContent=D.conn.auth+' \u2014 temporary, replace with Entra';
+el('stMap').textContent='v'+D.conn.mapVersion;
+el('stUnres').textContent=D.conn.unresolvedRepos;
+
+const iso=d=>d.toISOString().slice(0,10);
+function setScope(s){
+  scope=s;const mx=new Date(D.span.max);
+  if(s==='build'){const b=D.rows.filter(r=>r.src==='build').map(r=>r.date).sort();d1=b[0];d2=D.span.max}
+  else if(s==='week'){const a=new Date(mx);a.setDate(a.getDate()-6);d1=iso(a);d2=D.span.max}
+  else if(s==='release'){d1=D.span.min;d2=D.span.max}
+  el('d1').value=d1;el('d2').value=d2;
+  el('range').classList.toggle('off',s!=='custom');
+  [...el('scope').children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===s));
+  render();
+}
+[...el('scope').children].forEach(b=>b.onclick=()=>setScope(b.dataset.s));
+el('d1').onchange=el('d2').onchange=()=>{d1=el('d1').value;d2=el('d2').value;setScope('custom')};
+
+const comps=[...new Set(D.rows.map(r=>r.component))].sort();
+el('fcomp').innerHTML='<option value="">All components</option>'+
+  comps.map(c=>`<option>${esc(c)}</option>`).join('');
+const builds=[...new Set(D.rows.map(r=>r.okBuild))].sort().reverse();
+el('fbuild').innerHTML='<option value="">All builds</option>'+
+  builds.map(b=>`<option>${esc(b)}</option>`).join('');
+el('fcomp').onchange=()=>{comp=el('fcomp').value;render()};
+el('fbuild').onchange=()=>{build=el('fbuild').value;render()};
+[...el('cats').children].forEach(b=>b.onclick=()=>{
+  cats[b.dataset.k]=!cats[b.dataset.k];b.setAttribute('aria-pressed',cats[b.dataset.k]);render()});
+[...el('wtypes').children].forEach(b=>b.onclick=()=>{
+  const k=b.dataset.k;wt.has(k)?wt.delete(k):wt.add(k);
+  b.setAttribute('aria-pressed',wt.has(k));render()});
+el('q').oninput=()=>{q=el('q').value.toLowerCase();render()};
+el('reset').onclick=()=>{cats={runtime:true,config:true};wt.clear();comp='';build='';q='';counter='all';
+  el('fcomp').value='';el('fbuild').value='';el('q').value='';
+  [...el('cats').children].forEach(b=>b.setAttribute('aria-pressed',true));
+  [...el('wtypes').children].forEach(b=>b.setAttribute('aria-pressed',false));render()};
+
+function rollup(){
+  const g=new Map();
+  D.rows.filter(r=>r.date>=d1&&r.date<=d2).forEach(r=>r.subs.forEach(s=>{
+    const k=r.component+'/'+s;
+    if(!g.has(k))g.set(k,{key:k,component:r.component,repo:r.repo,subsystem:s,project:r.project,
+      files:[],wis:[],sums:[],auto:[],manual:[],cats:[],risks:[],okBuild:r.okBuild,changes:0});
+    const e=g.get(k);
+    r.files.forEach(f=>!e.files.includes(f)&&e.files.push(f));
+    r.wis.forEach(w=>!e.wis.some(y=>y.type===w.type&&y.id===w.id)&&e.wis.push(w));
+    if(r.summary&&!e.sums.includes(r.summary))e.sums.push(r.summary);
+    ['auto','manual'].forEach(f=>r[f].forEach(v=>!e[f].some(y=>y.label===v.label)&&e[f].push({...v})));
+    e.cats.push(r.cat);e.risks.push(r.risk);e.changes++;
+  }));
+  const RK={critical:0,high:1,medium:2,unmapped:1};
+  return [...g.values()].map(e=>{
+    if(edits[e.key])['auto','manual'].forEach(f=>edits[e.key][f]&&(e[f]=edits[e.key][f].slice()));
+    const c=e.cats.filter(x=>x!=='unclassified');
+    e.cat=c.length?c.sort((a,b)=>c.filter(v=>v===b).length-c.filter(v=>v===a).length)[0]:'unclassified';
+    e.risk=[...e.risks].sort((a,b)=>(RK[a]??2)-(RK[b]??2))[0];
+    e.est=e.auto.length*12+e.manual.length*25;
+    return e;});
+}
+function view(){
+  let R=rollup();
+  R=R.filter(s=>(s.cat==='runtime'&&cats.runtime)||(s.cat==='config'&&cats.config)||
+    s.cat==='both'||s.cat==='unclassified');
+  if(comp)R=R.filter(s=>s.component===comp);
+  if(build)R=R.filter(s=>s.okBuild===build);
+  if(wt.size)R=R.filter(s=>s.wis.some(w=>wt.has(w.type)));
+  if(q)R=R.filter(s=>JSON.stringify([s.subsystem,s.component,s.repo,s.files,s.wis,s.sums,s.auto,s.manual])
+    .toLowerCase().includes(q));
+  if(counter==='runtime')R=R.filter(s=>s.cat==='runtime');
+  else if(counter==='config')R=R.filter(s=>s.cat==='config');
+  else if(counter==='none')R=R.filter(s=>!s.auto.length&&!s.manual.length);
+  const O={runtime:0,both:1,config:2,unclassified:3},RK={critical:0,high:1,medium:2,unmapped:1};
+  const kf={cat:s=>O[s.cat],component:s=>s.component.toLowerCase(),repo:s=>s.repo.toLowerCase(),
+    subsystem:s=>s.subsystem.toLowerCase(),files:s=>-s.files.length,sum:s=>(s.sums[0]||'').toLowerCase(),
+    wis:s=>-s.wis.length,risk:s=>RK[s.risk]??2,ok:s=>s.okBuild,auto:s=>-s.auto.length,
+    manual:s=>-s.manual.length,est:s=>-s.est};
+  return R.sort((a,b)=>{const f=kf[sortK]||kf.cat,x=f(a),y=f(b);return (x>y?1:x<y?-1:0)*sortD});
+}
+const adoUrl=(k,p,repo,id)=>(D.ado.url[k]||D.ado.url.pr).replace('{org}',D.ado.org)
+  .replace('{project}',encodeURIComponent(p)).replace('{repo}',repo).replace('{id}',encodeURIComponent(id));
+
+function render(){
+  const R=view(),ALL=rollup();
+  const rt=ALL.filter(s=>s.cat==='runtime').length,cf=ALL.filter(s=>s.cat==='config').length,
+        nn=ALL.filter(s=>!s.auto.length&&!s.manual.length).length;
+  const files=R.reduce((a,s)=>a+s.files.length,0),ch=R.reduce((a,s)=>a+s.changes,0);
+
+  el('counters').innerHTML=[
+    ['all','All subsystems',ALL.length],['runtime','Runtime',rt],
+    ['config','Config',cf],['none','No suite',nn]
+  ].map(([k,l,n])=>`<button class="cnt" data-k="${k}" aria-pressed="${counter===k}">
+     <b>${n}</b><span>${l}</span></button>`).join('')
+   +`<div class="cmeta"><span><b>${ch}</b> changes</span><span><b>${files}</b> files</span>
+     <span><b>${d1}</b> \u2192 <b>${d2}</b></span></div>`;
+  [...el('counters').querySelectorAll('.cnt')].forEach(b=>b.onclick=()=>{
+    counter=counter===b.dataset.k?'all':b.dataset.k;render()});
+
+  const COLS=[['idx','#'],['cat','Category'],['component','Component'],['repo','Repo'],
+    ['subsystem','Subsystem'],['files','Files modified'],['sum','Summary'],['wis','Changes'],
+    ['risk','Risk'],['ok','Latest good build'],['auto','Automation suite'],
+    ['manual','Manual suite'],['est','Est']];
+  el('head').innerHTML=COLS.map(([k,l],i)=>
+    `<th data-k="${k}" class="${k===sortK?'on':''}${i===0?' f1':i===1?' f2':i===2?' f3':''}${k==='est'?' num':''}">${l}<span class="ar">${sortD>0?'\u25b2':'\u25bc'}</span></th>`).join('');
+  [...el('head').children].forEach(t=>t.onclick=()=>{
+    if(sortK===t.dataset.k)sortD*=-1;else{sortK=t.dataset.k;sortD=1}render()});
+
+  el('empty').hidden=R.length>0;
+  el('gridwrap').style.visibility=R.length?'visible':'hidden';
+  if(!R.length){
+    const total=D.rows.length;
+    el('empty').innerHTML=`<div class="mark">&#9675;</div>
+      <h3>No changes between ${esc(d1)} and ${esc(d2)}</h3>
+      <p>The connection is live and ${total} changes are indexed &mdash; none of them fall in this window.
+        Widen the range or clear the filters.</p>
+      <div class="opts">
+        <button class="btn secondary" data-go="release">Show the full release</button>
+        <button class="btn secondary" data-go="week">Last 7 days of data</button>
+        <button class="btn quiet" data-go="clear">Clear all filters</button></div>`;
+    el('empty').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{
+      if(b.dataset.go==='clear')el('reset').click();else setScope(b.dataset.go)});
+  }
+
+  el('tbody').innerHTML=R.map((s,i)=>{
+    const wis=[...s.wis.filter(w=>['ims','bug','story','feature'].includes(w.type)),
+               ...s.wis.filter(w=>!['ims','bug','story','feature'].includes(w.type))].slice(0,3);
+    const chip=(f,cls,ph)=>{
+      const v=s[f];
+      return (v.map((t,j)=>`<span class="suite ${cls} ${t.linked===false&&f==='manual'?'nolink':''}"
+        >${esc(t.label.length>24?t.label.slice(0,23)+'\u2026':t.label)}<x data-k="${esc(s.key)}" data-f="${f}" data-i="${j}">\u00d7</x></span>`).join(''))
+        +`<button class="add" data-add="${esc(s.key)}|${f}">+</button>`;
+    };
+    return `<tr>
+      <td class="idx f1">${i+1}</td>
+      <td class="f2"><span class="badge b-${s.cat}">${CAT[s.cat]}</span></td>
+      <td class="comp f3">${esc(s.component)}<em>${s.changes} change${s.changes===1?'':'s'}</em></td>
+      <td class="mono">${esc(s.repo)}</td>
+      <td style="font-weight:600">${esc(s.subsystem)}</td>
+      <td><div class="paths">${s.files.slice(0,2).map(esc).join('<br>')||'<span class="dash">&mdash;</span>'}
+        ${s.files.length>2?`<span class="n">+${s.files.length-2} more</span>`:''}</div></td>
+      <td class="sum">${esc((s.sums[0]||'no description recorded').slice(0,88))}${(s.sums[0]||'').length>88?'\u2026':''}
+        ${s.sums.length>1?`<em>+${s.sums.length-1} more</em>`:''}</td>
+      <td>${wis.map(w=>`<a class="lk lk-${w.type}" target="_blank" rel="noopener"
+        href="${esc(adoUrl(w.type,s.project,s.repo,w.id))}">${esc(w.label)}</a>`).join('')||'<span class="dash">&mdash;</span>'}</td>
+      <td><span class="badge b-${s.risk}">${esc(s.risk)}</span></td>
+      <td class="mono">${esc(s.okBuild)}</td>
+      <td>${s.auto.length?chip('auto','s-auto'):`<span class="gap">none mapped</span> <button class="add" data-add="${esc(s.key)}|auto">+</button>`}</td>
+      <td>${chip('manual','s-man')}</td>
+      <td class="num mono">${s.est?s.est+'m':'<span class="dash">?</span>'}</td></tr>`;
+  }).join('');
+
+  el('tbody').querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
+    const [k,f]=b.dataset.add.split('|');const v=prompt(f==='auto'?'Automation suite id':'Manual suite');
+    if(!v)return;const s=rollup().find(z=>z.key===k);
+    edits[k] ||= {};edits[k][f] ||= s[f].slice();
+    edits[k][f].push({label:v,kind:f,linked:/^(FR|UC|US|IMS)\s?\d/i.test(v)});
+    dirty.add(k);render()});
+  el('tbody').querySelectorAll('.suite x').forEach(x=>x.onclick=()=>{
+    const s=rollup().find(z=>z.key===x.dataset.k);const f=x.dataset.f;
+    edits[s.key] ||= {};edits[s.key][f] ||= s[f].slice();
+    edits[s.key][f].splice(+x.dataset.i,1);dirty.add(s.key);render()});
+
+  const suites=new Set(R.flatMap(s=>s.auto.map(x=>x.label))).size;
+  el('bdisp').disabled=!suites;
+  el('bdisp').textContent=suites?`Dispatch ${suites} suites`:'Dispatch automated';
+  el('stSrc').textContent={build:'Build wise',week:'Weekly',custom:'Custom timeline',
+    release:'Release'}[scope];
+  el('stDirty').textContent=dirty.size?dirty.size+' unsaved edit'+(dirty.size>1?'s':''):'';
+  el('stCounts').textContent=R.length+' of '+ALL.length+' subsystems shown';
+}
+setScope('custom');
+</script>
+</body>
+</html>

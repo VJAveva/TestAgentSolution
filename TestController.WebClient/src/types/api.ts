@@ -466,3 +466,131 @@ export interface BuildReportCard {
   failures: FailureEntry[];
   trend: TrendPoint[];
 }
+
+// ── Regression tab / CIRP (matches ImpactController projections) ──────────────
+// Backed by a mock provider until real Azure DevOps ingest lands — see
+// docs/AzureIntegration/FEATURE-ARCHITECTURE.md. Shapes are the real v2 contract.
+
+export type RegressionCategoryKind = 'Runtime' | 'Config' | 'Both' | 'Unclassified';
+export type RegressionEvidenceKind = 'Assumed' | 'Declared' | 'Observed';
+export type RegressionScopeKind = 'Build' | 'Weekly' | 'Custom' | 'Release';
+export type RegressionWorkItemKind = 'Ims' | 'Bug' | 'Story' | 'Feature' | 'Other';
+export type RegressionChangeKind = 'PullRequest' | 'Automated' | 'Commit';
+
+export interface RegressionWorkItemRef {
+  id: number;
+  kind: RegressionWorkItemKind;
+  title: string;
+  url?: string;
+  createdUtc?: string;
+}
+
+export interface RegressionChangeRef {
+  changeId: string;
+  summary: string;
+  observedUtc: string;
+  filePaths: string[];
+  workItems: RegressionWorkItemRef[];
+  kind: RegressionChangeKind;
+  url?: string;
+}
+
+export interface RegressionSuiteRef {
+  suiteId: string;
+  isLinked: boolean;
+  url?: string;
+  evidence: RegressionEvidenceKind;
+}
+
+export interface SubsystemRow {
+  component: string;
+  subsystem: string;
+  category: RegressionCategoryKind;
+  categoryConfidence: RegressionEvidenceKind;
+  filesModified: string[];
+  totalFilesModified: number;
+  changes: RegressionChangeRef[];
+  riskTier: string;
+  automatedSuites: RegressionSuiteRef[];
+  manualSuites: RegressionSuiteRef[];
+  estimatedMinutes: number;
+  isEstimate: boolean;
+  regressionAreas?: string[];
+  useCases?: string[];
+  buildNumber?: string;
+  buildFinishedUtc?: string;
+  buildResult?: string;
+  latestSuccessfulBuild?: string;
+  latestSuccessfulBuildUrl?: string;
+  repository?: string;
+  repositoryUrl?: string;
+  defaultBranch?: string;
+  solutionNames?: string[];
+}
+
+export interface RegressionSummary {
+  scopeLabel: string;
+  rangeText: string;
+  changeCount: number;
+  subsystemCount: number;
+  fileCount: number;
+  weeklyActivity: number[];
+}
+
+export interface ConsolidatedImpact {
+  summary: RegressionSummary;
+  rows: SubsystemRow[];
+}
+
+export interface RegressionPlanColumn {
+  subsystems: number;
+  automatedSuites: number;
+  manualSuites: number;
+  gaps: number;
+  estimatedMinutes: number;
+}
+
+export interface RegressionScope {
+  runtime: RegressionPlanColumn;
+  config: RegressionPlanColumn;
+  unmappedSubsystems: string[];
+  parallelAgentCount: number;
+}
+
+export interface RegressionSyncStatus {
+  state: string;
+  lastSyncUtc?: string;
+  mapVersion: string;
+  unresolvedRepositories: string[];
+}
+
+export interface RegressionConnectionInfo {
+  enabled: boolean;
+  mode: string;
+  organization: string;
+  project: string;
+  omiProject: string;
+  authMode: string;
+  credentialSource: string;
+  credentialConfigured: boolean;
+}
+
+export interface RegressionComponentRef {
+  name: string;
+  definitionId: number;
+}
+
+export interface RegressionBuildRef {
+  buildId: number;
+  buildNumber: string;
+  result: string;
+  finishedUtc?: string;
+  display: string;
+}
+
+export interface ChurnSummary {
+  headline: string;
+  highlights: string[];
+  narrative: string;
+}
+

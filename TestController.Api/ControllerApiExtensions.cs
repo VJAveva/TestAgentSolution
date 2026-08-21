@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using TestController.Api.Hubs;
 using TestController.Api.Middleware;
 using TestController.Api.Services;
+using TestControllerGrpc.Ado;
 using TestControllerGrpc.Services;
 
 namespace TestController.Api;
@@ -47,6 +48,12 @@ public static class ControllerApiExtensions
         services.AddSingleton<ExecutionLogCorrelator>();
         services.AddSingleton<SignalRNotifier>();
         services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
+
+        // Regression tab / CIRP (docs/AzureIntegration): real Azure DevOps ingest when
+        // Ado:Enabled=true, otherwise falls back to the mock provider. TryAdd so a host can
+        // override without touching this registration.
+        services.AddAdoRegressionIngest();
+        services.TryAddSingleton<IRegressionDataProvider, MockRegressionDataProvider>();
 
         // Lock recovery options: defaults are fine, hosts can override via Configure<LockRecoveryOptions>()
         services.TryAddSingleton(Microsoft.Extensions.Options.Options.Create(new LockRecoveryOptions()));

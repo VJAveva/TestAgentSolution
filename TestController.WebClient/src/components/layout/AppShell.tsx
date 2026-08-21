@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Eye, Server, Play, BarChart3, Activity, ScrollText, AlertTriangle, RotateCw, Award } from 'lucide-react';import WatchListTree from '../watchlist/WatchListTree';
+import { Eye, Server, Play, BarChart3, Activity, ScrollText, AlertTriangle, RotateCw, Award, GitPullRequest } from 'lucide-react';import WatchListTree from '../watchlist/WatchListTree';
 import NodeProperties from '../watchlist/NodeProperties';
 import WatchListToolbar from '../watchlist/WatchListToolbar';
 import AgentWorkspace from '../agents/AgentWorkspace';
@@ -13,6 +13,7 @@ import BuildList from '../results/BuildList';
 import BuildDetail from '../results/BuildDetail';
 import TrendCharts from '../results/TrendCharts';
 import ReportCardView from '../reportcard/ReportCardView';
+import RegressionView from '../regression/RegressionView';
 import Sidebar from './Sidebar';
 import ConnectionStatus from './ConnectionStatus';
 import DefaultModeBanner from '../header/DefaultModeBanner';
@@ -23,7 +24,7 @@ import { useAgents } from '../../hooks/useAgents';
 import { useExecution } from '../../hooks/useExecution';
 import { useHashRoute } from '../../hooks/useHashRoute';
 
-type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results' | 'report';
+type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results' | 'report' | 'regression';
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'watchlist', label: 'WatchList', icon: <Eye size={16} /> },
@@ -33,6 +34,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'logs',      label: 'Logs',      icon: <ScrollText size={16} /> },
   { id: 'results',   label: 'Results',   icon: <BarChart3 size={16} /> },
   { id: 'report',    label: 'Report Card', icon: <Award size={16} /> },
+  { id: 'regression', label: 'Regression', icon: <GitPullRequest size={16} /> },
 ];
 
 export default function AppShell() {
@@ -110,6 +112,7 @@ export default function AppShell() {
         {activeTab === 'logs'      && <LogsPage />}
         {activeTab === 'results'   && <ResultsPage />}
         {activeTab === 'report'    && <ReportCardPage />}
+        {activeTab === 'regression' && <RegressionPage />}
       </div>
     </div>
   );
@@ -172,6 +175,14 @@ function ReportCardPage() {
   return (
     <main className="flex-1 flex overflow-hidden">
       <ReportCardView />
+    </main>
+  );
+}
+
+function RegressionPage() {
+  return (
+    <main className="flex-1 flex overflow-hidden">
+      <RegressionView />
     </main>
   );
 }

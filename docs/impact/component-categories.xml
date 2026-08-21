@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Runtime vs Config classification for the Regression tab.
+
+  category attribute (required): Runtime | Config | Both
+    Runtime  = executes in the running engine (primitives, DI, scheduler, redundancy, comms, historian).
+    Config   = configuration/design-time (IDE, editors, GRAccess, deploy, import/export, admin).
+    Both     = exercised at both configuration and runtime (e.g. security).
+
+  - The "name" must match the component id shown in the Regression grid (the vobs name in
+    docs/impact/component-usecase-map.v1.json), e.g. "AAMxCore", "SysObj", "IDEExtensions".
+  - Components not listed here fall back to Unclassified.
+  - These are STARTER values inferred from each component's area list — review and adjust to your
+    ownership. The file is hot-loaded at app start; edit and restart to re-classify.
+-->
+<componentCategories version="1">
+  <!-- Runtime engine / primitives / DI / comms / historian -->
+  <component name="aabootstrap" category="Runtime" />
+  <component name="AAMxCore" category="Runtime" />
+  <component name="SysObj" category="Runtime" />
+  <component name="AppObjCommon" category="Runtime" />
+  <component name="ArchestrAObj" category="Runtime" />
+  <component name="ArchScript" category="Runtime" />
+  <component name="DDESuiteLinkClientObj" category="Runtime" />
+  <component name="DiCommon" category="Runtime" />
+  <component name="IntouchProxyObj" category="Runtime" />
+  <component name="IOClient" category="Runtime" />
+  <component name="OPCClientObj" category="Runtime" />
+  <component name="RedundantDIObject" category="Runtime" />
+  <component name="Sequencer" category="Runtime" />
+  <component name="SQLDataObj" category="Runtime" />
+  <component name="SQLScript" category="Runtime" />
+  <component name="UserExtended" category="Runtime" />
+  <component name="RTCommon" category="Runtime" />
+  <component name="MagellanProduct" category="Runtime" />
+  <component name="MagellanHistory" category="Runtime" />
+  <component name="Morpheus" category="Runtime" />
+
+  <!-- Configuration / IDE / deploy / admin -->
+  <component name="IDEExtensions" category="Config" />
+  <component name="IDEPublic" category="Config" />
+  <component name="ObjectFramework" category="Config" />
+  <component name="GRAccess" category="Config" />
+  <component name="MxAccess" category="Config" />
+  <component name="PFClient" category="Config" />
+  <component name="PFServer" category="Config" />
+  <component name="PFServerPublic" category="Config" />
+  <component name="AACategoryPkg" category="Config" />
+  <component name="MagellanPublic" category="Config" />
+  <component name="IOMBLS" category="Config" />
+  <component name="AdminUser" category="Config" />
+
+  <!-- Exercised at both configuration and runtime -->
+  <component name="ArchSvc" category="Both" />
+  <component name="Security" category="Both" />
+  <component name="Cybersecurity" category="Both" />
+</componentCategories>

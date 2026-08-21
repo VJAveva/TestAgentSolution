@@ -1,0 +1,786 @@
+<Window x:Class="TestControllerGrpc.Views.Regression.RegressionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:TestControllerGrpc.Views.Regression"
+        Title="Regression - TestController"
+        Height="900" Width="1520" MinWidth="1100" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BgCanvasBrush}">
+
+    <Window.Resources>
+        <FontFamily x:Key="Mono">Consolas</FontFamily>
+        <local:StringToUriConverter x:Key="StrToUri" />
+        <local:EmptyStringToCollapsedConverter x:Key="EmptyToCollapsed" />
+
+        <!-- Ribbon palette (matches docs/AzureIntegration/regression-tab-mockup.html) -->
+        <SolidColorBrush x:Key="RbBg" Color="#232140" />
+        <SolidColorBrush x:Key="RbSep" Color="#332F5C" />
+        <SolidColorBrush x:Key="RbTx" Color="#E6E3F5" />
+        <SolidColorBrush x:Key="RbTx3" Color="#726D9B" />
+        <SolidColorBrush x:Key="RbHover" Color="#2A2749" />
+        <SolidColorBrush x:Key="RbLine" Color="#3B3766" />
+        <SolidColorBrush x:Key="RbViolet" Color="#9B7BE8" />
+        <SolidColorBrush x:Key="RbVioletD" Color="#3E2F66" />
+
+        <!-- Ribbon command button: icon-over-text, subtle hover -->
+        <Style x:Key="RibbonBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource RbTx}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="Transparent"
+                                BorderThickness="1" CornerRadius="3" Padding="9,5,9,4" Margin="1,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource RbHover}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource RbLine}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Ribbon toggle: same shape, violet when checked -->
+        <Style x:Key="RibbonTgl" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource RbTx}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="Transparent"
+                                BorderThickness="1" CornerRadius="3" Padding="9,5,9,4" Margin="1,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource RbHover}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource RbLine}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource RbVioletD}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource RbViolet}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RibbonIcon" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,0,3" />
+        </Style>
+        <Style x:Key="RibbonText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{StaticResource RbTx}" />
+        </Style>
+        <Style x:Key="RibbonLbl" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource RbTx3}" />
+            <Setter Property="FontSize" Value="9.5" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,5,0,0" />
+        </Style>
+        <Style x:Key="RibbonSep" TargetType="Border">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Background" Value="{StaticResource RbSep}" />
+            <Setter Property="Margin" Value="7,3,7,3" />
+        </Style>
+        <Style x:Key="RibbonFieldLbl" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource RbTx3}" />
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="Width" Value="34" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="ToolBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource BgPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style x:Key="KpiLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="KpiValue" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+
+        <!-- Category badge -->
+        <Style x:Key="CategoryBadge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Category}" Value="Runtime">
+                    <Setter Property="Background" Value="{DynamicResource BgSuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Config">
+                    <Setter Property="Background" Value="{DynamicResource BgInfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Both">
+                    <Setter Property="Background" Value="{DynamicResource BgWarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Unclassified">
+                    <Setter Property="Background" Value="{DynamicResource BgDangerBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Row left-border encodes category (R9) -->
+        <Style x:Key="RowLeftBorder" TargetType="DataGridRow">
+            <Setter Property="BorderThickness" Value="3,0,0,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Category}" Value="Runtime">
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderSuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Config">
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderInfoBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Both">
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderWarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Unclassified">
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderDangerBrush}" />
+                </DataTrigger>
+                <!-- Automated-only rows (build-syncup, no PR/human commit) are de-emphasised so real-PR rows stand out. -->
+                <DataTrigger Binding="{Binding IsAutomatedOnly}" Value="True">
+                    <Setter Property="Opacity" Value="0.5" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- Borderless violet toggle used by the collapsible AI Summary bar -->
+        <Style x:Key="LinkToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource RbViolet}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- ── ADO connection / source status ── -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgSecondaryBrush}"
+                BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1" Padding="12,4">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" x:Name="SignInButton" Click="OnSignInClick"
+                        Visibility="{Binding AuthAvailable, Converter={StaticResource BoolToVis}}"
+                        Padding="10,2" Margin="8,0,0,0" Cursor="Hand"
+                        ToolTip="Sign in to Azure DevOps with your AVEVA Microsoft account">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x1F511;" Margin="0,0,5,0" />
+                        <TextBlock Text="{Binding SignInButtonText}" />
+                    </StackPanel>
+                </Button>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding AuthStatusText}" VerticalAlignment="Center"
+                           FontSize="11" Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,4,0" />
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="9" Height="9" VerticalAlignment="Center" Margin="0,0,6,0">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{DynamicResource BorderDangerBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                        <Setter Property="Fill" Value="{DynamicResource BorderSuccessBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="{Binding ConnectionText}" VerticalAlignment="Center" FontSize="11"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ── Toolbar ribbon: Track changes / Timeline / Show / Work items / Focus / Execute ── -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource RbBg}"
+                BorderBrush="{StaticResource RbSep}" BorderThickness="0,0,0,1" Padding="6,7,6,4">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel Orientation="Horizontal">
+
+                    <!-- Track changes (R1) -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding SelectScopeCommand}" CommandParameter="Build" ToolTip="{Binding LatestBuildText, StringFormat='Latest build: {0}'}">
+                                <StackPanel MinWidth="80">
+                                    <TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F4C1;" />
+                                    <TextBlock Style="{StaticResource RibbonText}" Text="Build" />
+                                    <TextBlock Text="{Binding LatestBuildText}" FontSize="8.5" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource RbTx3}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding SelectScopeCommand}" CommandParameter="Weekly" ToolTip="Last 7 days">
+                                <StackPanel MinWidth="50"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F4C5;" /><TextBlock Style="{StaticResource RibbonText}" Text="Weekly" /></StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding SelectScopeCommand}" CommandParameter="Custom" ToolTip="Custom range">
+                                <StackPanel MinWidth="50"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x270F;" Foreground="#5B9BFF" /><TextBlock Style="{StaticResource RibbonText}" Text="Custom" /></StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding SelectScopeCommand}" CommandParameter="Release" ToolTip="Release window">
+                                <StackPanel MinWidth="50"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F4E6;" /><TextBlock Style="{StaticResource RibbonText}" Text="Release" /></StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Track changes" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Timeline (R2) -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal" Margin="4,3,4,0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="From" />
+                                    <DatePicker SelectedDate="{Binding From}" Width="118" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="To" />
+                                    <DatePicker SelectedDate="{Binding To}" Width="118" />
+                                </StackPanel>
+                            </StackPanel>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding ApplyRangeCommand}" Margin="6,0,0,0" ToolTip="Apply the date range">
+                                <StackPanel MinWidth="46"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x2714;" Foreground="#3FBE86" /><TextBlock Style="{StaticResource RibbonText}" Text="Apply" /></StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Timeline" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Show (R3) -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowRuntime}" ToolTip="Show Runtime rows">
+                                <StackPanel MinWidth="52"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x26A1;" Foreground="#E0A040" /><TextBlock Style="{StaticResource RibbonText}" Text="Runtime" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowConfig}" ToolTip="Show Config rows">
+                                <StackPanel MinWidth="52"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x2699;" Foreground="#45C4D6" /><TextBlock Style="{StaticResource RibbonText}" Text="Config" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding HideAutomatedChanges}" ToolTip="Show only human-made changes (hide automated build-tool syncups). Toggle off to include automated changes.">
+                                <StackPanel MinWidth="52"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F464;" Foreground="#7BC47F" /><TextBlock Style="{StaticResource RibbonText}" Text="Human only" /></StackPanel>
+                            </ToggleButton>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Show" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Work items (R7) -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding FilterBug}" ToolTip="Only rows with a Bug work item">
+                                <StackPanel MinWidth="46"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F41E;" /><TextBlock Style="{StaticResource RibbonText}" Text="Bug" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding FilterStory}" ToolTip="Only rows with a User Story">
+                                <StackPanel MinWidth="52"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x2B50;" /><TextBlock Style="{StaticResource RibbonText}" Text="Story" /></StackPanel>
+                            </ToggleButton>
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding FilterIms}" ToolTip="Only rows with an internal IMS/Issue">
+                                <StackPanel MinWidth="46"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x25C6;" Foreground="#9B7BE8" /><TextBlock Style="{StaticResource RibbonText}" Text="IMS" /></StackPanel>
+                            </ToggleButton>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Work items" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Release branch switch (parallel dev) -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal" Margin="4,3,4,0" VerticalAlignment="Center">
+                            <ComboBox Width="150" VerticalAlignment="Center" ItemsSource="{Binding Branches}"
+                                      SelectedItem="{Binding SelectedBranch}"
+                                      ToolTip="Switch release branch (parallel dev). Configure Ado:Branches in appsettings." />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Branch" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Focus: component + build pickers -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Margin="4,3,4,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="Comp" />
+                                <ComboBox Width="176" ItemsSource="{Binding Components}" SelectedItem="{Binding SelectedComponent}"
+                                          DisplayMemberPath="Name" ToolTip="Filter the grid to one component/definition" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="Build" />
+                                <ComboBox Width="176" ItemsSource="{Binding Builds}" SelectedItem="{Binding SelectedBuild}"
+                                          DisplayMemberPath="Display" IsEnabled="{Binding IsBuildPickerEnabled}"
+                                          ToolTip="Pick a specific build of the selected component" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Focus" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Execute (R4) -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding LoadCommand}" ToolTip="Reload from Azure DevOps">
+                                <StackPanel MinWidth="50"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F504;" /><TextBlock Style="{StaticResource RibbonText}" Text="Refresh" /></StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding DispatchCommand}" ToolTip="Dispatch automated suites (advisory)">
+                                <StackPanel MinWidth="54"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x25B6;" Foreground="#3FBE86" /><TextBlock Style="{StaticResource RibbonText}" Text="Dispatch" /></StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding AssignManualCommand}" ToolTip="Assign manual suites (advisory)">
+                                <StackPanel MinWidth="50"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F464;" /><TextBlock Style="{StaticResource RibbonText}" Text="Assign" /></StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding ExportCommand}" ToolTip="Export the plan">
+                                <StackPanel MinWidth="50"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F4E5;" /><TextBlock Style="{StaticResource RibbonText}" Text="Export" /></StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Execute" />
+                    </StackPanel>
+                    <Border Style="{StaticResource RibbonSep}" />
+
+                    <!-- Report: recipients + email -->
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal" Margin="4,3,4,0" VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="To" VerticalAlignment="Center" />
+                            <TextBox Width="178" Height="24" VerticalContentAlignment="Center"
+                                     Text="{Binding Recipients, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Comma/semicolon-separated recipient emails (prefilled from BuildResults:ReportRecipients)" />
+                            <Button Style="{StaticResource RibbonBtn}" Command="{Binding EmailReportCommand}" Margin="6,0,0,0" ToolTip="Email the churn report (HTML body + CSV attachment)">
+                                <StackPanel MinWidth="48"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x2709;" Foreground="#5B9BFF" /><TextBlock Style="{StaticResource RibbonText}" Text="Email" /></StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource RibbonLbl}" Text="Report" />
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- ── Status / sync line (R14) ── -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgPrimaryBrush}"
+                BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1" Padding="12,4">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" FontSize="10" FontFamily="{StaticResource Mono}"
+                           Foreground="{DynamicResource TextTertiaryBrush}">
+                    <Run Text="{Binding SyncState, Mode=OneWay}" />
+                    <Run Text="  ·  map " /><Run Text="{Binding MapVersion, Mode=OneWay}" />
+                    <Run Text="  ·  unresolved: " /><Run Text="{Binding UnresolvedRepositories, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock DockPanel.Dock="Right" FontSize="10" FontFamily="{StaticResource Mono}"
+                           Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding StatusMessage, Mode=OneWay}" />
+            </DockPanel>
+        </Border>
+
+        <!-- ── Plan panel (R11-13) ── docked bottom so the grid keeps most of the space ── -->
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource Card}" Margin="12,0,12,12">
+            <UniformGrid Rows="1" Columns="6">
+                <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource KpiLabel}" Text="RUNTIME · SUBSYSTEMS" />
+                        <TextBlock Style="{StaticResource KpiValue}" Text="{Binding PlanRuntimeSubsystems}" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource KpiLabel}" Text="RUNTIME · AUTO / MANUAL / GAPS" />
+                        <TextBlock Style="{StaticResource KpiValue}" FontSize="14">
+                            <Run Text="{Binding PlanRuntimeSuites, Mode=OneWay}" /><Run Text=" / " />
+                            <Run Text="{Binding PlanRuntimeManual, Mode=OneWay}" /><Run Text=" / " />
+                            <Run Text="{Binding PlanRuntimeGaps, Mode=OneWay}" Foreground="{DynamicResource TextDangerBrush}" />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource KpiLabel}" Text="CONFIG · SUBSYSTEMS" />
+                        <TextBlock Style="{StaticResource KpiValue}" Text="{Binding PlanConfigSubsystems}" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource KpiLabel}" Text="CONFIG · AUTO / MANUAL / GAPS" />
+                        <TextBlock Style="{StaticResource KpiValue}" FontSize="14">
+                            <Run Text="{Binding PlanConfigSuites, Mode=OneWay}" /><Run Text=" / " />
+                            <Run Text="{Binding PlanConfigManual, Mode=OneWay}" /><Run Text=" / " />
+                            <Run Text="{Binding PlanConfigGaps, Mode=OneWay}" Foreground="{DynamicResource TextDangerBrush}" />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,1,0" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource KpiLabel}" Text="TOTAL GAPS" />
+                        <TextBlock Style="{StaticResource KpiValue}" Foreground="{DynamicResource TextDangerBrush}" Text="{Binding TotalGaps}" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,0,0" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource KpiLabel}" Text="PARALLEL DURATION (EST.)" />
+                        <TextBlock Style="{StaticResource KpiValue}" Text="{Binding ParallelDurationMinutes, StringFormat={}{0:0} min}" />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+        </Border>
+
+        <!-- ── R6 counters ── -->
+        <Border DockPanel.Dock="Top" Padding="12,8,12,0">
+            <StackPanel Orientation="Horizontal">
+                <Border Background="{DynamicResource BgSuccessBrush}" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                    <TextBlock FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}">
+                        <Run Text="RUNTIME " /><Run Text="{Binding RuntimeCount, Mode=OneWay}" FontWeight="Bold" />
+                    </TextBlock>
+                </Border>
+                <Border Background="{DynamicResource BgInfoBrush}" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                    <TextBlock FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}">
+                        <Run Text="CONFIG " /><Run Text="{Binding ConfigCount, Mode=OneWay}" FontWeight="Bold" />
+                    </TextBlock>
+                </Border>
+                <Border Background="{DynamicResource BgDangerBrush}" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                    <TextBlock FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}">
+                        <Run Text="NO SUITE " /><Run Text="{Binding NoSuiteCount, Mode=OneWay}" FontWeight="Bold" />
+                    </TextBlock>
+                </Border>
+                <TextBlock VerticalAlignment="Center" FontSize="11" FontFamily="{StaticResource Mono}"
+                           Foreground="{DynamicResource TextTertiaryBrush}">
+                    <Run Text="{Binding ChangeCount, Mode=OneWay}" /><Run Text=" changes · " />
+                    <Run Text="{Binding SubsystemCount, Mode=OneWay}" /><Run Text=" subsystems · " />
+                    <Run Text="{Binding FileCount, Mode=OneWay}" /><Run Text=" files · " />
+                    <Run Text="{Binding RangeText, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- ── AI Summary bar (collapsible; collapsed by default to reclaim grid space) ── -->
+        <Border DockPanel.Dock="Top" Margin="12,8,12,0" CornerRadius="6" Padding="10,6"
+                Background="{StaticResource RbBg}" BorderBrush="{StaticResource RbLine}" BorderThickness="1"
+                Visibility="{Binding AiSummaryHeadline, Converter={StaticResource EmptyToCollapsed}}">
+            <StackPanel>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#x1F9E0;" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock DockPanel.Dock="Left" Text="AI SUMMARY" FontSize="9.5" FontWeight="SemiBold"
+                               Foreground="{StaticResource RbViolet}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <ToggleButton DockPanel.Dock="Right" Style="{StaticResource LinkToggle}"
+                                  IsChecked="{Binding IsSummaryExpanded}" VerticalAlignment="Center"
+                                  ToolTip="Show or hide the full summary">
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="Details &#x25BE;" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSummaryExpanded}" Value="True">
+                                            <Setter Property="Text" Value="Hide &#x25B4;" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </ToggleButton>
+                    <TextBlock Text="{Binding AiSummaryHeadline}" FontSize="12" Foreground="{StaticResource RbTx}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+                <TextBlock Text="{Binding AiSummaryText}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{StaticResource RbTx}" LineHeight="17" Margin="22,6,0,0"
+                           Visibility="{Binding IsSummaryExpanded, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+        </Border>
+
+        <!-- ── R9 grid — the feature ── -->
+        <DataGrid ItemsSource="{Binding Rows}" Margin="12,8,12,0"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  Background="Transparent" RowBackground="Transparent"
+                  BorderThickness="0" CanUserResizeColumns="True"
+                  CanUserReorderColumns="False" CanUserSortColumns="True"
+                  SelectionMode="Single" RowStyle="{StaticResource RowLeftBorder}"
+                  SelectionChanged="OnRowSelectionChanged"
+                  Foreground="{DynamicResource TextPrimaryBrush}"
+                  HorizontalGridLinesBrush="{DynamicResource BorderTertiaryBrush}"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                  RowDetailsVisibilityMode="Visible"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="True">
+            <DataGrid.RowDetailsTemplate>
+                <DataTemplate>
+                    <Border Background="{DynamicResource BgSecondaryBrush}" Padding="14,8" Margin="0,2,0,4"
+                            BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,1,0,1"
+                            Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Click="OnHideDetails"
+                                    Content="&#x25B2; Hide details" Padding="8,2" Margin="0,0,0,6" Cursor="Hand"
+                                    FontSize="11" ToolTip="Collapse this row's details" />
+                            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <!-- Component-level AI summary -->
+                            <Border Background="{StaticResource RbVioletD}" CornerRadius="4" Padding="9,6" Margin="0,0,0,8"
+                                    Visibility="{Binding AiSummary, Converter={StaticResource EmptyToCollapsed}}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F9E0; COMPONENT AI SUMMARY" FontSize="9.5" FontWeight="SemiBold"
+                                               Foreground="{StaticResource RbViolet}" Margin="0,0,0,3" />
+                                    <TextBlock Text="{Binding AiSummary}" TextWrapping="Wrap" FontSize="11.5"
+                                               Foreground="{StaticResource RbTx}" LineHeight="16" />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="{Binding BuildInfo}" FontSize="11" FontFamily="{StaticResource Mono}"
+                                       Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,0,6" />
+                            <TextBlock Text="{Binding RepoInfo}" FontSize="11" FontFamily="{StaticResource Mono}"
+                                       Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,0,6" />
+
+                            <!-- Functional tests to execute for this component (use cases + regression areas) -->
+                            <Border BorderBrush="{DynamicResource BorderSuccessBrush}" BorderThickness="1" CornerRadius="4" Padding="9,6" Margin="0,0,0,6">
+                                <TextBlock FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap">
+                                    <Run Text="&#x2705; Functional tests to execute: " FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                    <Run Text="{Binding FunctionalTestsText, Mode=OneWay}" />
+                                </TextBlock>
+                            </Border>
+
+                            <TextBlock Text="Changes (oldest first)" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,3" />
+                            <ItemsControl ItemsSource="{Binding SortedChanges}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock FontSize="11" FontFamily="{StaticResource Mono}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,2">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <!-- Automated build-syncup changes highlighted -->
+                                                        <DataTrigger Binding="{Binding Kind}" Value="Automated">
+                                                            <Setter Property="Background" Value="#4A3A12" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                            <Run Text="{Binding ObservedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                            <Run Text="{Binding Kind, Mode=OneWay}" FontWeight="SemiBold"
+                                                 Foreground="{DynamicResource TextTertiaryBrush}" />
+                                            <Hyperlink NavigateUri="{Binding Url, Converter={StaticResource StrToUri}}"
+                                                       RequestNavigate="OnHyperlinkNavigate"
+                                                       ToolTip="Open the commit/PR in Azure DevOps">
+                                                <Run Text="{Binding Summary, Mode=OneWay}" />
+                                            </Hyperlink>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Work items" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,3"
+                                       Visibility="{Binding HasWorkItems, Converter={StaticResource BoolToVis}}" />
+                            <ItemsControl ItemsSource="{Binding WorkItemGroups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,4">
+                                            <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource RbViolet}" Margin="0,2,0,2" />
+                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                                   Foreground="{DynamicResource TextPrimaryBrush}" Margin="12,0,0,2">
+                                                            <Run Text="{Binding CreatedUtc, StringFormat='{}{0:yyyy-MM-dd}'}" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                            <Hyperlink NavigateUri="{Binding Url, Converter={StaticResource StrToUri}}"
+                                                                       RequestNavigate="OnHyperlinkNavigate"
+                                                                       ToolTip="Open the work item in Azure DevOps">
+                                                                <Run Text="#" /><Run Text="{Binding Id, Mode=OneWay}" /><Run Text=" — " /><Run Text="{Binding Title, Mode=OneWay}" />
+                                                            </Hyperlink>
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Modified files" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,3"
+                                       Visibility="{Binding HasModifiedFiles, Converter={StaticResource BoolToVis}}" />
+                            <StackPanel Visibility="{Binding HasModifiedFiles, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding Repository}" FontSize="11" FontFamily="{StaticResource Mono}"
+                                           FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,1" />
+                                <ItemsControl ItemsSource="{Binding ModifiedFiles}" Margin="8,0,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock FontSize="11" FontFamily="{StaticResource Mono}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,1">
+                                                <Run Text="└─" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                <Hyperlink NavigateUri="{Binding Url, Converter={StaticResource StrToUri}}"
+                                                           RequestNavigate="OnHyperlinkNavigate"
+                                                           ToolTip="Open the file in Azure DevOps">
+                                                    <Run Text="{Binding Path, Mode=OneWay}" />
+                                                </Hyperlink>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </DataTemplate>
+            </DataGrid.RowDetailsTemplate>
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                    <Setter Property="Padding" Value="6,5" />
+                    <Setter Property="FontSize" Value="11" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
+                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="26" CanUserResize="False" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}" Cursor="Hand"
+                                          Background="Transparent" BorderThickness="0" Padding="0"
+                                          ToolTip="Show / hide row details">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent">
+                                            <TextBlock x:Name="chev" Text="&#x25B8;" FontSize="12"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="chev" Property="Text" Value="&#x25BE;" />
+                                                <Setter TargetName="chev" Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="#" Binding="{Binding RowNumber}" Width="40" />
+                <DataGridTemplateColumn Header="CATEGORY" Width="90">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource CategoryBadge}" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding Category}" FontSize="10" FontWeight="Medium"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                            </Border>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="REPOSITORIES" Width="2.4*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" FontSize="11" FontFamily="{StaticResource Mono}" TextTrimming="CharacterEllipsis"
+                                       ToolTip="Component (repository) — click the repo to open it in Azure DevOps">
+                                <Run Text="{Binding Component, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" (" Foreground="{DynamicResource TextTertiaryBrush}" /><Hyperlink NavigateUri="{Binding RepositoryUrl, Converter={StaticResource StrToUri}}" RequestNavigate="OnHyperlinkNavigate"><Run Text="{Binding Repository, Mode=OneWay}" /></Hyperlink><Run Text=")" Foreground="{DynamicResource TextTertiaryBrush}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="SUBSYSTEMS" Binding="{Binding SubsystemsText}" Width="1.8*" />
+                <DataGridTextColumn Header="FILES MODIFIED" Binding="{Binding FilesPreview}" Width="2*" />
+                <DataGridTextColumn Header="SUMMARY" Binding="{Binding SummaryPreview}" Width="2.4*" />
+                <DataGridTextColumn Header="CHANGES" Binding="{Binding ChangeKindLabel}" Width="1.2*" />
+                <DataGridTextColumn Header="RISK" Binding="{Binding RiskTier}" Width="70" />
+                <DataGridTemplateColumn Header="LATEST OK BUILD" Width="1.2*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" FontSize="11" FontFamily="{StaticResource Mono}">
+                                <Hyperlink NavigateUri="{Binding LatestSuccessfulBuildUrl, Converter={StaticResource StrToUri}}"
+                                           RequestNavigate="OnHyperlinkNavigate" ToolTip="Open the latest successful build in Azure DevOps">
+                                    <Run Text="{Binding LatestSuccessfulBuild, Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="AUTOMATION SUITE" Width="1.4*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ItemsControl ItemsSource="{Binding AutomatedSuites}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource BgSuccessBrush}" CornerRadius="3"
+                                                Padding="5,1" Margin="0,1,3,1">
+                                            <TextBlock Text="{Binding SuiteId}" FontSize="9" FontFamily="{StaticResource Mono}"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="MANUAL SUITE" Width="1.4*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ItemsControl ItemsSource="{Binding ManualSuites}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="3" Padding="5,1" Margin="0,1,3,1"
+                                                Background="{DynamicResource BgInfoBrush}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsLinked}" Value="False">
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderInfoBrush}" />
+                                                            <Setter Property="BorderThickness" Value="1" />
+                                                            <Setter Property="Background" Value="Transparent" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding SuiteId}" FontSize="9" FontFamily="{StaticResource Mono}"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="EST." Binding="{Binding EstimateText}" Width="110" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

@@ -1240,6 +1240,10 @@
                                 ToolTip="WatchItem Builder" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
+                        <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
+                                ToolTip="Regression Tab (build/change impact)" Height="28" MinWidth="28" Padding="4,2">
+                            <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
+                        </Button>
                         <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
                                 ToolTip="Help (F1)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE897;" FontSize="14" Foreground="{DynamicResource Accent}" />
@@ -1795,6 +1799,13 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Report Card" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
+                                                    ToolTip="Open the Regression tab (build/change impact planning)">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Regression" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>

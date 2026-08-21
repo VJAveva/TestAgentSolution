@@ -3,6 +3,8 @@ using System.IO;
 using System.Windows.Threading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using TestControllerGrpc.Ado;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -236,6 +238,17 @@ public partial class App : Application
                 // WatchItem Builder (Tier3 §5): transient so each open deep-clones the
                 // current vocabulary config fresh from the monitor.
                 services.AddTransient<TestControllerGrpc.ViewModels.WatchBuilder.WatchBuilderViewModel>();
+
+                // Regression tab / CIRP (docs/AzureIntegration): real Azure DevOps ingest when
+                // Ado:Enabled=true, otherwise falls back to the mock provider. This is a separate
+                // instance from TestController.Api's own registration — the WPF and Web hosts each
+                // have their own DI container per the "two front doors, one engine" keystone; no
+                // cross-process singleton.
+                services.AddAdoRegressionIngest();
+                services.TryAddSingleton<TestControllerGrpc.Services.IRegressionDataProvider, TestControllerGrpc.Services.MockRegressionDataProvider>();
+                services.AddSingleton<TestControllerGrpc.Services.IRegressionReportMailer, TestControllerGrpc.Services.RegressionReportMailer>();
+                services.AddTransient<TestControllerGrpc.ViewModels.Regression.AdoSignInViewModel>();
+                services.AddSingleton<TestControllerGrpc.ViewModels.Regression.RegressionViewModel>();
             })
             .Build();
 
