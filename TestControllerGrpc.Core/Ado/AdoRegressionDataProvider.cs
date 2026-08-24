@@ -55,15 +55,15 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         _logger = logger;
     }
 
-    public async Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly from, DateOnly to, string? branch, CancellationToken ct)
+    public async Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
     {
         var (rows, unresolved) = await FetchRowsAsync(from, to, branch, ct);
         _lastUnresolved = unresolved;
         _lastSyncUtc = DateTimeOffset.UtcNow;
 
         var summary = new RegressionSummary(
-            ScopeLabel: "Custom",
-            RangeText: $"{from:yyyy-MM-dd} \u2013 {to:yyyy-MM-dd}",
+            ScopeLabel: from is null || to is null ? "Latest build" : "Custom",
+            RangeText: from is { } f && to is { } t ? $"{f:yyyy-MM-dd} \u2013 {t:yyyy-MM-dd}" : "Latest build (current vs previous)",
             ChangeCount: rows.Sum(r => r.Changes.Count),
             SubsystemCount: rows.Count,
             FileCount: rows.Sum(r => r.TotalFilesModified),
@@ -72,7 +72,7 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         return new ConsolidatedImpact(summary, rows);
     }
 
-    public async Task<RegressionScope> GetScopeAsync(DateOnly from, DateOnly to, RegressionCategoryKind? category, string? branch, CancellationToken ct)
+    public async Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, CancellationToken ct)
     {
         var (rows, unresolved) = await FetchRowsAsync(from, to, branch, ct);
         if (category is not null)
@@ -100,10 +100,10 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
     }
 
     private async Task<(IReadOnlyList<SubsystemRow> Rows, IReadOnlyList<string> Unresolved)> FetchRowsAsync(
-        DateOnly from, DateOnly to, string? branch, CancellationToken ct)
+        DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
     {
         // Memoize a single (from,to,branch) fetch for ~60s so GetConsolidated + GetScope don't double-scan ADO.
-        var key = $"{_options.CollectionMode}|{branch}|{from:o}|{to:o}";
+        var key = $"{_options.CollectionMode}|{branch}|{(from?.ToString("o") ?? "latest")}|{(to?.ToString("o") ?? "latest")}";
         await _fetchGate.WaitAsync(ct);
         try
         {
@@ -123,19 +123,23 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
     }
 
     private async Task<(IReadOnlyList<SubsystemRow> Rows, IReadOnlyList<string> Unresolved)> FetchRowsUncachedAsync(
-        DateOnly from, DateOnly to, string? branch, CancellationToken ct)
+        DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
     {
-        // Component-centric (default): scan each component pipeline's recent builds for changes.
+        // Component-centric (default): a null window means "latest build per component" (current vs previous).
         if (_options.CollectionMode == AdoCollectionMode.Components)
         {
             var (rows, unresolved) = await _componentCollector.CollectAsync(from, to, branch, ct);
             return (MergeBySubsystem(rows.ToList()), unresolved);
         }
 
+        // Legacy paths need a concrete window; default to the last week when none was supplied.
+        var f = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
+        var t = to ?? DateOnly.FromDateTime(DateTime.Today);
+
         // Legacy SP-manifest diff (kept for reference; does not apply to the Universal-Packages SP pipeline).
         if (_options.IsSpAnchored)
         {
-            var (spRows, spUnresolved) = await _spCollector.CollectAsync(from, to, ct);
+            var (spRows, spUnresolved) = await _spCollector.CollectAsync(f, t, ct);
             return (MergeBySubsystem(spRows.ToList()), spUnresolved);
         }
 
@@ -147,7 +151,7 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         }
 
         // Date-range fallback when no SP build definition is configured.
-        var builds = await _builds.GetBuildsAsync(from, to, ct);
+        var builds = await _builds.GetBuildsAsync(f, t, ct);
         var allRows = new List<SubsystemRow>();
         var allUnresolved = new HashSet<string>();
 

@@ -191,7 +191,7 @@ public sealed class InteractiveTokenProvider : IAdoTokenProvider, IInteractiveAd
         catch (AuthenticationRequiredException ex)
         {
             throw new AdoCredentialMissingException(
-                "Not signed in to Azure DevOps. Click \u201cSign in\u201d on the Regression tab to authenticate with your AVEVA Microsoft account.",
+                "Not signed in to Azure DevOps. Click \u201cSign in\u201d on the CodeChurn tab to authenticate with your AVEVA Microsoft account.",
                 ex);
         }
     }

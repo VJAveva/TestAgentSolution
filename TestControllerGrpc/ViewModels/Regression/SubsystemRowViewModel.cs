@@ -134,7 +134,7 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
 
     public bool HasWorkItems => AllWorkItems.Count > 0;
 
-    /// <summary>Work items grouped by type (User Stories, Bug, IMS, Others), each ordered by created time.</summary>
+    /// <summary>Work items grouped by type (User Stories, Bug, IMS, Others), each ordered by created time, newest first.</summary>
     public IReadOnlyList<WorkItemGroup> WorkItemGroups
     {
         get
@@ -144,7 +144,7 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
             void Add(string label, Func<RegressionWorkItemRef, bool> match)
             {
                 var items = all.Where(match)
-                    .OrderBy(w => w.CreatedUtc ?? DateTimeOffset.MaxValue)
+                    .OrderByDescending(w => w.CreatedUtc ?? DateTimeOffset.MinValue)
                     .ToList();
                 if (items.Count > 0)
                     groups.Add(new WorkItemGroup(label, items));

@@ -46,6 +46,15 @@ public partial class RegressionWindow : Window
             vm.IsExpanded = false;
     }
 
+    // Show/hide the Subsystem (Solutions) column; off by default because its wrapped .sln lists make rows uneven.
+    private void OnToggleSubsystemsColumn(object sender, RoutedEventArgs e)
+    {
+        if (SubsystemsColumn is not null)
+            SubsystemsColumn.Visibility = SubsystemsColumnToggle.IsChecked == true
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
     // Opens ADO work-item/PR/commit links in the default browser.
     private void OnHyperlinkNavigate(object sender, RequestNavigateEventArgs e)
     {

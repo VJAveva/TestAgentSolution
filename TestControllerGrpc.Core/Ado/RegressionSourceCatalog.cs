@@ -15,6 +15,16 @@ public sealed record RegressionConnectionInfo(
     string CredentialSource,
     bool CredentialConfigured);
 
+/// <summary>Deploy/health snapshot for the Regression tab: config state, loaded component count, and a live ADO probe.</summary>
+public sealed record RegressionHealth(
+    bool Enabled,
+    bool CredentialConfigured,
+    string CredentialSource,
+    int ComponentCount,
+    bool AdoReachable,
+    string? ProbeError,
+    DateTimeOffset CheckedUtc);
+
 /// <summary>A selectable component/definition for the tab's definition dropdown.</summary>
 public sealed record RegressionComponentRef(string Name, int DefinitionId);
 
@@ -39,6 +49,9 @@ public interface IRegressionSourceCatalog
 
     /// <summary>Release branches for the parallel-dev branch switcher (queried from recent ADO builds + config).</summary>
     Task<IReadOnlyList<string>> GetBranchesAsync(CancellationToken ct);
+
+    /// <summary>Deploy sanity probe: loaded-component count + a real lightweight authenticated ADO call.</summary>
+    Task<RegressionHealth> CheckHealthAsync(CancellationToken ct);
 }
 
 public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
@@ -112,6 +125,46 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(b => b, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    public async Task<RegressionHealth> CheckHealthAsync(CancellationToken ct)
+    {
+        var info = GetConnectionInfo();
+        var componentCount = GetComponents().Count;
+        var reachable = false;
+        string? probeError = null;
+
+        if (!_options.Enabled)
+        {
+            probeError = "ADO ingest disabled (Ado:Enabled=false) — serving mock/empty data.";
+        }
+        else if (_services.GetService(typeof(IBuildQueries)) is IBuildQueries builds)
+        {
+            try
+            {
+                // Lightweight authenticated probe: a 1-row recent-builds query proves connectivity + credential.
+                var omiProject = string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject;
+                _ = await builds.GetRecentSourceBranchesAsync(omiProject, 1, ct);
+                reachable = true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                probeError = ex.Message;
+            }
+        }
+        else
+        {
+            probeError = "ADO enabled but IBuildQueries is not registered — check credential resolution at startup.";
+        }
+
+        return new RegressionHealth(
+            Enabled: info.Enabled,
+            CredentialConfigured: info.CredentialConfigured,
+            CredentialSource: info.CredentialSource,
+            ComponentCount: componentCount,
+            AdoReachable: reachable,
+            ProbeError: probeError,
+            CheckedUtc: DateTimeOffset.UtcNow);
     }
 
     public async Task<IReadOnlyList<RegressionBuildRef>> GetComponentBuildsAsync(int definitionId, CancellationToken ct)

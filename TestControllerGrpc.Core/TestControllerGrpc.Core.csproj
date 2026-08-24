@@ -27,5 +27,18 @@
     <Protobuf Include="Protos\auth.proto" GrpcServices="Both" />
   </ItemGroup>
 
+  <!-- Impact data files loaded at runtime by ComponentBuildMap + ComponentCategorizer.
+       Copied next to the app (docs\impact\) so a deployed host finds them via
+       AppContext.BaseDirectory instead of the dev-only repo walk-up. Flows to every
+       referencing host's output/publish (WebApi, WPF Controller). -->
+  <ItemGroup>
+    <None Include="..\docs\impact\component-usecase-map.v1.json" Link="docs\impact\component-usecase-map.v1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\docs\impact\component-categories.xml" Link="docs\impact\component-categories.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
 

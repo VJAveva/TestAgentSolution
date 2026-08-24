@@ -131,6 +131,11 @@ public class ImpactController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<string>>> GetBranches(CancellationToken ct)
         => Ok(await _catalog.GetBranchesAsync(ct));
 
+    /// <summary>GET /api/impact/health — verified ADO probe + loaded-component count (deploy sanity check).</summary>
+    [HttpGet("health")]
+    public async Task<ActionResult<RegressionHealth>> GetHealth(CancellationToken ct)
+        => Ok(await _catalog.CheckHealthAsync(ct));
+
     /// <summary>GET /api/impact/summary?from&amp;to&amp;branch — computed AI summary of the scope.</summary>
     [HttpGet("summary")]
     public async Task<ActionResult<ChurnSummary>> GetSummary(

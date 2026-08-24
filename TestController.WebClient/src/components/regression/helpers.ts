@@ -59,8 +59,11 @@ export interface WorkItemGroup {
 
 export function workItemGroups(row: SubsystemRow): WorkItemGroup[] {
   const all = allWorkItems(row);
-  const byCreated = (a: RegressionWorkItemRef, b: RegressionWorkItemRef) =>
-    (a.createdUtc ?? '9999') < (b.createdUtc ?? '9999') ? -1 : 1;
+  const byCreated = (a: RegressionWorkItemRef, b: RegressionWorkItemRef) => {
+    const av = a.createdUtc ?? '';
+    const bv = b.createdUtc ?? '';
+    return av > bv ? -1 : av < bv ? 1 : 0;
+  };
   const groups: WorkItemGroup[] = [];
   const add = (label: string, pred: (w: RegressionWorkItemRef) => boolean) => {
     const items = all.filter(pred).sort(byCreated);

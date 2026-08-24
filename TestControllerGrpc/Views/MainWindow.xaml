@@ -1241,7 +1241,7 @@
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
-                                ToolTip="Regression Tab (build/change impact)" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="CodeChurn Tab (build/change impact)" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
@@ -1802,10 +1802,10 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
-                                                    ToolTip="Open the Regression tab (build/change impact planning)">
+                                                    ToolTip="Open the CodeChurn tab (build/change impact planning)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" Foreground="{DynamicResource AccGreen}" />
-                                                    <TextBlock Text="Regression" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <TextBlock Text="CodeChurn" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>

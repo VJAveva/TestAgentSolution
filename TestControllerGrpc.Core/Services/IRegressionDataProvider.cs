@@ -9,11 +9,11 @@ namespace TestControllerGrpc.Services;
 /// </summary>
 public interface IRegressionDataProvider
 {
-    /// <summary>R1/R2/R5/R9 — the subsystem rollup for a scope window (optionally filtered to one branch).</summary>
-    Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly from, DateOnly to, string? branch, CancellationToken ct);
+    /// <summary>R1/R2/R5/R9 — the subsystem rollup for a scope window; pass null from/to for the latest build (current vs previous).</summary>
+    Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, CancellationToken ct);
 
-    /// <summary>R11-13 — the recommended regression plan, optionally filtered by category and branch.</summary>
-    Task<RegressionScope> GetScopeAsync(DateOnly from, DateOnly to, RegressionCategoryKind? category, string? branch, CancellationToken ct);
+    /// <summary>R11-13 — the recommended regression plan; pass null from/to for the latest build (current vs previous).</summary>
+    Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, CancellationToken ct);
 
     /// <summary>R14 — sync freshness / unresolved-repository status bar.</summary>
     Task<RegressionSyncStatus> GetSyncStatusAsync(CancellationToken ct);

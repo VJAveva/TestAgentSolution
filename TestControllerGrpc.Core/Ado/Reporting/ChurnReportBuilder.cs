@@ -89,7 +89,7 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
         sb.Append("<div style=\"padding:8px 24px 24px;\">");
         sb.Append("<table style=\"width:100%;border-collapse:collapse;font-size:12px;\">");
         sb.Append("<thead><tr style=\"text-align:left;color:#726d9b;border-bottom:2px solid #e2e2ea;\">");
-        foreach (var h in new[] { "#", "Component", "Category", "Repo", "Branch", "Files", "PR", "Commit", "Auto", "WI", "Risk", "Latest OK", "Summary", "Impacted Functionality", "Test Use Cases" })
+        foreach (var h in new[] { "#", "Component", "Category", "Repo", "Branch", "Subsystem (Solutions)", "Files", "PR", "Commit", "Auto", "WI", "Risk", "Latest OK", "Summary", "Impacted Functionality", "Test Use Cases" })
             sb.Append($"<th style=\"padding:6px 8px;\">{Enc(h)}</th>");
         sb.Append("</tr></thead><tbody>");
 
@@ -118,6 +118,7 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
             sb.Append($"<td style=\"padding:6px 8px;color:{catColor};font-weight:600;\">{Enc(r.Category.ToString())}</td>");
             sb.Append($"<td style=\"padding:6px 8px;\">{Enc(r.Repository ?? "")}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:#666;\">{Enc(r.DefaultBranch ?? "")}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;color:#444;min-width:160px;\">{Enc(JoinOrDash(r.SolutionNames))}</td>");
             sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{r.TotalFilesModified}</td>");
             sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{pr}</td>");
             sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{commit}</td>");

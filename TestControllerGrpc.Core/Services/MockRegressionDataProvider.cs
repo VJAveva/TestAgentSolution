@@ -40,15 +40,15 @@ public sealed class MockRegressionDataProvider : IRegressionDataProvider
             _rows.ToDictionary(r => r.Subsystem, r => r), StringComparer.OrdinalIgnoreCase);
     }
 
-    public Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly from, DateOnly to, string? branch, CancellationToken ct)
+    public Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
     {
         var rows = _bySubsystem.Values.ToList();
         var changeCount = rows.Sum(r => r.Changes.Count);
         var fileCount = rows.Sum(r => r.TotalFilesModified);
 
         var summary = new RegressionSummary(
-            ScopeLabel: "Custom",
-            RangeText: $"{from:yyyy-MM-dd} \u2192 {to:yyyy-MM-dd}",
+            ScopeLabel: from is null || to is null ? "Latest build" : "Custom",
+            RangeText: from is { } f && to is { } t ? $"{f:yyyy-MM-dd} \u2192 {t:yyyy-MM-dd}" : "Latest build",
             ChangeCount: changeCount,
             SubsystemCount: rows.Count,
             FileCount: fileCount,
@@ -57,7 +57,7 @@ public sealed class MockRegressionDataProvider : IRegressionDataProvider
         return Task.FromResult(new ConsolidatedImpact(summary, rows));
     }
 
-    public Task<RegressionScope> GetScopeAsync(DateOnly from, DateOnly to, RegressionCategoryKind? category, string? branch, CancellationToken ct)
+    public Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, CancellationToken ct)
     {
         var rows = _bySubsystem.Values
             .Where(r => category is null || r.Category == category || r.Category == RegressionCategoryKind.Both)

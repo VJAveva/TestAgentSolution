@@ -35,6 +35,12 @@ public sealed partial class RegressionViewModel : ObservableObject
 
     private IReadOnlyList<SubsystemRow> _allRows = [];
 
+    // Bumped on each load so a superseded (older) load discards its results instead of overwriting a newer one.
+    private int _loadGeneration;
+
+    // Minimum time the busy indicator stays on screen so fast (cached/mock) loads still register visually.
+    private const int MinBusyVisibleMs = 400;
+
     public RegressionViewModel(
         IRegressionDataProvider provider,
         IRegressionSourceCatalog catalog,
@@ -54,7 +60,7 @@ public sealed partial class RegressionViewModel : ObservableObject
         _resultsConfig = resultsConfig;
         _logger = logger;
         _to = DateTime.Today;
-        _from = DateTime.Today.AddDays(-7);
+        _from = DateTime.Today;
         _recipients = resultsConfig.ReportRecipients;
         InitSource();
         RefreshAuthState();
@@ -263,7 +269,7 @@ public sealed partial class RegressionViewModel : ObservableObject
         }
     }
 
-    [ObservableProperty] private RegressionScopeKind _selectedScope = RegressionScopeKind.Weekly;
+    [ObservableProperty] private RegressionScopeKind _selectedScope = RegressionScopeKind.Build;
     [ObservableProperty] private DateTime _from;
     [ObservableProperty] private DateTime _to;
     [ObservableProperty] private bool _showRuntime = true;
@@ -315,6 +321,9 @@ public sealed partial class RegressionViewModel : ObservableObject
 
     [ObservableProperty] private string _statusMessage = "";
 
+    /// <summary>True while a scope load is in flight — drives the ribbon busy indicator.</summary>
+    [ObservableProperty] private bool _isBusy;
+
     /// <summary>One-line headline of the current scope (always shown in the compact AI Summary bar).</summary>
     [ObservableProperty] private string _aiSummaryHeadline = "";
 
@@ -363,13 +372,25 @@ public sealed partial class RegressionViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAsync()
     {
+        // Latest-wins without forced cancellation: a newer load bumps the generation so an older,
+        // superseded load discards its results instead of cancelling the in-flight ADO request.
+        var myGeneration = ++_loadGeneration;
+
+        // Immediate feedback so the ribbon click doesn't feel unresponsive during the ADO round-trip.
+        IsBusy = true;
+        StatusMessage = "Loading changes\u2026";
+        var startedAtMs = Environment.TickCount64;
         try
         {
-            var fromDate = DateOnly.FromDateTime(From);
-            var toDate = DateOnly.FromDateTime(To);
+            // Build scope shows the current build's changes vs the previous build (latest-build mode, no date window).
+            DateOnly? fromDate = SelectedScope == RegressionScopeKind.Build ? null : DateOnly.FromDateTime(From);
+            DateOnly? toDate = SelectedScope == RegressionScopeKind.Build ? null : DateOnly.FromDateTime(To);
             var branch = SelectedBranch == AllBranches ? null : SelectedBranch;
 
-            var consolidated = await _provider.GetConsolidatedAsync(fromDate, toDate, branch, CancellationToken.None);
+            // Offload to a background thread so the UI thread is free to paint the busy indicator,
+            // even when the provider completes synchronously (mock data or a warm cache).
+            var consolidated = await Task.Run(() => _provider.GetConsolidatedAsync(fromDate, toDate, branch, CancellationToken.None));
+            if (myGeneration != _loadGeneration) return;
             _allRows = consolidated.Rows;
             UpdateLatestBuild();
 
@@ -380,6 +401,7 @@ public sealed partial class RegressionViewModel : ObservableObject
             FileCount = consolidated.Summary.FileCount;
 
             var scope = await _provider.GetScopeAsync(fromDate, toDate, category: null, branch, CancellationToken.None);
+            if (myGeneration != _loadGeneration) return;
             PlanRuntimeSubsystems = scope.Runtime.Subsystems;
             PlanRuntimeSuites = scope.Runtime.AutomatedSuites;
             PlanRuntimeManual = scope.Runtime.ManualSuites;
@@ -399,6 +421,7 @@ public sealed partial class RegressionViewModel : ObservableObject
             ParallelDurationMinutes = scope.ParallelAgentCount > 0 ? totalMinutes / scope.ParallelAgentCount : totalMinutes;
 
             var sync = await _provider.GetSyncStatusAsync(CancellationToken.None);
+            if (myGeneration != _loadGeneration) return;
             SyncState = sync.State;
             MapVersion = sync.MapVersion;
             UnresolvedRepositories = sync.UnresolvedRepositories.Count == 0
@@ -411,8 +434,28 @@ public sealed partial class RegressionViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Load failed: {ex.Message}";
-            _logger.Error("Regression", "Failed to load consolidated impact.", ex);
+            // Only the current load surfaces an error; a superseded load fails silently.
+            if (myGeneration == _loadGeneration)
+            {
+                StatusMessage = ex is OperationCanceledException
+                    ? "Load canceled or timed out \u2014 check the Azure DevOps connection."
+                    : $"Load failed: {ex.Message}";
+                _logger.Error("Regression", "Failed to load consolidated impact.", ex);
+            }
+        }
+        finally
+        {
+            // Only the most recent load owns the busy indicator; a superseded load leaves it to the newer one.
+            if (myGeneration == _loadGeneration)
+            {
+                // Keep the indicator visible a beat longer so very fast (cached/mock) loads still register.
+                var remaining = MinBusyVisibleMs - (int)(Environment.TickCount64 - startedAtMs);
+                if (remaining > 0)
+                    await Task.Delay(remaining);
+
+                if (myGeneration == _loadGeneration)
+                    IsBusy = false;
+            }
         }
     }
 
