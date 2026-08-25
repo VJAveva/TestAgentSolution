@@ -8,12 +8,14 @@ namespace TestControllerGrpc.ViewModels.Regression;
 public sealed partial class SubsystemRowViewModel : ObservableObject
 {
     private readonly IChurnSummarizer? _summarizer;
+    private readonly Func<string, bool>? _keepFile;
     private string? _aiSummary;
 
-    public SubsystemRowViewModel(SubsystemRow model, IChurnSummarizer? summarizer = null)
+    public SubsystemRowViewModel(SubsystemRow model, IChurnSummarizer? summarizer = null, Func<string, bool>? keepFile = null)
     {
         Model = model;
         _summarizer = summarizer;
+        _keepFile = keepFile;
     }
 
     public SubsystemRow Model { get; }
@@ -27,8 +29,13 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
     public RegressionEvidenceKind CategoryConfidence => Model.CategoryConfidence;
     public string RiskTier => Model.RiskTier;
     public int TotalFilesModified => Model.TotalFilesModified;
-    public string FilesPreview => string.Join(", ", Model.FilesModified.Take(2)) +
-        (Model.FilesModified.Count > 2 ? $" (+{Model.FilesModified.Count - 2} more)" : "");
+
+    /// <summary>Modified files after the "All files" toggle filter (null filter = show everything).</summary>
+    private IReadOnlyList<string> DisplayFiles =>
+        _keepFile is null ? Model.FilesModified : Model.FilesModified.Where(_keepFile).ToList();
+
+    public string FilesPreview => string.Join(", ", DisplayFiles.Take(2)) +
+        (DisplayFiles.Count > 2 ? $" (+{DisplayFiles.Count - 2} more)" : "");
 
     /// <summary>Subsystems = the .sln files found under /src of the component's repository.</summary>
     public IReadOnlyList<string> Subsystems => Model.SolutionNames ?? [];
@@ -42,10 +49,10 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
             var byPath = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase); // path -> commit id
             foreach (var ch in Model.Changes)
                 foreach (var p in ch.FilePaths)
-                    if (!string.IsNullOrWhiteSpace(p) && !byPath.ContainsKey(p))
+                    if (!string.IsNullOrWhiteSpace(p) && (_keepFile is null || _keepFile(p)) && !byPath.ContainsKey(p))
                         byPath[p] = ch.ChangeId;
             foreach (var p in Model.FilesModified)
-                if (!string.IsNullOrWhiteSpace(p) && !byPath.ContainsKey(p))
+                if (!string.IsNullOrWhiteSpace(p) && (_keepFile is null || _keepFile(p)) && !byPath.ContainsKey(p))
                     byPath[p] = null;
             return byPath
                 .Take(50)

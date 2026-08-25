@@ -21,6 +21,15 @@ public interface IGitQueries
 
     /// <summary>Distinct .sln file names found under /src in a repository (for the Subsystems column). Empty on any failure.</summary>
     Task<IReadOnlyList<string>> GetSolutionNamesAsync(string project, string repositoryId, CancellationToken ct);
+
+    /// <summary>Commits on a branch authored on/after <paramref name="since"/> (branch history since the window start).</summary>
+    Task<IReadOnlyList<AdoGitCommitDto>> GetCommitsOnBranchSinceAsync(string project, string repositoryId, string branch, DateTimeOffset since, int top, CancellationToken ct);
+
+    /// <summary>Pull requests targeting a branch (all statuses, newest first); filter by creation date at the call site.</summary>
+    Task<IReadOnlyList<AdoPullRequestDto>> GetPullRequestsTargetingBranchAsync(string project, string repositoryId, string branch, int top, CancellationToken ct);
+
+    /// <summary>Work item ids linked to a pull request.</summary>
+    Task<IReadOnlyList<int>> GetPullRequestWorkItemIdsAsync(string project, string repositoryId, int pullRequestId, CancellationToken ct);
 }
 
 public sealed class GitQueries : IGitQueries
@@ -56,6 +65,37 @@ public sealed class GitQueries : IGitQueries
     {
         var result = await _client.GetAsync<AdoListResponse<AdoRepositoryDto>>(path, ct);
         return result.Value.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<IReadOnlyList<AdoGitCommitDto>> GetCommitsOnBranchSinceAsync(
+        string project, string repositoryId, string branch, DateTimeOffset since, int top, CancellationToken ct)
+    {
+        var fromDate = since.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var path = _client.ProjectApiPath(project,
+            $"git/repositories/{repositoryId}/commits?searchCriteria.itemVersion.versionType=branch" +
+            $"&searchCriteria.itemVersion.version={Uri.EscapeDataString(branch)}" +
+            $"&searchCriteria.fromDate={Uri.EscapeDataString(fromDate)}&searchCriteria.$top={top}&api-version=7.1");
+        var result = await _client.GetAsync<AdoListResponse<AdoGitCommitDto>>(path, ct);
+        return result.Value;
+    }
+
+    public async Task<IReadOnlyList<AdoPullRequestDto>> GetPullRequestsTargetingBranchAsync(
+        string project, string repositoryId, string branch, int top, CancellationToken ct)
+    {
+        var path = _client.ProjectApiPath(project,
+            $"git/repositories/{repositoryId}/pullrequests?searchCriteria.targetRefName=refs/heads/{Uri.EscapeDataString(branch)}" +
+            $"&searchCriteria.status=all&$top={top}&api-version=7.1");
+        var result = await _client.GetAsync<AdoListResponse<AdoPullRequestDto>>(path, ct);
+        return result.Value;
+    }
+
+    public async Task<IReadOnlyList<int>> GetPullRequestWorkItemIdsAsync(
+        string project, string repositoryId, int pullRequestId, CancellationToken ct)
+    {
+        var path = _client.ProjectApiPath(project,
+            $"git/repositories/{repositoryId}/pullRequests/{pullRequestId}/workitems?api-version=7.1");
+        var result = await _client.GetAsync<AdoListResponse<AdoResourceRefDto>>(path, ct);
+        return result.Value.Select(r => int.TryParse(r.Id, out var id) ? id : 0).Where(id => id > 0).ToList();
     }
 
     public async Task<IReadOnlyList<AdoRepositoryDto>> GetAllRepositoriesAsync(string project, CancellationToken ct)

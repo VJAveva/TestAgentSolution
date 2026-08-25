@@ -128,6 +128,12 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         // Component-centric (default): a null window means "latest build per component" (current vs previous).
         if (_options.CollectionMode == AdoCollectionMode.Components)
         {
+            // Null window + a specific branch => everything created on the branch since its first build (git-centric).
+            if (from is null && to is null && !string.IsNullOrWhiteSpace(branch))
+            {
+                var (branchRows, branchUnresolved) = await _componentCollector.CollectBranchSinceCreationAsync(branch, ct);
+                return (MergeBySubsystem(branchRows.ToList()), branchUnresolved);
+            }
             var (rows, unresolved) = await _componentCollector.CollectAsync(from, to, branch, ct);
             return (MergeBySubsystem(rows.ToList()), unresolved);
         }

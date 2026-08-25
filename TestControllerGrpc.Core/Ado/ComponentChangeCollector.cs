@@ -17,6 +17,8 @@ public sealed class ComponentChangeCollector
     private const int MaxFileLookupsPerComponent = 8; // bound the per-commit file fetches for responsiveness
     private const int MaxBuildsPerComponentInRange = 12; // bound how many builds we aggregate per component in a window
     private const int MaxConcurrentComponentScans = 5; // scan components in parallel (bounded) so wide windows stay responsive
+    private const int MaxCommitsPerComponent = 200; // cap branch-history commits scanned per component
+    private const int MaxPrsPerComponent = 40; // cap PRs (and their work-item lookups) scanned per component
 
     private readonly IBuildQueries _builds;
     private readonly IGitQueries _git;
@@ -139,6 +141,146 @@ public sealed class ComponentChangeCollector
         _logger.Info("Ado", $"Component scan complete: {list.Count} component(s) changed of {components.Count}.");
         return (list, []);
     }
+
+    /// <summary>
+    /// Git-centric branch scan: for each component, everything created on <paramref name="branch"/> since its
+    /// FIRST build (the branch's "created" date) — commits, PRs, PR-linked work items and changed files.
+    /// Emits one row per component that had activity on the branch.
+    /// </summary>
+    public async Task<(IReadOnlyList<SubsystemRow> Rows, IReadOnlyList<string> Unresolved)> CollectBranchSinceCreationAsync(
+        string branch, CancellationToken ct)
+    {
+        var omiProject = string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject;
+        var components = _map.All().Where(c => c.BuildDefinitionId > 0).ToList();
+        _logger.Info("Ado", $"Branch scan: {components.Count} components on '{branch}' since first build, concurrency={MaxConcurrentComponentScans}.");
+
+        var rows = new ConcurrentBag<SubsystemRow>();
+        using var gate = new SemaphoreSlim(MaxConcurrentComponentScans);
+
+        async Task ScanAsync(ComponentBuildInfo comp)
+        {
+            await gate.WaitAsync(ct);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Window start = the branch's first build; no build on the branch => the component never ran there.
+                var firstBuild = await _builds.GetFirstBuildOnBranchAsync(omiProject, comp.BuildDefinitionId, branch, ct);
+                if (firstBuild is null)
+                    return;
+                var latest = await _builds.GetLatestBuildsByDefinitionAsync(omiProject, comp.BuildDefinitionId, 1, branch, ct);
+                var headerBuild = latest.Count > 0 ? latest[0] : firstBuild;
+                var since = firstBuild.StartTime ?? firstBuild.FinishTime ?? DateTimeOffset.UtcNow.AddYears(-1);
+
+                string? repoId = null;
+                string? defaultBranch = null;
+                if (!string.IsNullOrWhiteSpace(comp.Repository))
+                {
+                    var repoMap = await GetRepoMapAsync(omiProject, ct);
+                    if (repoMap.TryGetValue(comp.Repository, out var hit))
+                        (repoId, defaultBranch) = hit;
+                }
+                repoId ??= headerBuild.Repository?.Id;
+                if (string.IsNullOrEmpty(repoId))
+                    return;
+
+                var row = await BuildBranchRowAsync(omiProject, comp, headerBuild, firstBuild, repoId, branch, since, defaultBranch, ct);
+                if (row is not null)
+                    rows.Add(row);
+            }
+            catch (AdoApiException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                _logger.Error("Ado", "ADO auth failed while scanning branch — aborting scan.", ex);
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("Ado", $"Component '{comp.ComponentId}' (def {comp.BuildDefinitionId}) branch scan failed: {ex.Message}");
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        try
+        {
+            await Task.WhenAll(components.Select(ScanAsync));
+        }
+        catch (AdoApiException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+        {
+            throw;
+        }
+
+        var branchList = rows.OrderBy(r => r.Component, StringComparer.OrdinalIgnoreCase).ToList();
+        _logger.Info("Ado", $"Branch scan complete: {branchList.Count} component(s) with activity of {components.Count}.");
+        return (branchList, []);
+    }
+
+    private async Task<SubsystemRow?> BuildBranchRowAsync(
+        string omiProject, ComponentBuildInfo comp, AdoBuildDto headerBuild, AdoBuildDto firstBuild,
+        string repoId, string branch, DateTimeOffset since, string? defaultBranch, CancellationToken ct)
+    {
+        var changeRefs = new List<RegressionChangeRef>();
+        var allFiles = new List<string>();
+
+        // Commits on the branch since the window start.
+        var commits = await _git.GetCommitsOnBranchSinceAsync(omiProject, repoId, branch, since, MaxCommitsPerComponent, ct);
+        var fileLookups = 0;
+        foreach (var c in commits)
+        {
+            var when = c.Author?.Date ?? c.Committer?.Date ?? headerBuild.FinishTime ?? DateTimeOffset.UtcNow;
+            var paths = fileLookups < MaxFileLookupsPerComponent
+                ? await SafeGetFilesAsync(omiProject, repoId, c.CommitId, ct)
+                : [];
+            if (paths.Count > 0) fileLookups++;
+            allFiles.AddRange(paths);
+            changeRefs.Add(new RegressionChangeRef(
+                ChangeId: c.CommitId,
+                Summary: c.Comment ?? "(no message)",
+                ObservedUtc: when,
+                FilePaths: paths,
+                WorkItems: [],
+                Kind: ClassifyChange(c.Comment),
+                Url: c.RemoteUrl));
+        }
+
+        // PRs targeting the branch, created on/after the window start; work items come from the PRs.
+        var prs = (await _git.GetPullRequestsTargetingBranchAsync(omiProject, repoId, branch, MaxPrsPerComponent, ct))
+            .Where(p => (p.CreationDate ?? DateTimeOffset.MaxValue) >= since)
+            .ToList();
+        foreach (var pr in prs)
+        {
+            var prWiIds = await _git.GetPullRequestWorkItemIdsAsync(omiProject, repoId, pr.PullRequestId, ct);
+            var prWorkItems = prWiIds.Count == 0
+                ? new List<RegressionWorkItemRef>()
+                : (await _workItems.GetByIdsAsync(prWiIds, ct)).Select(ToWorkItemRef).ToList();
+            changeRefs.Add(new RegressionChangeRef(
+                ChangeId: $"PR-{pr.PullRequestId}",
+                Summary: pr.Title ?? $"PR {pr.PullRequestId}",
+                ObservedUtc: pr.CreationDate ?? headerBuild.FinishTime ?? DateTimeOffset.UtcNow,
+                FilePaths: [],
+                WorkItems: prWorkItems,
+                Kind: RegressionChangeKind.PullRequest,
+                Url: PullRequestWebUrl(omiProject, comp.Repository ?? headerBuild.Repository?.Name, pr.PullRequestId)));
+        }
+
+        if (changeRefs.Count == 0)
+            return null; // no activity on this branch for the component
+
+        var solutionNames = await GetSolutionNamesCachedAsync(omiProject, repoId, ct);
+        var latestSuccessful = headerBuild.Result == "succeeded" ? headerBuild : null;
+        return BuildRow(omiProject, comp, headerBuild, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames);
+    }
+
+    private string? PullRequestWebUrl(string project, string? repo, int prId) =>
+        string.IsNullOrWhiteSpace(repo)
+            ? null
+            : $"https://dev.azure.com/{_options.Organization}/{Uri.EscapeDataString(project)}/_git/{Uri.EscapeDataString(repo)}/pullrequest/{prId}";
 
     /// <summary>Recent builds for one component definition, newest first — for the build picker dropdown.</summary>
     public async Task<IReadOnlyList<RegressionBuildRef>> GetComponentBuildsAsync(int definitionId, int top, CancellationToken ct)

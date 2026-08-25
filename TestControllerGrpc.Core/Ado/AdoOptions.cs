@@ -74,6 +74,15 @@ public sealed class AdoOptions
     /// <summary>Release branches the user can switch between (e.g. SP2026, SP2023R2SP2). Empty = no branch filter.</summary>
     public List<string> Branches { get; set; } = [];
 
+    /// <summary>Globs limiting which LIVE source branches appear in the branch switcher. Default: Release(s)/*, prod/* only. Empty = show all.</summary>
+    public List<string> BranchIncludePatterns { get; set; } = ["releases/*", "release/*", "prod/*"];
+
+    /// <summary>Branch to preselect in the switcher on load (must match a live branch name). Empty/not-found falls back to "(all branches)".</summary>
+    public string? DefaultBranch { get; set; }
+
+    /// <summary>Globs for files to hide from the modified-files list (pipeline yaml, shared configs). The repo's own &lt;RepoName&gt;.yaml is always ignored.</summary>
+    public List<string> IgnoredFilePatterns { get; set; } = ["*.yml", "*.yaml"];
+
     /// <summary>Entra tenant id — required for ServicePrincipal and Interactive modes.</summary>
     public string? TenantId { get; set; }
 

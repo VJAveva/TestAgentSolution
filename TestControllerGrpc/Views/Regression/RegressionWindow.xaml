@@ -300,6 +300,9 @@
                             <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding HideAutomatedChanges}" ToolTip="Show only human-made changes (hide automated build-tool syncups). Toggle off to include automated changes.">
                                 <StackPanel MinWidth="52"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F464;" Foreground="#7BC47F" /><TextBlock Style="{StaticResource RibbonText}" Text="Human only" /></StackPanel>
                             </ToggleButton>
+                            <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowAllFiles}" ToolTip="Show pipeline/shared files (e.g. &lt;RepoName&gt;.yaml, config files) that are hidden from Files Modified by default. Off = filtered.">
+                                <StackPanel MinWidth="52"><TextBlock Style="{StaticResource RibbonIcon}" Text="&#x1F4C4;" Foreground="#E0A040" /><TextBlock Style="{StaticResource RibbonText}" Text="All files" /></StackPanel>
+                            </ToggleButton>
                             <ToggleButton Style="{StaticResource RibbonTgl}" x:Name="SubsystemsColumnToggle" IsChecked="False"
                                           Checked="OnToggleSubsystemsColumn" Unchecked="OnToggleSubsystemsColumn"
                                           ToolTip="Show the Subsystem (Solutions) column. Off by default — the wrapped .sln lists make rows uneven.">

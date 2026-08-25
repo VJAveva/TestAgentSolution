@@ -107,13 +107,17 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
 
     public async Task<IReadOnlyList<string>> GetBranchesAsync(CancellationToken ct)
     {
-        var branches = new List<string>(_options.Branches);
+        var branches = new List<string>(_options.Branches); // curated release branches are always shown
         if (_options.Enabled && _services.GetService(typeof(IBuildQueries)) is IBuildQueries builds)
         {
             try
             {
                 var omiProject = string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject;
-                branches.AddRange(await builds.GetRecentSourceBranchesAsync(omiProject, 200, ct));
+                var live = await builds.GetRecentSourceBranchesAsync(omiProject, 200, ct);
+                // Only surface Release/*, prod/* live branches (Ado:BranchIncludePatterns) — hide feature/user branches.
+                branches.AddRange(_options.BranchIncludePatterns.Count == 0
+                    ? live
+                    : live.Where(MatchesBranchInclude));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -125,6 +129,15 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(b => b, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    // A live branch qualifies when it matches any Ado:BranchIncludePatterns glob (refs/heads/ prefix tolerated).
+    private bool MatchesBranchInclude(string branch)
+    {
+        var normalized = branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? branch["refs/heads/".Length..]
+            : branch;
+        return _options.BranchIncludePatterns.Any(p => GlobUtil.IsMatch(normalized, p) || GlobUtil.IsMatch(branch, p));
     }
 
     public async Task<RegressionHealth> CheckHealthAsync(CancellationToken ct)

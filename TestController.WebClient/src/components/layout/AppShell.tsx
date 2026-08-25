@@ -34,7 +34,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'logs',      label: 'Logs',      icon: <ScrollText size={16} /> },
   { id: 'results',   label: 'Results',   icon: <BarChart3 size={16} /> },
   { id: 'report',    label: 'Report Card', icon: <Award size={16} /> },
-  { id: 'regression', label: 'Regression', icon: <GitPullRequest size={16} /> },
+  { id: 'regression', label: 'CodeChurn', icon: <GitPullRequest size={16} /> },
 ];
 
 export default function AppShell() {

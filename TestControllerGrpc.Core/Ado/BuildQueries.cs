@@ -19,6 +19,9 @@ public interface IBuildQueries
     /// <summary>Definition-anchored builds in a project, optionally filtered to one branch (refs/heads/{branch}).</summary>
     Task<IReadOnlyList<AdoBuildDto>> GetLatestBuildsByDefinitionAsync(string project, int definitionId, int top, string? branchName, CancellationToken ct);
 
+    /// <summary>Oldest completed build of a definition on a branch (the branch's first build — used as the "created" date).</summary>
+    Task<AdoBuildDto?> GetFirstBuildOnBranchAsync(string project, int definitionId, string branchName, CancellationToken ct);
+
     /// <summary>Completed builds for a definition that finished within [from, to], newest first.</summary>
     Task<IReadOnlyList<AdoBuildDto>> GetBuildsByDefinitionInRangeAsync(string project, int definitionId, DateOnly from, DateOnly to, CancellationToken ct);
 
@@ -82,6 +85,15 @@ public sealed class BuildQueries : IBuildQueries
             $"build/builds?definitions={definitionId}&$top={top}{branch}&statusFilter=completed&queryOrder=finishTimeDescending&api-version=7.1");
         var result = await _client.GetAsync<AdoListResponse<AdoBuildDto>>(path, ct);
         return result.Value;
+    }
+
+    public async Task<AdoBuildDto?> GetFirstBuildOnBranchAsync(string project, int definitionId, string branchName, CancellationToken ct)
+    {
+        var branch = string.IsNullOrWhiteSpace(branchName) ? "" : $"&branchName=refs/heads/{Uri.EscapeDataString(branchName)}";
+        var path = _client.ProjectApiPath(project,
+            $"build/builds?definitions={definitionId}&$top=1{branch}&statusFilter=completed&queryOrder=finishTimeAscending&api-version=7.1");
+        var result = await _client.GetAsync<AdoListResponse<AdoBuildDto>>(path, ct);
+        return result.Value.FirstOrDefault();
     }
 
     public Task<IReadOnlyList<AdoBuildDto>> GetBuildsByDefinitionInRangeAsync(string project, int definitionId, DateOnly from, DateOnly to, CancellationToken ct)

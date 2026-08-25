@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Options;
 using Microsoft.Win32;
 using TestControllerGrpc.Ado;
 using TestControllerGrpc.Ado.Reporting;
@@ -32,6 +33,8 @@ public sealed partial class RegressionViewModel : ObservableObject
     private readonly IInteractiveAdoAuthenticator _auth;
     private readonly BuildResultsConfig _resultsConfig;
     private readonly IAppLogger _logger;
+    private readonly IReadOnlyList<string> _ignoredFilePatterns;
+    private readonly string _defaultBranch;
 
     private IReadOnlyList<SubsystemRow> _allRows = [];
 
@@ -49,6 +52,7 @@ public sealed partial class RegressionViewModel : ObservableObject
         IRegressionReportMailer mailer,
         IInteractiveAdoAuthenticator auth,
         BuildResultsConfig resultsConfig,
+        IOptions<AdoOptions> adoOptions,
         IAppLogger logger)
     {
         _provider = provider;
@@ -58,6 +62,8 @@ public sealed partial class RegressionViewModel : ObservableObject
         _mailer = mailer;
         _auth = auth;
         _resultsConfig = resultsConfig;
+        _ignoredFilePatterns = adoOptions.Value.IgnoredFilePatterns;
+        _defaultBranch = adoOptions.Value.DefaultBranch ?? "";
         _logger = logger;
         _to = DateTime.Today;
         _from = DateTime.Today;
@@ -104,7 +110,10 @@ public sealed partial class RegressionViewModel : ObservableObject
             Branches.Add(AllBranches);
             foreach (var b in live)
                 Branches.Add(b);
-            SelectedBranch = keep is not null && Branches.Contains(keep) ? keep : AllBranches;
+            // Keep an explicit user pick; otherwise preselect the configured default branch on first load.
+            SelectedBranch = keep is not null && keep != AllBranches && Branches.Contains(keep)
+                ? keep
+                : Branches.FirstOrDefault(b => string.Equals(b, _defaultBranch, StringComparison.OrdinalIgnoreCase)) ?? AllBranches;
         }
         catch (Exception ex)
         {
@@ -120,6 +129,9 @@ public sealed partial class RegressionViewModel : ObservableObject
     {
         RefreshConnection();
 
+        // Direct backing-field writes are intentional: the generated property setters would fire
+        // OnSelectedComponentChanged/OnSelectedBranchChanged during construction (premature ApplyFilter/LoadAsync).
+#pragma warning disable MVVMTK0034
         Components.Clear();
         Components.Add(AllComponents);
         foreach (var c in _catalog.GetComponents())
@@ -129,6 +141,7 @@ public sealed partial class RegressionViewModel : ObservableObject
         Branches.Clear();
         Branches.Add(AllBranches);
         _selectedBranch = AllBranches;
+#pragma warning restore MVVMTK0034
     }
 
     private void RefreshConnection()
@@ -283,10 +296,14 @@ public sealed partial class RegressionViewModel : ObservableObject
     // On by default so the grid leads with human-made changes; toggle off to also show automated build-tool changes.
     [ObservableProperty] private bool _hideAutomatedChanges = true;
 
+    // Off by default: pipeline/shared noise files (e.g. <RepoName>.yaml, configs) are hidden from Files Modified.
+    [ObservableProperty] private bool _showAllFiles;
+
     partial void OnFilterBugChanged(bool value) => ApplyFilter();
     partial void OnFilterStoryChanged(bool value) => ApplyFilter();
     partial void OnFilterImsChanged(bool value) => ApplyFilter();
     partial void OnHideAutomatedChangesChanged(bool value) => ApplyFilter();
+    partial void OnShowAllFilesChanged(bool value) => ApplyFilter();
 
     [ObservableProperty] private string _scopeLabel = "";
     [ObservableProperty] private string _rangeText = "";
@@ -476,7 +493,7 @@ public sealed partial class RegressionViewModel : ObservableObject
             ? filtered.Select(StripAutomatedChanges).Where(r => r.Changes.Count > 0)
             : filtered;
 
-        var list = projected.Select(r => new SubsystemRowViewModel(r, _summarizer)).ToList();
+        var list = projected.Select(r => new SubsystemRowViewModel(r, _summarizer, BuildFileFilter(r))).ToList();
 
         // Work-item-type filter (OR across the checked types); no filter when none are checked.
         if (FilterBug || FilterStory || FilterIms)
@@ -521,6 +538,10 @@ public sealed partial class RegressionViewModel : ObservableObject
             TotalFilesModified = files.Count,
         };
     }
+
+    // Null when "All files" is on; otherwise hides pipeline/shared noise files from a row's file lists.
+    private Func<string, bool>? BuildFileFilter(SubsystemRow row) =>
+        ShowAllFiles ? null : p => !FileNoiseFilter.IsIgnored(p, row.Repository, _ignoredFilePatterns);
 
     private void UpdateAiSummary()
     {

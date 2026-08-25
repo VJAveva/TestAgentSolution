@@ -125,3 +125,40 @@ public sealed class AdoTestPlanRefDto
     [JsonPropertyName("id")] public int Id { get; set; }
     [JsonPropertyName("name")] public string? Name { get; set; }
 }
+
+/// <summary>One commit from GET repositories/{repo}/commits (branch history since a date).</summary>
+public sealed class AdoGitCommitDto
+{
+    [JsonPropertyName("commitId")] public string CommitId { get; set; } = "";
+    [JsonPropertyName("comment")] public string? Comment { get; set; }
+    [JsonPropertyName("author")] public AdoGitUserDateDto? Author { get; set; }
+    [JsonPropertyName("committer")] public AdoGitUserDateDto? Committer { get; set; }
+    [JsonPropertyName("remoteUrl")] public string? RemoteUrl { get; set; }
+}
+
+public sealed class AdoGitUserDateDto
+{
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("email")] public string? Email { get; set; }
+    [JsonPropertyName("date")] public DateTimeOffset? Date { get; set; }
+}
+
+/// <summary>One pull request from GET repositories/{repo}/pullrequests.</summary>
+public sealed class AdoPullRequestDto
+{
+    [JsonPropertyName("pullRequestId")] public int PullRequestId { get; set; }
+    [JsonPropertyName("title")] public string? Title { get; set; }
+    [JsonPropertyName("status")] public string? Status { get; set; } // active|completed|abandoned
+    [JsonPropertyName("creationDate")] public DateTimeOffset? CreationDate { get; set; }
+    [JsonPropertyName("closedDate")] public DateTimeOffset? ClosedDate { get; set; }
+    [JsonPropertyName("sourceRefName")] public string? SourceRefName { get; set; }
+    [JsonPropertyName("targetRefName")] public string? TargetRefName { get; set; }
+    [JsonPropertyName("createdBy")] public AdoIdentityDto? CreatedBy { get; set; }
+}
+
+/// <summary>A generic { id, url } resource reference (e.g. PR -&gt; linked work items).</summary>
+public sealed class AdoResourceRefDto
+{
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("url")] public string? Url { get; set; }
+}
