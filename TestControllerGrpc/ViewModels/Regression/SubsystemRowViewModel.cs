@@ -1,5 +1,7 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TestControllerGrpc.Ado.Reporting;
+using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.ViewModels.Regression;
@@ -9,13 +11,18 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
 {
     private readonly IChurnSummarizer? _summarizer;
     private readonly Func<string, bool>? _keepFile;
+    private readonly IRegressionImpactMatcher? _matcher;
     private string? _aiSummary;
+    private bool _matchesLoaded;
 
-    public SubsystemRowViewModel(SubsystemRow model, IChurnSummarizer? summarizer = null, Func<string, bool>? keepFile = null)
+    public SubsystemRowViewModel(
+        SubsystemRow model, IChurnSummarizer? summarizer = null, Func<string, bool>? keepFile = null,
+        IRegressionImpactMatcher? matcher = null)
     {
         Model = model;
         _summarizer = summarizer;
         _keepFile = keepFile;
+        _matcher = matcher;
     }
 
     public SubsystemRow Model { get; }
@@ -189,6 +196,81 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isExpanded;
+
+    // ── Impacted test cases (impact-mapping engine), lazily loaded on first expand ─────────────────
+
+    /// <summary>Test cases the impact engine recommends for this component (shown in the row-expand detail).</summary>
+    public ObservableCollection<ImpactedTestCaseRow> TestMatches { get; } = new();
+
+    [ObservableProperty]
+    private bool _isMatchesLoading;
+
+    /// <summary>Loading/error note; empty once matches (or the fallback) are shown.</summary>
+    [ObservableProperty]
+    private string _matchesStatus = "";
+
+    public bool HasTestMatches => TestMatches.Count > 0;
+
+    /// <summary>Offline change summary shown when the engine matched no ADO test cases.</summary>
+    [ObservableProperty]
+    private string _changeSummary = "";
+
+    /// <summary>Recommended functional tests (relevant-first), shown when the engine matched no test cases.</summary>
+    public ObservableCollection<RecommendedTest> RecommendedTests { get; } = new();
+
+    public bool HasRecommendedTests => RecommendedTests.Count > 0;
+
+    /// <summary>True after load when nothing matched — surfaces the change summary + recommended tests fallback.</summary>
+    [ObservableProperty]
+    private bool _showChangeFallback;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (value && !_matchesLoaded && _matcher is not null)
+            _ = LoadMatchesAsync();
+    }
+
+    private async Task LoadMatchesAsync()
+    {
+        if (_matcher is null || _matchesLoaded)
+            return;
+
+        IsMatchesLoading = true;
+        MatchesStatus = "Analyzing changes\u2026";
+        IReadOnlyList<ImpactedTestCaseMatch> matches = [];
+        try
+        {
+            // Offload the engine cascade; the continuation resumes on the UI thread to touch the collection.
+            matches = await Task.Run(() => _matcher.MatchAsync(Model, CancellationToken.None));
+        }
+        catch
+        {
+            // The matcher already logs; fall through to the offline change analysis below.
+        }
+
+        TestMatches.Clear();
+        foreach (var m in matches)
+            TestMatches.Add(new ImpactedTestCaseRow(
+                m.TestCaseId, m.TestCaseTitle, m.TestCaseUrl,
+                m.ParentFeatureId > 0 ? $"#{m.ParentFeatureId}" : "does not exist",
+                m.MatchType, $"{m.ConfidencePercent}%", m.MatchReason, m.Description));
+
+        // No ADO matches (empty/uninitialized index) — always surface the offline change summary + recommended tests.
+        if (TestMatches.Count == 0)
+        {
+            ChangeSummary = RegressionChangeAnalyzer.Summarize(Model);
+            RecommendedTests.Clear();
+            foreach (var t in RegressionChangeAnalyzer.RecommendTests(Model))
+                RecommendedTests.Add(t);
+            ShowChangeFallback = true;
+        }
+
+        _matchesLoaded = true;
+        MatchesStatus = "";
+        IsMatchesLoading = false;
+        OnPropertyChanged(nameof(HasTestMatches));
+        OnPropertyChanged(nameof(HasRecommendedTests));
+    }
 }
 
 /// <summary>A modified file plus its Azure DevOps web link (null when the repository URL is unknown).</summary>
@@ -196,3 +278,8 @@ public sealed record ModifiedFileLink(string Path, string? Url);
 
 /// <summary>A named group of work items (by type) for the category-wise detail display.</summary>
 public sealed record WorkItemGroup(string Label, IReadOnlyList<RegressionWorkItemRef> Items);
+
+/// <summary>Display row for one impact-mapped test case in the grid's row-expand detail.</summary>
+public sealed record ImpactedTestCaseRow(
+    int TestCaseId, string Title, string? Url, string ParentFeatureText,
+    string MatchType, string ConfidenceText, string MatchReason, string? Description);

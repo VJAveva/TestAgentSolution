@@ -5,10 +5,10 @@ using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
 
-/// <summary>Emails the regression churn report (HTML body + CSV attachment) via the existing SMTP config.</summary>
+/// <summary>Emails the regression churn report (HTML body + workbook attachment) via the existing SMTP config.</summary>
 public interface IRegressionReportMailer
 {
-    void Send(string recipients, string subject, string htmlBody, string? csvContent, string csvFileName);
+    void Send(string recipients, string subject, string htmlBody, byte[]? attachment, string attachmentFileName, string attachmentContentType);
 }
 
 /// <summary>
@@ -26,7 +26,7 @@ public sealed class RegressionReportMailer : IRegressionReportMailer
         _logger = logger;
     }
 
-    public void Send(string recipients, string subject, string htmlBody, string? csvContent, string csvFileName)
+    public void Send(string recipients, string subject, string htmlBody, byte[]? attachment, string attachmentFileName, string attachmentContentType)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             throw new InvalidOperationException("No recipients specified.");
@@ -41,11 +41,11 @@ public sealed class RegressionReportMailer : IRegressionReportMailer
             IsBodyHtml = true,
         };
 
-        if (!string.IsNullOrWhiteSpace(csvContent))
+        if (attachment is { Length: > 0 })
         {
             // Stream is owned by the Attachment and disposed when the MailMessage is disposed.
-            var stream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
-            message.Attachments.Add(new Attachment(stream, csvFileName, "text/csv"));
+            var stream = new MemoryStream(attachment);
+            message.Attachments.Add(new Attachment(stream, attachmentFileName, attachmentContentType));
         }
 
         smtp.Send(message);

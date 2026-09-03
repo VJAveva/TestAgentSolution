@@ -10,8 +10,10 @@ import type {
   RegressionComponentRef,
   RegressionBuildRef,
   ChurnSummary,
+  ImpactedComponentAnalysis,
   SubsystemRow,
 } from '../types/api';
+import type { FilterState } from '../components/regression/helpers';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -23,12 +25,27 @@ function branchParam(branch: string | null): string {
   return branch ? `&branch=${encodeURIComponent(branch)}` : '';
 }
 
+function filterQuery(f: FilterState): string {
+  const p = new URLSearchParams({
+    showRuntime: String(f.showRuntime),
+    showConfig: String(f.showConfig),
+    hideAutomated: String(f.hideAutomated),
+    showAllChanges: String(f.showAllChanges),
+    filterBug: String(f.filterBug),
+    filterStory: String(f.filterStory),
+    filterIms: String(f.filterIms),
+  });
+  if (f.component) p.set('component', f.component);
+  return p.toString();
+}
+
 export function useRegression() {
   const setConsolidated = useRegressionStore((s) => s.setConsolidated);
   const setScope = useRegressionStore((s) => s.setScope);
   const setSyncStatus = useRegressionStore((s) => s.setSyncStatus);
   const setConnection = useRegressionStore((s) => s.setConnection);
   const setSummary = useRegressionStore((s) => s.setSummary);
+  const setAiLoading = useRegressionStore((s) => s.setAiLoading);
   const setBranches = useRegressionStore((s) => s.setBranches);
   const setComponents = useRegressionStore((s) => s.setComponents);
   const setLoading = useRegressionStore((s) => s.setLoading);
@@ -88,9 +105,19 @@ export function useRegression() {
     [],
   );
 
+  // Impact-mapped test cases + change-analysis fallback for one component (grid row-expand).
+  const fetchTestMatches = useCallback(
+    (row: SubsystemRow) =>
+      apiFetch<ImpactedComponentAnalysis>('/api/impact/test-matches', {
+        method: 'POST',
+        body: JSON.stringify(row),
+      }),
+    [],
+  );
+
   // Report is a file (text/csv or text/html) — bypass apiFetch (which JSON-parses / flags HTML) and stream a download.
-  const downloadReport = useCallback(async (from: Date, to: Date, branch: string | null, format: 'csv' | 'html') => {
-    const url = `${API_BASE}/api/impact/report?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}&format=${format}`;
+  const downloadReport = useCallback(async (from: Date, to: Date, branch: string | null, format: 'csv' | 'html' | 'xlsx', filter: FilterState) => {
+    const url = `${API_BASE}/api/impact/report?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}&format=${format}&${filterQuery(filter)}`;
     const headers: Record<string, string> = { 'X-User-Id': getUserId(), 'X-Source': 'WebClient' };
     const token = sessionStorage.getItem('auth_token');
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -107,8 +134,8 @@ export function useRegression() {
     URL.revokeObjectURL(objUrl);
   }, []);
 
-  const emailReport = useCallback(async (from: Date, to: Date, branch: string | null, recipients: string) => {
-    await apiFetch<{ sent: boolean; recipients: string }>('/api/impact/email', {
+  const emailReport = useCallback(async (from: Date, to: Date, branch: string | null, recipients: string, filter: FilterState) => {
+    await apiFetch<{ sent: boolean; recipients: string }>(`/api/impact/email?${filterQuery(filter)}`, {
       method: 'POST',
       body: JSON.stringify({ from: toDateParam(from), to: toDateParam(to), branch, recipients }),
     });
@@ -124,5 +151,21 @@ export function useRegression() {
     [],
   );
 
-  return { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, downloadReport, emailReport, applySuiteEdit };
+  // On-demand diff-grounded LLM summary; replaces the banner's summary with the AI version.
+  const summarizeWithAi = useCallback(
+    async (from: Date, to: Date, branch: string | null, filter: FilterState) => {
+      setAiLoading(true);
+      try {
+        const range = `?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}&${filterQuery(filter)}`;
+        setSummary(await apiFetch<ChurnSummary>(`/api/impact/ai-summary${range}`));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'AI summary failed');
+      } finally {
+        setAiLoading(false);
+      }
+    },
+    [setSummary, setAiLoading, setError],
+  );
+
+  return { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, fetchTestMatches, downloadReport, emailReport, applySuiteEdit, summarizeWithAi };
 }

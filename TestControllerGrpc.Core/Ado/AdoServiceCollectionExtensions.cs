@@ -39,6 +39,25 @@ public static class AdoServiceCollectionExtensions
         services.TryAddSingleton<Reporting.IChurnSummarizer, Reporting.ChurnSummarizer>();
         services.TryAddSingleton<Reporting.IChurnReportBuilder, Reporting.ChurnReportBuilder>();
 
+        // Async LLM change-summarizer. Resolves the diff-grounded LlmChurnSummarizer when the LLM is
+        // enabled + wired (ILlmClient/IChangeDiffSource present), else an offline pass-through over the
+        // deterministic summarizer. Registered unconditionally so callers always resolve one.
+        services.TryAddSingleton<Reporting.Llm.ILlmChangeSummarizer>(sp =>
+        {
+            var fallback = sp.GetRequiredService<Reporting.IChurnSummarizer>();
+            var llmOptions = sp.GetService<Microsoft.Extensions.Options.IOptions<Reporting.Llm.LlmOptions>>();
+            var llm = sp.GetService<Reporting.Llm.ILlmClient>();
+            var diffs = sp.GetService<Reporting.Llm.IChangeDiffSource>();
+            if (llmOptions?.Value.Enabled == true && llm is not null && diffs is not null)
+            {
+                return new Reporting.Llm.LlmChurnSummarizer(
+                    diffs, llm, fallback, llmOptions,
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AdoOptions>>(),
+                    sp.GetRequiredService<IAppLogger>());
+            }
+            return new Reporting.Llm.OfflineChangeSummarizer(fallback);
+        });
+
         // Interactive Entra sign-in (WPF). Registered unconditionally so the Regression tab's sign-in UI can
         // always resolve it; it reports IsAvailable=false unless Ado is enabled with AuthMode=Interactive.
         services.TryAddSingleton<InteractiveTokenProvider>();
@@ -81,6 +100,32 @@ public static class AdoServiceCollectionExtensions
         services.TryAddSingleton<SpBuildImpactCollector>();
         services.TryAddSingleton<ComponentChangeCollector>();
 
+        // LLM-backed code-change summarization (CodeChurn). Scaffolding — off unless Ado:Llm:Enabled=true.
+        if (IsLlmEnabled(services))
+        {
+            services.TryAddSingleton(sp =>
+            {
+                var cfg = sp.GetRequiredService<IConfiguration>();
+                var opts = new Reporting.Llm.LlmOptions();
+                cfg.GetSection(Reporting.Llm.LlmOptions.SectionName).Bind(opts);
+                return Microsoft.Extensions.Options.Options.Create(opts);
+            });
+            services.AddHttpClient<Reporting.Llm.AzureOpenAiClient>();
+            services.TryAddSingleton<Reporting.Llm.ILlmClient>(sp => sp.GetRequiredService<Reporting.Llm.AzureOpenAiClient>());
+
+            // Diff source, optionally wrapped by a persistent cache keyed by immutable {repo}:{commit}.
+            services.TryAddSingleton<Reporting.Llm.AdoChangeDiffSource>();
+            services.TryAddSingleton<Reporting.Llm.ICommitDiffCache, Reporting.Llm.FileCommitDiffCache>();
+            services.TryAddSingleton<Reporting.Llm.IChangeDiffSource>(sp =>
+            {
+                var inner = sp.GetRequiredService<Reporting.Llm.AdoChangeDiffSource>();
+                var cacheDiffs = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Reporting.Llm.LlmOptions>>().Value.CacheDiffs;
+                return cacheDiffs
+                    ? new Reporting.Llm.CachedChangeDiffSource(inner, sp.GetRequiredService<Reporting.Llm.ICommitDiffCache>())
+                    : inner;
+            });
+        }
+
         services.TryAddSingleton<IRegressionDataProvider, AdoRegressionDataProvider>();
 
         return services;
@@ -91,5 +136,12 @@ public static class AdoServiceCollectionExtensions
         using var provisional = services.BuildServiceProvider();
         var cfg = provisional.GetService<IConfiguration>();
         return cfg?.GetSection("Ado")?.GetValue<bool>("Enabled") ?? false;
+    }
+
+    private static bool IsLlmEnabled(IServiceCollection services)
+    {
+        using var provisional = services.BuildServiceProvider();
+        var cfg = provisional.GetService<IConfiguration>();
+        return cfg?.GetSection(Reporting.Llm.LlmOptions.SectionName)?.GetValue<bool>("Enabled") ?? false;
     }
 }

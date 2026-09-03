@@ -53,6 +53,8 @@ public static class ControllerApiExtensions
         // Ado:Enabled=true, otherwise falls back to the mock provider. TryAdd so a host can
         // override without touching this registration.
         services.AddAdoRegressionIngest();
+        // xlsx report builder lives in TestController.Reporting so ClosedXML stays out of Core/agent.
+        TestControllerGrpc.Ado.Reporting.ReportingServiceCollectionExtensions.AddChurnXlsxReporting(services);
         services.TryAddSingleton<IRegressionDataProvider, MockRegressionDataProvider>();
 
         // Lock recovery options: defaults are fine, hosts can override via Configure<LockRecoveryOptions>()

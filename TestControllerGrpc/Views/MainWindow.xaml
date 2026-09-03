@@ -1801,15 +1801,24 @@
                                                     <TextBlock Text="Report Card" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
+                                        </StackPanel>
+                                        <TextBlock Text="Results" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
+                                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,8" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="8,6" Margin="2">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding OpenRegressionCommand}"
                                                     ToolTip="Open the CodeChurn tab (build/change impact planning)">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="CodeChurn" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Results" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
+                                        <TextBlock Text="Code Churn" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>

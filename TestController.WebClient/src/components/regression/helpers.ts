@@ -6,10 +6,20 @@ export interface FilterState {
   showRuntime: boolean;
   showConfig: boolean;
   hideAutomated: boolean;
+  showAllChanges: boolean;
   filterBug: boolean;
   filterStory: boolean;
   filterIms: boolean;
   component: string | null;
+}
+
+function isPackageNoiseChange(c: RegressionChangeRef): boolean {
+  return (c.summary ?? '').toLowerCase().includes('universal-package');
+}
+
+function stripPackageNoise(row: SubsystemRow): SubsystemRow {
+  const kept = row.changes.filter((c) => !isPackageNoiseChange(c));
+  return kept.length === row.changes.length ? row : { ...row, changes: kept };
 }
 
 function stripAutomated(row: SubsystemRow): SubsystemRow {
@@ -29,6 +39,8 @@ export function applyFilters(rows: SubsystemRow[], f: FilterState): SubsystemRow
   );
   if (f.component) out = out.filter((r) => r.component === f.component);
   if (f.hideAutomated) out = out.map(stripAutomated).filter((r) => r.changes.length > 0);
+  // Hide Universal-Packages manifest bumps by default; "All changes" restores them.
+  if (!f.showAllChanges) out = out.map(stripPackageNoise).filter((r) => r.changes.length > 0);
   if (f.filterBug || f.filterStory || f.filterIms) {
     out = out.filter((r) => {
       const wis = allWorkItems(r);
@@ -86,8 +98,14 @@ export function modifiedFileLinks(row: SubsystemRow): FileLink[] {
   for (const c of row.changes) for (const p of c.filePaths) if (p && !byPath.has(p)) byPath.set(p, c.changeId);
   for (const p of row.filesModified) if (p && !byPath.has(p)) byPath.set(p, null);
   return Array.from(byPath.entries())
+    .filter(([path]) => isSourceFile(path)) // source files only (.h/.cpp/.cs), matching the churn Excel
     .slice(0, 50)
     .map(([path, commit]) => ({ path, url: fileUrl(row, path, commit) }));
+}
+
+function isSourceFile(path: string): boolean {
+  const p = path.toLowerCase();
+  return p.endsWith('.h') || p.endsWith('.cpp') || p.endsWith('.cs');
 }
 
 function fileUrl(row: SubsystemRow, path: string, commitId: string | null): string | null {

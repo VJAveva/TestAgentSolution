@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Churn Ribbon — Redesign Mockup</title>
+<style>
+:root{
+  --canvas:#14112a;
+  --panel:#1d1936;
+  --ribbon:#221e42;
+  --well:#191632;
+  --rule:#332c60;
+  --rule-soft:#2a2450;
+  --ink:#e8e5f8;
+  --ink-dim:#a49cd0;
+  --ink-faint:#7a72a8;
+  --accent:#7f6df6;
+  --accent-soft:#312a68;
+  --accent-line:#5f4fd6;
+  --runtime:#3ddc97;
+  --config:#5aa9fb;
+  --unmapped:#fb6f88;
+  --warn:#f5b545;
+  --radius:5px;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--canvas);
+  color:var(--ink);
+  font-family:var(--font);
+  font-size:13px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1460px;margin:0 auto;padding:40px 28px 80px}
+
+/* ---------- doc header ---------- */
+.doc-head{border-bottom:1px solid var(--rule);padding-bottom:26px;margin-bottom:38px}
+.doc-head h1{
+  font-size:27px;font-weight:600;letter-spacing:-.4px;margin:0 0 6px;
+}
+.doc-head p{margin:0;color:var(--ink-dim);max-width:64ch}
+.doc-meta{display:flex;gap:26px;margin-top:18px;flex-wrap:wrap}
+.doc-meta div{font-size:12px;color:var(--ink-faint)}
+.doc-meta b{display:block;color:var(--ink-dim);font-weight:500;font-size:12px}
+
+/* ---------- section scaffolding ---------- */
+section{margin-bottom:52px}
+.sec-title{
+  font-size:15px;font-weight:600;margin:0 0 4px;
+  display:flex;align-items:baseline;gap:10px;
+}
+.sec-title span{font-size:12px;font-weight:400;color:var(--ink-faint)}
+.sec-note{margin:0 0 18px;color:var(--ink-dim);max-width:76ch;font-size:12.5px}
+
+/* ---------- ribbon shell ---------- */
+.shell{
+  border:1px solid var(--rule);
+  border-radius:8px;
+  overflow:hidden;
+  background:var(--panel);
+  position:relative;
+}
+.tabbar{
+  display:flex;align-items:stretch;
+  background:var(--panel);
+  border-bottom:1px solid var(--rule);
+  padding-left:8px;
+  position:relative;
+}
+.app-chip{
+  display:flex;align-items:center;gap:8px;
+  padding:0 14px 0 6px;margin-right:6px;
+  border-right:1px solid var(--rule-soft);
+  color:var(--ink-dim);font-size:12px;
+}
+.app-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--runtime)}
+.tab{
+  padding:9px 15px;font-size:12.5px;color:var(--ink-dim);
+  border:none;background:none;font-family:inherit;cursor:pointer;
+  border-bottom:2px solid transparent;
+}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tabbar .spacer{flex:1}
+.tab-right{display:flex;align-items:center;gap:4px;padding-right:10px}
+
+.ribbon{
+  display:flex;align-items:stretch;
+  background:var(--ribbon);
+  padding:8px 4px 0;
+  gap:0;
+}
+.grp{
+  display:flex;flex-direction:column;
+  padding:0 12px 3px;
+  border-right:1px solid var(--rule-soft);
+  min-width:0;
+}
+.grp:last-child{border-right:none}
+.grp-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:5px;padding-bottom:6px}
+.grp-name{
+  font-size:11px;color:var(--ink-faint);text-align:center;
+  padding-top:3px;letter-spacing:.1px;
+}
+
+/* ---------- controls ---------- */
+.field{
+  display:flex;align-items:center;gap:0;
+  background:var(--well);
+  border:1px solid var(--rule);
+  border-radius:var(--radius);
+  height:26px;
+  overflow:hidden;
+}
+.field .lbl{
+  padding:0 8px;font-size:11.5px;color:var(--ink-faint);
+  background:rgba(255,255,255,.025);
+  border-right:1px solid var(--rule-soft);
+  height:100%;display:flex;align-items:center;white-space:nowrap;
+}
+.field .val{
+  padding:0 8px;flex:1;min-width:0;font-size:12.5px;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:flex;align-items:center;gap:6px;
+}
+.field .val .sub{color:var(--ink-faint);font-size:11.5px}
+.field .caret{padding:0 7px 0 3px;color:var(--ink-dim);font-size:9px}
+.field:hover{border-color:var(--accent-line);cursor:pointer}
+
+.row{display:flex;gap:6px;align-items:center}
+.row > .field{flex:1}
+.arrow{color:var(--ink-faint);font-size:12px;padding:0 1px;flex:none}
+
+/* segmented */
+.seg{display:flex;border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden;height:26px}
+.seg button{
+  flex:1;border:none;background:var(--well);color:var(--ink-dim);
+  font-family:inherit;font-size:12px;padding:0 10px;cursor:pointer;
+  border-right:1px solid var(--rule-soft);white-space:nowrap;
+}
+.seg button:last-child{border-right:none}
+.seg button:hover{background:#221e44;color:var(--ink)}
+.seg button.on{background:var(--accent-soft);color:#fff;box-shadow:inset 0 -2px 0 var(--accent)}
+
+/* toggle pills */
+.pills{display:flex;gap:5px;align-items:center;flex-wrap:nowrap}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  height:25px;padding:0 9px;
+  border:1px solid var(--rule);border-radius:13px;
+  background:var(--well);color:var(--ink-dim);
+  font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap;
+}
+.pill:hover{border-color:var(--accent-line);color:var(--ink)}
+.pill .cnt{
+  font-size:11px;font-variant-numeric:tabular-nums;
+  padding:1px 5px;border-radius:8px;background:rgba(255,255,255,.06);color:var(--ink-dim);
+}
+.pill.on{background:var(--accent-soft);border-color:var(--accent-line);color:#fff}
+.pill.on .cnt{background:rgba(255,255,255,.16);color:#fff}
+.pill.on.rt{border-color:var(--runtime);background:rgba(61,220,151,.14);color:var(--runtime)}
+.pill.on.rt .cnt{background:rgba(61,220,151,.2);color:var(--runtime)}
+.pill.on.cf{border-color:var(--config);background:rgba(90,169,251,.14);color:var(--config)}
+.pill.on.cf .cnt{background:rgba(90,169,251,.2);color:var(--config)}
+.pill.on.um{border-color:var(--unmapped);background:rgba(251,111,136,.14);color:var(--unmapped)}
+.pill.on.um .cnt{background:rgba(251,111,136,.2);color:var(--unmapped)}
+
+.axis{display:flex;align-items:center;gap:8px}
+.axis .axis-lbl{
+  font-size:11.5px;color:var(--ink-faint);width:66px;flex:none;text-align:right;
+}
+
+.linkbtn{
+  background:none;border:none;color:var(--ink-faint);font-family:inherit;
+  font-size:11.5px;cursor:pointer;padding:0 2px;text-decoration:underline;
+  text-underline-offset:2px;text-decoration-color:var(--rule);
+}
+.linkbtn:hover{color:var(--ink)}
+
+/* view stack */
+.vstack{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden}
+.vstack button{
+  border:none;background:var(--well);color:var(--ink-dim);font-family:inherit;
+  font-size:12px;padding:5px 12px;text-align:left;cursor:pointer;
+  border-bottom:1px solid var(--rule-soft);display:flex;align-items:center;gap:8px;
+}
+.vstack button:last-child{border-bottom:none}
+.vstack button:hover{background:#221e44;color:var(--ink)}
+.vstack button.on{background:var(--accent-soft);color:#fff}
+.vstack .gl{width:13px;text-align:center;opacity:.85}
+
+/* actions */
+.act-wrap{display:flex;gap:8px;align-items:stretch}
+.primary{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-width:78px;padding:6px 12px;
+  background:linear-gradient(180deg,#8a78ff,#6c58ee);
+  border:1px solid #6a56e8;border-radius:var(--radius);
+  color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset;
+}
+.primary:hover{background:linear-gradient(180deg,#9686ff,#7563f2)}
+.primary .gl{font-size:19px;line-height:1}
+.primary .hint{font-size:10.5px;font-weight:400;opacity:.8}
+.small-stack{display:flex;flex-direction:column;gap:4px;justify-content:center}
+.sbtn{
+  display:flex;align-items:center;gap:7px;height:25px;padding:0 10px;
+  background:var(--well);border:1px solid var(--rule);border-radius:var(--radius);
+  color:var(--ink-dim);font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap;
+}
+.sbtn:hover{border-color:var(--accent-line);color:var(--ink)}
+.sbtn .gl{width:13px;text-align:center;opacity:.8}
+
+/* status bar */
+.status{
+  display:flex;align-items:center;gap:0;
+  background:var(--well);border-top:1px solid var(--rule);
+  padding:0 12px;height:30px;font-size:11.5px;
+}
+.st{display:flex;align-items:baseline;gap:6px;padding:0 13px;height:100%;align-items:center}
+.st + .st{border-left:1px solid var(--rule-soft)}
+.st:first-child{padding-left:0}
+.st .k{color:var(--ink-faint)}
+.st .v{color:var(--ink);font-variant-numeric:tabular-nums}
+.status .spacer{flex:1}
+.st.ok .v{color:var(--runtime)}
+
+/* ---------- annotation badges ---------- */
+.mockwrap{position:relative;padding:30px 46px 26px}
+.badge{
+  position:absolute;z-index:6;
+  width:21px;height:21px;border-radius:50%;
+  background:var(--accent);color:#fff;
+  font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 3px var(--canvas), 0 2px 5px rgba(0,0,0,.5);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---------- legend table ---------- */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{
+  text-align:left;font-weight:600;color:var(--ink-dim);font-size:11.5px;
+  padding:8px 12px;border-bottom:1px solid var(--rule);
+}
+td{padding:9px 12px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+td.r{white-space:nowrap;width:44px}
+.rtag{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:30px;height:20px;padding:0 6px;border-radius:10px;
+  background:var(--accent-soft);color:#cdc4ff;
+  font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;
+}
+code{
+  font-family:"Cascadia Mono","Consolas",monospace;font-size:11.5px;
+  color:#c7bdff;background:rgba(127,109,246,.1);padding:1px 5px;border-radius:3px;
+}
+td.was{color:var(--ink-faint)}
+td.was s{text-decoration-color:var(--unmapped)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+@media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+
+.callout{
+  border-left:2px solid var(--accent);
+  padding:2px 0 2px 16px;margin:20px 0;
+  color:var(--ink-dim);font-size:12.5px;max-width:78ch;
+}
+.callout b{color:var(--ink);font-weight:600}
+
+/* narrow demo */
+.narrow-frame{max-width:1020px;border:1px dashed var(--rule);border-radius:9px;padding:9px;position:relative}
+.narrow-frame::after{
+  content:"1020 px viewport";position:absolute;top:-9px;right:14px;
+  background:var(--canvas);padding:0 8px;font-size:11px;color:var(--ink-faint);
+}
+.narrow-frame .grp{padding:0 9px}
+
+.ov{
+  display:flex;align-items:center;justify-content:center;
+  width:28px;align-self:center;height:30px;margin:0 4px;
+  border:1px solid var(--rule);border-radius:var(--radius);
+  background:var(--well);color:var(--ink-dim);cursor:pointer;font-size:14px;
+}
+.ov:hover{border-color:var(--accent-line);color:var(--ink)}
+
+.collapsed{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;min-width:62px;padding:5px 8px;
+  background:var(--well);border:1px solid var(--rule);border-radius:var(--radius);
+  color:var(--ink-dim);font-family:inherit;font-size:11.5px;cursor:pointer;
+}
+.collapsed:hover{border-color:var(--accent-line);color:var(--ink)}
+.collapsed .gl{font-size:16px}
+
+*:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="doc-head">
+  <h1>Code Churn ribbon — redesign</h1>
+  <p>Eight competing groups collapsed into one left-to-right spine: pick a scope, pick a range, narrow it, choose how to read it, act on it. Branch and Focus are now a single Scope group, and the comparison baseline is visible instead of implied.</p>
+  <div class="doc-meta">
+    <div><b>Surface</b>TestControllerGrpc (WPF)</div>
+    <div><b>Replaces</b>Existing churn ribbon, 8 groups</div>
+    <div><b>Regions</b>R1–R14, annotated for Copilot</div>
+    <div><b>Fits at</b>1280 px with no horizontal scroll</div>
+  </div>
+</header>
+
+<!-- ============ MAIN MOCKUP ============ -->
+<section>
+  <h2 class="sec-title">Proposed ribbon <span>Analysis tab, default state</span></h2>
+  <p class="sec-note">Every command from the current bar is still here. Nothing was deleted — things were regrouped, and four items moved to sibling tabs where they belong.</p>
+
+  <div class="mockwrap">
+    <div class="badge" style="top:14px;left:150px">1</div>
+    <div class="badge" style="top:66px;left:26px">2</div>
+    <div class="badge" style="top:104px;left:26px">3</div>
+    <div class="badge" style="top:140px;left:26px">4</div>
+    <div class="badge" style="top:176px;left:26px">5</div>
+    <div class="badge" style="top:66px;left:437px">6</div>
+    <div class="badge" style="top:104px;left:672px">7</div>
+    <div class="badge" style="top:140px;left:672px">8</div>
+    <div class="badge" style="top:176px;left:672px">9</div>
+    <div class="badge" style="top:66px;left:1002px">10</div>
+    <div class="badge" style="top:66px;left:1148px">11</div>
+    <div class="badge" style="top:176px;left:1268px">12</div>
+    <div class="badge" style="top:14px;left:1330px">13</div>
+    <div class="badge" style="bottom:12px;left:26px">14</div>
+
+    <div class="shell" id="main">
+
+      <!-- R1 tab strip -->
+      <div class="tabbar">
+        <div class="app-chip"><span class="dot"></span>Churn</div>
+        <button class="tab on">Analysis</button>
+        <button class="tab">Regression</button>
+        <button class="tab">Work items</button>
+        <button class="tab">Report</button>
+        <button class="tab">Settings</button>
+        <div class="spacer"></div>
+        <!-- R13 -->
+        <div class="tab-right">
+          <button class="sbtn"><span class="gl">↻</span>Refresh</button>
+          <button class="sbtn"><span class="gl">⋯</span></button>
+        </div>
+      </div>
+
+      <div class="ribbon">
+
+        <!-- ===== SCOPE (R2–R5) ===== -->
+        <div class="grp" style="flex:1 1 400px;min-width:352px">
+          <div class="grp-body">
+            <div class="field">
+              <span class="lbl">Branch</span>
+              <span class="val">Releases/SP2023R2/2023R2SP2</span>
+              <span class="caret">▼</span>
+            </div>
+            <div class="row">
+              <div class="field">
+                <span class="lbl">From build</span>
+                <span class="val">20260903.1</span>
+                <span class="caret">▼</span>
+              </div>
+              <span class="arrow">→</span>
+              <div class="field">
+                <span class="lbl">To</span>
+                <span class="val">20260903.2 <span class="sub">latest</span></span>
+                <span class="caret">▼</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <span class="lbl">Component</span>
+                <span class="val">All <span class="sub">36</span></span>
+                <span class="caret">▼</span>
+              </div>
+              <div class="field">
+                <span class="lbl">Subsystem</span>
+                <span class="val">All <span class="sub">35</span></span>
+                <span class="caret">▼</span>
+              </div>
+            </div>
+          </div>
+          <div class="grp-name">Scope</div>
+        </div>
+
+        <!-- ===== RANGE (R6) ===== -->
+        <div class="grp" style="flex:0 0 244px">
+          <div class="grp-body">
+            <div class="seg" id="rangeSeg">
+              <button class="on" data-range="build">Build</button>
+              <button data-range="week">Week</button>
+              <button data-range="release">Release</button>
+              <button data-range="custom">Custom</button>
+            </div>
+            <div class="row" id="dateRow" style="opacity:.4;pointer-events:none">
+              <div class="field">
+                <span class="lbl">From</span>
+                <span class="val">3 Sep 2026</span>
+                <span class="caret">▼</span>
+              </div>
+              <div class="field">
+                <span class="lbl">To</span>
+                <span class="val">3 Sep 2026</span>
+                <span class="caret">▼</span>
+              </div>
+            </div>
+            <div class="row" style="justify-content:flex-end">
+              <span id="rangeHint" style="font-size:11px;color:var(--ink-faint);flex:1">Compares this build to the one before it</span>
+            </div>
+          </div>
+          <div class="grp-name">Range</div>
+        </div>
+
+        <!-- ===== FILTER (R7–R9) ===== -->
+        <div class="grp" style="flex:0 0 318px">
+          <div class="grp-body">
+            <div class="axis">
+              <span class="axis-lbl">Context</span>
+              <div class="pills">
+                <button class="pill rt on" data-tog><span>Runtime</span><span class="cnt">23</span></button>
+                <button class="pill cf on" data-tog><span>Config</span><span class="cnt">15</span></button>
+              </div>
+            </div>
+            <div class="axis">
+              <span class="axis-lbl">Work item</span>
+              <div class="pills">
+                <button class="pill" data-tog>Bug</button>
+                <button class="pill" data-tog>Story</button>
+                <button class="pill" data-tog>IMS</button>
+              </div>
+            </div>
+            <div class="axis">
+              <span class="axis-lbl">Coverage</span>
+              <div class="pills">
+                <button class="pill um" data-tog><span>No suite mapped</span><span class="cnt">35</span></button>
+                <button class="linkbtn" id="clearBtn">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="grp-name">Filter</div>
+        </div>
+
+        <!-- ===== VIEW (R10) ===== -->
+        <div class="grp" style="flex:0 0 152px">
+          <div class="grp-body">
+            <div class="vstack" id="viewStack">
+              <button class="on"><span class="gl">▤</span>By file</button>
+              <button><span class="gl">▦</span>By subsystem</button>
+              <button><span class="gl">◈</span>By suite</button>
+            </div>
+          </div>
+          <div class="grp-name">Group rows</div>
+        </div>
+
+        <!-- ===== ACT (R11–R12) ===== -->
+        <div class="grp" style="flex:0 0 214px">
+          <div class="grp-body">
+            <div class="act-wrap">
+              <button class="primary">
+                <span class="gl">▶</span>
+                <span>Dispatch</span>
+                <span class="hint">23 selected</span>
+              </button>
+              <div class="small-stack">
+                <button class="sbtn"><span class="gl">◉</span>Assign</button>
+                <button class="sbtn"><span class="gl">↧</span>Export ▾</button>
+                <button class="sbtn"><span class="gl">✉</span>Email ▾</button>
+              </div>
+            </div>
+          </div>
+          <div class="grp-name">Act</div>
+        </div>
+
+      </div>
+
+      <!-- R14 status bar -->
+      <div class="status">
+        <div class="st"><span class="k">Changes</span><span class="v">799</span></div>
+        <div class="st"><span class="k">Files</span><span class="v">397</span></div>
+        <div class="st"><span class="k">Subsystems</span><span class="v">35</span></div>
+        <div class="st"><span class="k">Impact map</span><span class="v">v1</span></div>
+        <div class="st ok"><span class="k">Unresolved</span><span class="v">none</span></div>
+        <div class="spacer"></div>
+        <div class="st"><span class="k">Report sent</span><span class="v">vinodkumar.Javvadi@aveva.com · 10:42</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>The one thing that changed the most:</b> the current bar shows a single build number, so the question "compared to what?" is answered only by a sentence buried in the status strip. Scope now shows the pair explicitly — <code>20260903.1 → 20260903.2</code> — and the Range presets simply rewrite the left half of that pair.
+  </div>
+</section>
+
+<!-- ============ NARROW ============ -->
+<section>
+  <h2 class="sec-title">Narrow window <span>how the scroll gets prevented, not just postponed</span></h2>
+  <p class="sec-note">Each group declares a collapse priority. As width drops, the lowest-priority group folds into a single button that opens the same controls in a popup. Scope and Act never collapse.</p>
+
+  <div class="narrow-frame">
+    <div class="shell">
+      <div class="tabbar">
+        <div class="app-chip"><span class="dot"></span>Churn</div>
+        <button class="tab on">Analysis</button>
+        <button class="tab">Regression</button>
+        <button class="tab">Work items</button>
+        <div class="spacer"></div>
+        <div class="tab-right"><button class="sbtn"><span class="gl">↻</span>Refresh</button></div>
+      </div>
+      <div class="ribbon">
+        <div class="grp" style="flex:1 1 330px;min-width:300px">
+          <div class="grp-body">
+            <div class="field"><span class="lbl">Branch</span><span class="val">…/2023R2SP2</span><span class="caret">▼</span></div>
+            <div class="row">
+              <div class="field"><span class="lbl">From</span><span class="val">20260903.1</span><span class="caret">▼</span></div>
+              <span class="arrow">→</span>
+              <div class="field"><span class="lbl">To</span><span class="val">20260903.2</span><span class="caret">▼</span></div>
+            </div>
+            <div class="row">
+              <div class="field"><span class="lbl">Component</span><span class="val">All <span class="sub">36</span></span><span class="caret">▼</span></div>
+            </div>
+          </div>
+          <div class="grp-name">Scope</div>
+        </div>
+        <div class="grp" style="flex:0 0 244px">
+          <div class="grp-body">
+            <div class="seg">
+              <button class="on">Build</button><button>Week</button><button>Release</button><button>Custom</button>
+            </div>
+            <div class="row" style="opacity:.4">
+              <div class="field"><span class="lbl">From</span><span class="val">3 Sep</span><span class="caret">▼</span></div>
+              <div class="field"><span class="lbl">To</span><span class="val">3 Sep</span><span class="caret">▼</span></div>
+            </div>
+            <div class="row"><span style="font-size:11px;color:var(--ink-faint)">Build to previous build</span></div>
+          </div>
+          <div class="grp-name">Range</div>
+        </div>
+        <div class="grp" style="flex:0 0 92px">
+          <div class="grp-body" style="justify-content:center">
+            <button class="collapsed"><span class="gl">⚑</span>Filter ▾<span style="font-size:10px;color:var(--accent)">2 on</span></button>
+          </div>
+          <div class="grp-name">Filter</div>
+        </div>
+        <div class="grp" style="flex:0 0 86px">
+          <div class="grp-body" style="justify-content:center">
+            <button class="collapsed"><span class="gl">▤</span>View ▾</button>
+          </div>
+          <div class="grp-name">Group rows</div>
+        </div>
+        <div class="grp" style="flex:0 0 176px">
+          <div class="grp-body">
+            <div class="act-wrap">
+              <button class="primary"><span class="gl">▶</span><span>Dispatch</span><span class="hint">23</span></button>
+              <div class="small-stack">
+                <button class="sbtn"><span class="gl">◉</span>Assign</button>
+                <button class="sbtn"><span class="gl">↧</span>Export</button>
+              </div>
+            </div>
+          </div>
+          <div class="grp-name">Act</div>
+        </div>
+      </div>
+      <div class="status">
+        <div class="st"><span class="k">Changes</span><span class="v">799</span></div>
+        <div class="st"><span class="k">Files</span><span class="v">397</span></div>
+        <div class="st"><span class="k">Subsystems</span><span class="v">35</span></div>
+        <div class="spacer"></div>
+        <div class="st ok"><span class="k">Unresolved</span><span class="v">none</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REGION LEGEND ============ -->
+<section>
+  <h2 class="sec-title">Region reference <span>R1–R14, for the Copilot implementation prompts</span></h2>
+  <table>
+    <thead>
+      <tr><th class="r">R</th><th style="width:20%">Region</th><th style="width:26%">WPF control</th><th>Behaviour and binding</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="r"><span class="rtag">R1</span></td><td>Tab strip</td><td><code>RibbonTabItem</code> ×5</td><td>Analysis holds churn commands. Regression, Work items, Report and Settings absorb everything that used to fight for space on one row. Selected tab persists per session.</td></tr>
+      <tr><td class="r"><span class="rtag">R2</span></td><td>Scope group</td><td><code>RibbonGroup</code>, <code>SizePriority=0</code></td><td>Never collapses. Absorbs the old Branch group and Focus group entirely. Group width flexes; three stacked rows.</td></tr>
+      <tr><td class="r"><span class="rtag">R3</span></td><td>Branch picker</td><td><code>RibbonComboBox</code> editable</td><td>Bound to <code>ScopeVm.SelectedBranch</code>. Editable so a branch can be typed, matching the web form. Changing it reloads the build list in R4 and clears R5.</td></tr>
+      <tr><td class="r"><span class="rtag">R4</span></td><td>Compare pair</td><td>2 × <code>RibbonComboBox</code></td><td><code>BaselineBuild</code> → <code>TargetBuild</code>. Driven by R6: a preset writes the baseline, Custom unlocks both. This is the fix for "compared to what?" — currently only inferable from the status text.</td></tr>
+      <tr><td class="r"><span class="rtag">R5</span></td><td>Component / Subsystem</td><td>2 × <code>RibbonComboBox</code> multi-select</td><td>Replaces the unlabelled "Comp" pair. Header shows <code>All 36</code> when unfiltered, <code>3 of 36</code> when narrowed. Subsystem list is filtered by the component selection.</td></tr>
+      <tr><td class="r"><span class="rtag">R6</span></td><td>Range group</td><td><code>RibbonGroup</code>, <code>SizePriority=2</code></td><td>Merges Track changes and Timeline. Presets apply on click — no Apply round-trip. Date fields stay visible but disabled until Custom, so the mode is legible without a click. Apply only appears in Custom.</td></tr>
+      <tr><td class="r"><span class="rtag">R7</span></td><td>Deployment context</td><td><code>ToggleButton</code> ×2</td><td>Runtime and Config carry their live counts, so the RUNTIME 23 / CONFIG 15 chips no longer need a separate status strip. "Human only" moves to R9 where it is actually a coverage question.</td></tr>
+      <tr><td class="r"><span class="rtag">R8</span></td><td>Work item axis</td><td><code>ToggleButton</code> ×3</td><td>Bug / Story / IMS. Was a separate group; it is one filter axis and belongs with the others. Multi-select, OR within the axis, AND across axes.</td></tr>
+      <tr><td class="r"><span class="rtag">R9</span></td><td>Coverage + Clear</td><td><code>ToggleButton</code> + <code>Hyperlink</code></td><td>"No suite mapped" is the single most acted-on filter in this workflow, so it gets its own row. Clear resets all three axes and is disabled when nothing is on.</td></tr>
+      <tr><td class="r"><span class="rtag">R10</span></td><td>Group rows</td><td><code>ListBox</code> as radio stack</td><td>Was "All files / Subsystems" inside Show, mixed in with filters. It is a grouping mode, not a filter — separating the two axes is what removes the ambiguity. Adds By suite.</td></tr>
+      <tr><td class="r"><span class="rtag">R11</span></td><td>Dispatch</td><td><code>RibbonButton LargeSize</code></td><td>The only filled button in the ribbon. Caption shows the live selection count so the blast radius is visible before the click. Disabled at zero selection with a tooltip naming the reason.</td></tr>
+      <tr><td class="r"><span class="rtag">R12</span></td><td>Export / Email</td><td><code>RibbonSplitButton</code> ×2</td><td>Export ▾ gives CSV, XLSX, impact-map JSON. Email ▾ gives Send now and Manage recipients — this is where the emailed-report behaviour becomes a command instead of a status message.</td></tr>
+      <tr><td class="r"><span class="rtag">R13</span></td><td>Quick access</td><td><code>QuickAccessToolBar</code></td><td>Refresh sits here because it applies to every tab, not just Analysis. The ⋯ overflow catches anything a narrow window pushed out.</td></tr>
+      <tr><td class="r"><span class="rtag">R14</span></td><td>Context bar</td><td><code>StatusBar</code></td><td>Labelled key/value cells with dividers instead of a run of dot-joined fragments. Counts that a control already shows are not repeated here. Right side is reserved for the last completed action.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ MIGRATION ============ -->
+<section>
+  <h2 class="sec-title">Where every existing command went</h2>
+  <p class="sec-note">Read this as the acceptance checklist — if a row has no destination, the redesign lost something.</p>
+  <table>
+    <thead><tr><th style="width:26%">Today</th><th style="width:22%">Now lives in</th><th>Why it moved</th></tr></thead>
+    <tbody>
+      <tr><td class="was">Build 20260903.2 tile</td><td>Scope, R4 target</td><td>It was an identity label doing no work. As the right half of the compare pair it becomes editable and meaningful.</td></tr>
+      <tr><td class="was">Weekly / Custom / Release</td><td>Range, R6 presets</td><td>Same concept as Timeline, split across two groups. Adds an explicit "Build" preset, which is what the tool actually defaults to.</td></tr>
+      <tr><td class="was">From / To / Apply</td><td>Range, R6 row 2</td><td>Now visibly tied to the Custom preset. Apply disappears for presets, which apply immediately.</td></tr>
+      <tr><td class="was">Runtime / Config</td><td>Filter, R7</td><td>Unchanged in meaning, now carrying the counts that were duplicated in the status strip.</td></tr>
+      <tr><td class="was">Human only</td><td>Filter, R9 coverage</td><td>It answers "was this change reviewed by a person?", which is a coverage question, not a deployment context. Sitting beside Runtime and Config implied a third context.</td></tr>
+      <tr><td class="was">All files / Subsystems</td><td>Group rows, R10</td><td>A view mode wearing a filter's clothes. Given its own group so the two axes stop reading as one.</td></tr>
+      <tr><td class="was">Bug / Story / IMS</td><td>Filter, R8</td><td>Folded into the filter block as a labelled axis rather than a standalone group.</td></tr>
+      <tr><td class="was">Branch dropdown</td><td>Scope, R3</td><td>Widened. The old control truncated to <code>Releases/SP2023R2/2…</code>, which cannot be told apart from a sibling release branch.</td></tr>
+      <tr><td class="was">Build dropdown (Branch grp)</td><td>Scope, R4 baseline</td><td>Sat under Branch with no label explaining its role in the comparison.</td></tr>
+      <tr><td class="was">Comp (All components)</td><td>Scope, R5</td><td>Abbreviation expanded. "Focus" as a group name did not say what was being focused.</td></tr>
+      <tr><td class="was">Second Focus dropdown</td><td>Scope, R5 subsystem</td><td>It had no visible label at all — the single largest ambiguity in the current bar.</td></tr>
+      <tr><td class="was">Refresh</td><td>Quick access, R13</td><td>Global command, so it should not be tab-scoped.</td></tr>
+      <tr><td class="was">Dispatch</td><td>Act, R11</td><td>Promoted to the only filled button, with a live count.</td></tr>
+      <tr><td class="was">Assign</td><td>Act, R12</td><td>Unchanged.</td></tr>
+      <tr><td class="was">Export</td><td>Act, R12</td><td>Split button. Format choice moves out of a modal.</td></tr>
+      <tr><td class="was">"Report emailed to …"</td><td>Act R12 + status R14</td><td>Was a status message with no matching command. Now it is a command that leaves a status trace.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <div class="grid2">
+    <div>
+      <h2 class="sec-title">Layout budget</h2>
+      <p class="sec-note">Fixed widths total 928 px, leaving Scope to flex. At 1280 px Scope gets 352 px, its declared minimum, so nothing scrolls. Below that, collapse priorities fire in order: Group rows, then Filter, then Range.</p>
+      <table>
+        <tbody>
+          <tr><td>Scope</td><td><code>1fr</code>, min 352</td><td class="was">priority 0</td></tr>
+          <tr><td>Range</td><td><code>244 px</code></td><td class="was">priority 2</td></tr>
+          <tr><td>Filter</td><td><code>318 px</code></td><td class="was">priority 3</td></tr>
+          <tr><td>Group rows</td><td><code>152 px</code></td><td class="was">priority 4</td></tr>
+          <tr><td>Act</td><td><code>214 px</code></td><td class="was">priority 0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h2 class="sec-title">Open questions for you</h2>
+      <p class="sec-note">Three decisions I guessed at, flagged so you can overrule them before implementation.</p>
+      <table>
+        <tbody>
+          <tr><td><b>Human only</b></td><td>I read it as a review-provenance filter and moved it beside coverage. If it means something else, it goes back with Runtime and Config.</td></tr>
+          <tr><td><b>Second Focus dropdown</b></td><td>I assumed subsystem, since the status bar counts 35 of them. If it is risk tier or selection tier, R5 needs a third combo and Scope grows to four rows.</td></tr>
+          <tr><td><b>Tags vs Branches</b></td><td>The web form has a Tags/Branches switch that the ribbon does not. I would put it as a two-state toggle inside the R3 field's left label, so the label itself reads either Branch or Tag.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('[data-tog]').forEach(function(b){
+    b.addEventListener('click',function(){ b.classList.toggle('on'); syncClear(); });
+  });
+
+  function syncClear(){
+    var any = document.querySelectorAll('#main .pill.on').length > 0;
+    var c = document.getElementById('clearBtn');
+    if(c) c.style.opacity = any ? '1' : '.35';
+  }
+  syncClear();
+
+  var clear = document.getElementById('clearBtn');
+  if(clear) clear.addEventListener('click',function(){
+    document.querySelectorAll('#main .pill.on').forEach(function(p){ p.classList.remove('on'); });
+    syncClear();
+  });
+
+  var hints = {
+    build:'Compares this build to the one before it',
+    week:'Compares the last 7 days of builds',
+    release:'Compares against the last release tag',
+    custom:'Pick both endpoints, then apply'
+  };
+  var seg = document.getElementById('rangeSeg');
+  var dateRow = document.getElementById('dateRow');
+  var hint = document.getElementById('rangeHint');
+  if(seg) seg.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click',function(){
+      seg.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      var custom = b.dataset.range === 'custom';
+      dateRow.style.opacity = custom ? '1' : '.4';
+      dateRow.style.pointerEvents = custom ? 'auto' : 'none';
+      hint.textContent = hints[b.dataset.range];
+    });
+  });
+
+  var vs = document.getElementById('viewStack');
+  if(vs) vs.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click',function(){
+      vs.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+    });
+  });
+
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click',function(){
+      var bar = t.parentElement;
+      bar.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('on'); });
+      t.classList.add('on');
+    });
+  });
+})();
+</script>
+</body>
+</html>

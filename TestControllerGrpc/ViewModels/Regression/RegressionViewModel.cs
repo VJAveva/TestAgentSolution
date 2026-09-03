@@ -7,6 +7,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.Win32;
 using TestControllerGrpc.Ado;
 using TestControllerGrpc.Ado.Reporting;
+using TestControllerGrpc.Ado.Reporting.Llm;
+using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -28,9 +30,12 @@ public sealed partial class RegressionViewModel : ObservableObject
     private readonly IRegressionDataProvider _provider;
     private readonly IRegressionSourceCatalog _catalog;
     private readonly IChurnReportBuilder _reportBuilder;
+    private readonly IChurnXlsxBuilder _xlsx;
     private readonly IChurnSummarizer _summarizer;
+    private readonly ILlmChangeSummarizer _llmSummarizer;
     private readonly IRegressionReportMailer _mailer;
     private readonly IInteractiveAdoAuthenticator _auth;
+    private readonly IRegressionImpactMatcher _matcher;
     private readonly BuildResultsConfig _resultsConfig;
     private readonly IAppLogger _logger;
     private readonly IReadOnlyList<string> _ignoredFilePatterns;
@@ -48,22 +53,28 @@ public sealed partial class RegressionViewModel : ObservableObject
         IRegressionDataProvider provider,
         IRegressionSourceCatalog catalog,
         IChurnReportBuilder reportBuilder,
+        IChurnXlsxBuilder xlsx,
         IChurnSummarizer summarizer,
+        ILlmChangeSummarizer llmSummarizer,
         IRegressionReportMailer mailer,
         IInteractiveAdoAuthenticator auth,
         BuildResultsConfig resultsConfig,
         IOptions<AdoOptions> adoOptions,
+        IRegressionImpactMatcher matcher,
         IAppLogger logger)
     {
         _provider = provider;
         _catalog = catalog;
         _reportBuilder = reportBuilder;
+        _xlsx = xlsx;
         _summarizer = summarizer;
+        _llmSummarizer = llmSummarizer;
         _mailer = mailer;
         _auth = auth;
         _resultsConfig = resultsConfig;
         _ignoredFilePatterns = adoOptions.Value.IgnoredFilePatterns;
         _defaultBranch = adoOptions.Value.DefaultBranch ?? "";
+        _matcher = matcher;
         _logger = logger;
         _to = DateTime.Today;
         _from = DateTime.Today;
@@ -267,7 +278,7 @@ public sealed partial class RegressionViewModel : ObservableObject
             Rows.Clear();
             if (row is not null)
             {
-                Rows.Add(new SubsystemRowViewModel(row, _summarizer) { RowNumber = 1, IsExpanded = true });
+                Rows.Add(new SubsystemRowViewModel(row, _summarizer, matcher: _matcher) { RowNumber = 1, IsExpanded = true });
                 StatusMessage = $"{component.Name} build {build.BuildNumber}: {row.Changes.Count} change(s).";
             }
             else
@@ -299,11 +310,15 @@ public sealed partial class RegressionViewModel : ObservableObject
     // Off by default: pipeline/shared noise files (e.g. <RepoName>.yaml, configs) are hidden from Files Modified.
     [ObservableProperty] private bool _showAllFiles;
 
+    // Off by default: Universal-Packages manifest bumps are hidden; turn on "All changes" to include them.
+    [ObservableProperty] private bool _showAllChanges;
+
     partial void OnFilterBugChanged(bool value) => ApplyFilter();
     partial void OnFilterStoryChanged(bool value) => ApplyFilter();
     partial void OnFilterImsChanged(bool value) => ApplyFilter();
     partial void OnHideAutomatedChangesChanged(bool value) => ApplyFilter();
     partial void OnShowAllFilesChanged(bool value) => ApplyFilter();
+    partial void OnShowAllChangesChanged(bool value) => ApplyFilter();
 
     [ObservableProperty] private string _scopeLabel = "";
     [ObservableProperty] private string _rangeText = "";
@@ -349,6 +364,11 @@ public sealed partial class RegressionViewModel : ObservableObject
 
     /// <summary>Collapsed by default so the summary pane doesn't steal grid space (autohide).</summary>
     [ObservableProperty] private bool _isSummaryExpanded;
+
+    /// <summary>True while the AI (LLM) summary is generating — disables the AI Summary command.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SummarizeWithAiCommand))]
+    private bool _isAiBusy;
 
     /// <summary>Comma/semicolon-separated report recipients (prefilled from BuildResults:ReportRecipients).</summary>
     [ObservableProperty] private string _recipients = "";
@@ -493,7 +513,11 @@ public sealed partial class RegressionViewModel : ObservableObject
             ? filtered.Select(StripAutomatedChanges).Where(r => r.Changes.Count > 0)
             : filtered;
 
-        var list = projected.Select(r => new SubsystemRowViewModel(r, _summarizer, BuildFileFilter(r))).ToList();
+        // Hide Universal-Packages manifest bumps unless "All changes" is on; drop rows left with no changes.
+        if (!ShowAllChanges)
+            projected = projected.Select(StripPackageNoiseChanges).Where(r => r.Changes.Count > 0);
+
+        var list = projected.Select(r => new SubsystemRowViewModel(r, _summarizer, BuildFileFilter(r), _matcher)).ToList();
 
         // Work-item-type filter (OR across the checked types); no filter when none are checked.
         if (FilterBug || FilterStory || FilterIms)
@@ -539,9 +563,16 @@ public sealed partial class RegressionViewModel : ObservableObject
         };
     }
 
-    // Null when "All files" is on; otherwise hides pipeline/shared noise files from a row's file lists.
+    /// <summary>Returns a copy of the row with Universal-Packages manifest changes removed.</summary>
+    private static SubsystemRow StripPackageNoiseChanges(SubsystemRow row)
+    {
+        var kept = row.Changes.Where(c => !RegressionRowFilter.IsPackageNoiseChange(c)).ToList();
+        return kept.Count == row.Changes.Count ? row : row with { Changes = kept };
+    }
+
+    // Null when "All files" is on; otherwise shows only source files (.h/.cpp/.cs), matching the churn Excel.
     private Func<string, bool>? BuildFileFilter(SubsystemRow row) =>
-        ShowAllFiles ? null : p => !FileNoiseFilter.IsIgnored(p, row.Repository, _ignoredFilePatterns);
+        ShowAllFiles ? null : FileNoiseFilter.IsSourceFile;
 
     private void UpdateAiSummary()
     {
@@ -592,7 +623,7 @@ public sealed partial class RegressionViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Export()
+    private async Task Export()
     {
         if (Rows.Count == 0)
         {
@@ -604,8 +635,8 @@ public sealed partial class RegressionViewModel : ObservableObject
         {
             Title = "Export code churn report",
             FileName = $"churn-report-{DateOnly.FromDateTime(From):yyyyMMdd}-{DateOnly.FromDateTime(To):yyyyMMdd}",
-            DefaultExt = ".html",
-            Filter = "HTML report (*.html)|*.html|CSV (*.csv)|*.csv",
+            DefaultExt = ".xlsx",
+            Filter = "Excel workbook (*.xlsx)|*.xlsx|HTML report (*.html)|*.html|CSV (*.csv)|*.csv",
         };
         if (dlg.ShowDialog() != true)
             return;
@@ -613,11 +644,20 @@ public sealed partial class RegressionViewModel : ObservableObject
         try
         {
             var report = BuildCurrentReport();
-            var isCsv = dlg.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
-            var content = isCsv ? _reportBuilder.BuildCsv(report) : _reportBuilder.BuildHtml(report);
-            File.WriteAllText(dlg.FileName, content, Encoding.UTF8);
+            if (dlg.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+            {
+                StatusMessage = "Matching test cases for the workbook\u2026";
+                var matches = await MatchWorkbookTestCasesAsync(report);
+                File.WriteAllBytes(dlg.FileName, _xlsx.BuildXlsx(report, matches));
+            }
+            else
+            {
+                var isCsv = dlg.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+                var content = isCsv ? _reportBuilder.BuildCsv(report) : _reportBuilder.BuildHtml(report);
+                File.WriteAllText(dlg.FileName, content, Encoding.UTF8);
+            }
             StatusMessage = $"Exported {Rows.Count} row(s) to {dlg.FileName}";
-            _logger.Info("Regression", $"Churn report exported ({(isCsv ? "csv" : "html")}) to {dlg.FileName}");
+            _logger.Info("Regression", $"Churn report exported to {dlg.FileName}");
         }
         catch (Exception ex)
         {
@@ -645,17 +685,72 @@ public sealed partial class RegressionViewModel : ObservableObject
             StatusMessage = $"Emailing report to {Recipients}\u2026";
             var report = BuildCurrentReport();
             var html = _reportBuilder.BuildHtml(report);
-            var csv = _reportBuilder.BuildCsv(report);
-            var csvName = $"churn-report-{report.From:yyyyMMdd}-{report.To:yyyyMMdd}.csv";
+            var matches = await MatchWorkbookTestCasesAsync(report);
+            var xlsx = _xlsx.BuildXlsx(report, matches);
+            var xlsxName = $"churn-report-{report.From:yyyyMMdd}-{report.To:yyyyMMdd}.xlsx";
             var subject = $"Code churn report \u00b7 {report.RangeText} \u00b7 {report.Rows.Count} component(s)";
             var recipients = Recipients;
-            await Task.Run(() => _mailer.Send(recipients, subject, html, csv, csvName));
+            await Task.Run(() => _mailer.Send(recipients, subject, html, xlsx, xlsxName,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             StatusMessage = $"Report emailed to {recipients}.";
         }
         catch (Exception ex)
         {
             StatusMessage = $"Email failed: {ex.Message}";
             _logger.Error("Regression", "Failed to email churn report.", ex);
+        }
+    }
+
+    // Best-effort impact-mapping matches for the workbook's "Impacted Test Cases" sheet; a failure
+    // (or a thin retrieval index) yields null so the export still produces the Code Churn sheet.
+    private async Task<IReadOnlyList<ImpactedTestCaseMatch>?> MatchWorkbookTestCasesAsync(ChurnReport report)
+    {
+        try
+        {
+            return await Task.Run(() => _matcher.MatchManyAsync(report.Rows, CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Regression", $"Workbook test-case matching failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private bool CanSummarizeWithAi() => !IsAiBusy;
+
+    /// <summary>Regenerates the scope summary using the diff-grounded LLM summarizer (on-demand).</summary>
+    [RelayCommand(CanExecute = nameof(CanSummarizeWithAi))]
+    private async Task SummarizeWithAiAsync()
+    {
+        if (Rows.Count == 0)
+        {
+            StatusMessage = "Nothing to summarize \u2014 load a scope first.";
+            return;
+        }
+
+        IsAiBusy = true;
+        StatusMessage = "Generating AI summary\u2026";
+        try
+        {
+            var summary = await _llmSummarizer.SummarizeReleaseAsync(BuildCurrentReport(), CancellationToken.None);
+            AiSummaryHeadline = summary.Headline;
+            var bullets = summary.Highlights.Count == 0
+                ? ""
+                : string.Join("\n", summary.Highlights.Select(h => "\u2022 " + h));
+            AiSummaryText = string.IsNullOrWhiteSpace(summary.Narrative)
+                ? bullets
+                : summary.Narrative + (bullets.Length > 0 ? "\n\n" + bullets : "");
+            IsSummaryExpanded = true;
+            StatusMessage = "AI summary ready.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"AI summary failed: {ex.Message}";
+            _logger.Error("Regression", "AI summary generation failed.", ex);
+        }
+        finally
+        {
+            IsAiBusy = false;
         }
     }
 }

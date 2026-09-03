@@ -38,6 +38,8 @@
   <ItemGroup>
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
     <ProjectReference Include="..\TestController.Api\TestController.Api.csproj" />
+    <ProjectReference Include="..\TestController.Reporting\TestController.Reporting.csproj" />
+    <ProjectReference Include="..\TestController.Impact\TestController.Impact.csproj" />
   </ItemGroup>
 
   <ItemGroup>

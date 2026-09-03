@@ -245,10 +245,19 @@ public partial class App : Application
                 // have their own DI container per the "two front doors, one engine" keystone; no
                 // cross-process singleton.
                 services.AddAdoRegressionIngest();
+                TestControllerGrpc.Ado.Reporting.ReportingServiceCollectionExtensions.AddChurnXlsxReporting(services);
                 services.TryAddSingleton<TestControllerGrpc.Services.IRegressionDataProvider, TestControllerGrpc.Services.MockRegressionDataProvider>();
                 services.AddSingleton<TestControllerGrpc.Services.IRegressionReportMailer, TestControllerGrpc.Services.RegressionReportMailer>();
                 services.AddTransient<TestControllerGrpc.ViewModels.Regression.AdoSignInViewModel>();
                 services.AddSingleton<TestControllerGrpc.ViewModels.Regression.RegressionViewModel>();
+
+                // Impact test mapping engine (docs/AzureIntegration/ImpactMapping-Copilot-BuildGuide.md).
+                // Reader: the desktop host consumes the index but never writes it — the WebApi host owns
+                // maintenance, so at most one writer touches the SQLite file.
+                TestControllerGrpc.Core.Impact.ImpactServiceCollectionExtensions.AddImpactMapping(
+                    services, ctx.Configuration, TestControllerGrpc.Core.Impact.ImpactHostRole.Reader);
+                services.AddSingleton<TestControllerGrpc.ViewModels.Regression.ImpactMappingViewModel>();
+                services.AddTransient<TestControllerGrpc.Views.Regression.ImpactMappingView>();
             })
             .Build();
 

@@ -80,8 +80,8 @@ public sealed class AdoOptions
     /// <summary>Branch to preselect in the switcher on load (must match a live branch name). Empty/not-found falls back to "(all branches)".</summary>
     public string? DefaultBranch { get; set; }
 
-    /// <summary>Globs for files to hide from the modified-files list (pipeline yaml, shared configs). The repo's own &lt;RepoName&gt;.yaml is always ignored.</summary>
-    public List<string> IgnoredFilePatterns { get; set; } = ["*.yml", "*.yaml"];
+    /// <summary>Globs for files to hide from the modified-files list (pipeline yaml, package manifests, shared configs). The repo's own &lt;RepoName&gt;.yaml is always ignored.</summary>
+    public List<string> IgnoredFilePatterns { get; set; } = ["*.yml", "*.yaml", "*Universal-Package*.json"];
 
     /// <summary>Entra tenant id — required for ServicePrincipal and Interactive modes.</summary>
     public string? TenantId { get; set; }

@@ -12,6 +12,7 @@
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
     <ProjectReference Include="..\TestController.Api\TestController.Api.csproj" />
     <ProjectReference Include="..\TestController.Persistence\TestController.Persistence.csproj" />
+    <ProjectReference Include="..\TestController.Impact\TestController.Impact.csproj" />
   </ItemGroup>
 
   <ItemGroup>

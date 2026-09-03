@@ -422,7 +422,12 @@ public sealed class ComponentChangeCollector
         try
         {
             var files = await _git.GetCommitChangesAsync(project, repoId, commitId, ct);
-            return files.Select(f => f.Path).ToList();
+            // Drop package-manifest / pipeline noise (Universal-Package.json, *.yml, etc.) so only real
+            // source/interface changes surface in the grid, report, and LLM grounding.
+            return files
+                .Select(f => f.Path)
+                .Where(p => !FileNoiseFilter.IsIgnored(p, null, _options.IgnoredFilePatterns))
+                .ToList();
         }
         catch (Exception ex)
         {

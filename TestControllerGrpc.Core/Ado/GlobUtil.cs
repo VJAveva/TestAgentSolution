@@ -43,4 +43,11 @@ public static class FileNoiseFilter
                     return true;
         return false;
     }
+
+    /// <summary>True only for source files worth listing (.h/.cpp/.cs); excludes folders and non-source files.</summary>
+    public static bool IsSourceFile(string? path) =>
+        !string.IsNullOrWhiteSpace(path)
+        && (path.EndsWith(".h", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".cpp", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase));
 }

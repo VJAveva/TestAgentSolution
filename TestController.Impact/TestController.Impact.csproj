@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Files use explicit file-scoped namespaces TestControllerGrpc.Core.Impact.*; this keeps the
+         folder-derived default in sync so both hosts and tests reference the same namespaces as Core. -->
+    <RootNamespace>TestControllerGrpc.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <!-- Pin patched SQLitePCLRaw to override vulnerable transitive 2.1.11 (GHSA-2m69-gcr7-jv3q) pulled by EF Core Sqlite. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <!-- Roslyn: the one authorised parser dependency (P10 change-document builder). -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <!-- ML.NET: authorised for the optional ranker-mode score calibrator only (P19). -->
+    <PackageReference Include="Microsoft.ML" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Composition-root support for AddImpactMapping (P25): config binding + typed HttpClient. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestController.WebApi.Tests" />
+  </ItemGroup>
+
+</Project>

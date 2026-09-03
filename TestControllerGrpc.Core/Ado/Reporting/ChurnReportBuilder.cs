@@ -18,7 +18,7 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
     public string BuildCsv(ChurnReport report)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("#,Component,Category,Subsystem,Repository,Branch,FilesModified,PullRequests,Commits,Automated,WorkItems,Risk,BuildNumber,LatestOkBuild,RepositoryUrl,Summary,ImpactedFunctionality,TestUseCases");
+        sb.AppendLine("#,Component,Category,Subsystem,Repository,Branch,FilesModified,PullRequests,Commits,Automated,WorkItems,Risk,BuildNumber,LatestOkBuild,RepositoryUrl,Summary,ImpactedFunctionality,TestUseCases,WorkItemLinks,ModifiedFiles,ChangeLinks");
 
         var n = 1;
         foreach (var r in report.Rows)
@@ -49,6 +49,9 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
                 summary,
                 Join(r.RegressionAreas),
                 Join(r.UseCases),
+                WorkItemsText(r),
+                FilesText(r),
+                ChangeLinksText(r),
             };
             sb.AppendLine(string.Join(",", fields.Select(Csv)));
             n++;
@@ -89,7 +92,7 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
         sb.Append("<div style=\"padding:8px 24px 24px;\">");
         sb.Append("<table style=\"width:100%;border-collapse:collapse;font-size:12px;\">");
         sb.Append("<thead><tr style=\"text-align:left;color:#726d9b;border-bottom:2px solid #e2e2ea;\">");
-        foreach (var h in new[] { "#", "Component", "Category", "Repo", "Branch", "Subsystem (Solutions)", "Files", "PR", "Commit", "Auto", "WI", "Risk", "Latest OK", "Summary", "Impacted Functionality", "Test Use Cases" })
+        foreach (var h in new[] { "#", "Component", "Category", "Repo", "Branch", "Subsystem (Solutions)", "Files", "PR", "Commit", "Auto", "WI", "Risk", "Latest OK", "Summary", "Impacted Functionality", "Test Use Cases", "Work Items", "Files Changed" })
             sb.Append($"<th style=\"padding:6px 8px;\">{Enc(h)}</th>");
         sb.Append("</tr></thead><tbody>");
 
@@ -129,6 +132,8 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
             sb.Append($"<td style=\"padding:6px 8px;color:#444;\">{Enc(Truncate(summary, 90))}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:#4b3f8f;min-width:150px;\">{Enc(JoinOrDash(r.RegressionAreas))}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:#00697a;min-width:150px;\">{Enc(JoinOrDash(r.UseCases))}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;min-width:150px;\">{WorkItemsHtml(r)}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;color:#444;font-family:Consolas,monospace;font-size:11px;max-width:240px;word-break:break-word;\">{FilesHtml(r)}</td>");
             sb.Append("</tr>");
             n++;
         }
@@ -153,6 +158,52 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
 
     private static string JoinOrDash(IReadOnlyList<string>? items) =>
         items is { Count: > 0 } ? string.Join("; ", items) : "\u2014";
+
+    private static IReadOnlyList<RegressionWorkItemRef> DistinctWorkItems(SubsystemRow r) =>
+        r.Changes.SelectMany(c => c.WorkItems).GroupBy(w => w.Id).Select(g => g.First()).ToList();
+
+    private static string WorkItemLabel(RegressionWorkItemRef w) => w.Kind switch
+    {
+        RegressionWorkItemKind.Bug => $"Bug {w.Id}",
+        RegressionWorkItemKind.Story => $"User Story {w.Id}",
+        RegressionWorkItemKind.Feature => $"Feature {w.Id}",
+        RegressionWorkItemKind.Ims => $"IMS {w.Id}",
+        _ => $"Work Item {w.Id}",
+    };
+
+    // CSV: "User Story 4105526 (url); Bug 123 (url)".
+    private static string WorkItemsText(SubsystemRow r) =>
+        DistinctWorkItems(r) is { Count: > 0 } wis
+            ? string.Join("; ", wis.Select(w => string.IsNullOrEmpty(w.Url) ? WorkItemLabel(w) : $"{WorkItemLabel(w)} ({w.Url})"))
+            : "";
+
+    // HTML: linked work-item chips.
+    private static string WorkItemsHtml(SubsystemRow r)
+    {
+        var wis = DistinctWorkItems(r);
+        return wis.Count == 0 ? "\u2014" : string.Join(", ", wis.Select(w => string.IsNullOrEmpty(w.Url)
+            ? Enc(WorkItemLabel(w))
+            : $"<a href=\"{Enc(w.Url)}\" style=\"color:#3b5bdb;text-decoration:none;\">{Enc(WorkItemLabel(w))}</a>"));
+    }
+
+    // Real modified source/interface files (package-manifest noise filtered upstream in the collector).
+    private static string FilesText(SubsystemRow r) =>
+        r.FilesModified is { Count: > 0 } ? string.Join("; ", r.FilesModified) : "";
+
+    // Azure DevOps PR/commit links for the change set (Excel export column).
+    private static string ChangeLinksText(SubsystemRow r) =>
+        string.Join("; ", r.Changes.Select(c => c.Url).Where(u => !string.IsNullOrEmpty(u)).Distinct());
+
+    private static string FilesHtml(SubsystemRow r)
+    {
+        if (r.FilesModified is not { Count: > 0 })
+            return "\u2014";
+        // Email clients choke on huge cells — show a few files here; the CSV carries the full list.
+        const int max = 3;
+        var body = string.Join("<br>", r.FilesModified.Take(max).Select(Enc));
+        var extra = r.FilesModified.Count - max;
+        return extra > 0 ? $"{body}<br><span style=\"color:#999;\">\u2026 +{extra} more (see CSV)</span>" : body;
+    }
 
     private static string Enc(string? value) => WebUtility.HtmlEncode(value ?? "");
 

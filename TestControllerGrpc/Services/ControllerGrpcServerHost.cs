@@ -24,11 +24,14 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
 {
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IEventAggregator _events;
+    private readonly IAppLogger _appLogger;
     private readonly ILogger<ControllerGrpcServerHost> _logger;
     private readonly int _port;
     private readonly int _keepAliveHours;
     private readonly int _maxReceiveMessageSize;
     private readonly int _maxSendMessageSize;
+    private readonly ControllerTimeoutOptions _timeouts;
+    private readonly string? _agentSharedSecret;
     private WebApplication? _app;
     private Task? _serverTask;
 
@@ -36,10 +39,12 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
         IAgentGrpcDispatcher dispatcher,
         IEventAggregator events,
         IConfiguration config,
+        IAppLogger appLogger,
         ILogger<ControllerGrpcServerHost> logger)
     {
         _dispatcher = dispatcher;
         _events = events;
+        _appLogger = appLogger;
         _logger = logger;
         _port = config.GetValue<int>("ControllerGrpcPort", 5100);
         // Default (24h) matches Controller:Timeouts:OuterSafetyNetTimeoutHours so a
@@ -50,10 +55,13 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
         // Bound to the same Controller:Timeouts section used by the outbound
         // agent channels, so a fleet running past ~100 agents can raise both
         // directions' message-size ceiling with a single appsettings edit.
-        var timeouts = config.GetSection(ControllerTimeoutOptions.SectionName).Get<ControllerTimeoutOptions>()
+        _timeouts = config.GetSection(ControllerTimeoutOptions.SectionName).Get<ControllerTimeoutOptions>()
             ?? new ControllerTimeoutOptions();
-        _maxReceiveMessageSize = timeouts.MaxReceiveMessageSizeBytes;
-        _maxSendMessageSize = timeouts.MaxSendMessageSizeBytes;
+        _maxReceiveMessageSize = _timeouts.MaxReceiveMessageSizeBytes;
+        _maxSendMessageSize = _timeouts.MaxSendMessageSizeBytes;
+        // Agent shared secret enforced by AgentAuthInterceptor. Empty = fail-open.
+        _agentSharedSecret = config["Controller:AgentSharedSecret"]
+            ?? Environment.GetEnvironmentVariable("AGENT_SHARED_SECRET");
     }
 
     public Task StartAsync(CancellationToken ct)
@@ -83,11 +91,16 @@ public sealed class ControllerGrpcServerHost : IHostedService, IDisposable, IAsy
             {
                 o.MaxReceiveMessageSize = _maxReceiveMessageSize;
                 o.MaxSendMessageSize = _maxSendMessageSize;
+                // Authenticate inbound agent RPCs against the configured shared secret.
+                o.Interceptors.Add<AgentAuthInterceptor>();
             });
 
             // Share singletons from WPF DI into the gRPC server's DI container
             builder.Services.AddSingleton(_dispatcher);
             builder.Services.AddSingleton(_events);
+            builder.Services.AddSingleton(_appLogger);
+            builder.Services.AddSingleton(_timeouts);
+            builder.Services.AddSingleton(new AgentAuthOptions { SharedSecret = _agentSharedSecret });
 
             // Reduce Kestrel/ASP.NET noise
             builder.Logging.SetMinimumLevel(LogLevel.Warning);

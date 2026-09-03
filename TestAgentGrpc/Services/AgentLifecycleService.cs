@@ -151,7 +151,10 @@ public sealed class AgentLifecycleService : IHostedService, IDisposable
         {
             try
             {
-                await Task.Delay(interval, ct);
+                // ±10% jitter desynchronizes the fleet's heartbeat/re-registration
+                // cadence so a controller restart isn't met by a synchronized storm.
+                var jitterMs = interval.TotalMilliseconds * (0.9 + Random.Shared.NextDouble() * 0.2);
+                await Task.Delay(TimeSpan.FromMilliseconds(jitterMs), ct);
 
                 // Re-register if previous registration failed or controller may have restarted
                 if (!_registeredWithController || consecutiveFailures >= 3)

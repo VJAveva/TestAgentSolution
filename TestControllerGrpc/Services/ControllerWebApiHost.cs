@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using TestController.Api;
 using TestController.Api.Security;
 using TestController.Api.Services;
+using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
@@ -32,6 +33,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly BuildResultsConfig _resultsConfig;
     private readonly AgentLockManager _lockManager;
     private readonly IAppLogger _appLogger;
+    private readonly IRegressionImpactMatcher _impactMatcher;
     private readonly ILogger<ControllerWebApiHost> _logger;
     private readonly IConfiguration _config;
     private readonly int _port;
@@ -50,6 +52,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         BuildResultsConfig resultsConfig,
         AgentLockManager lockManager,
         IAppLogger appLogger,
+        IRegressionImpactMatcher impactMatcher,
         IConfiguration config,
         ILogger<ControllerWebApiHost> logger)
     {
@@ -64,6 +67,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _resultsConfig = resultsConfig;
         _lockManager = lockManager;
         _appLogger = appLogger;
+        _impactMatcher = impactMatcher;
         _logger = logger;
         _config = config;
         _port = config.GetValue<int>("WebApiPort", 5200);
@@ -135,6 +139,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_resultsConfig);
             builder.Services.AddSingleton(_lockManager);
             builder.Services.AddSingleton(_appLogger);
+
+            // Bridge the impact-mapping matcher (with its engine + index) from the WPF container so the
+            // React client on this embedded host gets the same "Impacted Test Cases" data as the desktop.
+            builder.Services.AddSingleton(_impactMatcher);
 
             // RBAC feature (identity, authorization, audit, persistence, mode transition)
             builder.Services.AddRbacFeature(builder.Configuration);

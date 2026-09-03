@@ -39,6 +39,17 @@ public sealed class AgentSettings
     public int RegistrationRetryCount { get; set; } = 3;
     public int RegistrationRetryIntervalSeconds { get; set; } = 30;
 
+    /// <summary>Per-attempt deadline for the Register gRPC call (seconds). Default: 20.</summary>
+    public int RegistrationCallTimeoutSeconds { get; set; } = 20;
+
+    /// <summary>
+    /// Optional shared secret sent as the <c>x-agent-token</c> gRPC metadata header on
+    /// every controller call. Must match Controller:AgentSharedSecret on the controller.
+    /// When empty, no token is sent (controller must also be unconfigured / fail-open).
+    /// Prefer supplying via the AGENT_SHARED_SECRET environment variable.
+    /// </summary>
+    public string? AgentSharedSecret { get; set; }
+
     // Heartbeat
     public int HeartbeatIntervalSeconds { get; set; } = 15;
 

@@ -174,6 +174,11 @@ builder.Services.AddSignalR(options =>
 });
 builder.Services.AddScoped<Microsoft.AspNetCore.SignalR.IHubFilter, TestController.Api.Hubs.HubExceptionFilter>();
 
+// Impact test mapping engine (docs/AzureIntegration/ImpactMapping-Copilot-BuildGuide.md).
+// ReaderWriter: this standalone host owns index maintenance (at most one writer per SQLite file).
+TestControllerGrpc.Core.Impact.ImpactServiceCollectionExtensions.AddImpactMapping(
+    builder.Services, builder.Configuration, TestControllerGrpc.Core.Impact.ImpactHostRole.ReaderWriter);
+
 // CORS: production environments should specify allowed origins explicitly.
 // Default policy allows all for development/single-machine scenarios.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
@@ -443,6 +448,10 @@ app.MapGroup("/api").MapAuthEndpoints().AllowAnonymous();
 app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 app.MapGroup("/api/tokens").MapTokenManagementEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
+
+// Impact test mapping engine: REST + SSE surface plus the progress hub.
+app.MapGroup("/api/impact-mapping").MapImpactMappingEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
+app.MapHub<TestController.WebApi.Hubs.ImpactProgressHub>("/hubs/impact");
 
 // Client-side error logs ingestion (WebClient AppLogPanel → server logs)
 app.MapPost("/api/clientlogs", async (HttpContext ctx, IAppLogger logger) =>

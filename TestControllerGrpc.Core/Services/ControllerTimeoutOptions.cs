@@ -67,6 +67,14 @@ public sealed class ControllerTimeoutOptions
     /// <summary>Max gRPC send message size (bytes) for channels/servers to agents. Default: 16 MB.</summary>
     public int MaxSendMessageSizeBytes { get; set; } = 16 * 1024 * 1024;
 
+    /// <summary>
+    /// Maximum number of distinct agents that may be registered. New registrations
+    /// beyond this cap are rejected with ResourceExhausted to bound resource use and
+    /// blunt a registration-flood attack. Re-registrations of existing agents are
+    /// always allowed. Default: 1000.
+    /// </summary>
+    public int MaxRegisteredAgents { get; set; } = 1000;
+
     // ── Monitor polling ──
 
     /// <summary>Telemetry polling interval (milliseconds). Default: 2000.</summary>

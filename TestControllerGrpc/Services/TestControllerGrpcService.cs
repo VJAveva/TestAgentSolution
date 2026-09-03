@@ -18,38 +18,63 @@ namespace TestControllerGrpc.Services;
 /// </summary>
 public sealed class TestControllerGrpcService : TestControllerService.TestControllerServiceBase
 {
+    private const int MaxAgentNameLength = 128;
+    private const int DefaultAgentGrpcPort = 5200;
+
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly IEventAggregator _events;
     private readonly ILogger<TestControllerGrpcService> _logger;
     private readonly IAppLogger _appLogger;
+    private readonly ControllerTimeoutOptions _timeouts;
 
     public TestControllerGrpcService(
         IAgentGrpcDispatcher dispatcher,
         IEventAggregator events,
         ILogger<TestControllerGrpcService> logger,
-        IAppLogger appLogger)
+        IAppLogger appLogger,
+        ControllerTimeoutOptions timeouts)
     {
         _dispatcher = dispatcher;
         _events = events;
         _logger = logger;
         _appLogger = appLogger;
+        _timeouts = timeouts;
     }
 
     public override Task<Empty> Register(TestAgentRef request, ServerCallContext context)
         => GrpcGuard.RunAsync(_appLogger, "ControllerGrpc.Register", context, () =>
         {
-        // Use the explicit endpoint when provided; fall back to peer-derived address
-        var agentGrpcAddress = !string.IsNullOrEmpty(request.Endpoint)
-            ? request.Endpoint
-            : ExtractAgentAddress(context.Peer, request.Name);
+        // ── Server-side validation: never trust the client. ──
+        var agentName = request.Name?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(agentName))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Agent name is required"));
+        if (agentName.Length > MaxAgentNameLength)
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                $"Agent name exceeds {MaxAgentNameLength} characters"));
+
+        // Prefer the agent-advertised endpoint, but reject non-routable/loopback
+        // values (a remote agent advertising localhost would make the controller
+        // call itself); fall back to the peer-derived address in that case.
+        var agentGrpcAddress = ResolveAgentAddress(request.Endpoint, context.Peer, agentName);
+
+        // Capacity guard: cap NEW registrations so a registration flood cannot
+        // exhaust controller resources.
+        var isNew = _dispatcher.GetAgentAddress(agentName) is null;
+        if (isNew && _dispatcher.RegisteredAgentCount >= _timeouts.MaxRegisteredAgents)
+        {
+            _appLogger.Warn("ControllerGrpc.Register",
+                $"Rejected '{agentName}': agent capacity {_timeouts.MaxRegisteredAgents} reached");
+            throw new RpcException(new Status(StatusCode.ResourceExhausted,
+                $"Controller agent capacity ({_timeouts.MaxRegisteredAgents}) reached"));
+        }
 
         _logger.LogInformation(
             "Agent registered via gRPC: Name={Name}, Endpoint={Endpoint}, Peer={Peer}",
-            request.Name, agentGrpcAddress, context.Peer);
+            agentName, agentGrpcAddress, context.Peer);
 
         // Register under the friendly name so WatchList XML AgentName references resolve
         // (dispatcher publishes AgentRegisteredEvent internally)
-        _dispatcher.RegisterAgent(request.Name, agentGrpcAddress);
+        _dispatcher.RegisterAgent(agentName, agentGrpcAddress);
 
         return Task.FromResult(new Empty());
         });
@@ -141,7 +166,7 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
                 {
                     var host = afterProtocol[..lastColon];
                     // For IPv6 addresses like "[::1]", keep brackets
-                    return $"http://{host}:5200";
+                    return $"http://{host}:{DefaultAgentGrpcPort}";
                 }
             }
         }
@@ -151,7 +176,36 @@ public sealed class TestControllerGrpcService : TestControllerService.TestContro
             _logger.LogDebug(ex, "Failed to parse agent address from peer string: {Peer}", peer);
         }
 
-        // Fallback: assume hostname:5200
-        return $"http://{agentName}:5200";
+        // Fallback: assume hostname:default gRPC port
+        return $"http://{agentName}:{DefaultAgentGrpcPort}";
+    }
+
+    /// <summary>
+    /// Chooses the callback address for an agent: the advertised endpoint when it is
+    /// absolute and routable, otherwise the address derived from the gRPC peer.
+    /// </summary>
+    private string ResolveAgentAddress(string? advertisedEndpoint, string peer, string agentName)
+    {
+        if (!string.IsNullOrWhiteSpace(advertisedEndpoint) &&
+            Uri.TryCreate(advertisedEndpoint, UriKind.Absolute, out var uri) &&
+            !IsLoopbackHost(uri.Host))
+        {
+            return advertisedEndpoint;
+        }
+
+        if (!string.IsNullOrWhiteSpace(advertisedEndpoint))
+            _logger.LogWarning(
+                "Agent {Name} advertised non-routable endpoint '{Ep}' — deriving from peer {Peer}",
+                agentName, advertisedEndpoint, peer);
+
+        return ExtractAgentAddress(peer, agentName);
+    }
+
+    private static bool IsLoopbackHost(string host)
+    {
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var bare = host.Trim('[', ']');
+        return System.Net.IPAddress.TryParse(bare, out var ip) && System.Net.IPAddress.IsLoopback(ip);
     }
 }

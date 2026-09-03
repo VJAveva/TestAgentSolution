@@ -2,6 +2,7 @@ using System.Net.Security;
 using System.Security.Authentication;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Options;
 using TestControllerGrpc.Services;
@@ -20,8 +21,12 @@ namespace TestAgentGrpc.Clients;
 /// </summary>
 public sealed class TestControllerClient : IDisposable
 {
+    private const string AgentTokenHeader = "x-agent-token";
+
     private readonly AgentSettings _settings;
     private readonly ILogger<TestControllerClient> _logger;
+    private readonly string? _agentToken;
+    private readonly SemaphoreSlim _registrationGate = new(1, 1);
     private GrpcChannel? _channel;
     private readonly object _channelLock = new();
 
@@ -29,6 +34,9 @@ public sealed class TestControllerClient : IDisposable
     {
         _settings = settings.Value;
         _logger   = logger;
+        _agentToken = string.IsNullOrEmpty(_settings.AgentSharedSecret)
+            ? Environment.GetEnvironmentVariable("AGENT_SHARED_SECRET")
+            : _settings.AgentSharedSecret;
     }
 
     private GrpcChannel GetOrCreateChannel()
@@ -80,7 +88,24 @@ public sealed class TestControllerClient : IDisposable
         }
     }
 
-    private TestControllerService.TestControllerServiceClient Client => new(GetOrCreateChannel());
+    private TestControllerService.TestControllerServiceClient Client
+    {
+        get
+        {
+            var channel = GetOrCreateChannel();
+            if (string.IsNullOrEmpty(_agentToken))
+                return new(channel);
+
+            // Attach the shared-secret header to every call so the controller's
+            // AgentAuthInterceptor can authenticate this agent.
+            var invoker = channel.Intercept(headers =>
+            {
+                headers.Add(AgentTokenHeader, _agentToken);
+                return headers;
+            });
+            return new(invoker);
+        }
+    }
 
     /// <summary>
     /// Forces recreation of the gRPC channel (e.g., after detecting persistent failures).
@@ -106,11 +131,36 @@ public sealed class TestControllerClient : IDisposable
     /// </summary>
     public async Task<(bool Success, string? Error)> RegisterAsync(CancellationToken ct = default)
     {
+        // Serialize registration so a manual tray Re-Register can't race the
+        // heartbeat loop's re-registration on the shared channel.
+        try { await _registrationGate.WaitAsync(ct); }
+        catch (OperationCanceledException) { return (false, "Registration cancelled (shutdown)"); }
+        try
+        {
+            return await RegisterCoreAsync(ct);
+        }
+        finally
+        {
+            _registrationGate.Release();
+        }
+    }
+
+    private async Task<(bool Success, string? Error)> RegisterCoreAsync(CancellationToken ct)
+    {
         var agentName = _settings.AgentName;
         var endpoint  = _settings.GetResolvedEndpoint();
         var retries   = _settings.RegistrationRetryCount;
         var delay     = TimeSpan.FromSeconds(_settings.RegistrationRetryIntervalSeconds);
         string? lastError = null;
+
+        // Cancellation-safe, jittered inter-attempt delay (spreads a fleet-wide
+        // retry storm when the controller restarts). Returns false if cancelled.
+        async Task<bool> WaitBeforeRetryAsync(int attempt)
+        {
+            if (attempt >= retries) return true;
+            try { await Task.Delay(JitteredDelay(delay), ct); return true; }
+            catch (OperationCanceledException) { return false; }
+        }
 
         // ── Checkpoint 1: Validate all registration parameters ─────────
         var validationErrors = ValidateRegistrationParams(agentName, endpoint);
@@ -152,7 +202,9 @@ public sealed class TestControllerClient : IDisposable
                     Name     = agentName,
                     State    = AgentState.Ready,
                     Endpoint = endpoint,
-                }, cancellationToken: ct);
+                },
+                deadline: DateTime.UtcNow.AddSeconds(_settings.RegistrationCallTimeoutSeconds),
+                cancellationToken: ct);
 
                 // ── Checkpoint 4: Registration confirmed ───────────────
                 _logger.LogInformation(
@@ -166,21 +218,27 @@ public sealed class TestControllerClient : IDisposable
             }
             catch (RpcException ex)
             {
+                if (ct.IsCancellationRequested) return (false, "Registration cancelled (shutdown)");
                 lastError = $"gRPC {ex.StatusCode}: {ex.Status.Detail} ({ex.Message})";
                 _logger.LogWarning(
                     "[Checkpoint 3/4 FAIL] Attempt {N}: {Error}", attempt + 1, lastError);
                 CrashDumpHelper.AppendCrashLog(
                     $"[Registration] ATTEMPT_{attempt + 1}_FAILED: {lastError}");
-                if (attempt < retries) await Task.Delay(delay, ct);
+                if (!await WaitBeforeRetryAsync(attempt)) return (false, lastError);
             }
             catch (HttpRequestException ex)
             {
+                if (ct.IsCancellationRequested) return (false, "Registration cancelled (shutdown)");
                 lastError = $"HTTP error: {ex.Message} (InnerException: {ex.InnerException?.Message})";
                 _logger.LogWarning(
                     "[Checkpoint 3/4 FAIL] Attempt {N}: {Error}", attempt + 1, lastError);
                 CrashDumpHelper.AppendCrashLog(
                     $"[Registration] ATTEMPT_{attempt + 1}_FAILED (HTTP): {lastError}");
-                if (attempt < retries) await Task.Delay(delay, ct);
+                if (!await WaitBeforeRetryAsync(attempt)) return (false, lastError);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return (false, "Registration cancelled (shutdown)");
             }
             catch (Exception ex)
             {
@@ -189,7 +247,7 @@ public sealed class TestControllerClient : IDisposable
                     "[Checkpoint 3/4 FAIL] Attempt {N}: {Error}", attempt + 1, lastError);
                 CrashDumpHelper.AppendCrashLog(
                     $"[Registration] ATTEMPT_{attempt + 1}_FAILED (Unexpected): {lastError}");
-                if (attempt < retries) await Task.Delay(delay, ct);
+                if (!await WaitBeforeRetryAsync(attempt)) return (false, lastError);
             }
         }
 
@@ -202,6 +260,13 @@ public sealed class TestControllerClient : IDisposable
             $"LastError={lastError}");
         return (false, lastError);
     }
+
+    /// <summary>
+    /// Applies full jitter to a base retry delay (range [0.5x, 1.5x)) so a fleet of
+    /// agents doesn't re-register in lockstep after a controller restart.
+    /// </summary>
+    private static TimeSpan JitteredDelay(TimeSpan baseDelay) =>
+        TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * (0.5 + Random.Shared.NextDouble()));
 
     /// <summary>
     /// Validates that all registration parameters are non-empty and well-formed.
@@ -338,6 +403,7 @@ public sealed class TestControllerClient : IDisposable
 
     public void Dispose()
     {
+        _registrationGate.Dispose();
         lock (_channelLock)
         {
             _channel?.Dispose();

@@ -163,7 +163,8 @@ public static class CrashDumpHelper
         {
             var path = CrashLogPath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {text}{Environment.NewLine}");
+            var safe = SecurityRedactor.Redact(text) ?? text;
+            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {safe}{Environment.NewLine}");
         }
         catch { /* never let logging crash us */ }
     }

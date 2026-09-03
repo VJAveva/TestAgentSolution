@@ -594,3 +594,29 @@ export interface ChurnSummary {
   narrative: string;
 }
 
+/** One Test Case matched to an impacted component by the impact-mapping engine (grid row-expand + churn Excel). */
+export interface ImpactedTestCaseMatch {
+  impactedArea: string;
+  testCaseId: number;
+  testCaseTitle: string;
+  description?: string;
+  testCaseUrl?: string;
+  parentFeatureId: number;
+  matchType: string;
+  confidencePercent: number;
+  matchReason: string;
+}
+
+/** A functional test recommended for a change; `relevant` when its name matches the change's themes. */
+export interface RecommendedTest {
+  name: string;
+  relevant: boolean;
+}
+
+/** Row-expand payload: engine matches plus the offline change summary + recommended tests fallback. */
+export interface ImpactedComponentAnalysis {
+  matches: ImpactedTestCaseMatch[];
+  changeSummary: string;
+  recommendedTests: RecommendedTest[];
+}
+

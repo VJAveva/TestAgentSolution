@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, RotateCw, ChevronRight, ChevronDown, Download, Mail, Brain } from 'lucide-react';
+import { AlertTriangle, RotateCw, ChevronRight, ChevronDown, Download, Mail, Brain, Sparkles } from 'lucide-react';
 import { useRegression } from '../../hooks/useRegression';
 import { useRegressionStore } from '../../stores/regressionStore';
-import type { RegressionBuildRef, RegressionCategoryKind, RegressionScopeKind, SubsystemRow } from '../../types/api';
+import type { RegressionBuildRef, RegressionCategoryKind, RegressionScopeKind, SubsystemRow, ImpactedComponentAnalysis } from '../../types/api';
 import {
   applyFilters,
   changeKindLabel,
@@ -13,6 +13,7 @@ import {
   summarizeComponent,
   workItemGroups,
 } from './helpers';
+import type { FilterState } from './helpers';
 
 const ALL_BRANCHES = '(all branches)';
 const ALL_COMPONENTS = '(all components)';
@@ -59,7 +60,7 @@ function Toggle({ label, active, onClick, activeClass }: { label: string; active
 }
 
 export default function RegressionView() {
-  const { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, downloadReport, emailReport } = useRegression();
+  const { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, downloadReport, emailReport, summarizeWithAi } = useRegression();
   const consolidated = useRegressionStore((s) => s.consolidated);
   const scope = useRegressionStore((s) => s.scope);
   const syncStatus = useRegressionStore((s) => s.syncStatus);
@@ -70,16 +71,19 @@ export default function RegressionView() {
   const showRuntime = useRegressionStore((s) => s.showRuntime);
   const showConfig = useRegressionStore((s) => s.showConfig);
   const hideAutomated = useRegressionStore((s) => s.hideAutomated);
+  const showAllChanges = useRegressionStore((s) => s.showAllChanges);
   const filterBug = useRegressionStore((s) => s.filterBug);
   const filterStory = useRegressionStore((s) => s.filterStory);
   const filterIms = useRegressionStore((s) => s.filterIms);
   const setShowRuntime = useRegressionStore((s) => s.setShowRuntime);
   const setShowConfig = useRegressionStore((s) => s.setShowConfig);
   const setHideAutomated = useRegressionStore((s) => s.setHideAutomated);
+  const setShowAllChanges = useRegressionStore((s) => s.setShowAllChanges);
   const setFilterBug = useRegressionStore((s) => s.setFilterBug);
   const setFilterStory = useRegressionStore((s) => s.setFilterStory);
   const setFilterIms = useRegressionStore((s) => s.setFilterIms);
   const loading = useRegressionStore((s) => s.loading);
+  const aiLoading = useRegressionStore((s) => s.aiLoading);
   const error = useRegressionStore((s) => s.error);
 
   const [scopeKind, setScopeKind] = useState<RegressionScopeKind>('Weekly');
@@ -92,6 +96,8 @@ export default function RegressionView() {
   const [branch, setBranch] = useState<string | null>(null);
   const [selectedDefId, setSelectedDefId] = useState<number | null>(null);
   const [selectedComponentName, setSelectedComponentName] = useState<string | null>(null);
+  const [branchText, setBranchText] = useState<string>(ALL_BRANCHES);
+  const [componentText, setComponentText] = useState<string>('');
   const [inspectBuilds, setInspectBuilds] = useState<RegressionBuildRef[]>([]);
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
   const [focusedRow, setFocusedRow] = useState<SubsystemRow | null>(null);
@@ -106,6 +112,10 @@ export default function RegressionView() {
     fetchComponents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the searchable inputs in sync when the selection changes elsewhere (scope buttons, reset).
+  useEffect(() => { setBranchText(branch ?? ALL_BRANCHES); }, [branch]);
+  useEffect(() => { setComponentText(selectedComponentName ?? ''); }, [selectedComponentName]);
 
   const reload = (f: Date, t: Date, b: string | null) => {
     setFocusedRow(null);
@@ -180,10 +190,14 @@ export default function RegressionView() {
     setSelectedBuildId(null);
   };
 
-  const runExport = async (format: 'csv' | 'html') => {
+  const filterState: FilterState = {
+    showRuntime, showConfig, hideAutomated, showAllChanges, filterBug, filterStory, filterIms, component: selectedComponentName,
+  };
+
+  const runExport = async (format: 'csv' | 'html' | 'xlsx') => {
     try {
-      setStatusMessage(`Generating ${format.toUpperCase()} report…`);
-      await downloadReport(from, to, branch, format);
+      setStatusMessage(`Generating ${format.toUpperCase()} report\u2026`);
+      await downloadReport(from, to, branch, format, filterState);
       setStatusMessage(`${format.toUpperCase()} report downloaded.`);
     } catch (e) {
       setStatusMessage(`Export failed: ${e instanceof Error ? e.message : e}`);
@@ -194,7 +208,7 @@ export default function RegressionView() {
     if (!recipients.trim()) { setStatusMessage('Enter at least one recipient email.'); return; }
     try {
       setStatusMessage(`Emailing report to ${recipients}…`);
-      await emailReport(from, to, branch, recipients);
+      await emailReport(from, to, branch, recipients, filterState);
       setStatusMessage(`Report emailed to ${recipients}.`);
     } catch (e) {
       setStatusMessage(`Email failed: ${e instanceof Error ? e.message : e}`);
@@ -204,9 +218,9 @@ export default function RegressionView() {
   const rows = useMemo(
     () =>
       applyFilters(consolidated?.rows ?? [], {
-        showRuntime, showConfig, hideAutomated, filterBug, filterStory, filterIms, component: selectedComponentName,
+        showRuntime, showConfig, hideAutomated, showAllChanges, filterBug, filterStory, filterIms, component: selectedComponentName,
       }),
-    [consolidated, showRuntime, showConfig, hideAutomated, filterBug, filterStory, filterIms, selectedComponentName],
+    [consolidated, showRuntime, showConfig, hideAutomated, showAllChanges, filterBug, filterStory, filterIms, selectedComponentName],
   );
 
   const latestBuild = useMemo(() => {
@@ -269,26 +283,42 @@ export default function RegressionView() {
         <button onClick={applyRange} className="px-2.5 py-1 rounded text-xs font-medium border border-bdr text-text-secondary hover:bg-bg-surface">Apply</button>
 
         <span className="text-[10px] uppercase tracking-wider text-text-muted font-medium ml-2">Branch</span>
-        <select value={branch ?? ALL_BRANCHES} onChange={(e) => changeBranch(e.target.value)}
-          className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none max-w-[180px]">
-          <option value={ALL_BRANCHES}>{ALL_BRANCHES}</option>
-          {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-        </select>
+        <input list="branch-options" value={branchText}
+          onChange={(e) => {
+            const v = e.target.value;
+            setBranchText(v);
+            if (v === ALL_BRANCHES || branches.includes(v)) changeBranch(v);
+          }}
+          placeholder="type to search"
+          className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none max-w-[180px]" />
+        <datalist id="branch-options">
+          <option value={ALL_BRANCHES} />
+          {branches.map((b) => <option key={b} value={b} />)}
+        </datalist>
 
         <Toggle label="Runtime" active={showRuntime} onClick={() => setShowRuntime(!showRuntime)} activeClass="bg-acc-green/20 border-acc-green/50 text-acc-green" />
         <Toggle label="Config" active={showConfig} onClick={() => setShowConfig(!showConfig)} activeClass="bg-acc-blue/20 border-acc-blue/50 text-acc-blue" />
         <Toggle label="Human only" active={hideAutomated} onClick={() => setHideAutomated(!hideAutomated)} />
+        <Toggle label="All changes" active={showAllChanges} onClick={() => setShowAllChanges(!showAllChanges)} />
         <Toggle label="Bug" active={filterBug} onClick={() => setFilterBug(!filterBug)} />
         <Toggle label="Story" active={filterStory} onClick={() => setFilterStory(!filterStory)} />
         <Toggle label="IMS" active={filterIms} onClick={() => setFilterIms(!filterIms)} />
 
         <span className="text-[10px] uppercase tracking-wider text-text-muted font-medium ml-2">Focus</span>
-        <select value={selectedDefId ?? 0} onChange={(e) => onComponentPick(e.target.value)}
-          className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none max-w-[170px]"
-          title="Filter the grid to one component / pick a build to inspect">
-          <option value={0}>{ALL_COMPONENTS}</option>
-          {components.map((c) => <option key={c.definitionId} value={c.definitionId}>{c.name}</option>)}
-        </select>
+        <input list="component-options" value={componentText}
+          onChange={(e) => {
+            const v = e.target.value;
+            setComponentText(v);
+            if (v === '' || v === ALL_COMPONENTS) { onComponentPick('0'); return; }
+            const comp = components.find((c) => c.name === v);
+            if (comp) onComponentPick(String(comp.definitionId));
+          }}
+          placeholder={ALL_COMPONENTS}
+          title="Filter the grid to one component (type to search)"
+          className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none max-w-[170px]" />
+        <datalist id="component-options">
+          {components.map((c) => <option key={c.definitionId} value={c.name} />)}
+        </datalist>
         <select value={selectedBuildId ?? 0} onChange={(e) => onBuildPick(e.target.value)} disabled={!selectedDefId}
           className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none max-w-[190px] disabled:opacity-40"
           title="Inspect a specific build of the selected component">
@@ -297,9 +327,14 @@ export default function RegressionView() {
         </select>
 
         <div className="ml-auto flex items-center gap-2">
-          <input value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="report recipients"
-            className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none w-40" />
+          <button onClick={() => summarizeWithAi(from, to, branch, filterState)} disabled={aiLoading}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-acc-mauve/50 text-acc-mauve hover:bg-acc-mauve/10 disabled:opacity-40">
+            <Sparkles size={12} /> {aiLoading ? 'Summarizing\u2026' : 'AI Summary'}
+          </button>
+          <textarea value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="report recipients (comma/semicolon separated)" rows={2}
+            className="bg-bg-surface border border-bdr rounded text-text-primary text-xs px-2 py-1 outline-none w-72 resize-y align-top" />
           <button onClick={sendEmail} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-bdr text-text-secondary hover:bg-bg-surface"><Mail size={12} /> Email</button>
+          <button onClick={() => runExport('xlsx')} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-acc-green/50 text-acc-green hover:bg-acc-green/10"><Download size={12} /> Excel</button>
           <button onClick={() => runExport('csv')} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-bdr text-text-secondary hover:bg-bg-surface"><Download size={12} /> CSV</button>
           <button onClick={() => runExport('html')} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-bdr text-text-secondary hover:bg-bg-surface"><Download size={12} /> HTML</button>
           <button onClick={() => reload(from, to, branch)} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-bdr text-text-secondary hover:bg-bg-surface"><RotateCw size={12} /> Refresh</button>
@@ -493,10 +528,27 @@ function FragmentRow({ row, index, isOpen, onToggle }: { row: SubsystemRow; inde
 }
 
 function RowDetail({ row }: { row: SubsystemRow }) {
+  const { fetchTestMatches } = useRegression();
   const changes = sortedChanges(row);
   const groups = workItemGroups(row);
   const files = modifiedFileLinks(row);
   const tests = functionalTests(row);
+  const [analysis, setAnalysis] = useState<ImpactedComponentAnalysis | null>(null);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
+
+  // Lazily analyze this component's changes when the row expands (engine matches + offline fallback).
+  useEffect(() => {
+    let cancelled = false;
+    setMatchesLoading(true);
+    setMatchesError(null);
+    fetchTestMatches(row)
+      .then((a) => { if (!cancelled) setAnalysis(a); })
+      .catch((e) => { if (!cancelled) setMatchesError(e instanceof Error ? e.message : 'Failed to analyze changes'); })
+      .finally(() => { if (!cancelled) setMatchesLoading(false); });
+    return () => { cancelled = true; };
+  }, [row, fetchTestMatches]);
+
   return (
     <div className="flex flex-col gap-3 text-xs">
       {/* Component AI summary */}
@@ -515,6 +567,64 @@ function RowDetail({ row }: { row: SubsystemRow }) {
       <div className="rounded border border-acc-green/30 px-3 py-2">
         <span className="font-semibold text-text-secondary">✅ Functional tests to execute: </span>
         <span className="text-text-primary">{tests.length ? tests.join(', ') : '—'}</span>
+      </div>
+
+      {/* Impacted test cases (impact-mapping engine) with an offline change-analysis fallback */}
+      <div>
+        <div className="font-semibold text-text-secondary mb-1">
+          🎯 Impacted test cases for {row.component}{analysis && analysis.matches.length > 0 ? ` (${analysis.matches.length})` : ''}
+        </div>
+        {matchesLoading && <div className="text-text-muted font-mono">Analyzing changes…</div>}
+        {matchesError && <div className="text-acc-red">{matchesError}</div>}
+        {analysis && analysis.matches.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {analysis.matches.map((m) => (
+              <div key={m.testCaseId} className="rounded border border-bdr bg-bg-panel/40 px-2.5 py-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {m.testCaseUrl
+                    ? <a href={m.testCaseUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline font-mono">#{m.testCaseId}</a>
+                    : <span className="text-text-muted font-mono">#{m.testCaseId}</span>}
+                  <span className="text-text-primary font-medium">{m.testCaseTitle}</span>
+                  <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                    <span className="px-1.5 py-0.5 rounded bg-bg-surface text-text-muted text-[10px] uppercase">{m.matchType}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-acc-green/15 text-acc-green text-[10px] font-mono">{m.confidencePercent}%</span>
+                  </span>
+                </div>
+                <div className="text-[11px] text-text-muted mt-0.5">
+                  Parent feature: {m.parentFeatureId > 0 ? `#${m.parentFeatureId}` : 'does not exist'}
+                </div>
+                {m.matchReason && <div className="text-text-secondary mt-0.5 leading-relaxed">{m.matchReason}</div>}
+                {m.description && <div className="text-text-muted mt-0.5 leading-relaxed italic line-clamp-3">{m.description}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+        {!matchesLoading && !matchesError && analysis && analysis.matches.length === 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="text-text-muted italic">No matched test cases in the index — recommendation from the code changes:</div>
+            {analysis.changeSummary && (
+              <div className="rounded border border-bdr bg-bg-panel/40 px-2.5 py-2 text-text-secondary leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap break-words">
+                {analysis.changeSummary}
+              </div>
+            )}
+            {analysis.recommendedTests.length > 0 && (
+              <div>
+                <div className="text-text-secondary font-semibold mb-1">Recommended tests</div>
+                <div className="flex flex-wrap gap-1">
+                  {analysis.recommendedTests.map((t) => (
+                    <span
+                      key={t.name}
+                      title={t.relevant ? 'Relevant to these changes' : undefined}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${t.relevant ? 'bg-acc-green/20 text-acc-green' : 'bg-bg-surface text-text-muted'}`}
+                    >
+                      {t.relevant ? '★ ' : ''}{t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Changes */}

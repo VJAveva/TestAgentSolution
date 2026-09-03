@@ -35,6 +35,11 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     private readonly ConcurrentDictionary<string, AgentHealthState> _healthStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _activeExecutions = new(StringComparer.OrdinalIgnoreCase);
 
+    // Endpoints parked for disposal because the agent re-registered with a NEW
+    // address while a command was still streaming on the old channel. Disposed
+    // when that execution completes (see ExecuteRemoteCommandAsync finally).
+    private readonly ConcurrentDictionary<string, AgentEndpoint> _pendingDisposal = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Raised when execution output arrives.</summary>
     public event Action<string, string, string>? OutputReceived;  // agentName, line, kind
 
@@ -57,11 +62,36 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     /// </summary>
     public void RegisterAgent(string agentName, string grpcAddress)
     {
+        agentName = agentName?.Trim() ?? "";
         grpcAddress = NormalizeAddress(grpcAddress);
 
-        // Dispose old endpoint if re-registering same name
+        // Idempotent: a re-registration with an UNCHANGED address must not dispose and
+        // rebuild the channel — agents re-register on transient heartbeat blips, and
+        // tearing down the channel would abort a command actively streaming on it.
+        if (_agents.TryGetValue(agentName, out var existing) &&
+            string.Equals(existing.Address, grpcAddress, StringComparison.OrdinalIgnoreCase))
+        {
+            _healthStates.TryAdd(agentName, new AgentHealthState { AgentName = agentName });
+            _logger.LogDebug("Agent {Name} re-registered unchanged ({Address}) — no-op", agentName, grpcAddress);
+            return;
+        }
+
+        // Address changed (or brand-new agent). If a command is actively streaming on
+        // the old channel, PARK the old endpoint and dispose it when that execution
+        // finishes instead of yanking the live stream.
         if (_agents.TryRemove(agentName, out var old))
-            old.Dispose();
+        {
+            _logger.LogWarning("Agent {Name} endpoint changed {Old} \u2192 {New}", agentName, old.Address, grpcAddress);
+            if (_activeExecutions.ContainsKey(agentName))
+            {
+                _pendingDisposal.AddOrUpdate(agentName, old, (_, prev) => { try { prev.Dispose(); } catch { } return old; });
+            }
+            else
+            {
+                old.Dispose();
+            }
+        }
+
         _agents[agentName] = new AgentEndpoint(agentName, grpcAddress, _timeouts);
         _healthStates[agentName] = new AgentHealthState { AgentName = agentName };
         _logger.LogInformation("Registered agent {Name} \u2192 {Address}", agentName, grpcAddress);
@@ -909,6 +939,11 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
         finally
         {
             _activeExecutions.TryRemove(agentName, out _);
+            // Dispose any endpoint parked during a mid-execution re-registration.
+            if (_pendingDisposal.TryRemove(agentName, out var parked))
+            {
+                try { parked.Dispose(); } catch { /* best-effort */ }
+            }
         }
     }
 
@@ -1436,6 +1471,9 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
     {
         foreach (var ep in _agents.Values)
             ep.Dispose();
+        foreach (var ep in _pendingDisposal.Values)
+            ep.Dispose();
+        _pendingDisposal.Clear();
         _agents.Clear();
         _healthStates.Clear();
     }
