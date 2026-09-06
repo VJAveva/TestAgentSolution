@@ -6,19 +6,19 @@
     Wraps the existing per-component deploy scripts (deploy-webapi.bat,
     deploy-controller.bat, deploy-agent.bat) with the safety net they lack:
 
-      1. PRE-DEPLOY  — runs Invoke-PreDeployCheck.ps1 (blocks on active sessions).
-      2. BACKUP      — snapshots the current remote deployment to a timestamped
+      1. PRE-DEPLOY  - runs Invoke-PreDeployCheck.ps1 (blocks on active sessions).
+      2. BACKUP      - snapshots the current remote deployment to a timestamped
                        folder BEFORE the destructive `robocopy /MIR` overwrites it.
-      3. DEPLOY      — invokes the matching component deploy script.
-      4. VERIFY      — runs Invoke-SmokeTest.ps1 against the deployed host.
-      5. ROLLBACK    — if VERIFY fails, automatically restores the backup.
+      3. DEPLOY      - invokes the matching component deploy script.
+      4. VERIFY      - runs Invoke-SmokeTest.ps1 against the deployed host.
+      5. ROLLBACK    - if VERIFY fails, automatically restores the backup.
 
     Re-run with -Rollback to manually restore the most recent (or a named)
     backup without deploying anything new.
 
     This is the automation referenced by .github/workflows/deploy.yml and the
-    "Deploy & Rollback" section of docs/RUNBOOK.md. Anyone — not just the
-    original author — can deploy and roll back with a single command.
+    "Deploy & Rollback" section of docs/RUNBOOK.md. Anyone - not just the
+    original author - can deploy and roll back with a single command.
 
 .PARAMETER Component
     Which component to act on: webapi | controller | agent.
@@ -34,7 +34,7 @@
     IIS site name for the 'webapi' component. Default: TestControllerWeb.
 
 .PARAMETER ControllerNode
-    Controller machine name — required when Component is 'agent'.
+    Controller machine name - required when Component is 'agent'.
 
 .PARAMETER Rollback
     Restore a backup instead of deploying. Uses -BackupName if given,
@@ -99,7 +99,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 if ($BackupName) { $Rollback = $true }
 if (-not $BackupRoot) { $BackupRoot = Join-Path $repoRoot 'publish\_backups' }
 
-# ── Resolve the remote deployment path for the component ──────────────────────
+# -- Resolve the remote deployment path for the component ----------------------
 function Get-RemotePath {
     switch ($Component) {
         'webapi'     { "\\$TargetNode\C`$\inetpub\$IisSiteName" }
@@ -116,7 +116,7 @@ function Write-Ok($msg)   { Write-Host "  [ ok   ] $msg" -ForegroundColor Green 
 function Write-Warn2($msg){ Write-Host "  [ warn ] $msg" -ForegroundColor Yellow }
 function Write-Err($msg)  { Write-Host "  [ FAIL ] $msg" -ForegroundColor Red }
 
-# ── IIS site control (webapi only) ────────────────────────────────────────────
+# -- IIS site control (webapi only) --------------------------------------------
 function Set-WebApiSite([ValidateSet('Start', 'Stop')] [string]$Action) {
     if ($Component -ne 'webapi') { return }
     $local = $env:COMPUTERNAME
@@ -130,14 +130,14 @@ function Set-WebApiSite([ValidateSet('Start', 'Stop')] [string]$Action) {
     }
 }
 
-# ── Snapshot the current remote deployment before overwriting it ──────────────
+# -- Snapshot the current remote deployment before overwriting it --------------
 function Backup-CurrentDeployment {
     if (-not (Test-Path $remotePath)) {
-        Write-Warn2 "No existing deployment at $remotePath — nothing to back up (first deploy)."
+        Write-Warn2 "No existing deployment at $remotePath - nothing to back up (first deploy)."
         return $null
     }
     if (-not (Get-ChildItem -Path $remotePath -Force -ErrorAction SilentlyContinue)) {
-        Write-Warn2 "Existing deployment at $remotePath is empty — skipping backup."
+        Write-Warn2 "Existing deployment at $remotePath is empty - skipping backup."
         return $null
     }
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -150,7 +150,7 @@ function Backup-CurrentDeployment {
     return $dest
 }
 
-# ── Restore a backup over the remote deployment ───────────────────────────────
+# -- Restore a backup over the remote deployment -------------------------------
 function Restore-Backup([string]$BackupPath) {
     if (-not (Test-Path $BackupPath)) { throw "Backup path not found: $BackupPath" }
     Write-Step "Restoring $BackupPath -> $remotePath"
@@ -168,7 +168,7 @@ function Get-LatestBackup {
         Sort-Object Name -Descending | Select-Object -First 1
 }
 
-# ── Invoke the existing component deploy script ───────────────────────────────
+# -- Invoke the existing component deploy script -------------------------------
 function Invoke-ComponentDeploy {
     switch ($Component) {
         'webapi' {
@@ -188,7 +188,7 @@ function Invoke-ComponentDeploy {
     if ($LASTEXITCODE -ne 0) { throw "Component deploy script failed with exit code $LASTEXITCODE." }
 }
 
-# ── Pre-deploy + smoke checks (webapi has the HTTP surface to test) ───────────
+# -- Pre-deploy + smoke checks (webapi has the HTTP surface to test) -----------
 function Invoke-PreDeploy {
     if ($Component -ne 'webapi' -or -not $BaseUrl) { return }
     Write-Step "Pre-deploy safety check against $BaseUrl"
@@ -220,7 +220,7 @@ Write-Host "    Mode      : $(if ($Rollback) { 'ROLLBACK' } else { 'DEPLOY' })" 
 Write-Host '  ============================================================' -ForegroundColor White
 Write-Host ''
 
-# ── ROLLBACK path ─────────────────────────────────────────────────────────────
+# -- ROLLBACK path -------------------------------------------------------------
 if ($Rollback) {
     $backup = if ($BackupName) {
         Join-Path $componentBackupDir $BackupName
@@ -236,11 +236,11 @@ if ($Rollback) {
     }
     Restore-Backup -BackupPath $backup
     if (Test-Deployment) { Write-Ok 'Rollback verified healthy.'; exit 0 }
-    Write-Err 'Rollback completed but smoke test still failing — investigate manually.'
+    Write-Err 'Rollback completed but smoke test still failing - investigate manually.'
     exit 1
 }
 
-# ── DEPLOY path ───────────────────────────────────────────────────────────────
+# -- DEPLOY path ---------------------------------------------------------------
 Invoke-PreDeploy
 $backupPath = Backup-CurrentDeployment
 
@@ -268,6 +268,6 @@ if ($backupPath) {
     Write-Warn2 'Rolled back. The previous version is restored; the new build was NOT kept.'
 }
 else {
-    Write-Warn2 'No backup existed (first deploy) — leaving the new build in place for investigation.'
+    Write-Warn2 'No backup existed (first deploy) - leaving the new build in place for investigation.'
 }
 exit 1

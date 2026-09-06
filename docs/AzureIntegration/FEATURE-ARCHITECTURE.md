@@ -226,6 +226,48 @@ sequenceDiagram
 
 **Testing.** Translator and resolver fully unit-tested against fixtures with zero network. One integration test asserts the real map validates clean. Required cases: unmapped raises escalation and never an empty plan; cycle-safe dependency traversal; merge commit with empty change list is normal not an error; first build of a definition has no predecessor; unknown work item type passes through as `other` rather than being dropped; repository resolution failure returns null.
 
+## 9a. Impact Index Storage
+
+**Why it is not in source control.** The retrieval index (`impact-index.db`) is a SQLite BM25 + dense-vector cache built from the ADO corpus. It reached 1.29 GB and was rejected by GitHub's 100 MB per-file limit. It is regenerable build output, not source, so Git LFS would be the wrong tool as well as an over-quota one. It is git-ignored, excluded from the publish payload, and rebuilt on demand.
+
+**Path resolution.** `IImpactIndexPathProvider` in `TestControllerGrpc.Core` is the single source of truth, shared by both hosts. First match wins:
+
+| Order | Source | Use |
+|---|---|---|
+| 1 | `IMPACT_INDEX_ROOT` environment variable | Per-machine or per-session override; wins over everything |
+| 2 | `ImpactMapping:IndexRoot` in appsettings | Per-deployment override |
+| 3 | `%ProgramData%\TestAgentSolution\ImpactIndex` | Default |
+
+The resolved source is logged once per process at Information level under the `ImpactIndex` category.
+
+**Two databases, two lifetimes.** The rebuildable index and the durable learning store live in *sibling* directories, never nested:
+
+```
+%ProgramData%\TestAgentSolution\
+    ImpactIndex\impact-index.db        regenerable cache, safe to delete
+    Learning\impact-outcomes.db        run outcomes that train the ranker, NOT regenerable
+```
+
+`Rebuild-ImpactIndex.ps1 -Force` clears `ImpactIndex` only. Collapsing these into one root would make a routine rebuild silently destroy accumulated learning data.
+
+**Snapshot reverts.** The controller VM is subject to snapshot reverts, which destroy the index. `Prepare-ImpactIndexStorage.ps1` provisions the directories (idempotent, grants Modify to the service account) and runs as part of standard provisioning. `Rebuild-ImpactIndex.ps1` must be run after a revert — the index does not come back on its own.
+
+**Absence is loud, never silent.** This is the failure mode that matters: an index that is missing rather than merely stale would otherwise let `EnsureCreatedAsync` materialise an empty database, and every impact query would return zero results — indistinguishable from "no impacted tests found". Because test selection is recall-biased, that is worse than an error. So `RetrievalIndexStore` consults `IImpactIndexHealthCheck` before every read and throws `ImpactIndexUnavailableException` when the index cannot serve.
+
+| `ImpactIndexStatus` | Meaning | Query behaviour | ASP.NET health |
+|---|---|---|---|
+| `Ready` | Present, integrity-clean, populated | Serves | Healthy |
+| `Missing` | No file at the resolved path | Throws | Unhealthy |
+| `Empty` | File present, zero documents | Throws | Unhealthy |
+| `Corrupt` | Cannot open, or `PRAGMA integrity_check` fails | Throws | Unhealthy |
+| `Stale` | Older than `ImpactMapping:IndexStaleAfter` (default 14 days) | Serves | Degraded |
+
+Every non-`Ready` message names the resolved path, the reason, and the exact rebuild command. The check never returns `Ready` as a fallback on an unexpected exception.
+
+**Surfaces.** `GET /health/impact-index` on the WebApi; a startup Warning in both hosts; the WPF Code Churn surface shows a non-blocking banner with a Rebuild action. Startup is never failed by a bad index — the rest of the host still works.
+
+**Build guard.** `IMPACT001` warns after build if an `impact-index.db` or `impact-outcomes.db` reappears anywhere in the source tree (excluding `bin`/`obj`/`publish`), catching a regression to the old relative-path behaviour before it reaches a commit.
+
 ## 10. Delivery phases
 
 | Phase | Delivers | Gate |

@@ -50,7 +50,7 @@ Write-Host "Output:   $OutputDir"
 Write-Host "Validity: $ValidityDays days ($($notBefore.ToString('yyyy-MM-dd')) to $($notAfter.ToString('yyyy-MM-dd')))"
 Write-Host ""
 
-# ── Step 1: Create Root CA ──────────────────────────────────────────────
+# -- Step 1: Create Root CA ----------------------------------------------
 Write-Host "[1/3] Creating Root CA certificate..." -ForegroundColor Yellow
 
 $rootCa = New-SelfSignedCertificate `
@@ -69,7 +69,7 @@ Export-Certificate -Cert $rootCa -FilePath $rootCaPath -Type CERT | Out-Null
 Write-Host "  Root CA thumbprint: $($rootCa.Thumbprint)"
 Write-Host "  Exported to: $rootCaPath"
 
-# ── Step 2: Create Server Certificate (for Agent TLS listener) ──────────
+# -- Step 2: Create Server Certificate (for Agent TLS listener) ----------
 Write-Host "[2/3] Creating Agent server certificate..." -ForegroundColor Yellow
 
 $sanList = @($AgentHosts -split ',') | ForEach-Object { $_.Trim() }
@@ -93,7 +93,7 @@ Write-Host "  Server cert thumbprint: $($serverCert.Thumbprint)"
 Write-Host "  SAN entries: $($sanList -join ', ')"
 Write-Host "  Exported to: $serverPfxPath"
 
-# ── Step 3: Create Client Certificate (for mTLS - Controller connecting to Agent) ──
+# -- Step 3: Create Client Certificate (for mTLS - Controller connecting to Agent) --
 Write-Host "[3/3] Creating Controller client certificate..." -ForegroundColor Yellow
 
 $clientCert = New-SelfSignedCertificate `
@@ -113,7 +113,7 @@ Export-PfxCertificate -Cert $clientCert -FilePath $clientPfxPath -Password $Pass
 Write-Host "  Client cert thumbprint: $($clientCert.Thumbprint)"
 Write-Host "  Exported to: $clientPfxPath"
 
-# ── Summary ─────────────────────────────────────────────────────────────
+# -- Summary -------------------------------------------------------------
 Write-Host ""
 Write-Host "=== Certificate Generation Complete ===" -ForegroundColor Green
 Write-Host ""

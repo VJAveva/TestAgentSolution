@@ -32,7 +32,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Resolve paths ──
+# -- Resolve paths --
 if (-not $SolutionRoot) {
     $SolutionRoot = $PSScriptRoot
     if (-not $SolutionRoot) { $SolutionRoot = (Get-Location).Path }
@@ -55,7 +55,7 @@ Write-Host "    Deployment Manifest Validation" -ForegroundColor Cyan
 Write-Host "  ============================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Load manifest ──
+# -- Load manifest --
 if (-not (Test-Path $ManifestPath)) {
     Write-Status "Manifest not found: $ManifestPath" "FAIL"
     exit 1
@@ -67,7 +67,7 @@ Write-Status "Manifest loaded: $ManifestPath" "PASS"
 $errors = @()
 $warnings = @()
 
-# ── Validate required fields ──
+# -- Validate required fields --
 Write-Host ""
 Write-Host "  Metadata:" -ForegroundColor DarkGray
 
@@ -76,7 +76,7 @@ foreach ($field in $requiredFields) {
     $value = $manifest.$field
     if ([string]::IsNullOrWhiteSpace($value) -or $value -eq "unknown") {
         if ($field -eq "gitSha" -and $value -eq "unknown") {
-            $warnings += "Git SHA is 'unknown' — build may not be from a git repository."
+            $warnings += "Git SHA is 'unknown' - build may not be from a git repository."
             Write-Status "$field`: $value" "WARN"
         } else {
             $errors += "Required field '$field' is missing or empty."
@@ -91,7 +91,7 @@ foreach ($field in $requiredFields) {
 if ($manifest.buildMachine) { Write-Host "    Build machine: $($manifest.buildMachine)" -ForegroundColor DarkGray }
 if ($manifest.agentCapVersion) { Write-Host "    Agent capability version: $($manifest.agentCapVersion)" -ForegroundColor DarkGray }
 
-# ── Validate proto hash against current source ──
+# -- Validate proto hash against current source --
 Write-Host ""
 Write-Host "  Proto Compatibility:" -ForegroundColor DarkGray
 
@@ -106,14 +106,14 @@ if (-not $SkipProtoCheck) {
             Write-Status "Proto hash MISMATCH (manifest: $($manifest.protoHash), current: $currentProtoHash)" "FAIL"
         }
     } else {
-        $warnings += "Proto file not found at $protoFile — cannot verify compatibility."
-        Write-Status "Proto file not found — skipping" "WARN"
+        $warnings += "Proto file not found at $protoFile - cannot verify compatibility."
+        Write-Status "Proto file not found - skipping" "WARN"
     }
 } else {
     Write-Status "Proto check skipped" "WARN"
 }
 
-# ── Validate project artifacts ──
+# -- Validate project artifacts --
 Write-Host ""
 Write-Host "  Artifact Integrity:" -ForegroundColor DarkGray
 
@@ -150,7 +150,7 @@ if ($manifest.projects) {
                 Write-Status "$($proj.name): checksum MISMATCH" "FAIL"
             }
         } else {
-            $warnings += "Project '$($proj.name)' has no checksum in manifest — integrity unverified."
+            $warnings += "Project '$($proj.name)' has no checksum in manifest - integrity unverified."
             Write-Status "$($proj.name): present but no checksum ($($proj.files) files, $($proj.sizeMB) MB)" "WARN"
         }
     }
@@ -159,12 +159,12 @@ if ($manifest.projects) {
     Write-Status "No projects in manifest" "FAIL"
 }
 
-# ── Summary ──
+# -- Summary --
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor DarkGray
 
 if ($errors.Count -eq 0 -and $warnings.Count -eq 0) {
-    Write-Host "  VALIDATION PASSED — All artifacts verified." -ForegroundColor Green
+    Write-Host "  VALIDATION PASSED - All artifacts verified." -ForegroundColor Green
     Write-Host "  ============================================================" -ForegroundColor Green
     exit 0
 }
@@ -184,7 +184,7 @@ if ($errors.Count -gt 0) {
         Write-Host "    - $e" -ForegroundColor Red
     }
     Write-Host ""
-    Write-Host "  VALIDATION FAILED — Do NOT deploy these artifacts." -ForegroundColor Red
+    Write-Host "  VALIDATION FAILED - Do NOT deploy these artifacts." -ForegroundColor Red
     Write-Host "  ============================================================" -ForegroundColor Red
     exit 1
 }

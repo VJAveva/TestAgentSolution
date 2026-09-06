@@ -39,8 +39,22 @@
     { "node": "warmpri" }
   ],
 
-  "preserveFiles": [ "appsettings.json", "commandpolicy.json" ],
-  "preserveFolders": [ "Logs", "Data" ],
+  "$preserveNote": "robocopy /MIR DELETES destination files absent from the publish source. Everything here is host-local STATE, not a deliverable: omitting impact-*.db once destroyed 344 KB of ranker learning data on jvgr22. Verify with: compare the deployed folder against publish\\controller and add anything that is not a build artifact.",
+  "preserveFiles": [
+    "appsettings.json",
+    "commandpolicy.json",
+    "WatchList.xml",
+    "orchestrator.db",
+    "orchestrator.db-wal",
+    "orchestrator.db-shm",
+    "impact-index.db",
+    "impact-index.db-wal",
+    "impact-index.db-shm",
+    "impact-outcomes.db",
+    "impact-outcomes.db-wal",
+    "impact-outcomes.db-shm"
+  ],
+  "preserveFolders": [ "Logs", "Data", "Parameters" ],
 
   "agentConfigPatch": {
     "merge": {
@@ -65,7 +79,24 @@
   },
 
   "controllerConfigPatch": {
-    "merge": {},
+    "$note": "'merge' adds a key only when absent, so a re-deploy never overwrites operator-tuned values and never touches server-specific settings such as VocabularyFile.",
+    "merge": {
+      "ImpactMapping": {
+        "IndexRoot": null,
+        "IndexStaleAfter": "14.00:00:00",
+        "Persistence": {
+          "Enabled": true,
+          "NetworkPath": "\\\\dev\\link\\DevTransfer\\VJPersistence",
+          "BackupInterval": "00:30:00",
+          "StartupDelay": "00:02:00",
+          "KeepVersions": 5,
+          "IncludeIndex": false,
+          "MergeAcrossHosts": true,
+          "CanonicalFolderName": "_canonical",
+          "HostId": ""
+        }
+      }
+    },
     "set": {},
     "mergeAgentsList": true
   }

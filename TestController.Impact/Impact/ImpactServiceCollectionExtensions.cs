@@ -49,11 +49,28 @@ public static class ImpactServiceCollectionExtensions
         section.Bind(options);
         services.Configure<ImpactMappingOptions>(section);
 
-        // Separate databases: the rebuildable index cache and the durable learning store.
+        // Storage location is resolved once, outside the source tree, and the directories are provisioned
+        // eagerly so the first write does not fail on a missing folder.
+        services.TryAddSingleton<IImpactIndexPathProvider>(sp =>
+        {
+            var provider = new ImpactIndexPathProvider(config, sp.GetService<IAppLogger>());
+            provider.EnsureIndexRootExists();
+            return provider;
+        });
+        services.TryAddSingleton<IImpactIndexHealthCheck, ImpactIndexHealthCheck>();
+
+        // Network persistence: the learning store is the only impact data that cannot be regenerated, so it
+        // is mirrored to a share that outlives controller VM snapshot reverts.
+        services.Configure<ImpactPersistenceOptions>(section.GetSection("Persistence"));
+        services.TryAddSingleton<IImpactPersistenceService, ImpactPersistenceService>();
+
+        // Separate databases: the rebuildable index cache and the durable learning store. Paths come from
+        // the provider (absolute) — a relative DatabasePath resolves against the working directory, which is
+        // how the index previously landed inside the repo.
         services.AddDbContextFactory<ImpactIndexDbContext>((sp, builder) =>
-            builder.UseSqlite($"Data Source={sp.GetRequiredService<IOptions<ImpactMappingOptions>>().Value.Index.DatabasePath}"));
+            builder.UseSqlite($"Data Source={sp.GetRequiredService<IImpactIndexPathProvider>().IndexFilePath}"));
         services.AddDbContextFactory<OutcomeDbContext>((sp, builder) =>
-            builder.UseSqlite($"Data Source={sp.GetRequiredService<IOptions<ImpactMappingOptions>>().Value.Learning.OutcomeDatabasePath}"));
+            builder.UseSqlite($"Data Source={sp.GetRequiredService<IImpactIndexPathProvider>().OutcomeFilePath}"));
 
         // ADO work-item client — builds on the host's existing AdoClient, which AddAdoRegressionIngest only
         // registers when Ado:Enabled=true. Registered via a factory (opaque to ValidateOnBuild) so a host with
@@ -138,6 +155,11 @@ public static class ImpactServiceCollectionExtensions
         {
             services.AddHostedService<IndexMaintenanceService>();
         }
+
+        // Persistence runs on EVERY host: a reader still accumulates its own run outcomes, and losing those
+        // to a snapshot revert is the failure this exists to prevent. Safe to run everywhere because each
+        // host writes its own folder and the merge is an idempotent set union, not a read-modify-write.
+        services.AddHostedService<ImpactPersistenceWorker>();
 
         return services;
     }

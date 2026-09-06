@@ -21,18 +21,35 @@ public sealed class RetrievalIndexStore : IRetrievalIndexStore
 {
     private readonly IDbContextFactory<ImpactIndexDbContext> _contextFactory;
     private readonly ImpactMappingOptions.RetrievalOptions _retrieval;
+    private readonly IImpactIndexHealthCheck? _health;
 
     /// <summary>Creates the store over the index database context factory.</summary>
-    public RetrievalIndexStore(IDbContextFactory<ImpactIndexDbContext> contextFactory, IOptions<ImpactMappingOptions> options)
+    /// <param name="health">
+    /// When supplied, the index is verified before every read. Without it <c>EnsureCreatedAsync</c> would
+    /// silently materialise an empty database and every query would return zero results — indistinguishable
+    /// from a genuine "no impacted tests". Optional so existing unit tests can construct the store directly.
+    /// </param>
+    public RetrievalIndexStore(
+        IDbContextFactory<ImpactIndexDbContext> contextFactory,
+        IOptions<ImpactMappingOptions> options,
+        IImpactIndexHealthCheck? health = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _retrieval = options.Value.Retrieval;
+        _health = health;
     }
 
     /// <inheritdoc />
     public async Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, CancellationToken ct)
     {
+        if (_health is not null)
+        {
+            ImpactIndexHealth health = await _health.CheckAsync(ct).ConfigureAwait(false);
+            if (health.IsUnusable)
+                throw new ImpactIndexUnavailableException(health);
+        }
+
         await using ImpactIndexDbContext ctx = await _contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         await ImpactIndexInitializer.EnsureCreatedAsync(ctx, ct).ConfigureAwait(false);
 

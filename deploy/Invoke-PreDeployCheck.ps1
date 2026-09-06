@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Pre-deployment safety check — verifies no active sessions before deploying.
+    Pre-deployment safety check - verifies no active sessions before deploying.
 
 .DESCRIPTION
     Queries the WebApi deployment preflight endpoint to determine if it's
@@ -41,7 +41,7 @@ Write-Host "  ============================================================" -For
 Write-Host "  Target: $baseUrl"
 Write-Host ""
 
-# ── Query preflight status ──
+# -- Query preflight status --
 try {
     $preflight = Invoke-RestMethod -Uri "$baseUrl/api/deployment/preflight" -TimeoutSec 10 -ErrorAction Stop
 }
@@ -56,7 +56,7 @@ catch {
     exit 1
 }
 
-# ── Display results ──
+# -- Display results --
 Write-Host "  System Status:" -ForegroundColor DarkGray
 Write-Host "    Agents: $($preflight.agents.total) total, $($preflight.agents.offline) offline, $($preflight.agents.locked) locked" -ForegroundColor White
 Write-Host "    Active sessions: $($preflight.activeSessionCount)" -ForegroundColor White
@@ -94,7 +94,7 @@ if ($preflight.safe) {
     Write-Host "  -Force specified. Proceeding despite active sessions." -ForegroundColor Yellow
 }
 
-# ── Enable maintenance mode if requested ──
+# -- Enable maintenance mode if requested --
 if ($EnableMaintenance) {
     Write-Host ""
     Write-Host "  Enabling maintenance mode..." -ForegroundColor Cyan

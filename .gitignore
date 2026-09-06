@@ -360,5 +360,18 @@ MigrationBackup/
 .ionide/
 
 # Fody - auto-generated XML schema
-FodyWeavers.xsdTestController.WebClient.zip
-/TestController.WebApi/impact-index.db
+FodyWeavers.xsd
+TestController.WebClient.zip
+
+# Impact-mapping databases — regenerable/local build artifacts, never source.
+# The index reached 1.29 GB and was rejected by GitHub's 100 MB per-file limit.
+# Both databases now live outside the repo (see IImpactIndexPathProvider); these
+# patterns are the backstop for a stray run with a relative DatabasePath.
+# The -wal/-shm sidecars must be listed too: SQLite runs in write-ahead-logging
+# mode, so a live database is three files, and the -wal alone can reach GB scale.
+impact-index.db
+impact-index.db-wal
+impact-index.db-shm
+impact-outcomes.db
+impact-outcomes.db-wal
+impact-outcomes.db-shm

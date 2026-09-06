@@ -298,7 +298,10 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<AgentConnectivityHealthCheck>("agents", tags: ["ready"])
-    .AddCheck<CertificateExpiryHealthCheck>("tls-cert", tags: ["ready"]);
+    .AddCheck<CertificateExpiryHealthCheck>("tls-cert", tags: ["ready"])
+    // Not tagged "ready": a missing index must not take the whole host out of rotation, but it must be
+    // visible. Impact queries themselves throw ImpactIndexUnavailableException rather than returning empty.
+    .AddCheck<ImpactIndexAspNetHealthCheck>("impact-index", tags: ["impact"]);
 
 // OpenTelemetry metrics: custom app meters + Prometheus exporter on /metrics
 builder.Services.AddSingleton<AppMetrics>();
@@ -419,6 +422,43 @@ app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready"),
 }).AllowAnonymous();
+app.MapHealthChecks("/health/impact-index", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("impact"),
+    ResponseWriter = async (ctx, report) =>
+    {
+        var entry = report.Entries.TryGetValue("impact-index", out var e) ? e : default;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsJsonAsync(new
+        {
+            status = entry.Data.TryGetValue("status", out var s) ? s : report.Status.ToString(),
+            healthy = report.Status == Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy,
+            message = entry.Description ?? "",
+            indexFilePath = entry.Data.TryGetValue("indexFilePath", out var p) ? p : null,
+            sizeBytes = entry.Data.TryGetValue("sizeBytes", out var b) ? b : null,
+            documentCount = entry.Data.TryGetValue("documentCount", out var d) ? d : null,
+            lastBuiltUtc = entry.Data.TryGetValue("lastBuiltUtc", out var lb) ? lb : null,
+        });
+    },
+}).AllowAnonymous();
+
+// Report index state once at startup so a missing index is known before the first query, not after.
+// Deliberately non-fatal: the host still serves everything that does not depend on the index.
+_ = Task.Run(async () =>
+{
+    try
+    {
+        var health = await app.Services.GetRequiredService<TestControllerGrpc.Core.Impact.IImpactIndexHealthCheck>()
+            .CheckAsync(CancellationToken.None);
+        var log = app.Services.GetRequiredService<IAppLogger>();
+        if (health.IsReady) log.Info("ImpactIndex", health.Message);
+        else log.Warn("ImpactIndex", health.Message);
+    }
+    catch (Exception ex)
+    {
+        app.Services.GetRequiredService<IAppLogger>().Error("ImpactIndex", "Startup index health check failed.", ex);
+    }
+});
 
 // Prometheus metrics endpoint
 app.MapPrometheusScrapingEndpoint("/metrics").AllowAnonymous();

@@ -100,7 +100,7 @@ Write-Host "  Target: $baseUrl"
 Write-Host "  Timeout: ${TimeoutSeconds}s per request"
 Write-Host ""
 
-# ── Test 1: Fleet endpoint ──
+# -- Test 1: Fleet endpoint --
 Write-Host "  [1/7] Fleet Status" -ForegroundColor DarkGray
 $fleet = Test-Endpoint -Name "GET /api/agents/fleet" -Url "$baseUrl/api/agents/fleet" -Validate {
     param($r)
@@ -112,7 +112,7 @@ if ($fleet -and $fleet.agents) {
     Write-Host "        Fleet: $($fleet.agents.Count) agents registered" -ForegroundColor DarkGray
 }
 
-# ── Test 2: Agent details + telemetry for each agent ──
+# -- Test 2: Agent details + telemetry for each agent --
 Write-Host ""
 Write-Host "  [2/7] Agent Details & Telemetry" -ForegroundColor DarkGray
 
@@ -131,7 +131,7 @@ foreach ($agentName in $agentNames) {
     }
 }
 
-# ── Test 3: SignalR negotiate ──
+# -- Test 3: SignalR negotiate --
 Write-Host ""
 Write-Host "  [3/7] SignalR Connectivity" -ForegroundColor DarkGray
 
@@ -154,7 +154,7 @@ catch {
     Write-Host "  [FAIL] SignalR negotiate - $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# ── Test 4: Agent capabilities (ForceReady support) ──
+# -- Test 4: Agent capabilities (ForceReady support) --
 Write-Host ""
 Write-Host "  [4/7] Agent Capabilities" -ForegroundColor DarkGray
 
@@ -187,7 +187,7 @@ if ($agentsMissingForceReady.Count -gt 0 -and $RequireForceReady) {
     Write-Host "  [PASS] All agents support ForceReady" -ForegroundColor Green
 }
 
-# ── Test 5: Active execution stream safety ──
+# -- Test 5: Active execution stream safety --
 Write-Host ""
 Write-Host "  [5/7] Execution Stream Safety" -ForegroundColor DarkGray
 
@@ -203,7 +203,7 @@ Test-Endpoint -Name "GET /api/deployment/preflight" -Url "$baseUrl/api/deploymen
     return "Missing safety assessment"
 } | Out-Null
 
-# ── Test 6: WebClient bundle ──
+# -- Test 6: WebClient bundle --
 Write-Host ""
 Write-Host "  [6/7] WebClient Bundle" -ForegroundColor DarkGray
 
@@ -225,7 +225,7 @@ catch {
     Write-Host "  [FAIL] WebClient index.html - $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# ── Test 7: Deployment preflight (safe to operate) ──
+# -- Test 7: Deployment preflight (safe to operate) --
 Write-Host ""
 Write-Host "  [7/7] Operational Readiness" -ForegroundColor DarkGray
 
@@ -235,7 +235,7 @@ $preflight = Test-Endpoint -Name "Operational preflight" -Url "$baseUrl/api/depl
     return "System reports not safe: $($r.issues -join '; ')"
 }
 
-# ── Summary ──
+# -- Summary --
 $total = $passed + $failed + $warnings
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor DarkGray

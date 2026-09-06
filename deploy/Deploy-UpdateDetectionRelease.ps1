@@ -86,7 +86,7 @@ if ($IncludeController -and -not (Test-Path $ctrlSrc)) { throw "Controller publi
 
 $results = [System.Collections.Generic.List[object]]::new()
 
-# ── Agents ────────────────────────────────────────────────────────────────────
+# -- Agents --------------------------------------------------------------------
 function Deploy-Agent([string]$node) {
     $remote  = "\\$node\C`$\TestAgentService"
     $cfgPath = Join-Path $remote 'appsettings.json'
@@ -177,7 +177,7 @@ function Deploy-Agent([string]$node) {
     return [pscustomobject]$status
 }
 
-# ── Controller ────────────────────────────────────────────────────────────────
+# -- Controller ----------------------------------------------------------------
 function Deploy-Controller([string]$node) {
     $remote = "\\$node\C`$\TestControllerService"
     $status = [ordered]@{ Node = "$node (controller)"; Stopped = ''; Backup = ''; Copy = ''; Config = ''; Started = '' }
@@ -237,7 +237,7 @@ function Deploy-Controller([string]$node) {
     return [pscustomobject]$status
 }
 
-# ── Run ───────────────────────────────────────────────────────────────────────
+# -- Run -----------------------------------------------------------------------
 Write-Host "TestAgentSolution - Windows Update detection release" -ForegroundColor White
 Write-Host "Mode      : $(if($DryRun){'DRY RUN (no changes)'}else{'LIVE DEPLOY'})" -ForegroundColor $(if($DryRun){'Yellow'}else{'Red'})
 Write-Host "Agent src : $agentSrc"

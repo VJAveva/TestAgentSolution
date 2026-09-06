@@ -90,7 +90,7 @@ if (-not $ReportDir)      { $ReportDir      = Join-Path $repoRoot 'publish\_repo
 
 if ($Rollback -and -not $BackupStamp) { throw "-Rollback requires -BackupStamp (e.g. 20260906-143800)." }
 
-# ── console helpers ───────────────────────────────────────────────────────────
+# -- console helpers -----------------------------------------------------------
 function Write-Head($m) { Write-Host "`n$m" -ForegroundColor White }
 function Write-Node($m) { Write-Host "`n=== $m ===" -ForegroundColor White }
 function Step($m) { Write-Host "  [ .. ] $m" -ForegroundColor Cyan }
@@ -98,7 +98,7 @@ function Ok($m)   { Write-Host "  [ OK ] $m" -ForegroundColor Green }
 function Warn($m) { Write-Host "  [warn] $m" -ForegroundColor Yellow }
 function Fail($m) { Write-Host "  [FAIL] $m" -ForegroundColor Red }
 
-# ── inventory loading ─────────────────────────────────────────────────────────
+# -- inventory loading ---------------------------------------------------------
 function Read-Inventory {
     param([string]$Path, [string]$Template)
 
@@ -141,7 +141,7 @@ function Get-Prop { param($Obj, [string]$Name, $Default = $null)
     return $Default
 }
 
-# ── config patching ───────────────────────────────────────────────────────────
+# -- config patching -----------------------------------------------------------
 function Expand-Token { param([string]$Value, [hashtable]$Tokens)
     # Longest first: $CONTROLLER is a prefix of $CONTROLLERPORT and would otherwise eat it.
     foreach ($k in ($Tokens.Keys | Sort-Object -Property Length -Descending)) {
@@ -246,7 +246,7 @@ function Merge-AgentsList {
     return @{ Changes = $changes; Applied = $true }
 }
 
-# ── process / task control ────────────────────────────────────────────────────
+# -- process / task control ----------------------------------------------------
 function Wait-Unlocked {
     param([string]$ProbePath, [int]$TimeoutSeconds = 30)
     if (-not (Test-Path $ProbePath)) { return $true }   # first-time deploy
@@ -276,7 +276,7 @@ function Invoke-Robocopy {
     return $LASTEXITCODE
 }
 
-# ── per-node deployment ───────────────────────────────────────────────────────
+# -- per-node deployment -------------------------------------------------------
 function Deploy-Node {
     param($Spec, $Patch, [hashtable]$Tokens, [string]$Kind)
 
@@ -427,7 +427,7 @@ function Restore-Node {
     return [pscustomobject]$r
 }
 
-# ── reporting ─────────────────────────────────────────────────────────────────
+# -- reporting -----------------------------------------------------------------
 function Write-Report {
     param($Results, [string]$Mode, [datetime]$Start, [datetime]$End)
 
@@ -505,7 +505,7 @@ Backups: $backupRoot</footer>
     return @{ Json = $jsonPath; Html = $htmlPath; Summary = $summary }
 }
 
-# ── main ──────────────────────────────────────────────────────────────────────
+# -- main ----------------------------------------------------------------------
 Add-Type -AssemblyName System.Web
 
 $inv  = Read-Inventory -Path $InventoryPath -Template $PatchTemplate

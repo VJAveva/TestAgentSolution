@@ -136,18 +136,18 @@ Write-Host "    Crash dumps:      $CrashRetentionDays days" -ForegroundColor Dar
 Write-Host "    Test results:     $ResultsRetentionDays days" -ForegroundColor DarkGray
 if ($WhatIf) {
     Write-Host ""
-    Write-Host "    *** DRY RUN MODE — no files will be deleted ***" -ForegroundColor Yellow
+    Write-Host "    *** DRY RUN MODE - no files will be deleted ***" -ForegroundColor Yellow
 }
 Write-Host ""
 
-# ── Application logs ──
+# -- Application logs --
 Write-Status "Cleaning application logs..." "STEP"
 foreach ($logDir in $LogDirectories) {
     Remove-OldFiles -Path $logDir -FilePattern "*.log" -RetentionDays $LogRetentionDays -Category "AppLog"
     Remove-OldFiles -Path $logDir -FilePattern "*.txt" -RetentionDays $LogRetentionDays -Category "AppLog"
 }
 
-# ── Crash dumps ──
+# -- Crash dumps --
 Write-Host ""
 Write-Status "Cleaning crash dumps..." "STEP"
 foreach ($logDir in $LogDirectories) {
@@ -155,7 +155,7 @@ foreach ($logDir in $LogDirectories) {
     Remove-OldFiles -Path $logDir -FilePattern "*.dmp" -RetentionDays $CrashRetentionDays -Category "CrashDump"
 }
 
-# ── Audit logs ──
+# -- Audit logs --
 Write-Host ""
 Write-Status "Cleaning audit logs..." "STEP"
 foreach ($logDir in $LogDirectories) {
@@ -164,7 +164,7 @@ foreach ($logDir in $LogDirectories) {
     Remove-OldFiles -Path $auditPath -FilePattern "*.log" -RetentionDays $AuditRetentionDays -Category "AuditLog"
 }
 
-# ── Test results ──
+# -- Test results --
 Write-Host ""
 Write-Status "Cleaning old test results..." "STEP"
 if (Test-Path $ResultsRootPath) {
@@ -185,14 +185,14 @@ if (Test-Path $ResultsRootPath) {
     }
 }
 
-# ── Session persistence files ──
+# -- Session persistence files --
 Write-Host ""
 Write-Status "Cleaning old session persistence files..." "STEP"
 foreach ($logDir in $LogDirectories) {
     Remove-OldFiles -Path $logDir -FilePattern "sessions-*.json" -RetentionDays $LogRetentionDays -Category "SessionPersist"
 }
 
-# ── Summary ──
+# -- Summary --
 $elapsed = (Get-Date) - $startTime
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor DarkGray

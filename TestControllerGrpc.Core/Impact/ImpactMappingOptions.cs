@@ -9,6 +9,16 @@ public sealed class ImpactMappingOptions
 {
     public const string SectionName = "ImpactMapping";
 
+    /// <summary>
+    /// Directory holding the impact databases. <c>null</c> means "use the ProgramData default"
+    /// (<c>%ProgramData%\TestAgentSolution\ImpactIndex</c>). Overridden by the <c>IMPACT_INDEX_ROOT</c>
+    /// environment variable. Resolved by <see cref="IImpactIndexPathProvider"/>.
+    /// </summary>
+    public string? IndexRoot { get; set; }
+
+    /// <summary>How old the index may be before the health check reports Stale.</summary>
+    public TimeSpan IndexStaleAfter { get; set; } = TimeSpan.FromDays(14);
+
     public KeywordOptions Keywords { get; set; } = new();
     public AdoOptions Ado { get; set; } = new();
     public IndexOptions Index { get; set; } = new();
@@ -85,6 +95,12 @@ public sealed class ImpactMappingOptions
     /// <summary>Persistent index storage + embedding parameters.</summary>
     public sealed class IndexOptions
     {
+        /// <summary>
+        /// Legacy relative path. Left for back-compat only — a relative value resolves against the process
+        /// working directory, which is how a 1.29 GB database ended up inside the source tree. Hosts now take
+        /// the absolute path from <see cref="IImpactIndexPathProvider"/>; set <c>ImpactMapping:IndexRoot</c>
+        /// to relocate.
+        /// </summary>
         public string DatabasePath { get; set; } = "impact-index.db";
         public TimeSpan MaxAge { get; set; } = TimeSpan.FromHours(30);
         public bool UseWiqlPreFilter { get; set; }

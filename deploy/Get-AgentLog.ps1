@@ -155,7 +155,7 @@ function Get-FilteredEntries {
     return $entries
 }
 
-# ── Main ────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------
 $path = Resolve-AuditPath -Computer $ComputerName -Dir $LogDirectory -DateStr $Date
 Write-Host "Audit log: $path" -ForegroundColor DarkGray
 Write-Host ("-" * 100) -ForegroundColor DarkGray

@@ -34,6 +34,37 @@
   <ItemGroup>
     <Folder Include="Hubs\" />
   </ItemGroup>
+
+  <!-- The impact databases are deliberately NOT packaged. They are resolved at runtime through
+       IImpactIndexPathProvider (default %ProgramData%\TestAgentSolution\ImpactIndex) and are host-local
+       state, not deliverables: the index is a regenerable cache that reached 1.29 GB, and the outcome
+       store is machine-specific learning data. A deployed node provisions the directory via
+       Prepare-ControllerNode.ps1 and populates it with Rebuild-ImpactIndex.ps1.
+       If these files are ever seen in the publish output, that is a bug, not a missing asset. -->
+  <ItemGroup>
+    <Content Remove="impact-index.db;impact-index.db-wal;impact-index.db-shm" />
+    <Content Remove="impact-outcomes.db;impact-outcomes.db-wal;impact-outcomes.db-shm" />
+    <None Remove="impact-index.db;impact-index.db-wal;impact-index.db-shm" />
+    <None Remove="impact-outcomes.db;impact-outcomes.db-wal;impact-outcomes.db-shm" />
+    <None Update="impact-index.db;impact-index.db-wal;impact-index.db-shm" CopyToPublishDirectory="Never" CopyToOutputDirectory="Never" />
+    <None Update="impact-outcomes.db;impact-outcomes.db-wal;impact-outcomes.db-shm" CopyToPublishDirectory="Never" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
+  <!-- IMPACT001: catches a regression to the old in-tree path. The engine must never write a database
+       beside the sources again; if it does, the file is one 'git add -f' away from a rejected push.
+       Anchored on this file rather than $(SolutionDir), which is undefined when the project builds alone. -->
+  <Target Name="WarnOnInTreeImpactIndex" AfterTargets="Build">
+    <PropertyGroup>
+      <ImpactRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</ImpactRepoRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <StrayImpactDb Include="$(ImpactRepoRoot)\**\impact-index.db;$(ImpactRepoRoot)\**\impact-outcomes.db"
+                     Exclude="$(ImpactRepoRoot)\**\bin\**;$(ImpactRepoRoot)\**\obj\**;$(ImpactRepoRoot)\publish\**" />
+    </ItemGroup>
+    <Warning Code="IMPACT001"
+             Condition="'@(StrayImpactDb)' != ''"
+             Text="Impact database found inside the source tree: %(StrayImpactDb.FullPath). It must live under the IImpactIndexPathProvider root (default %25ProgramData%25\TestAgentSolution\ImpactIndex). Delete or move it; see .gitignore and docs/AzureIntegration/FEATURE-ARCHITECTURE.md 'Impact Index Storage'." />
+  </Target>
   
    <!-- Auto-build React on publish -->
   <Target Name="BuildReactApp" BeforeTargets="Build" Condition="!Exists('wwwroot\index.html')">
