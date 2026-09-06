@@ -9,6 +9,7 @@ using TestController.Api;
 using TestController.Api.Security;
 using TestController.Api.Services;
 using TestControllerGrpc.Core.Impact;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
@@ -32,6 +33,12 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly BuildResultsAggregator _aggregator;
     private readonly BuildResultsConfig _resultsConfig;
     private readonly AgentLockManager _lockManager;
+    private readonly IMaintenanceStateStore? _maintenanceState;
+    private readonly IFleetMaintenanceService? _fleetMaintenance;
+    private readonly IMaintenanceOperationStore? _maintenanceStore;
+    private readonly INodeUpdateStatusStore? _updateStatus;
+    private readonly IFleetNotificationService? _fleetNotifications;
+    private readonly IUpdatePolicyStore? _updatePolicy;
     private readonly IAppLogger _appLogger;
     private readonly IRegressionImpactMatcher _impactMatcher;
     private readonly ILogger<ControllerWebApiHost> _logger;
@@ -54,7 +61,13 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         IAppLogger appLogger,
         IRegressionImpactMatcher impactMatcher,
         IConfiguration config,
-        ILogger<ControllerWebApiHost> logger)
+        ILogger<ControllerWebApiHost> logger,
+        IMaintenanceStateStore? maintenanceState = null,
+        IFleetMaintenanceService? fleetMaintenance = null,
+        IMaintenanceOperationStore? maintenanceStore = null,
+        INodeUpdateStatusStore? updateStatus = null,
+        IFleetNotificationService? fleetNotifications = null,
+        IUpdatePolicyStore? updatePolicy = null)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -66,6 +79,12 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _aggregator = aggregator;
         _resultsConfig = resultsConfig;
         _lockManager = lockManager;
+        _maintenanceState = maintenanceState;
+        _fleetMaintenance = fleetMaintenance;
+        _maintenanceStore = maintenanceStore;
+        _updateStatus = updateStatus;
+        _fleetNotifications = fleetNotifications;
+        _updatePolicy = updatePolicy;
         _appLogger = appLogger;
         _impactMatcher = impactMatcher;
         _logger = logger;
@@ -138,6 +157,19 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             builder.Services.AddSingleton(_aggregator);
             builder.Services.AddSingleton(_resultsConfig);
             builder.Services.AddSingleton(_lockManager);
+            if (_maintenanceState is not null)
+                builder.Services.AddSingleton(_maintenanceState);
+            if (_fleetMaintenance is not null)
+                builder.Services.AddSingleton(_fleetMaintenance);
+            if (_maintenanceStore is not null)
+                builder.Services.AddSingleton(_maintenanceStore);
+            // Same instances the WPF UI binds to, so both surfaces agree on update posture.
+            if (_updateStatus is not null)
+                builder.Services.AddSingleton(_updateStatus);
+            if (_fleetNotifications is not null)
+                builder.Services.AddSingleton(_fleetNotifications);
+            if (_updatePolicy is not null)
+                builder.Services.AddSingleton(_updatePolicy);
             builder.Services.AddSingleton(_appLogger);
 
             // Bridge the impact-mapping matcher (with its engine + index) from the WPF container so the

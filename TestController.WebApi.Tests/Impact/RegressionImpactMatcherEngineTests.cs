@@ -83,6 +83,24 @@ public sealed class RegressionImpactMatcherEngineTests
     }
 
     [Fact]
+    public async Task MatchAsync_Should_SurfaceAnchorTestCases_When_BelowEarlyExit_AndIndexEmpty()
+    {
+        // Declared regression areas force anchor coverage to 0 (NullDeclaredMappingSource) so early-exit CANNOT
+        // fire, and there are only 3 linked child test cases (< MinAnchorsForEarlyExit=5). They must still surface
+        // via the full path now that anchors are folded into the candidate set.
+        var emptyIndex = new FakeIndexStore(Snapshot(IndexKind.Feature), Snapshot(IndexKind.TestCase));
+        FakeAdo ado = AdoWithCorpus(); // Children[900] = [101,102,103]
+        var anchors = new AnchorEdgeProvider(ado, new FakeOutcomes(), NullDeclaredMappingSource.Instance,
+            Options.Create(new ImpactMappingOptions()), new NoopAppLogger());
+        ImpactTestMappingService engine = BuildEngine(anchors, emptyIndex, ado);
+
+        var matches = await Matcher(engine).MatchAsync(Row(regressionAreas: ["Deploy", "Galaxy"], workItemIds: 900), CancellationToken.None);
+
+        Assert.NotEmpty(matches);
+        Assert.All(matches, m => Assert.Contains(m.TestCaseId, new[] { 101, 102, 103 }));
+    }
+
+    [Fact]
     public async Task MatchAsync_Should_ReturnEmpty_When_IndexEmptyAndNoLinkedTestCases()
     {
         // The live situation: empty index, and the change's work item resolves to no child test cases.

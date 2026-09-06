@@ -1,12 +1,79 @@
 <UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.FleetView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
     xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace">
 
     <DockPanel>
         <!-- Summary bar -->
         <Border DockPanel.Dock="Top" Padding="10,6">
             <DockPanel>
+                <!-- R16: notification bell + unread badge + flyout -->
+                <Grid DockPanel.Dock="Right" Margin="8,0,0,0"
+                      Visibility="{Binding Updates.HasNotifications, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}">
+                    <ToggleButton x:Name="BellToggle" Padding="6,3" Cursor="Hand"
+                                  Background="Transparent" BorderThickness="0"
+                                  ToolTip="Fleet update notifications">
+                        <StackPanel Orientation="Horizontal">
+                            <mi:MaterialIcon Kind="BellOutline" Width="14" Height="14"
+                                             Foreground="{DynamicResource TextP}"/>
+                            <Border Margin="3,0,0,0" CornerRadius="7" Padding="4,0" MinWidth="14"
+                                    Background="{DynamicResource AccRed}" VerticalAlignment="Center"
+                                    Visibility="{Binding Updates.HasUnread, Converter={StaticResource BoolVis}}">
+                                <TextBlock Text="{Binding Updates.UnreadCount}" FontSize="9" FontWeight="Bold"
+                                           HorizontalAlignment="Center" Foreground="#FF1E1E2E"/>
+                            </Border>
+                        </StackPanel>
+                    </ToggleButton>
+                    <Popup IsOpen="{Binding IsChecked, ElementName=BellToggle}" StaysOpen="False"
+                           Placement="Bottom" HorizontalOffset="-260" AllowsTransparency="True">
+                        <Border Width="320" MaxHeight="360" CornerRadius="5" Padding="8"
+                                Background="{DynamicResource BgPanel}"
+                                BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                    <Button DockPanel.Dock="Right" Content="Mark all read" FontSize="9"
+                                            Padding="6,2" Cursor="Hand"
+                                            Background="Transparent" Foreground="{DynamicResource Accent}"
+                                            BorderThickness="0"
+                                            Command="{Binding Updates.MarkAllReadCommand}"/>
+                                    <TextBlock Text="Notifications" FontSize="11" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource TextP}"/>
+                                </DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Nothing to report." FontSize="10"
+                                           Foreground="{DynamicResource TextS}"
+                                           Visibility="{Binding Updates.HasUnread, Converter={StaticResource InvBoolVis}}"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Updates.Notifications}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:FleetNotificationVM}">
+                                                <Border Padding="6,4" Margin="0,0,0,3" CornerRadius="3"
+                                                        Background="{DynamicResource BgCard}">
+                                                    <StackPanel>
+                                                        <TextBlock FontSize="10" FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource TextP}">
+                                                            <Run Text="{Binding NodeId, Mode=OneWay}"/>
+                                                            <Run Text=" — "/>
+                                                            <Run Text="{Binding Title, Mode=OneWay}"/>
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding Description}" FontSize="9"
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="{DynamicResource TextS}"/>
+                                                        <TextBlock FontSize="9" Foreground="{DynamicResource TextS}">
+                                                            <Run Text="{Binding SourceText, Mode=OneWay}"/>
+                                                            <Run Text=" · "/>
+                                                            <Run Text="{Binding RelativeTime, Mode=OneWay}"/>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
                 <!-- Register Agent button -->
                 <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="10,4"
                         FontSize="10" Cursor="Hand"
@@ -38,6 +105,13 @@
                         <Run Text="{Binding OfflineCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
                         <Run Text=" offline"/>
                     </TextBlock>
+                    <TextBlock VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0"
+                               Foreground="#FFF0B070"
+                               Visibility="{Binding HasReverting, Converter={StaticResource BoolVis}}">
+                        <Run Text="·"/>
+                        <Run Text="{Binding RevertingCount, Mode=OneWay}" FontWeight="SemiBold"/>
+                        <Run Text=" reverting"/>
+                    </TextBlock>
                     <!-- Fleet utilization bar -->
                     <Border Width="80" Height="4" CornerRadius="2" Margin="10,0,0,0"
                             Background="{DynamicResource Bdr}" VerticalAlignment="Center"
@@ -49,6 +123,43 @@
                 </StackPanel>
             </DockPanel>
         </Border>
+
+        <!-- Windows Update banner stack (R15): one banner per severity, not per node -->
+        <ItemsControl DockPanel.Dock="Top" Margin="10,0,10,6"
+                      ItemsSource="{Binding Updates.Banners}"
+                      Visibility="{Binding Updates.HasBanners, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:UpdateBannerVM}">
+                    <Border CornerRadius="4" Padding="10,6" Margin="0,0,0,4"
+                            Background="#1A4D9CF5" BorderBrush="#444D9CF5" BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                                        <Setter Property="Background" Value="#1AF0B070"/>
+                                        <Setter Property="BorderBrush" Value="#44F0B070"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Review" Padding="10,3" FontSize="10"
+                                    Cursor="Hand" VerticalAlignment="Center"
+                                    Background="Transparent" Foreground="{DynamicResource TextP}"
+                                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                                    Command="{Binding DataContext.Updates.ReviewCommand,
+                                              RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextP}"/>
+                                <TextBlock Text="{Binding Detail}" FontSize="10" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextS}"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <!-- Grouped agent panel -->
         <Grid>
@@ -169,7 +280,49 @@
                                         <DataTemplate DataType="{x:Type vm:FleetCardVM}">
                                             <Border Width="Auto" Height="50" Margin="3" CornerRadius="5"
                                                     Padding="7,5" Cursor="Hand"
-                                                    MouseLeftButtonUp="Card_Click">
+                                                    MouseLeftButtonUp="Card_Click"
+                                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                                                <Border.ContextMenu>
+                                                    <ContextMenu Style="{DynamicResource ThemedContextMenu}">
+                                                        <MenuItem Header="Revert to snapshot…"
+                                                                  Command="{Binding PlacementTarget.Tag.RevertCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                            <MenuItem.Icon>
+                                                                <mi:MaterialIcon Kind="BackupRestore" Width="15" Height="15" Foreground="{DynamicResource TextP}"/>
+                                                            </MenuItem.Icon>
+                                                        </MenuItem>
+                                                        <MenuItem Header="Reboot machine…"
+                                                                  Command="{Binding PlacementTarget.Tag.RebootCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                            <MenuItem.Icon>
+                                                                <mi:MaterialIcon Kind="Restart" Width="15" Height="15" Foreground="{DynamicResource TextP}"/>
+                                                            </MenuItem.Icon>
+                                                        </MenuItem>
+                                                        <MenuItem Header="Cancel revert"
+                                                                  Command="{Binding PlacementTarget.Tag.CancelRevertCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                            <MenuItem.Icon>
+                                                                <mi:MaterialIcon Kind="CloseCircleOutline" Width="15" Height="15" Foreground="{DynamicResource TextP}"/>
+                                                            </MenuItem.Icon>
+                                                        </MenuItem>
+                                                        <Separator/>
+                                                        <MenuItem Header="Open remote desktop"
+                                                                  Command="{Binding PlacementTarget.Tag.OpenRemoteDesktopCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                            <MenuItem.Icon>
+                                                                <mi:MaterialIcon Kind="RemoteDesktop" Width="15" Height="15" Foreground="{DynamicResource TextP}"/>
+                                                            </MenuItem.Icon>
+                                                        </MenuItem>
+                                                        <Separator/>
+                                                        <MenuItem Header="Return to rotation (clear quarantine)"
+                                                                  Command="{Binding PlacementTarget.Tag.ClearQuarantineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                            <MenuItem.Icon>
+                                                                <mi:MaterialIcon Kind="ShieldCheckOutline" Width="15" Height="15" Foreground="{DynamicResource TextP}"/>
+                                                            </MenuItem.Icon>
+                                                        </MenuItem>
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}"/>
@@ -196,6 +349,27 @@
                                                                 <Setter Property="BorderBrush" Value="{DynamicResource AccPeach}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </Trigger>
+                                                            <DataTrigger Binding="{Binding IsUnderMaintenance}" Value="True">
+                                                                <Setter Property="Background" Value="#33F0B070"/>
+                                                                <Setter Property="BorderBrush" Value="#FFF0B070"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsQuarantined}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource StatusFailedBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
+                                                            </DataTrigger>
+                                                            <!-- R17: reboot-required uses the amber card; draining gets its own grey-blue -->
+                                                            <DataTrigger Binding="{Binding IsRebootRequired}" Value="True">
+                                                                <Setter Property="Background" Value="#33F0B070"/>
+                                                                <Setter Property="BorderBrush" Value="#FFF0B070"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsDraining}" Value="True">
+                                                                <Setter Property="Background" Value="#2A3A4C"/>
+                                                                <Setter Property="BorderBrush" Value="#FF7B92AD"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
+                                                            </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
@@ -251,6 +425,31 @@
                                                                    Foreground="{DynamicResource TextP}"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    MaxWidth="120"/>
+                                                        <!-- R17: Windows Update shield badge -->
+                                                        <Border Margin="5,0,0,0" CornerRadius="3" Padding="4,1"
+                                                                VerticalAlignment="Center"
+                                                                ToolTip="{Binding UpdateTooltip}"
+                                                                Visibility="{Binding HasUpdateBadge, Converter={StaticResource BoolVis}}"
+                                                                Background="#1A4D9CF5" BorderBrush="#444D9CF5" BorderThickness="0.5">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsRebootRequired}" Value="True">
+                                                                            <Setter Property="Background" Value="#1AF0B070"/>
+                                                                            <Setter Property="BorderBrush" Value="#44F0B070"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <mi:MaterialIcon Kind="ShieldAlertOutline" Width="9" Height="9"
+                                                                                 VerticalAlignment="Center" Margin="0,0,3,0"
+                                                                                 Foreground="{DynamicResource TextS}"/>
+                                                                <TextBlock Text="{Binding UpdateBadgeText}" FontSize="9"
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="{DynamicResource TextP}"/>
+                                                            </StackPanel>
+                                                        </Border>
                                                         <!-- Pipeline tag pill (visible when busy) -->
                                                         <Border Margin="6,0,0,0" CornerRadius="3"
                                                                 Padding="5,1" VerticalAlignment="Center"
@@ -280,7 +479,19 @@
                                                                Foreground="{DynamicResource TextS}"
                                                                VerticalAlignment="Bottom"
                                                                TextTrimming="CharacterEllipsis"
-                                                               Margin="12,2,0,0"/>
+                                                               Margin="12,2,0,0"
+                                                               Visibility="{Binding IsUnderMaintenance, Converter={StaticResource InvBoolVis}}"/>
+                                                    <!-- Row 2 (maintenance): phase message + progress bar -->
+                                                    <StackPanel Grid.Row="1" Margin="12,2,0,0" VerticalAlignment="Bottom"
+                                                                Visibility="{Binding IsUnderMaintenance, Converter={StaticResource BoolVis}}">
+                                                        <TextBlock Text="{Binding MaintenanceLine}" FontSize="8"
+                                                                   FontFamily="Consolas" Foreground="#FFF0B070"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <ProgressBar Height="3" Margin="0,2,0,0" Minimum="0" Maximum="100"
+                                                                     Value="{Binding MaintenanceProgressPercent, Mode=OneWay}"
+                                                                     Background="Transparent" BorderThickness="0"
+                                                                     Foreground="#FFF0B070"/>
+                                                    </StackPanel>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>

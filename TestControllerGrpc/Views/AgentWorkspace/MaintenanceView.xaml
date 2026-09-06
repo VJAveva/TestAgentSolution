@@ -1,0 +1,216 @@
+<UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.MaintenanceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace">
+
+    <DockPanel>
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Padding="10,6" Background="{DynamicResource BgCard}"
+                BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="↻ Refresh" Padding="10,4" FontSize="10" Cursor="Hand"
+                        Command="{Binding RefreshHistoryCommand}"
+                        Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                        BorderBrush="{DynamicResource Accent}" BorderThickness="1"/>
+                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextS}">
+                    <Run Text="{Binding ActiveCount, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"/>
+                    <Run Text=" active ·"/>
+                    <Run Text="{Binding History.Count, Mode=OneWay}" Foreground="{DynamicResource TextP}"/>
+                    <Run Text=" in history"/>
+                </TextBlock>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- R19: Windows updates rollup + per-node grid -->
+            <Expander Grid.Row="0" IsExpanded="True" Margin="10,8,10,0"
+                      Foreground="{DynamicResource TextP}"
+                      Visibility="{Binding HasUpdates, Converter={StaticResource BoolVis}}">
+                <Expander.Header>
+                    <TextBlock Text="Windows updates" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextP}"/>
+                </Expander.Header>
+                <StackPanel Margin="0,6,0,0">
+                    <DockPanel Margin="0,0,0,6">
+                        <Button DockPanel.Dock="Right" Content="Reboot all ready" Padding="10,4" FontSize="10"
+                                Cursor="Hand" VerticalAlignment="Center"
+                                Command="{Binding Updates.RebootAllReadyCommand}"
+                                IsEnabled="{Binding Updates.CanRebootAllReady}"
+                                ToolTip="Queues a reboot for every node reporting Reboot required that is not draining."
+                                Background="#1AF0B070" Foreground="#FFF0B070"
+                                BorderBrush="#44F0B070" BorderThickness="1"/>
+                        <UniformGrid Rows="1" Columns="4">
+                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
+                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.ReportingCount}" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextP}"/>
+                                    <TextBlock Text="agents reporting" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
+                                    Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.RebootRequiredCount}" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="#FFF0B070"/>
+                                    <TextBlock Text="reboot required" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
+                                    Background="#1A4D9CF5" BorderBrush="#444D9CF5" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.PendingCount}" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Accent}"/>
+                                    <TextBlock Text="updates pending" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
+                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.FailedCount}" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AccRed}"/>
+                                    <TextBlock Text="install failed" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </DockPanel>
+
+                    <DataGrid ItemsSource="{Binding Updates.Rows}" MaxHeight="200"
+                              AutoGenerateColumns="False" IsReadOnly="True"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              Background="Transparent" BorderThickness="0" FontSize="10">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Agent" Binding="{Binding AgentName}" Width="130"/>
+                            <DataGridTextColumn Header="Update state" Binding="{Binding StateText}" Width="110"/>
+                            <DataGridTextColumn Header="Last install" Binding="{Binding LastInstall}" Width="120"/>
+                            <DataGridTextColumn Header="Pending" Binding="{Binding PendingCount}" Width="60"/>
+                            <DataGridTextColumn Header="Detected by" Binding="{Binding DetectedBy}" Width="100"/>
+                            <DataGridTextColumn Header="Last report" Binding="{Binding LastReport}" Width="90">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStale}" Value="True">
+                                                <Setter Property="Foreground" Value="#FFF0B070"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Dispatch" Binding="{Binding DispatchText}" Width="80"/>
+                            <DataGridTemplateColumn Header="Actions" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Reboot now" Padding="6,2" FontSize="9" Margin="0,0,4,0"
+                                                    Cursor="Hand" IsEnabled="{Binding IsRebootRequired}"
+                                                    ToolTip="{Binding Provenance}"
+                                                    Command="{Binding DataContext.Updates.RebootNodeCommand,
+                                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding AgentName}"/>
+                                            <Button Content="Snooze 4h" Padding="6,2" FontSize="9"
+                                                    Cursor="Hand" IsEnabled="{Binding HasBadge}"
+                                                    Command="{Binding DataContext.Updates.SnoozeCommand,
+                                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding AgentName}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </Expander>
+
+            <!-- R7 + R14: Active operations with live phase, progress and provenance -->
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding ActiveOperations}" Margin="8,8,8,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:MaintenanceOpVM}">
+                        <Border Margin="0,0,0,8" Padding="12" CornerRadius="6"
+                                Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Elapsed}" FontSize="11"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource TextS}"/>
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextP}">
+                                        <Run Text="{Binding NodeId, Mode=OneWay}" FontFamily="Consolas"/>
+                                        <Run Text=" · "/>
+                                        <Run Text="{Binding KindText, Mode=OneWay}"/>
+                                        <Run Text=" · "/>
+                                        <Run Text="{Binding StateText, Mode=OneWay}" Foreground="#FFF0B070"/>
+                                    </TextBlock>
+                                </DockPanel>
+
+                                <TextBlock Text="{Binding Message}" FontSize="11" Margin="0,5,0,5"
+                                           Foreground="{DynamicResource TextS}" TextWrapping="Wrap"/>
+
+                                <ProgressBar Height="4" Minimum="0" Maximum="100"
+                                             Value="{Binding ProgressPercent, Mode=OneWay}"
+                                             Foreground="#FFF0B070" Background="{DynamicResource Bdr}" BorderThickness="0"/>
+                                <TextBlock Margin="0,3,0,0" FontSize="10" Foreground="{DynamicResource TextS}">
+                                    <Run Text="Step"/><Run Text="{Binding StepNumber, Mode=OneWay}"/>
+                                    <Run Text="of"/><Run Text="{Binding StepCount, Mode=OneWay}"/>
+                                    <Run Text=" · "/><Run Text="{Binding PhaseText, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <!-- R14: provenance strip -->
+                                <Border Margin="0,8,0,0" Padding="8" CornerRadius="4" Background="{DynamicResource BgPanel}">
+                                    <WrapPanel>
+                                        <StackPanel Margin="0,0,18,4">
+                                            <TextBlock Text="Triggered from" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding TriggerSourceText}" FontSize="11" Foreground="{DynamicResource TextP}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,18,4">
+                                            <TextBlock Text="By" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding TriggeredBy}" FontSize="11" Foreground="{DynamicResource TextP}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,18,4">
+                                            <TextBlock Text="Reason" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource TextP}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,18,4">
+                                            <TextBlock Text="Snapshot" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding SnapshotName}" FontSize="11" Foreground="{DynamicResource TextP}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,18,4">
+                                            <TextBlock Text="Script" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding ScriptPath}" FontSize="11" Foreground="{DynamicResource TextP}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="220"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,0,4">
+                                            <TextBlock Text="Linked run" FontSize="9" Foreground="{DynamicResource TextS}"/>
+                                            <TextBlock Text="{Binding LinkedRun}" FontSize="11" Foreground="{DynamicResource TextP}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- R11: completed-operation history -->
+            <DataGrid Grid.Row="2" ItemsSource="{Binding History}" Margin="8" AutoGenerateColumns="False"
+                      IsReadOnly="True" CanUserAddRows="False" GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column" Background="Transparent" BorderThickness="0"
+                      RowBackground="Transparent" Foreground="{DynamicResource TextP}"
+                      HorizontalScrollBarVisibility="Auto" FontSize="11">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Agent" Binding="{Binding NodeId, Mode=OneWay}" Width="120"/>
+                    <DataGridTextColumn Header="Operation" Binding="{Binding KindText, Mode=OneWay}" Width="90"/>
+                    <DataGridTextColumn Header="Snapshot" Binding="{Binding SnapshotName, Mode=OneWay}" Width="150"/>
+                    <DataGridTextColumn Header="Source" Binding="{Binding TriggerSourceText, Mode=OneWay}" Width="90"/>
+                    <DataGridTextColumn Header="By" Binding="{Binding TriggeredBy, Mode=OneWay}" Width="120"/>
+                    <DataGridTextColumn Header="Started" Binding="{Binding StartedText, Mode=OneWay}" Width="120"/>
+                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationText, Mode=OneWay}" Width="80"/>
+                    <DataGridTextColumn Header="Result" Binding="{Binding ResultText, Mode=OneWay}" Width="90"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </DockPanel>
+</UserControl>

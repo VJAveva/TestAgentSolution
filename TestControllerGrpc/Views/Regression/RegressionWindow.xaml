@@ -500,6 +500,7 @@
                     <!-- ═══ Filter (R7–R9): context · work item · coverage ═══ -->
                     <StackPanel Orientation="Vertical">
                         <StackPanel Margin="4,2,4,0">
+                            <!-- Context + Author -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Style="{StaticResource RibbonAxisLbl}" Text="Context" />
                                 <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowRuntime}" ToolTip="Show Runtime rows">
@@ -516,7 +517,13 @@
                                         <Border Style="{StaticResource RibbonCount}"><TextBlock Style="{StaticResource RibbonCountText}" Text="{Binding ConfigCount, Mode=OneWay}" /></Border>
                                     </StackPanel>
                                 </ToggleButton>
+                                <Border Width="1" Background="{StaticResource RbSep}" Margin="10,2,10,2" />
+                                <TextBlock Style="{StaticResource RibbonAxisLbl}" Text="Author" Width="44" />
+                                <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding HideAutomatedChanges}" ToolTip="Show only human-made changes (hide automated build-tool syncups). Toggle off to include automated changes.">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F464;" Foreground="#7BC47F" VerticalAlignment="Center" Margin="0,0,5,0" /><TextBlock Text="Human only" Foreground="{StaticResource RbTx}" FontSize="11" VerticalAlignment="Center" /></StackPanel>
+                                </ToggleButton>
                             </StackPanel>
+                            <!-- Work item -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Style="{StaticResource RibbonAxisLbl}" Text="Work item" />
                                 <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding FilterBug}" ToolTip="Only rows with a Bug work item">
@@ -529,23 +536,27 @@
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#x25C6;" Foreground="#9B7BE8" VerticalAlignment="Center" Margin="0,0,5,0" /><TextBlock Text="IMS" Foreground="{StaticResource RbTx}" FontSize="11" VerticalAlignment="Center" /></StackPanel>
                                 </ToggleButton>
                             </StackPanel>
+                            <!-- Coverage + Noise + Clear -->
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource RibbonAxisLbl}" Text="Coverage" />
-                                <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding HideAutomatedChanges}" ToolTip="Show only human-made changes (hide automated build-tool syncups). Toggle off to include automated changes.">
-                                    <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F464;" Foreground="#7BC47F" VerticalAlignment="Center" Margin="0,0,5,0" /><TextBlock Text="Human only" Foreground="{StaticResource RbTx}" FontSize="11" VerticalAlignment="Center" /></StackPanel>
+                                <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowUnmappedOnly}" ToolTip="Show only rows with no automated or manual suite mapped — the unmapped churn this tool exists to surface.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#x26A0;" Foreground="#FBAFBC" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                        <TextBlock Text="No suite mapped" Foreground="{StaticResource RbTx}" FontSize="11" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource RibbonCount}" Background="#33FB6F88"><TextBlock Style="{StaticResource RibbonCountText}" Foreground="#FBAFBC" Text="{Binding NoSuiteCount, Mode=OneWay}" /></Border>
+                                    </StackPanel>
                                 </ToggleButton>
+                                <Border Width="1" Background="{StaticResource RbSep}" Margin="10,2,10,2" />
+                                <TextBlock Style="{StaticResource RibbonAxisLbl}" Text="Noise" Width="44" />
                                 <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowAllFiles}" ToolTip="Show pipeline/shared files (e.g. &lt;RepoName&gt;.yaml, config files) that are hidden from Files Modified by default. Off = filtered.">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4C4;" Foreground="#E0A040" VerticalAlignment="Center" Margin="0,0,5,0" /><TextBlock Text="All files" Foreground="{StaticResource RbTx}" FontSize="11" VerticalAlignment="Center" /></StackPanel>
                                 </ToggleButton>
                                 <ToggleButton Style="{StaticResource RibbonTgl}" IsChecked="{Binding ShowAllChanges}" ToolTip="Show Universal-Packages manifest changes that are hidden by default. Off = dependency-version bumps filtered out.">
                                     <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F5C3;" Foreground="#8AB4F8" VerticalAlignment="Center" Margin="0,0,5,0" /><TextBlock Text="All changes" Foreground="{StaticResource RbTx}" FontSize="11" VerticalAlignment="Center" /></StackPanel>
                                 </ToggleButton>
-                                <Border Style="{StaticResource RibbonCount}" Background="#33FB6F88" Padding="7,1" Height="20"
-                                        ToolTip="Rows with no automated or manual suite mapped">
-                                    <TextBlock Style="{StaticResource RibbonCountText}" Foreground="#FBAFBC">
-                                        <Run Text="No suite " /><Run Text="{Binding NoSuiteCount, Mode=OneWay}" />
-                                    </TextBlock>
-                                </Border>
+                                <Button Style="{StaticResource RibbonBtn}" Command="{Binding ClearFiltersCommand}" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Reset every filter to its default">
+                                    <TextBlock Text="Clear" FontSize="10" Foreground="{StaticResource RbTx3}" TextDecorations="Underline" />
+                                </Button>
                             </StackPanel>
                         </StackPanel>
                         <TextBlock Style="{StaticResource RibbonLbl}" Text="Filter" />

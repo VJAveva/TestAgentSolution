@@ -109,6 +109,9 @@ public sealed class RetrievalIndexBuilder
 
     private int BatchSize => Math.Max(1, _options.Ado.BatchSize);
 
+    // Small pause between index batches so a background build never starves request handling on the host.
+    private const int BatchPauseMilliseconds = 15;
+
     private async Task<IReadOnlyList<AdoWorkItemRef>> EnumerateAsync(string workItemType, DateTimeOffset since, CancellationToken ct)
     {
         var refs = new List<AdoWorkItemRef>();
@@ -181,6 +184,7 @@ public sealed class RetrievalIndexBuilder
         await ctx.Documents.Where(d => reindexIds.Contains(d.Id)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
+        var termRows = new List<(string DocumentId, string Term, int TermFrequency)>();
         for (int i = 0; i < pending.Count; i++)
         {
             PendingDocument item = pending[i];
@@ -201,9 +205,7 @@ public sealed class RetrievalIndexBuilder
             });
 
             foreach ((string term, int tf) in item.Terms)
-            {
-                ctx.DocumentTerms.Add(new DocumentTerm { DocumentId = item.Draft.Id, Term = term, TermFrequency = tf });
-            }
+                termRows.Add((item.Draft.Id, term, tf));
 
             float[] vector = i < vectors.Count ? vectors[i] : Array.Empty<float>();
             if (vector.Length > 0)
@@ -219,8 +221,37 @@ public sealed class RetrievalIndexBuilder
         }
 
         await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
+        // Term postings outnumber documents ~20:1; insert them with chunked multi-row statements instead of
+        // per-row change-tracked entities — turning tens of thousands of INSERTs into a few hundred.
+        await BulkInsertTermsAsync(ctx, termRows, ct).ConfigureAwait(false);
         ctx.ChangeTracker.Clear(); // bound memory across batches
+        // Yield between batches so a full first-time build never starves request handling on the host.
+        await Task.Delay(BatchPauseMilliseconds, ct).ConfigureAwait(false);
         return (pending.Count, skipped);
+    }
+
+    // SQLite caps bound variables per statement; 300 rows × 3 params stays under even the legacy 999 limit.
+    private static async Task BulkInsertTermsAsync(
+        ImpactIndexDbContext ctx, IReadOnlyList<(string DocumentId, string Term, int TermFrequency)> rows, CancellationToken ct)
+    {
+        const int rowsPerStatement = 300;
+        for (int start = 0; start < rows.Count; start += rowsPerStatement)
+        {
+            int count = Math.Min(rowsPerStatement, rows.Count - start);
+            var sql = new StringBuilder("INSERT INTO \"DocumentTerms\" (\"DocumentId\", \"Term\", \"TermFrequency\") VALUES ");
+            var args = new object[count * 3];
+            for (int r = 0; r < count; r++)
+            {
+                int p = r * 3;
+                if (r > 0) sql.Append(',');
+                sql.Append('(').Append('{').Append(p).Append("},{").Append(p + 1).Append("},{").Append(p + 2).Append("})");
+                (string documentId, string term, int termFrequency) = rows[start + r];
+                args[p] = documentId;
+                args[p + 1] = term;
+                args[p + 2] = termFrequency;
+            }
+            await ctx.Database.ExecuteSqlRawAsync(sql.ToString(), args, ct).ConfigureAwait(false);
+        }
     }
 
     private async Task<IReadOnlyList<float[]>> EmbedBatchedAsync(IReadOnlyList<string> texts, CancellationToken ct)

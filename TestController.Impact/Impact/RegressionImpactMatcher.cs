@@ -112,19 +112,26 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
             .Select(c => c.Summary)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
-        List<int> workItemIds = row.Changes
+        List<RegressionWorkItemRef> workItems = row.Changes
             .SelectMany(c => c.WorkItems)
-            .Select(w => w.Id)
-            .Distinct()
+            .GroupBy(w => w.Id)
+            .Select(g => g.First())
+            .ToList();
+
+        // Feed every change subject + work-item title (functional English — the vocabulary test cases use) as the
+        // PR narrative so it drives retrieval and grounds HyDE/rerank, not just file paths and the first subject.
+        List<string> narrative = commitMessages
+            .Concat(workItems.Select(w => w.Title))
+            .Where(t => !string.IsNullOrWhiteSpace(t))
             .ToList();
 
         return new ChangePayload(
             PullRequestId: null,
-            PrTitle: null,
-            PrDescription: null,
+            PrTitle: narrative.FirstOrDefault(),
+            PrDescription: narrative.Count > 1 ? string.Join(". ", narrative.Skip(1)) : null,
             CommitMessages: commitMessages,
             Diffs: [],
-            LinkedWorkItemIds: workItemIds);
+            LinkedWorkItemIds: workItems.Select(w => w.Id).ToList());
     }
 
     private ImpactedTestCaseMatch Project(string area, MappedTestCase m)

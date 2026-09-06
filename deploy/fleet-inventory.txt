@@ -1,0 +1,22 @@
+# Flat-file fleet inventory for deploy/Invoke-FleetDeployment.ps1
+#
+# One node per line. Blank lines and '#' comments ignored.
+# Optional per-node override:  <node>[:<grpcPort>]
+# Controller line uses the 'controller:' prefix.
+#
+# When this format is used, agentDefaults/controller settings and the config
+# patch come from deploy/fleet-inventory.json (the flat file only overrides
+# WHICH nodes are targeted). Use -InventoryPath for this file plus
+# -PatchTemplate for the json when you want a different node list.
+
+controller: jvgr22
+
+jvgr1
+jvkpri
+jvkbak
+jvhist
+jvgr2
+warmgr
+warmbak
+warmhist
+warmpri

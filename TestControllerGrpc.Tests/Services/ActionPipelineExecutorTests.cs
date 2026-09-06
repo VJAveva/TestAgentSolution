@@ -204,7 +204,7 @@ public class ActionPipelineExecutorTests
                 .Setup(d => d.ExecuteLocalCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
                 .Returns<ActionConfig, PipelineExecutionContext, CancellationToken>((a, ctx, _) =>
                 {
-                    // Capture the resolved command — by this point Initialize should have run
+                    // Capture the resolved command ï¿½ by this point Initialize should have run
                     capturedCommand = ParameterResolver.Resolve(a.Command, ctx);
                     return Task.FromResult(new ActionResult(true, 0, ""));
                 });
@@ -279,9 +279,46 @@ public class ActionPipelineExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteTemplateTrackedAsync_Should_RunTemplateActionsAndGroups_When_Invoked()
+    {
+        var executed = new List<string>();
+
+        _dispatcher
+            .Setup(d => d.ExecuteLocalCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
+            .Returns<ActionConfig, PipelineExecutionContext, CancellationToken>((a, _, _) =>
+            {
+                executed.Add(a.Command);
+                return Task.FromResult(new ActionResult(true, 0, ""));
+            });
+
+        var template = new TemplateConfig
+        {
+            ID = "SmokeSuite",
+            Children =
+            [
+                new ActionConfig { Type = ActionType.RunCommand, Command = "top-action" },
+                new ActionGroupConfig
+                {
+                    Tag = "Group1",
+                    ExecutionType = ExecutionMode.Sequential,
+                    Children =
+                    [
+                        new ActionConfig { Type = ActionType.RunCommand, Command = "group-step1" },
+                        new ActionConfig { Type = ActionType.RunCommand, Command = "group-step2" },
+                    ]
+                },
+            ]
+        };
+
+        await _executor.ExecuteTemplateTrackedAsync("Template:SmokeSuite", template, CreateContext(), CancellationToken.None);
+
+        Assert.Equal(["top-action", "group-step1", "group-step2"], executed);
+    }
+
+    [Fact]
     public async Task ExecuteEventAsync_Should_ReturnFalse_When_RefTemplateNotFound()
     {
-        // No templates loaded — Ref should fail
+        // No templates loaded ï¿½ Ref should fail
         var evt = new EventConfig
         {
             Type = "Renamed",

@@ -222,6 +222,12 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<AuditLogger>());
 builder.Services.AddSingleton<AgentLifecycleService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentLifecycleService>());builder.Services.AddHostedService<StuckExecutionWatchdog>();
 builder.Services.AddHostedService<GrpcListenerWatchdog>();
+
+// ── Windows Update posture detection (spec Prompt 14/15) ──────────────
+builder.Services.Configure<WindowsUpdateSettings>(
+    builder.Configuration.GetSection(WindowsUpdateSettings.SectionName));
+builder.Services.AddSingleton<WindowsUpdateReporter>();
+builder.Services.AddHostedService<WindowsUpdateDetector>();
 var app = builder.Build();
 
 app.MapGrpcService<TestAgentGrpcService>();

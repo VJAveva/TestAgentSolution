@@ -185,10 +185,23 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
         IReadOnlyList<Scored<TestCaseCandidate>> candidates =
             await ExpandAndReduceCandidatesAsync(normalized, branchB.TestCases, branchB.Orphans, warnings, ct).ConfigureAwait(false);
 
+        // Fold anchor test cases (linked work items, historical failures, declared map) into the candidate set so
+        // Tier-0 evidence is still selectable when retrieval is thin/empty — otherwise anchors only help on early exit.
+        (candidates, IReadOnlyDictionary<int, RelevanceJudgement> anchorJudgements) =
+            await MergeAnchorCandidatesAsync(candidates, anchors, warnings, ct).ConfigureAwait(false);
+
         // T3 — rerank and calibrate.
         Report(progress, "T3:Rerank", 3, 6, "Reranking candidates…");
         IReadOnlyDictionary<int, RelevanceJudgement> judgements =
             await SafeRerankAsync(changeDoc, hyde, payload, candidates, warnings, ct).ConfigureAwait(false);
+        if (anchorJudgements.Count > 0)
+        {
+            // Deterministic anchor evidence keeps its high grade even if the reranker degraded to pass-through.
+            var overridden = new Dictionary<int, RelevanceJudgement>(judgements);
+            foreach (KeyValuePair<int, RelevanceJudgement> kv in anchorJudgements)
+                overridden[kv.Key] = kv.Value;
+            judgements = overridden;
+        }
         List<Scored<TestCaseCandidate>> calibrated = candidates
             .Select(c => c with { Score = _calibrator.Calibrate(c.Score, []) })
             .ToList();
@@ -249,6 +262,41 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
             area, [], [], selected, gaps, anchors, diagnostics, tier, EarlyExit: true, warnings, stopwatch.Elapsed, runId);
         await RecordAsync(result, warnings, ct).ConfigureAwait(false);
         return result;
+    }
+
+    private static readonly IReadOnlyDictionary<int, RelevanceJudgement> EmptyJudgements =
+        new Dictionary<int, RelevanceJudgement>();
+
+    // Adds anchor test cases (Tier-0) not already surfaced by retrieval into the candidate set, so linked-work-item
+    // / historical evidence is selectable even when the index is thin or empty. Mirrors EarlyExitAsync's hydration.
+    private async Task<(IReadOnlyList<Scored<TestCaseCandidate>> Candidates, IReadOnlyDictionary<int, RelevanceJudgement> AnchorJudgements)>
+        MergeAnchorCandidatesAsync(IReadOnlyList<Scored<TestCaseCandidate>> candidates, AnchorResult anchors, List<string> warnings, CancellationToken ct)
+    {
+        if (anchors.Edges.Count == 0)
+            return (candidates, EmptyJudgements);
+
+        var have = candidates.Select(c => c.Value.Item.Id).ToHashSet();
+        int[] missing = anchors.Edges.Select(e => e.TestCaseId).Distinct().Where(id => !have.Contains(id)).ToArray();
+        if (missing.Length == 0)
+            return (candidates, EmptyJudgements);
+
+        IReadOnlyList<TestCaseCandidate> fetched = await SafeGetTestCasesAsync(missing, warnings, ct).ConfigureAwait(false);
+        if (fetched.Count == 0)
+            return (candidates, EmptyJudgements);
+
+        Dictionary<int, double> weightById = anchors.Edges
+            .GroupBy(e => e.TestCaseId)
+            .ToDictionary(g => g.Key, g => g.Max(e => e.Weight));
+
+        var merged = new List<Scored<TestCaseCandidate>>(candidates);
+        var anchorJudgements = new Dictionary<int, RelevanceJudgement>();
+        foreach (TestCaseCandidate tc in fetched)
+        {
+            double weight = weightById.GetValueOrDefault(tc.Item.Id, 1.0);
+            merged.Add(new Scored<TestCaseCandidate>(tc, weight, [new ScoreComponent("anchor", weight, 1.0, weight)]));
+            anchorJudgements[tc.Item.Id] = new RelevanceJudgement(3, 0.9, "anchor edge", ["anchor"]);
+        }
+        return (merged, anchorJudgements);
     }
 
     private async Task<IReadOnlyList<IReadOnlyList<Scored<FeatureCandidate>>>> RunFeatureBranchAsync(

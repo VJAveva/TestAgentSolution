@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Services;
 
 namespace TestController.Api.Services;
@@ -22,15 +23,18 @@ public sealed class AgentLivenessMonitor : BackgroundService
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly ILogger<AgentLivenessMonitor> _logger;
     private readonly AgentLivenessOptions _options;
+    private readonly IMaintenanceStateStore? _maintenanceState;
 
     public AgentLivenessMonitor(
         IAgentGrpcDispatcher dispatcher,
         ILogger<AgentLivenessMonitor> logger,
-        IOptions<AgentLivenessOptions> options)
+        IOptions<AgentLivenessOptions> options,
+        IMaintenanceStateStore? maintenanceState = null)
     {
         _dispatcher = dispatcher;
         _logger = logger;
         _options = options.Value;
+        _maintenanceState = maintenanceState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -71,7 +75,11 @@ public sealed class AgentLivenessMonitor : BackgroundService
 
     private async Task ProbeAllAgentsAsync(CancellationToken ct)
     {
-        var agents = _dispatcher.RegisteredAgents.ToArray();
+        // Skip nodes under maintenance (Reverting etc.): the agent is expected to be unreachable there, so
+        // probing it would raise a false "agent lost" alarm.
+        var agents = _dispatcher.RegisteredAgents
+            .Where(a => _maintenanceState is null || _maintenanceState.Get(a) == MaintenanceState.None)
+            .ToArray();
         if (agents.Length == 0)
             return;
 

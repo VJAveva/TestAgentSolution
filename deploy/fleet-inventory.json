@@ -1,0 +1,72 @@
+{
+  "$comment": [
+    "Fleet inventory for deploy/Invoke-FleetDeployment.ps1.",
+    "Tokens usable in configPatch values: $NODE, $GRPCPORT, $CONTROLLER, $CONTROLLERPORT, $WEBAPIPORT.",
+    "'merge' adds a key ONLY when absent (non-destructive, safe to re-run).",
+    "'set' forces a value every run - use only for values the deployer owns."
+  ],
+
+  "controller": {
+    "node": "jvgr22",
+    "sharePath": "C$\\TestControllerService",
+    "publishDir": "publish\\controller",
+    "grpcPort": 5100,
+    "webApiPort": 5200,
+    "processName": "TestControllerGrpc",
+    "lockProbe": "TestControllerGrpc.dll",
+    "launchMode": "Manual"
+  },
+
+  "agentDefaults": {
+    "sharePath": "C$\\TestAgentService",
+    "publishDir": "publish\\agent",
+    "grpcPort": 5200,
+    "taskName": "TestAgentGrpc Interactive",
+    "processName": "TestAgentGrpc",
+    "lockProbe": "TestAgentGrpc.dll",
+    "launchMode": "ScheduledTask"
+  },
+
+  "agents": [
+    { "node": "jvgr1" },
+    { "node": "jvkpri" },
+    { "node": "jvkbak" },
+    { "node": "jvhist" },
+    { "node": "jvgr2" },
+    { "node": "warmgr" },
+    { "node": "warmbak" },
+    { "node": "warmhist" },
+    { "node": "warmpri" }
+  ],
+
+  "preserveFiles": [ "appsettings.json", "commandpolicy.json" ],
+  "preserveFolders": [ "Logs", "Data" ],
+
+  "agentConfigPatch": {
+    "merge": {
+      "WindowsUpdate": {
+        "Enabled": true,
+        "PollIntervalSeconds": 300,
+        "CoalescingWindowSeconds": 30,
+        "MaxCoalescingSeconds": 300,
+        "SnapshotIntervalSeconds": 3600,
+        "StartupDelaySeconds": 20,
+        "ScanTimeoutSeconds": 180,
+        "ScanPendingUpdates": true,
+        "WatchEventLog": true,
+        "MaxReportedItems": 30
+      }
+    },
+    "set": {
+      "AgentSettings.AgentName": "$NODE",
+      "AgentSettings.AgentEndpoint": "http://$NODE:$GRPCPORT",
+      "AgentSettings.ControllerAddress": "http://$CONTROLLER:$CONTROLLERPORT"
+    }
+  },
+
+  "controllerConfigPatch": {
+    "merge": {},
+    "set": {},
+    "mergeAgentsList": true
+  }
+}

@@ -81,6 +81,25 @@ public class ChurnReportTests
     }
 
     [Fact]
+    public void BuildHtml_Should_MirrorExcelColumns_WithClubbedActivityAndSourceOnlyFiles()
+    {
+        var wi = new RegressionWorkItemRef(555, RegressionWorkItemKind.Bug, "crash", "https://ado/wi/555");
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 23,
+                changes: Change("Merged PR: fix crash", RegressionChangeKind.PullRequest, wi))
+            with { FilesModified = ["src/Engine.cpp", "README.md"] };
+
+        var html = new ChurnReportBuilder(new ChurnSummarizer()).BuildHtml(Report(row));
+
+        Assert.Contains(">Activity<", html);
+        Assert.Contains(">Work Items<", html);
+        Assert.Contains(">Change Links<", html);
+        Assert.Contains("Files changed: 23", html);
+        Assert.Contains("Engine.cpp", html);
+        Assert.DoesNotContain("README.md", html); // source-only files (.h/.cpp/.cs), matching the Excel
+        Assert.Contains("href=\"https://ado/wi/555\"", html);
+    }
+
+    [Fact]
     public void BuildCsv_Should_IncludeChangeAzureLinks()
     {
         var change = new RegressionChangeRef("PR-960370", "Merged PR", DateTimeOffset.UtcNow, [], [],
@@ -287,8 +306,8 @@ public class ChurnReportTests
         var csv = builder.BuildCsv(Report(row));
         var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Contains("ImpactedFunctionality", lines[0]);
-        Assert.Contains("TestUseCases", lines[0]);
+        Assert.Contains("Impacted Functionality", lines[0]);
+        Assert.Contains("Test Use Cases", lines[0]);
         Assert.Contains("Alarming; Trends", csv);
         Assert.Contains("UC-1 Ack alarm", csv);
     }

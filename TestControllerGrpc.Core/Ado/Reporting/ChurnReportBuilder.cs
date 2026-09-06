@@ -18,7 +18,7 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
     public string BuildCsv(ChurnReport report)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("#,Component,Category,Subsystem,Repository,Branch,FilesModified,PullRequests,Commits,Automated,WorkItems,Risk,BuildNumber,LatestOkBuild,RepositoryUrl,Summary,ImpactedFunctionality,TestUseCases,WorkItemLinks,ModifiedFiles,ChangeLinks");
+        sb.AppendLine("#,Component,Category,Repository,Branch,Activity,Risk,Latest OK,Summary,Work Items,Modified Files,Change Links,Impacted Functionality,Test Use Cases");
 
         var n = 1;
         foreach (var r in report.Rows)
@@ -34,24 +34,17 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
                 n.ToString(CultureInfo.InvariantCulture),
                 r.Component,
                 r.Category.ToString(),
-                r.Subsystem,
                 r.Repository ?? "",
                 r.DefaultBranch ?? "",
-                r.TotalFilesModified.ToString(CultureInfo.InvariantCulture),
-                pr.ToString(CultureInfo.InvariantCulture),
-                commit.ToString(CultureInfo.InvariantCulture),
-                auto.ToString(CultureInfo.InvariantCulture),
-                wi.ToString(CultureInfo.InvariantCulture),
+                $"Files changed: {r.TotalFilesModified}; PR's: {pr}; Commits: {commit}; WI: {wi}; Auto: {auto}",
                 r.RiskTier ?? "",
-                r.BuildNumber ?? "",
                 r.LatestSuccessfulBuild ?? "",
-                r.RepositoryUrl ?? "",
                 summary,
-                Join(r.RegressionAreas),
-                Join(r.UseCases),
                 WorkItemsText(r),
                 FilesText(r),
                 ChangeLinksText(r),
+                Join(r.RegressionAreas),
+                Join(r.UseCases),
             };
             sb.AppendLine(string.Join(",", fields.Select(Csv)));
             n++;
@@ -92,7 +85,7 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
         sb.Append("<div style=\"padding:8px 24px 24px;\">");
         sb.Append("<table style=\"width:100%;border-collapse:collapse;font-size:12px;\">");
         sb.Append("<thead><tr style=\"text-align:left;color:#726d9b;border-bottom:2px solid #e2e2ea;\">");
-        foreach (var h in new[] { "#", "Component", "Category", "Repo", "Branch", "Subsystem (Solutions)", "Files", "PR", "Commit", "Auto", "WI", "Risk", "Latest OK", "Summary", "Impacted Functionality", "Test Use Cases", "Work Items", "Files Changed" })
+        foreach (var h in new[] { "#", "Component", "Category", "Repository", "Branch", "Activity", "Risk", "Latest OK", "Summary", "Work Items", "Modified Files", "Change Links", "Impacted Functionality", "Test Use Cases" })
             sb.Append($"<th style=\"padding:6px 8px;\">{Enc(h)}</th>");
         sb.Append("</tr></thead><tbody>");
 
@@ -115,25 +108,21 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
             };
             var bg = n % 2 == 0 ? "#faf9ff" : "#ffffff";
 
-            sb.Append($"<tr style=\"background:{bg};border-bottom:1px solid #eee;\">");
+            sb.Append($"<tr style=\"background:{bg};border-bottom:1px solid #eee;vertical-align:top;\">");
             sb.Append($"<td style=\"padding:6px 8px;color:#999;\">{n}</td>");
             sb.Append($"<td style=\"padding:6px 8px;font-weight:600;\">{Enc(r.Component)}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:{catColor};font-weight:600;\">{Enc(r.Category.ToString())}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;\">{Enc(r.Repository ?? "")}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;\">{RepoHtml(r)}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:#666;\">{Enc(r.DefaultBranch ?? "")}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;color:#444;min-width:160px;\">{Enc(JoinOrDash(r.SolutionNames))}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{r.TotalFilesModified}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{pr}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{commit}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;text-align:right;color:#999;\">{auto}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;text-align:right;\">{wi}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;white-space:nowrap;\">Files changed: {r.TotalFilesModified}<br>PR's: {pr}<br>Commits: {commit}<br>WI: {wi}<br>Auto: {auto}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:{riskColor};\">{Enc(risk)}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;color:#666;\">{Enc(r.LatestSuccessfulBuild ?? "\u2014")}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;color:#666;\">{LatestOkHtml(r)}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:#444;\">{Enc(Truncate(summary, 90))}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;color:#4b3f8f;min-width:150px;\">{Enc(JoinOrDash(r.RegressionAreas))}</td>");
-            sb.Append($"<td style=\"padding:6px 8px;color:#00697a;min-width:150px;\">{Enc(JoinOrDash(r.UseCases))}</td>");
             sb.Append($"<td style=\"padding:6px 8px;min-width:150px;\">{WorkItemsHtml(r)}</td>");
             sb.Append($"<td style=\"padding:6px 8px;color:#444;font-family:Consolas,monospace;font-size:11px;max-width:240px;word-break:break-word;\">{FilesHtml(r)}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;font-size:11px;max-width:220px;word-break:break-word;\">{ChangeLinksHtml(r)}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;color:#4b3f8f;min-width:150px;\">{Enc(JoinOrDash(r.RegressionAreas))}</td>");
+            sb.Append($"<td style=\"padding:6px 8px;color:#00697a;min-width:150px;\">{Enc(JoinOrDash(r.UseCases))}</td>");
             sb.Append("</tr>");
             n++;
         }
@@ -177,18 +166,47 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
             ? string.Join("; ", wis.Select(w => string.IsNullOrEmpty(w.Url) ? WorkItemLabel(w) : $"{WorkItemLabel(w)} ({w.Url})"))
             : "";
 
-    // HTML: linked work-item chips.
+    // HTML: linked work-item chips, one per line (HTML allows a link per item, unlike an Excel cell).
     private static string WorkItemsHtml(SubsystemRow r)
     {
         var wis = DistinctWorkItems(r);
-        return wis.Count == 0 ? "\u2014" : string.Join(", ", wis.Select(w => string.IsNullOrEmpty(w.Url)
+        return wis.Count == 0 ? "\u2014" : string.Join("<br>", wis.Select(w => string.IsNullOrEmpty(w.Url)
             ? Enc(WorkItemLabel(w))
             : $"<a href=\"{Enc(w.Url)}\" style=\"color:#3b5bdb;text-decoration:none;\">{Enc(WorkItemLabel(w))}</a>"));
     }
 
-    // Real modified source/interface files (package-manifest noise filtered upstream in the collector).
-    private static string FilesText(SubsystemRow r) =>
-        r.FilesModified is { Count: > 0 } ? string.Join("; ", r.FilesModified) : "";
+    private static string RepoHtml(SubsystemRow r)
+    {
+        var name = Enc(r.Repository ?? "");
+        return string.IsNullOrEmpty(r.RepositoryUrl)
+            ? name
+            : $"<a href=\"{Enc(r.RepositoryUrl)}\" style=\"color:#3b5bdb;text-decoration:none;\">{name}</a>";
+    }
+
+    private static string LatestOkHtml(SubsystemRow r)
+    {
+        var label = Enc(r.LatestSuccessfulBuild ?? "\u2014");
+        return string.IsNullOrEmpty(r.LatestSuccessfulBuildUrl)
+            ? label
+            : $"<a href=\"{Enc(r.LatestSuccessfulBuildUrl)}\" style=\"color:#3b5bdb;text-decoration:none;\">{label}</a>";
+    }
+
+    // HTML: one clickable change link per line (label = the change summary).
+    private static string ChangeLinksHtml(SubsystemRow r)
+    {
+        var links = r.Changes
+            .Where(c => !string.IsNullOrEmpty(c.Url))
+            .Select(c => $"<a href=\"{Enc(c.Url)}\" style=\"color:#3b5bdb;text-decoration:none;\">{Enc(Truncate(c.Summary, 60))}</a>")
+            .ToList();
+        return links.Count == 0 ? "\u2014" : string.Join("<br>", links);
+    }
+
+    // Real modified source files only (.h/.cpp/.cs), matching the Excel/email Modified Files column.
+    private static string FilesText(SubsystemRow r)
+    {
+        var files = r.FilesModified.Where(FileNoiseFilter.IsSourceFile).ToList();
+        return files.Count > 0 ? string.Join("; ", files) : "";
+    }
 
     // Azure DevOps PR/commit links for the change set (Excel export column).
     private static string ChangeLinksText(SubsystemRow r) =>
@@ -196,13 +214,14 @@ public sealed class ChurnReportBuilder : IChurnReportBuilder
 
     private static string FilesHtml(SubsystemRow r)
     {
-        if (r.FilesModified is not { Count: > 0 })
+        var files = r.FilesModified.Where(FileNoiseFilter.IsSourceFile).ToList();
+        if (files.Count == 0)
             return "\u2014";
-        // Email clients choke on huge cells — show a few files here; the CSV carries the full list.
-        const int max = 3;
-        var body = string.Join("<br>", r.FilesModified.Take(max).Select(Enc));
-        var extra = r.FilesModified.Count - max;
-        return extra > 0 ? $"{body}<br><span style=\"color:#999;\">\u2026 +{extra} more (see CSV)</span>" : body;
+        // Email clients choke on huge cells — show up to a handful of source files, one per line.
+        const int max = 8;
+        var body = string.Join("<br>", files.Take(max).Select(Enc));
+        var extra = files.Count - max;
+        return extra > 0 ? $"{body}<br><span style=\"color:#999;\">\u2026 +{extra} more</span>" : body;
     }
 
     private static string Enc(string? value) => WebUtility.HtmlEncode(value ?? "");

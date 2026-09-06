@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebClient churn toolbar — redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#0d1117;
+  --surface:#141a22;
+  --surface-2:#111721;
+  --raised:#1b232d;
+  --raised-hi:#232e3a;
+  --rule:#26313d;
+  --rule-soft:#1d2630;
+  --text:#e3e9f0;
+  --dim:#94a2b3;
+  --faint:#66737f;
+  --sel:#35a7a9;
+  --sel-bg:#0e3336;
+  --sel-line:#3fbcbe;
+  --attn:#dd8f4d;
+  --alert:#df6079;
+  --ok:#4fb783;
+  --r:6px;
+  --sans:"IBM Plex Sans","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--canvas);color:var(--text);
+  font-family:var(--sans);font-size:13.5px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1480px;margin:0 auto;padding:44px 30px 90px}
+
+/* ---------- doc chrome ---------- */
+.doc-head{border-bottom:1px solid var(--rule);padding-bottom:28px;margin-bottom:42px}
+.doc-head h1{font-size:28px;font-weight:600;letter-spacing:-.5px;margin:0 0 8px}
+.doc-head p{margin:0;color:var(--dim);max-width:66ch}
+.doc-meta{display:flex;gap:30px;margin-top:20px;flex-wrap:wrap}
+.doc-meta div{font-size:12px;color:var(--faint)}
+.doc-meta b{display:block;color:var(--dim);font-weight:450;font-size:12px;margin-bottom:1px}
+section{margin-bottom:56px}
+.sec-title{font-size:16px;font-weight:600;margin:0 0 5px;display:flex;align-items:baseline;gap:11px}
+.sec-title span{font-size:12.5px;font-weight:400;color:var(--faint)}
+.sec-note{margin:0 0 20px;color:var(--dim);max-width:78ch;font-size:13px}
+
+/* ---------- app frame ---------- */
+.app{
+  border:1px solid var(--rule);border-radius:9px;overflow:hidden;
+  background:var(--surface-2);
+}
+
+/* W1 page header */
+.apphead{
+  display:flex;align-items:center;gap:16px;
+  padding:13px 18px;background:var(--surface);
+  border-bottom:1px solid var(--rule);
+}
+.apphead h2{font-size:16px;font-weight:600;margin:0;letter-spacing:-.2px}
+.crumb{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:1px}
+.crumb i{font-style:normal;color:var(--rule);padding:0 5px}
+.apphead .sp{flex:1}
+.mode{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:4px 10px 4px 8px;border-radius:20px;
+  border:1px solid rgba(221,143,77,.35);background:rgba(221,143,77,.09);
+  color:var(--attn);font-size:12px;cursor:pointer;font-family:inherit;
+}
+.mode .d{width:6px;height:6px;border-radius:50%;background:var(--attn)}
+.mode:hover{background:rgba(221,143,77,.16)}
+.stamp{font-size:11.5px;color:var(--faint);font-family:var(--mono)}
+
+/* ---------- shared control styles ---------- */
+.bar{display:flex;align-items:center;gap:0;padding:9px 18px;background:var(--surface-2)}
+.bar + .bar{border-top:1px solid var(--rule-soft)}
+.bar .sp{flex:1}
+
+.unit{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.divider{width:1px;align-self:stretch;background:var(--rule-soft);margin:0 15px;flex:none}
+.ulabel{font-size:12px;color:var(--faint);flex:none}
+
+.sel{
+  display:inline-flex;align-items:center;gap:8px;height:29px;padding:0 9px 0 11px;
+  background:var(--raised);border:1px solid var(--rule);border-radius:var(--r);
+  color:var(--text);font-family:var(--sans);font-size:13px;cursor:pointer;
+  max-width:270px;
+}
+.sel .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel .mono{font-family:var(--mono);font-size:12.5px}
+.sel .cnt{color:var(--faint);font-size:12px}
+.sel .cv{color:var(--dim);font-size:9px;margin-left:auto;padding-left:2px}
+.sel:hover{background:var(--raised-hi);border-color:#33404e}
+.sel[disabled]{opacity:.42;cursor:not-allowed}
+.to{color:var(--faint);font-family:var(--mono);font-size:13px;padding:0 1px}
+
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;height:29px}
+.seg button{
+  border:none;background:var(--raised);color:var(--dim);font-family:var(--sans);
+  font-size:12.5px;padding:0 13px;cursor:pointer;border-right:1px solid var(--rule-soft);
+}
+.seg button:last-child{border-right:none}
+.seg button:hover{background:var(--raised-hi);color:var(--text)}
+.seg button.on{background:var(--sel-bg);color:#8fdedf;box-shadow:inset 0 -2px 0 var(--sel)}
+
+.chip{
+  display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;
+  border:1px solid var(--rule);border-radius:15px;background:var(--raised);
+  color:var(--dim);font-family:var(--sans);font-size:12.5px;cursor:pointer;white-space:nowrap;
+}
+.chip:hover{background:var(--raised-hi);color:var(--text);border-color:#33404e}
+.chip .n{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+.chip.on{background:var(--sel-bg);border-color:var(--sel);color:#a4e5e6}
+.chip.on .n{color:#7fd3d4}
+.chip.alert.on{background:rgba(223,96,121,.13);border-color:var(--alert);color:#f0a2b2}
+.chip.alert.on .n{color:#f0a2b2}
+.chipset{display:inline-flex;gap:6px;white-space:nowrap}
+
+.ghost{
+  display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 13px;
+  background:transparent;border:1px solid var(--rule);border-radius:var(--r);
+  color:var(--dim);font-family:var(--sans);font-size:13px;cursor:pointer;white-space:nowrap;
+}
+.ghost:hover{background:var(--raised);color:var(--text);border-color:#33404e}
+.solid{
+  display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 15px;
+  background:var(--sel);border:1px solid var(--sel-line);border-radius:var(--r);
+  color:#04211f;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.solid:hover{background:var(--sel-line)}
+.linkb{
+  background:none;border:none;color:var(--faint);font-family:var(--sans);font-size:12.5px;
+  cursor:pointer;padding:0 3px;text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:var(--rule);
+}
+.linkb:hover{color:var(--text)}
+.dt{
+  height:29px;padding:0 9px;background:var(--raised);border:1px solid var(--rule);
+  border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12.5px;
+}
+
+/* W6 stat strip */
+.stats{display:flex;gap:0;background:var(--surface);border-top:1px solid var(--rule)}
+.stat{
+  flex:1;padding:11px 18px;border-right:1px solid var(--rule-soft);
+  background:none;border-top:none;border-bottom:none;border-left:none;
+  text-align:left;font-family:var(--sans);cursor:pointer;
+}
+.stat:last-child{border-right:none}
+.stat:hover{background:var(--raised)}
+.stat .v{font-family:var(--mono);font-size:19px;font-weight:500;line-height:1.15;display:block}
+.stat .k{font-size:12px;color:var(--faint)}
+.stat.flag .v{color:var(--alert)}
+.stat.flag .k{color:#c78a99}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--surface-2)}
+.tbl th{
+  text-align:left;font-weight:500;color:var(--faint);font-size:11.5px;
+  padding:9px 18px;border-bottom:1px solid var(--rule);background:var(--surface)
+}
+.tbl td{padding:9px 18px;border-bottom:1px solid var(--rule-soft);color:var(--dim)}
+.tbl td.f{font-family:var(--mono);font-size:12px;color:var(--text)}
+.tbl tr:last-child td{border-bottom:none}
+.tag{
+  display:inline-block;padding:1px 8px;border-radius:11px;font-size:11px;
+  border:1px solid var(--rule);color:var(--dim)
+}
+.tag.none{border-color:rgba(223,96,121,.4);color:#e08f9f;background:rgba(223,96,121,.08)}
+.fade td{opacity:.5}
+
+/* ---------- annotation ---------- */
+.mockwrap{position:relative;padding:26px 46px 22px}
+.badge{
+  position:absolute;z-index:8;min-width:24px;height:22px;padding:0 6px;border-radius:11px;
+  background:var(--sel);color:#04211f;font-size:11px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 3px var(--canvas),0 2px 6px rgba(0,0,0,.55);
+  font-family:var(--mono);
+}
+
+/* ---------- tables / legend ---------- */
+table.doc{width:100%;border-collapse:collapse;font-size:13px}
+table.doc th{
+  text-align:left;font-weight:500;color:var(--dim);font-size:12px;
+  padding:9px 13px;border-bottom:1px solid var(--rule)
+}
+table.doc td{padding:10px 13px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+table.doc tbody tr:hover{background:rgba(255,255,255,.017)}
+td.w{white-space:nowrap;width:46px}
+.wtag{
+  display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:21px;
+  padding:0 7px;border-radius:11px;background:var(--sel-bg);color:#7fd3d4;
+  font-size:11.5px;font-weight:500;font-family:var(--mono)
+}
+code{
+  font-family:var(--mono);font-size:12px;color:#8fd4d5;
+  background:rgba(53,167,169,.09);padding:1px 5px;border-radius:3px
+}
+td.was{color:var(--faint)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start}
+@media(max-width:1080px){.grid2{grid-template-columns:1fr}}
+
+.callout{
+  border-left:2px solid var(--sel);padding:3px 0 3px 17px;margin:22px 0;
+  color:var(--dim);font-size:13px;max-width:80ch
+}
+.callout b{color:var(--text);font-weight:600}
+
+/* dialog */
+.dlg{
+  border:1px solid var(--rule);border-radius:9px;background:var(--surface);
+  max-width:470px;overflow:hidden
+}
+.dlg-h{padding:14px 18px;border-bottom:1px solid var(--rule);font-weight:600;font-size:14px}
+.dlg-b{padding:16px 18px;display:flex;flex-direction:column;gap:15px}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld > span{font-size:12px;color:var(--faint)}
+.recips{
+  display:flex;flex-wrap:wrap;gap:5px;padding:6px;min-height:38px;
+  background:var(--raised);border:1px solid var(--rule);border-radius:var(--r)
+}
+.rchip{
+  display:inline-flex;align-items:center;gap:6px;padding:2px 6px 2px 9px;border-radius:12px;
+  background:var(--sel-bg);border:1px solid rgba(53,167,169,.4);color:#a4e5e6;font-size:12px
+}
+.rchip b{cursor:pointer;color:#7fd3d4;font-weight:400}
+.recips input{
+  flex:1;min-width:120px;background:none;border:none;color:var(--text);
+  font-family:var(--sans);font-size:12.5px;outline:none;padding:0 4px
+}
+.txt{
+  background:var(--raised);border:1px solid var(--rule);border-radius:var(--r);
+  padding:7px 10px;color:var(--text);font-family:var(--sans);font-size:13px;width:100%
+}
+.opts{display:flex;gap:7px}
+.dlg-f{padding:13px 18px;border-top:1px solid var(--rule);display:flex;gap:9px;justify-content:flex-end}
+
+/* narrow */
+.narrow{max-width:760px;border:1px dashed var(--rule);border-radius:10px;padding:10px;position:relative}
+.narrow::after{
+  content:"760 px";position:absolute;top:-9px;right:16px;background:var(--canvas);
+  padding:0 8px;font-size:11px;color:var(--faint);font-family:var(--mono)
+}
+.narrow .bar{flex-wrap:wrap;row-gap:9px}
+.narrow .divider{display:none}
+.narrow .stats{flex-wrap:wrap}
+.narrow .stat{flex:1 1 45%;border-bottom:1px solid var(--rule-soft)}
+
+pre{
+  background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);
+  padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12px;
+  color:var(--dim);line-height:1.65;margin:0
+}
+pre .c{color:var(--faint)}
+pre .k{color:#8fd4d5}
+*:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="doc-head">
+  <h1>WebClient churn toolbar — redesign</h1>
+  <p>The current bar has no grouping structure, so it wraps mid-axis: Runtime lands on one line while Config and Human only land on the next. Rebuilt as three purposeful rows — identity, scope, filters — with every axis wrapping as a unit.</p>
+  <div class="doc-meta">
+    <div><b>Surface</b>TestController.WebClient (React)</div>
+    <div><b>Not</b>The WPF ribbon — regions use W, not R</div>
+    <div><b>Regions</b>W1–W12</div>
+    <div><b>Controls</b>21 today, 14 after</div>
+  </div>
+</header>
+
+<!-- ================= MAIN ================= -->
+<section>
+  <h2 class="sec-title">Proposed layout <span>default state, 1400 px</span></h2>
+  <p class="sec-note">Read top to bottom: who and what am I looking at, over what span, narrowed how. Actions sit at the right edge of the filter row, where the eye lands last.</p>
+
+  <div class="mockwrap">
+    <div class="badge" style="top:11px;left:24px">W1</div>
+    <div class="badge" style="top:11px;left:1122px">W2</div>
+    <div class="badge" style="top:75px;left:24px">W3</div>
+    <div class="badge" style="top:75px;left:300px">W4</div>
+    <div class="badge" style="top:75px;left:640px">W5</div>
+    <div class="badge" style="top:127px;left:24px">W6</div>
+    <div class="badge" style="top:127px;left:322px">W7</div>
+    <div class="badge" style="top:127px;left:600px">W8</div>
+    <div class="badge" style="top:127px;left:836px">W9</div>
+    <div class="badge" style="top:127px;left:1240px">W10</div>
+    <div class="badge" style="top:186px;left:24px">W11</div>
+    <div class="badge" style="bottom:80px;left:24px">W12</div>
+
+    <div class="app" id="app">
+
+      <!-- W1 / W2 -->
+      <div class="apphead">
+        <div>
+          <h2>Code churn</h2>
+          <div class="crumb">AppServer OMI<i>/</i>AppServer.AABootstrap</div>
+        </div>
+        <div class="sp"></div>
+        <button class="mode" id="modeBtn"><span class="d"></span>Read-only</button>
+        <span class="stamp">updated 10:42</span>
+        <button class="ghost" style="height:29px;padding:0 11px">↻</button>
+      </div>
+
+      <!-- W3 / W4 / W5 : scope row -->
+      <div class="bar">
+        <div class="unit">
+          <span class="ulabel">Branch</span>
+          <button class="sel"><span class="t mono">Releases/SP2023R2/2023R2SP2</span><span class="cv">▼</span></button>
+        </div>
+        <div class="divider"></div>
+        <div class="unit">
+          <span class="ulabel">Compare</span>
+          <button class="sel"><span class="t mono">20260903.1</span><span class="cv">▼</span></button>
+          <span class="to">→</span>
+          <button class="sel"><span class="t mono">20260903.2</span><span class="cnt">latest</span><span class="cv">▼</span></button>
+        </div>
+        <div class="divider"></div>
+        <div class="unit">
+          <span class="ulabel">Range</span>
+          <div class="seg" id="rangeSeg">
+            <button class="on" data-r="build">Build</button>
+            <button data-r="week">Week</button>
+            <button data-r="release">Release</button>
+            <button data-r="custom">Custom</button>
+          </div>
+        </div>
+        <div class="sp"></div>
+        <div class="unit">
+          <span class="ulabel">Component</span>
+          <button class="sel"><span class="t">All</span><span class="cnt">36</span><span class="cv">▼</span></button>
+        </div>
+      </div>
+
+      <!-- W6..W10 : filter row -->
+      <div class="bar">
+        <div class="unit">
+          <span class="ulabel">Context</span>
+          <div class="chipset">
+            <button class="chip on" data-t>Runtime <span class="n">23</span></button>
+            <button class="chip on" data-t>Config <span class="n">15</span></button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="unit">
+          <span class="ulabel">Author</span>
+          <div class="chipset">
+            <button class="chip on" data-t>Human</button>
+            <button class="chip" data-t>Automated <span class="n">112</span></button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="unit">
+          <span class="ulabel">Work item</span>
+          <div class="chipset">
+            <button class="chip" data-t>Bug</button>
+            <button class="chip" data-t>Story</button>
+            <button class="chip" data-t>IMS</button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="unit">
+          <span class="ulabel">Coverage</span>
+          <div class="chipset">
+            <button class="chip alert" data-t>No suite mapped <span class="n">35</span></button>
+          </div>
+        </div>
+        <div class="unit" style="margin-left:13px"><button class="linkb" id="clearBtn">Clear</button></div>
+        <div class="sp"></div>
+        <div class="unit" style="gap:9px">
+          <button class="ghost">✦ AI summary</button>
+          <button class="solid" id="exportBtn">Export ▾</button>
+        </div>
+      </div>
+
+      <!-- W11 stat strip -->
+      <div class="stats">
+        <button class="stat"><span class="v">799</span><span class="k">Changes</span></button>
+        <button class="stat"><span class="v">397</span><span class="k">Files</span></button>
+        <button class="stat"><span class="v">35</span><span class="k">Subsystems</span></button>
+        <button class="stat flag"><span class="v">35</span><span class="k">No suite mapped</span></button>
+        <button class="stat"><span class="v">v1</span><span class="k">Impact map</span></button>
+        <button class="stat"><span class="v" style="color:var(--ok)">0</span><span class="k">Unresolved paths</span></button>
+      </div>
+
+      <!-- W12 results -->
+      <table class="tbl">
+        <thead>
+          <tr><th>File</th><th>Subsystem</th><th>Context</th><th>Work item</th><th>Suite</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="f">src/Bootstrap/GalaxyLoader.cs</td><td>Bootstrap</td><td><span class="tag">Runtime</span></td><td>Bug 448210</td><td><span class="tag">SP.Smoke.Deploy</span></td></tr>
+          <tr><td class="f">src/Bootstrap/PackageResolver.cs</td><td>Bootstrap</td><td><span class="tag">Runtime</span></td><td>Story 447901</td><td><span class="tag">SP.Targeted.Pkg</span></td></tr>
+          <tr><td class="f">cfg/Templates/AppEngine.xml</td><td>Deployment</td><td><span class="tag">Config</span></td><td>IMS 91442</td><td><span class="tag none">none</span></td></tr>
+          <tr><td class="f">src/Comms/MxAccessBridge.cpp</td><td>Communications</td><td><span class="tag">Runtime</span></td><td>Bug 448077</td><td><span class="tag">SP.Full.Comms</span></td></tr>
+          <tr class="fade"><td class="f">src/Bootstrap/Version.props</td><td>Bootstrap</td><td><span class="tag">Config</span></td><td>—</td><td><span class="tag none">none</span></td></tr>
+        </tbody>
+      </table>
+
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>The wrapping fix, specifically:</b> each axis is one <code>.unit</code> with <code>white-space:nowrap</code> around a label and its chipset. The row wraps between units, never inside one. Runtime and Config cannot be separated by a line break no matter how narrow the window gets.
+  </div>
+</section>
+
+<!-- ================= STATES ================= -->
+<section>
+  <h2 class="sec-title">Two states worth pinning down</h2>
+  <div class="grid2">
+    <div>
+      <p class="sec-note" style="margin-bottom:14px">Choosing Custom reveals the dates and an Apply button in place of the preset row. Presets apply on click, so Apply only exists where it does something.</p>
+      <div class="app">
+        <div class="bar">
+          <div class="unit">
+            <span class="ulabel">Branch</span>
+            <button class="sel" style="max-width:180px"><span class="t mono">…/2023R2SP2</span><span class="cv">▼</span></button>
+          </div>
+          <div class="divider"></div>
+          <div class="unit">
+            <span class="ulabel">Range</span>
+            <div class="seg">
+              <button data-r="build">Build</button><button data-r="week">Week</button>
+              <button data-r="release">Release</button><button class="on">Custom</button>
+            </div>
+          </div>
+        </div>
+        <div class="bar">
+          <div class="unit">
+            <span class="ulabel">From</span><input class="dt" type="date" value="2026-09-02">
+            <span class="ulabel" style="margin-left:8px">To</span><input class="dt" type="date" value="2026-09-04">
+          </div>
+          <div class="unit" style="margin-left:12px"><button class="solid">Apply range</button></div>
+          <div class="sp"></div>
+          <span class="stamp">3 days, 2 builds</span>
+        </div>
+      </div>
+      <p class="sec-note" style="margin-top:14px">The disabled <code>(pick build)</code> dropdown disappears entirely. It was disabled because Build mode picks the build for you — a control that is inert in three of four modes should not hold permanent space.</p>
+    </div>
+    <div>
+      <p class="sec-note" style="margin-bottom:14px">The recipients textarea moves out of the toolbar and into the send dialog, where it is asked for once, at the moment it matters.</p>
+      <div class="dlg">
+        <div class="dlg-h">Email churn report</div>
+        <div class="dlg-b">
+          <div class="fld">
+            <span>To</span>
+            <div class="recips">
+              <span class="rchip">vinodkumar.Javvadi@aveva.com <b>×</b></span>
+              <span class="rchip">sp-qa-leads@aveva.com <b>×</b></span>
+              <input placeholder="Add a recipient">
+            </div>
+          </div>
+          <div class="fld">
+            <span>Subject</span>
+            <input class="txt" value="Churn 20260903.1 → 20260903.2 — 799 changes, 35 unmapped">
+          </div>
+          <div class="fld">
+            <span>Attach</span>
+            <div class="opts">
+              <button class="chip on" data-t>Excel</button>
+              <button class="chip" data-t>CSV</button>
+              <button class="chip" data-t>HTML</button>
+              <button class="chip on" data-t>AI summary</button>
+            </div>
+          </div>
+        </div>
+        <div class="dlg-f">
+          <button class="ghost">Cancel</button>
+          <button class="solid">Send report</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= NARROW ================= -->
+<section>
+  <h2 class="sec-title">Narrow viewport <span>760 px</span></h2>
+  <p class="sec-note">Units wrap whole. Dividers drop out, the stat strip goes two-up, and the actions stay together on their own line. No axis is ever split.</p>
+  <div class="narrow">
+    <div class="app">
+      <div class="apphead">
+        <div><h2 style="font-size:15px">Code churn</h2><div class="crumb">AppServer.AABootstrap</div></div>
+        <div class="sp"></div>
+        <button class="mode"><span class="d"></span>Read-only</button>
+      </div>
+      <div class="bar">
+        <div class="unit"><span class="ulabel">Branch</span><button class="sel" style="max-width:170px"><span class="t mono">…/2023R2SP2</span><span class="cv">▼</span></button></div>
+        <div class="unit" style="margin-left:12px"><span class="ulabel">Compare</span><button class="sel"><span class="t mono">903.1</span><span class="cv">▼</span></button><span class="to">→</span><button class="sel"><span class="t mono">903.2</span><span class="cv">▼</span></button></div>
+        <div class="unit" style="margin-left:12px"><span class="ulabel">Range</span><div class="seg"><button class="on">Build</button><button>Week</button><button>Release</button><button>Custom</button></div></div>
+      </div>
+      <div class="bar">
+        <div class="unit"><span class="ulabel">Context</span><div class="chipset"><button class="chip on" data-t>Runtime <span class="n">23</span></button><button class="chip on" data-t>Config <span class="n">15</span></button></div></div>
+        <div class="unit" style="margin-left:12px"><span class="ulabel">Author</span><div class="chipset"><button class="chip on" data-t>Human</button><button class="chip" data-t>Automated</button></div></div>
+        <div class="unit" style="margin-left:12px"><span class="ulabel">Work item</span><div class="chipset"><button class="chip" data-t>Bug</button><button class="chip" data-t>Story</button><button class="chip" data-t>IMS</button></div></div>
+        <div class="unit" style="margin-left:12px"><span class="ulabel">Coverage</span><div class="chipset"><button class="chip alert" data-t>No suite <span class="n">35</span></button></div></div>
+      </div>
+      <div class="bar">
+        <button class="linkb">Clear</button>
+        <div class="sp"></div>
+        <div class="unit" style="gap:9px"><button class="ghost">✦ AI summary</button><button class="solid">Export ▾</button></div>
+      </div>
+      <div class="stats">
+        <button class="stat"><span class="v">799</span><span class="k">Changes</span></button>
+        <button class="stat"><span class="v">397</span><span class="k">Files</span></button>
+        <button class="stat"><span class="v">35</span><span class="k">Subsystems</span></button>
+        <button class="stat flag"><span class="v">35</span><span class="k">No suite mapped</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= REGIONS ================= -->
+<section>
+  <h2 class="sec-title">Region reference <span>W1–W12, WebClient only</span></h2>
+  <table class="doc">
+    <thead><tr><th class="w">W</th><th style="width:18%">Region</th><th style="width:24%">Component</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td class="w"><span class="wtag">W1</span></td><td>Identity block</td><td><code>&lt;ChurnHeader/&gt;</code></td><td>Title plus a mono breadcrumb naming the project and repo. The current UI never states which repo is loaded — it is only visible on the New Analysis form you navigated away from.</td></tr>
+      <tr><td class="w"><span class="wtag">W2</span></td><td>Mode badge</td><td><code>&lt;ModeBadge/&gt;</code> + popover</td><td>Replaces the full-width amber banner. Click opens the same sentence about Observer access and enabling Secured mode. A permanent banner for a permanent condition trains people to stop reading it.</td></tr>
+      <tr><td class="w"><span class="wtag">W3</span></td><td>Branch</td><td><code>&lt;BranchSelect/&gt;</code></td><td>Mono type, since a branch ref is an identifier. Widened so sibling release branches are distinguishable. Carries the Tags/Branches switch from the New Analysis form as a two-state label.</td></tr>
+      <tr><td class="w"><span class="wtag">W4</span></td><td>Compare pair</td><td><code>&lt;BuildCompare/&gt;</code></td><td>Baseline → target, both editable. The current bar never shows what the comparison is against; this is the same gap as the desktop ribbon and should share a view model shape.</td></tr>
+      <tr><td class="w"><span class="wtag">W5</span></td><td>Range presets</td><td><code>&lt;SegmentedControl/&gt;</code></td><td>Build, Week, Release, Custom. Presets apply immediately and rewrite the W4 baseline. Only Custom reveals dates and Apply.</td></tr>
+      <tr><td class="w"><span class="wtag">W6</span></td><td>Context axis</td><td><code>&lt;FilterAxis/&gt;</code></td><td>Runtime and Config with live counts. Both selected by default. One <code>.unit</code>, so they cannot be split by a wrap.</td></tr>
+      <tr><td class="w"><span class="wtag">W7</span></td><td>Author axis</td><td><code>&lt;FilterAxis/&gt;</code></td><td>Human only becomes Human versus Automated under its own label. Beside Runtime and Config it implied a third deployment context, which it is not.</td></tr>
+      <tr><td class="w"><span class="wtag">W8</span></td><td>Work item axis</td><td><code>&lt;FilterAxis/&gt;</code></td><td>Bug, Story, IMS. Multi-select, OR inside the axis, AND across axes. All changes is gone — no chips selected already means all.</td></tr>
+      <tr><td class="w"><span class="wtag">W9</span></td><td>Coverage axis</td><td><code>&lt;FilterAxis/&gt;</code></td><td>The only chip with its own colour, because unmapped churn is the thing this tool exists to surface. Clear sits after it and is disabled when nothing is on.</td></tr>
+      <tr><td class="w"><span class="wtag">W10</span></td><td>Actions</td><td><code>&lt;ExportMenu/&gt;</code></td><td>Four equal-weight buttons become one filled Export with Excel, CSV, HTML and Email report in the menu. AI summary stays separate — it generates rather than exports.</td></tr>
+      <tr><td class="w"><span class="wtag">W11</span></td><td>Result stats</td><td><code>&lt;StatStrip/&gt;</code></td><td>Replaces the near-invisible dot-joined status line. Each tile is a button that applies its own filter, so No suite mapped is one click from a filtered view.</td></tr>
+      <tr><td class="w"><span class="wtag">W12</span></td><td>Results table</td><td><code>&lt;ChurnTable/&gt;</code></td><td>Unchanged in scope, shown here only so the toolbar can be judged against the content it governs. Rows with no work item render at reduced emphasis.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= MIGRATION ================= -->
+<section>
+  <h2 class="sec-title">Where every current control went</h2>
+  <p class="sec-note">Twenty-one controls become fourteen. Use this as the acceptance checklist.</p>
+  <table class="doc">
+    <thead><tr><th style="width:24%">Today</th><th style="width:20%">Now</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td class="was">Default Mode banner</td><td>W2 badge</td><td>Reclaims a full row. The message survives in a popover, where it is read on demand rather than ignored on every load.</td></tr>
+      <tr><td class="was">SCOPE / FROM / TO / BRANCH / FOCUS labels</td><td>Sentence-case inline labels</td><td>Tracked-out small caps at four different positions read as decoration. Sentence case sits closer to its control and scans faster.</td></tr>
+      <tr><td class="was">Build / Weekly / Custom / Release</td><td>W5 segmented</td><td>Same four options, but visibly one control with one answer rather than four buttons that might be independent toggles.</td></tr>
+      <tr><td class="was">From / To / Apply</td><td>W5 custom state</td><td>Hidden unless Custom is selected. They currently sit enabled while Build mode ignores them.</td></tr>
+      <tr><td class="was">(pick build) — disabled</td><td>W4 compare pair</td><td>Becomes the baseline selector and is never inert. A permanently greyed control with no explanation is the single most confusing thing on the current bar.</td></tr>
+      <tr><td class="was">BRANCH (all branches)</td><td>W3</td><td>Widened and set in mono. "All branches" as a default is questionable for churn — flagged below.</td></tr>
+      <tr><td class="was">Runtime / Config</td><td>W6</td><td>Reunited on one line under a Context label, with counts.</td></tr>
+      <tr><td class="was">Human only</td><td>W7</td><td>Given its own axis and a partner state, so the filter's meaning is legible without hovering.</td></tr>
+      <tr><td class="was">All changes</td><td>Removed</td><td>It was the empty state of the work-item axis wearing a button. Zero chips selected already means all; Clear covers the reset.</td></tr>
+      <tr><td class="was">Bug / Story / IMS</td><td>W8</td><td>Labelled as an axis so it stops reading as a continuation of Runtime and Config.</td></tr>
+      <tr><td class="was">FOCUS (all components)</td><td>W3 row, right edge</td><td>Moved up beside Branch. It narrows the scope, so it belongs with the other scope controls, not among the filters.</td></tr>
+      <tr><td class="was">AI Summary</td><td>W10</td><td>Kept as a distinct action next to Export.</td></tr>
+      <tr><td class="was">recipients textarea</td><td>Email dialog</td><td>A free-text field in a persistent toolbar is state with nowhere to be saved. Recipients belong to the send action, and become removable chips with validation.</td></tr>
+      <tr><td class="was">Email / Excel / CSV / HTML</td><td>W10 Export menu</td><td>Four equal buttons implied four equally likely intents. One menu, four items, one of which opens the dialog.</td></tr>
+      <tr><td class="was">Refresh</td><td>W1</td><td>Beside the updated-at stamp, which is the thing it changes.</td></tr>
+      <tr><td class="was">"· map · unresolved: none"</td><td>W11 tiles</td><td>Two facts hidden in 10 px grey text become two of six tiles, each clickable.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= REACT ================= -->
+<section>
+  <div class="grid2">
+    <div>
+      <h2 class="sec-title">Component shape</h2>
+      <p class="sec-note">One state object, one derived query. Every control reads and writes the same slice, which is what keeps the URL shareable.</p>
+<pre><span class="c">// churnQuery.ts — the whole toolbar state</span>
+<span class="k">type</span> ChurnQuery = {
+  scope: {
+    branch: string;          <span class="c">// W3</span>
+    baselineBuild: string;   <span class="c">// W4</span>
+    targetBuild: string;     <span class="c">// W4</span>
+    components: string[];    <span class="c">// [] = all</span>
+  };
+  range:
+    | { mode: 'build' | 'week' | 'release' }
+    | { mode: 'custom'; from: string; to: string };
+  filters: {
+    context:  ('runtime'|'config')[];
+    author:   ('human'|'automated')[];
+    workItem: ('bug'|'story'|'ims')[];
+    unmappedOnly: boolean;
+  };
+};</pre>
+      <p class="sec-note" style="margin-top:14px">Serialise it to the query string so a filtered view can be pasted into a bug. Today none of this survives a refresh.</p>
+    </div>
+    <div>
+      <h2 class="sec-title">Wrapping rule</h2>
+      <p class="sec-note">The whole layout fix is three declarations. Worth stating plainly because it is easy to lose in a refactor.</p>
+<pre>.bar   { display:flex; flex-wrap:wrap; row-gap:9px; }
+.unit  { display:inline-flex; white-space:nowrap; }
+.unit  { flex:none; }
+
+<span class="c">/* A unit is one label + one chipset.
+   Flex may break between units.
+   It can never break inside one. */</span></pre>
+      <h2 class="sec-title" style="margin-top:26px">Shared with the desktop ribbon</h2>
+      <p class="sec-note">These two apps stay separate, but three definitions should come from Core so they cannot drift: the compare-pair semantics, the four range presets, and the filter axis enums. If Runtime means one thing in WPF and another here, the counts stop agreeing and both surfaces lose trust.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec-title">Three things I assumed</h2>
+  <table class="doc">
+    <tbody>
+      <tr><td style="width:22%"><b>Human only</b></td><td>Read as commit authorship — real people versus build agents and version-bump bots. Hence the Human / Automated pair with a count on Automated. If it means manually classified rather than machine mapped, it belongs in the Coverage axis instead.</td></tr>
+      <tr><td><b>(all branches)</b></td><td>Left as the default, but churn between two builds implies a single branch. If this genuinely spans branches, W4 needs a branch qualifier on each build or the comparison is undefined.</td></tr>
+      <tr><td><b>Automated count</b></td><td>Shown as 112 to make the point that a count on an unselected chip tells you what you are currently excluding. If that number is expensive to compute, drop it rather than compute filtered totals on every keystroke.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('[data-t]').forEach(function(c){
+    c.addEventListener('click',function(){ c.classList.toggle('on'); sync(); });
+  });
+  function sync(){
+    var on = document.querySelectorAll('#app .chip.on').length;
+    var b = document.getElementById('clearBtn');
+    if(b) b.style.opacity = on ? '1' : '.35';
+  }
+  sync();
+  var cb = document.getElementById('clearBtn');
+  if(cb) cb.addEventListener('click',function(){
+    document.querySelectorAll('#app .chip.on').forEach(function(c){ c.classList.remove('on'); });
+    sync();
+  });
+  document.querySelectorAll('.seg').forEach(function(s){
+    s.querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click',function(){
+        s.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); });
+        b.classList.add('on');
+      });
+    });
+  });
+  document.querySelectorAll('.rchip b').forEach(function(x){
+    x.addEventListener('click',function(){ x.parentElement.remove(); });
+  });
+})();
+</script>
+</body>
+</html>

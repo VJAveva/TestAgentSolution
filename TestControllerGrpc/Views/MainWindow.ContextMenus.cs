@@ -249,6 +249,8 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "Template")
         {
+            menu.Items.Add(CreateMenuItemWithIcon("Execute Template", _vm.ExecuteTemplateCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Edit Template XML…", _vm.EditSingleTemplateXmlCommand, "\uE70F", "AccMauve"));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
@@ -262,6 +264,8 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "ActionGroup")
         {
+            menu.Items.Add(CreateMenuItemWithIcon("Execute Group", _vm.ExecuteGroupCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
             menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToTemplateCommand, "\uE71B", "AccMauve"));
@@ -275,6 +279,12 @@ public partial class MainWindow : Window
                 Foreground = (Brush)FindResource("TextS"),
             };
             menu.Items.Add(execTypeSubmenu);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
+        }
+        else if (node.NodeKind is "Action")
+        {
+            menu.Items.Add(CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
         }

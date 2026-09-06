@@ -2,8 +2,10 @@ using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.Views.Dialogs;
 
 namespace TestControllerGrpc.ViewModels.AgentWorkspace;
 
@@ -12,6 +14,8 @@ public partial class FleetVM : ObservableObject, IDisposable
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly AgentLockManager _lockManager;
     private readonly ExecutionSessionManager _sessionManager;
+    private readonly IFleetMaintenanceService? _maintenanceService;
+    private readonly IMaintenanceStateStore? _maintenanceState;
     private readonly Dispatcher _uiDispatcher;
     private bool _disposed;
 
@@ -26,14 +30,48 @@ public partial class FleetVM : ObservableObject, IDisposable
     [ObservableProperty] private int _freeCount;
     [ObservableProperty] private int _offlineCount;
     [ObservableProperty] private int _failedCount;
+    [ObservableProperty] private int _revertingCount;
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private bool _isEmpty = true;
     [ObservableProperty] private int _utilizationBarWidth;
 
+    public bool HasReverting => RevertingCount > 0;
+    partial void OnRevertingCountChanged(int value) => OnPropertyChanged(nameof(HasReverting));
+
     public event Action<string>? AgentSelected;
     public event Action? RegisterAgentClicked;
 
+    /// <summary>Windows Update posture source for the card shield badges (R17); null until attached.</summary>
+    public FleetUpdatesVM? Updates { get; private set; }
+
+    /// <summary>Wires the shared update view model so card badges track posture changes.</summary>
+    public void AttachUpdates(FleetUpdatesVM updates)
+    {
+        Updates = updates;
+        updates.RowsChanged += ApplyUpdateBadges;
+        OnPropertyChanged(nameof(Updates));
+        ApplyUpdateBadges();
+    }
+
+    private void ApplyUpdateBadges()
+    {
+        if (Updates is null) return;
+
+        foreach (var card in Cards)
+        {
+            var row = Updates.Rows.FirstOrDefault(
+                r => string.Equals(r.AgentName, card.AgentName, StringComparison.OrdinalIgnoreCase));
+
+            card.HasUpdateBadge = row?.HasBadge ?? false;
+            card.IsRebootRequired = row?.IsRebootRequired ?? false;
+            card.UpdateBadgeText = row?.BadgeText ?? "";
+            card.UpdateTooltip = row?.Provenance ?? "";
+            card.IsDraining = _maintenanceState?.Get(card.AgentName) == MaintenanceState.Draining;
+        }
+    }
+
     private readonly DispatcherTimer _healthTimer;
+    private readonly DispatcherTimer _elapsedTimer;
     private bool _isProbing;
 
     /// <summary>Debounce timer: coalesces rapid event bursts into a single Refresh.</summary>
@@ -44,12 +82,22 @@ public partial class FleetVM : ObservableObject, IDisposable
         AgentLockManager lockManager,
         ExecutionSessionManager sessionManager,
         IEventAggregator events,
-        Dispatcher uiDispatcher)
+        Dispatcher uiDispatcher,
+        IFleetMaintenanceService? maintenanceService = null,
+        IMaintenanceStateStore? maintenanceState = null)
     {
         _dispatcher = dispatcher;
         _lockManager = lockManager;
         _sessionManager = sessionManager;
+        _maintenanceService = maintenanceService;
+        _maintenanceState = maintenanceState;
         _uiDispatcher = uiDispatcher;
+
+        if (_maintenanceService is not null)
+        {
+            _maintenanceService.ProgressChanged += OnMaintenanceProgress;
+            _maintenanceService.OperationCompleted += OnMaintenanceCompleted;
+        }
 
         // Scale fix: Debounce all event-driven refreshes to prevent UI starvation.
         // At 200 agents with heartbeats every 5s, up to 40 events/second can arrive.
@@ -80,6 +128,11 @@ public partial class FleetVM : ObservableObject, IDisposable
             uiDispatcher);
         _healthTimer.Start();
 
+        // 1-second timer to advance the elapsed clock on cards under maintenance.
+        _elapsedTimer = new DispatcherTimer(
+            TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => TickElapsed(), uiDispatcher);
+        _elapsedTimer.Start();
+
         Refresh();
     }
 
@@ -88,7 +141,13 @@ public partial class FleetVM : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         _healthTimer.Stop();
+        _elapsedTimer.Stop();
         _refreshDebounce.Stop();
+        if (_maintenanceService is not null)
+        {
+            _maintenanceService.ProgressChanged -= OnMaintenanceProgress;
+            _maintenanceService.OperationCompleted -= OnMaintenanceCompleted;
+        }
     }
 
     /// <summary>
@@ -261,6 +320,15 @@ public partial class FleetVM : ObservableObject, IDisposable
                 free++;
             }
 
+            // Reflect authoritative maintenance state (the revert engine owns it) on the card.
+            if (_maintenanceState is not null)
+            {
+                var mstate = _maintenanceState.Get(agentName);
+                card.IsUnderMaintenance = mstate is MaintenanceState.Reverting or MaintenanceState.Rebooting or MaintenanceState.Updating;
+                card.IsQuarantined = mstate == MaintenanceState.Quarantined;
+                card.MaintenanceStateText = mstate == MaintenanceState.None ? "" : mstate.ToString();
+            }
+
             if (isNew)
                 Cards.Add(card);
         }
@@ -315,6 +383,9 @@ public partial class FleetVM : ObservableObject, IDisposable
         UtilizationBarWidth = Cards.Count > 0
             ? (int)(80.0 * busy / Cards.Count)
             : 0;
+
+        RevertingCount = Cards.Count(c => c.IsUnderMaintenance);
+        ApplyUpdateBadges();
     }
 
     [RelayCommand]
@@ -326,6 +397,124 @@ public partial class FleetVM : ObservableObject, IDisposable
 
     [RelayCommand]
     private void RequestRegisterAgent() => RegisterAgentClicked?.Invoke();
+
+    // ── Fleet maintenance (revert) ──
+
+    [RelayCommand]
+    private void Revert(FleetCardVM? card)
+    {
+        if (card is null || _maintenanceService is null) return;
+        var dialog = new RevertMachineDialog();
+        dialog.Initialize(card.AgentName);
+        dialog.ShowDialog();
+    }
+
+    [RelayCommand]
+    private async Task Reboot(FleetCardVM? card)
+    {
+        if (card is null || _maintenanceService is null) return;
+        var confirm = ThemedMessageBox.Show(
+            $"Reboot '{card.AgentName}'?\n\nAny running test on it will be interrupted.",
+            "Reboot machine", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+        if (confirm != System.Windows.MessageBoxResult.Yes) return;
+
+        var request = new RebootRequest
+        {
+            NodeId = card.AgentName,
+            TriggerSource = MaintenanceTriggerSource.FleetPanel,
+            TriggeredBy = Environment.UserName,
+        };
+        try { await _maintenanceService.StartRebootAsync(request, CancellationToken.None); }
+        catch (MaintenanceInProgressException) { /* already under maintenance */ }
+    }
+
+    [RelayCommand]
+    private async Task CancelRevert(FleetCardVM? card)
+    {
+        if (card is null || _maintenanceService is null || card.CurrentOperationId == Guid.Empty) return;
+        await _maintenanceService.RequestCancelAsync(card.CurrentOperationId);
+    }
+
+    [RelayCommand]
+    private async Task ClearQuarantine(FleetCardVM? card)
+    {
+        if (card is null || _maintenanceService is null) return;
+        await _maintenanceService.ClearQuarantineAsync(card.AgentName, Environment.UserName);
+        _uiDispatcher.InvokeAsync(Refresh);
+    }
+
+    [RelayCommand]
+    private void OpenRemoteDesktop(FleetCardVM? card)
+    {
+        if (card is null) return;
+        var host = ResolveHost(card);
+        if (string.IsNullOrWhiteSpace(host)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo("mstsc.exe", $"/v:{host}") { UseShellExecute = true });
+        }
+        catch
+        {
+            // mstsc unavailable or launch blocked — nothing actionable from the fleet panel.
+        }
+    }
+
+    private static string ResolveHost(FleetCardVM card)
+        => !string.IsNullOrWhiteSpace(card.Address) && Uri.TryCreate(card.Address, UriKind.Absolute, out var uri)
+            ? uri.Host
+            : card.AgentName;
+
+    private void TickElapsed()
+    {
+        foreach (var card in Cards)
+        {
+            if (card.IsUnderMaintenance && card.MaintenanceStartedUtc != default)
+                card.MaintenanceElapsed = FormatElapsed(DateTime.UtcNow - card.MaintenanceStartedUtc);
+        }
+    }
+
+    private static string FormatElapsed(TimeSpan t)
+        => t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes}:{t.Seconds:00}";
+
+    private void OnMaintenanceProgress(object? sender, MaintenanceProgress p)
+    {
+        _uiDispatcher.InvokeAsync(() =>
+        {
+            var card = Cards.FirstOrDefault(c =>
+                string.Equals(c.AgentName, p.NodeId, StringComparison.OrdinalIgnoreCase));
+            if (card is null) return;
+            if (!card.IsUnderMaintenance)
+                card.MaintenanceStartedUtc = DateTime.UtcNow - p.Elapsed;
+            card.IsUnderMaintenance = true;
+            card.IsQuarantined = false;
+            card.CurrentOperationId = p.OperationId;
+            card.MaintenanceStep = p.StepNumber;
+            card.MaintenanceStepCount = p.StepCount;
+            card.MaintenancePhase = p.Message;
+            card.MaintenanceStateText = _maintenanceState?.Get(p.NodeId).ToString() ?? "Reverting";
+            RevertingCount = Cards.Count(c => c.IsUnderMaintenance);
+        });
+    }
+
+    private void OnMaintenanceCompleted(object? sender, MaintenanceOperation op)
+    {
+        _uiDispatcher.InvokeAsync(() =>
+        {
+            var card = Cards.FirstOrDefault(c =>
+                string.Equals(c.AgentName, op.NodeId, StringComparison.OrdinalIgnoreCase));
+            if (card is not null)
+            {
+                card.MaintenancePhase = op.State.ToString();
+                card.MaintenanceStep = 0;
+                card.MaintenanceStepCount = 0;
+                card.CurrentOperationId = Guid.Empty;
+                card.MaintenanceStartedUtc = default;
+                card.MaintenanceElapsed = "";
+            }
+            Refresh();
+        });
+    }
 }
 
 /// <summary>
@@ -403,4 +592,49 @@ public partial class FleetCardVM : ObservableObject
     partial void OnWatchItemTagChanged(string value) => OnPropertyChanged(nameof(PipelinePillText));
     partial void OnCurrentActionTagChanged(string value) => OnPropertyChanged(nameof(PipelinePillText));
     partial void OnProgressPercentChanged(int value) => OnPropertyChanged(nameof(PipelinePillText));
+
+    // ── Fleet maintenance (revert) live state ──
+    [ObservableProperty] private bool _isUnderMaintenance;
+    [ObservableProperty] private bool _isQuarantined;
+    [ObservableProperty] private string _maintenanceStateText = "";
+    [ObservableProperty] private string _maintenancePhase = "";
+    [ObservableProperty] private int _maintenanceStep;
+    [ObservableProperty] private int _maintenanceStepCount;
+    [ObservableProperty] private Guid _currentOperationId;
+    [ObservableProperty] private DateTime _maintenanceStartedUtc;
+    [ObservableProperty] private string _maintenanceElapsed = "";
+
+    public int MaintenanceProgressPercent =>
+        MaintenanceStepCount > 0 ? (int)(100.0 * MaintenanceStep / MaintenanceStepCount) : 0;
+
+    public string MaintenanceLine
+    {
+        get
+        {
+            if (MaintenanceStepCount <= 0) return MaintenancePhase;
+            var elapsed = string.IsNullOrEmpty(MaintenanceElapsed) ? "" : $"{MaintenanceElapsed} \u00b7 ";
+            return $"{MaintenanceStateText} \u00b7 {MaintenanceStep}/{MaintenanceStepCount} \u00b7 {elapsed}{MaintenancePhase}";
+        }
+    }
+
+    partial void OnMaintenanceStepChanged(int value)
+    {
+        OnPropertyChanged(nameof(MaintenanceProgressPercent));
+        OnPropertyChanged(nameof(MaintenanceLine));
+    }
+    partial void OnMaintenanceStepCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(MaintenanceProgressPercent));
+        OnPropertyChanged(nameof(MaintenanceLine));
+    }
+    partial void OnMaintenancePhaseChanged(string value) => OnPropertyChanged(nameof(MaintenanceLine));
+
+    // ── Windows Update shield badge (spec R17) ──
+    [ObservableProperty] private bool _hasUpdateBadge;
+    [ObservableProperty] private bool _isRebootRequired;
+    [ObservableProperty] private bool _isDraining;
+    [ObservableProperty] private string _updateBadgeText = "";
+    [ObservableProperty] private string _updateTooltip = "";
+    partial void OnMaintenanceStateTextChanged(string value) => OnPropertyChanged(nameof(MaintenanceLine));
+    partial void OnMaintenanceElapsedChanged(string value) => OnPropertyChanged(nameof(MaintenanceLine));
 }

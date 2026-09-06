@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TestController.Persistence.Maintenance;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
@@ -17,6 +18,7 @@ public sealed class OrchestratorDbContext : DbContext
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<NotificationMute> NotificationMutes => Set<NotificationMute>();
     public DbSet<NotificationCooldown> NotificationCooldowns => Set<NotificationCooldown>();
+    public DbSet<MaintenanceOperationRecord> MaintenanceOperations => Set<MaintenanceOperationRecord>();
 
     public OrchestratorDbContext(DbContextOptions<OrchestratorDbContext> options)
         : base(options) { }

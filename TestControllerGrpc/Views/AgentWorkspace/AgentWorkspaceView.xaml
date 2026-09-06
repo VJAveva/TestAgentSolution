@@ -51,6 +51,18 @@
                             <RadioButton GroupName="AgentMode" Style="{StaticResource ModeRadio}"
                                          Content="⚙ Registry"
                                          IsChecked="{Binding CurrentMode, Converter={StaticResource EnumToBool}, ConverterParameter=Registry}"/>
+                            <RadioButton GroupName="AgentMode" Style="{StaticResource ModeRadio}"
+                                         IsChecked="{Binding CurrentMode, Converter={StaticResource EnumToBool}, ConverterParameter=Maintenance}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🔧 Maintenance" VerticalAlignment="Center"/>
+                                    <Border Margin="5,0,0,0" CornerRadius="7" Padding="5,0" MinWidth="16"
+                                            Background="{DynamicResource Accent}"
+                                            Visibility="{Binding Maintenance.HasActive, Converter={StaticResource BoolVis}}">
+                                        <TextBlock Text="{Binding Maintenance.ActiveCount}" FontSize="9"
+                                                   Foreground="White" HorizontalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
+                            </RadioButton>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -95,6 +107,18 @@
                     </Style>
                 </views:RegistryView.Style>
             </views:RegistryView>
+            <views:MaintenanceView DataContext="{Binding Maintenance}">
+                <views:MaintenanceView.Style>
+                    <Style TargetType="UserControl">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.CurrentMode, ElementName=ContentGrid}" Value="Maintenance">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </views:MaintenanceView.Style>
+            </views:MaintenanceView>
         </Grid>
     </DockPanel>
 </UserControl>

@@ -65,6 +65,39 @@ public sealed class ImpactServiceCollectionExtensionsTests
         Assert.NotEmpty(provider.GetServices<IHostedService>());
     }
 
+    [Fact]
+    public void AddImpactMapping_ReaderWriter_Should_BuildUnderValidateOnBuild_WhenAdoNotRegistered()
+    {
+        // Regression for the JVGR22 incident: the WebApi host (ReaderWriter + ValidateOnBuild) ran with a stale
+        // appsettings that had no Ado section, so AddAdoRegressionIngest never registered AdoClient. The impact
+        // graph must still build — degrading IAdoWorkItemClient to NullAdoWorkItemClient — instead of failing
+        // DI validation on the unregistered AdoClient (which 500'd the whole site, health included).
+        IConfiguration config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ImpactMapping:Index:DatabasePath"] = "test-noado-index.db",
+                ["ImpactMapping:Learning:OutcomeDatabasePath"] = "test-noado-outcomes.db",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IAppLogger, NoopAppLogger>();
+        // Deliberately DO NOT register AdoClient / IAdoTokenProvider — this is the ADO-disabled host.
+
+        services.AddImpactMapping(config, ImpactHostRole.ReaderWriter);
+
+        using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+
+        Assert.NotNull(provider.GetService<IImpactTestMappingService>());
+        Assert.IsType<NullAdoWorkItemClient>(provider.GetService<IAdoWorkItemClient>());
+        Assert.NotEmpty(provider.GetServices<IHostedService>());
+    }
+
     private sealed class FakeTokenProvider : IAdoTokenProvider
     {
         public Task<string> GetAuthHeaderAsync(CancellationToken ct) => Task.FromResult("Bearer test");

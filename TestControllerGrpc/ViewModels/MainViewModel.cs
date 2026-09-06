@@ -37,6 +37,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IAppLogger _appLogger;
     private readonly IEventAggregator _events;
     private readonly AgentLockManager _lockManager;
+    private readonly TestControllerGrpc.Core.Maintenance.IMaintenanceStateStore? _maintenanceState;
+    private readonly TestControllerGrpc.Core.Maintenance.IFleetMaintenanceService? _fleetMaintenance;
     private readonly HealthThresholdSettings _healthThresholds;
     private readonly TestController.Api.Services.PipelineAuthorizationGuard _pipelineGuard;
     private readonly Services.AuthClient _authClient;
@@ -116,6 +118,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TriggerAllWatchItemsCommand.NotifyCanExecuteChanged();
         ExecuteGroupCommand.NotifyCanExecuteChanged();
         ExecuteSingleActionCommand.NotifyCanExecuteChanged();
+        ExecuteTemplateCommand.NotifyCanExecuteChanged();
         CancelExecutionCommand.NotifyCanExecuteChanged();
         RetryFailedCommand.NotifyCanExecuteChanged();
     }
@@ -340,7 +343,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Services.CapabilityChecker capabilityChecker,
         Services.CurrentUserHolder currentUserHolder,
         Services.LockStateService lockStateService,
-        TestControllerGrpc.Locking.ILockRegistry lockRegistry)
+        TestControllerGrpc.Locking.ILockRegistry lockRegistry,
+        TestControllerGrpc.Core.Maintenance.IMaintenanceStateStore? maintenanceState = null,
+        TestControllerGrpc.Core.Maintenance.IFleetMaintenanceService? fleetMaintenance = null,
+        TestControllerGrpc.Core.Maintenance.IMaintenanceOperationStore? maintenanceStore = null,
+        TestControllerGrpc.Core.Maintenance.INodeUpdateStatusStore? updateStatus = null,
+        TestControllerGrpc.Core.Maintenance.IFleetNotificationService? fleetNotifications = null,
+        TestControllerGrpc.Core.Maintenance.UpdatePolicyStore? updatePolicy = null)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -358,9 +367,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _currentUserHolder = currentUserHolder;
         _lockStateService = lockStateService;
         _lockRegistry = lockRegistry;
+        _maintenanceState = maintenanceState;
+        _fleetMaintenance = fleetMaintenance;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
-            Application.Current.Dispatcher);
+            Application.Current.Dispatcher, fleetMaintenance, _maintenanceState, maintenanceStore,
+            updateStatus, fleetNotifications, updatePolicy);
+
+        // Mirror fleet-maintenance (revert / reboot) activity into the main execution log.
+        if (_fleetMaintenance is not null)
+        {
+            _fleetMaintenance.ProgressChanged += OnMaintenanceProgressLog;
+            _fleetMaintenance.OperationCompleted += OnMaintenanceCompletedLog;
+        }
 
         // Phase 2b: subscribe to capability changes for CanExecute + filtering
         _capabilityChecker.CapabilitiesChanged += OnCapabilitiesChanged;
@@ -685,6 +704,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _capabilityChecker.CapabilitiesChanged -= OnCapabilitiesChanged;
         _authClient.AuthStateChanged -= OnAuthStateChanged;
         _currentUserHolder.UserChanged -= OnCurrentUserChanged;
+        if (_fleetMaintenance is not null)
+        {
+            _fleetMaintenance.ProgressChanged -= OnMaintenanceProgressLog;
+            _fleetMaintenance.OperationCompleted -= OnMaintenanceCompletedLog;
+        }
 
         // Dispose event aggregator subscriptions (replaces static event unsubscription)
         foreach (var sub in _subscriptions) sub.Dispose();
@@ -827,6 +851,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return null;
     }
 
+    /// <summary>Finds the owning Template's pipeline tag ("Template:{ID}") for a node in the Templates tree.</summary>
+    private static string? FindTemplateTag(TreeNodeViewModel? node)
+    {
+        var current = node;
+        while (current is not null)
+        {
+            if (current.NodeKind == NodeKinds.Template)
+                return $"Template:{current.Tag}";
+            current = current.Parent;
+        }
+        return null;
+    }
+
     /// <summary>Auto-populate gRPC address from agent name for convenience.</summary>
     partial void OnNewAgentNameChanged(string value)
     {
@@ -875,6 +912,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedTemplateNodeChanged(TreeNodeViewModel? value)
     {
+        NotifyExecutionCanExecuteChanged();
         if (value is null) return;
 
         ActiveEditNode = value;

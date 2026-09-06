@@ -68,7 +68,9 @@ export default function FleetPage({ onSelectAgent }: FleetPageProps) {
               return (
                 <div
                   key={virtualRow.key}
-                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pb-3"
                   style={{
                     position: 'absolute',
                     top: 0,

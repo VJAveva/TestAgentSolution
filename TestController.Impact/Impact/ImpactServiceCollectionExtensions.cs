@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using TestControllerGrpc.Ado;
 using TestControllerGrpc.Ado.Reporting.Llm;
 using TestControllerGrpc.Core.Impact.Ado;
 using TestControllerGrpc.Core.Impact.Anchors;
@@ -14,6 +15,7 @@ using TestControllerGrpc.Core.Impact.Ranking;
 using TestControllerGrpc.Core.Impact.Rerank;
 using TestControllerGrpc.Core.Impact.Retrieval;
 using TestControllerGrpc.Core.Impact.Selection;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Core.Impact;
 
@@ -53,8 +55,20 @@ public static class ImpactServiceCollectionExtensions
         services.AddDbContextFactory<OutcomeDbContext>((sp, builder) =>
             builder.UseSqlite($"Data Source={sp.GetRequiredService<IOptions<ImpactMappingOptions>>().Value.Learning.OutcomeDatabasePath}"));
 
-        // ADO work-item client — builds on the host's existing AdoClient (AddAdoRegressionIngest).
-        services.TryAddSingleton<IAdoWorkItemClient, AdoImpactWorkItemClient>();
+        // ADO work-item client — builds on the host's existing AdoClient, which AddAdoRegressionIngest only
+        // registers when Ado:Enabled=true. Registered via a factory (opaque to ValidateOnBuild) so a host with
+        // ValidateOnBuild=true still starts when ADO is disabled, degrading to the null client (no external
+        // work items) instead of failing DI validation on the unregistered AdoClient.
+        services.TryAddSingleton<IAdoWorkItemClient>(sp =>
+        {
+            AdoClient? adoClient = sp.GetService<AdoClient>();
+            return adoClient is null
+                ? new NullAdoWorkItemClient()
+                : new AdoImpactWorkItemClient(
+                    adoClient,
+                    sp.GetRequiredService<IOptions<ImpactMappingOptions>>(),
+                    sp.GetRequiredService<IAppLogger>());
+        });
 
         // Embeddings: Azure (cached) when an endpoint is configured, otherwise the null provider.
         if (!string.IsNullOrWhiteSpace(options.Index.EmbeddingEndpoint))

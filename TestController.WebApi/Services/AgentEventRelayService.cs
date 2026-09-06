@@ -1,6 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using TestAgentGrpc;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Services;
 
 namespace TestController.WebApi.Services;
@@ -18,17 +19,20 @@ public sealed class AgentEventRelayService : BackgroundService
     private readonly IRealtimeNotifier _notifier;
     private readonly AgentGrpcClientManager _grpcManager;
     private readonly AgentRegistry _registry;
+    private readonly INodeUpdateStatusStore _updateStatus;
     private readonly ILogger<AgentEventRelayService> _logger;
 
     public AgentEventRelayService(
         IRealtimeNotifier notifier,
         AgentGrpcClientManager grpcManager,
         AgentRegistry registry,
+        INodeUpdateStatusStore updateStatus,
         ILogger<AgentEventRelayService> logger)
     {
         _notifier = notifier;
         _grpcManager = grpcManager;
         _registry = registry;
+        _updateStatus = updateStatus;
         _logger = logger;
     }
 
@@ -147,6 +151,17 @@ public sealed class AgentEventRelayService : BackgroundService
 
             case ExecutionEventType.EventHeartbeat:
                 _registry.UpdateStatus(agentName, "Online");
+                break;
+
+            case ExecutionEventType.EventWindowsUpdate:
+                var posture = WindowsUpdateEventMapper.TryMap(agentName, evt.Detail, DateTimeOffset.UtcNow);
+                if (posture is not null)
+                {
+                    _updateStatus.Apply(posture);
+                    _logger.LogDebug(
+                        "Windows Update posture for {Agent}: pending={Pending} rebootRequired={Reboot}",
+                        agentName, posture.Status.PendingCount, posture.Status.RebootRequired);
+                }
                 break;
         }
     }

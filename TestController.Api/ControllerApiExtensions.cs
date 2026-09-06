@@ -76,6 +76,8 @@ public static class ControllerApiExtensions
         // Agent liveness: actively probes idle agents so the fleet screen turns red
         // within seconds of an agent dying, before a run hangs on it.
         services.AddHostedService<AgentLivenessMonitor>();
+        services.AddHostedService<MaintenanceHubBridge>();
+        services.AddHostedService<FleetUpdateHubBridge>();
 
         // Add controllers from the shared assembly
         return services.AddControllers()

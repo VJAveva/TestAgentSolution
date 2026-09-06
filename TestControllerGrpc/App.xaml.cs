@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TestController.Api;
 using TestControllerGrpc.Configuration;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
@@ -99,6 +100,9 @@ public partial class App : Application
                 // Phase 3a: Pipeline lock (controller-host only — WebApi proxies via ControllerProxyService)
                 services.AddControllerLockServices(ctx.Configuration);
 
+                // Fleet maintenance revert engine (controller host owns the DB the operation store writes to)
+                services.AddFleetMaintenanceServices(ctx.Configuration);
+
                 services.AddSingleton<IEventAggregator, EventAggregator>();
                 services.AddSingleton<IVocabularyMonitor, VocabularyMonitor>();
                 // ControllerTimeoutOptions: bind from "Controller:Timeouts" so the dispatcher's
@@ -135,6 +139,10 @@ public partial class App : Application
                 services.AddHostedService<ControllerHostedService>();
                 services.AddHostedService<ControllerGrpcServerHost>();
                 services.AddHostedService<ControllerWebApiHost>();
+
+                // Windows Update posture: store fed by the agent push firehose (mirrors WebApi's AgentEventRelayService).
+                services.AddWindowsUpdatePosture();
+                services.AddHostedService<NodeUpdateStatusRelay>();
 
                 // Phase 8: Automatic notification dispatcher
                 services.AddHostedService<NotificationDispatcher>();
@@ -181,6 +189,7 @@ public partial class App : Application
                 // Phase 3b: Lock conflict dialog ViewModels
                 services.AddTransient<ViewModels.LockConflictDialogViewModel>();
                 services.AddTransient<ViewModels.ForceReleaseReasonDialogViewModel>();
+                services.AddTransient<ViewModels.AgentWorkspace.RevertMachineViewModel>();
 
                 // Phase 1b: User management
                 services.AddSingleton<UserManagementClient>();

@@ -10,6 +10,7 @@ using TestController.Api;
 using TestController.Api.Security;
 using TestController.WebApi.Endpoints;
 using TestController.WebApi.Services;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -107,6 +108,8 @@ builder.Services.AddSingleton<ControllerProxyService>();
 // Lets the shared AgentsController proxy /api/agents/fleet to the co-located controller.
 builder.Services.AddSingleton<TestController.Api.Services.IControllerFleetProxy, ControllerFleetProxy>();
 builder.Services.AddSingleton<ConfigValidator>();
+// Controller-side Windows Update posture, fed by AgentEventRelayService from the agent firehose.
+builder.Services.AddWindowsUpdatePosture();
 builder.Services.AddHostedService<AgentEventRelayService>();
 // Bridges the WPF controller's hub events (live run + lock + owner) to this host's
 // ControllerHub so web clients see them without ever connecting to the controller directly.
@@ -114,7 +117,7 @@ builder.Services.AddHostedService<AgentEventRelayService>();
 builder.Services.AddHostedService<ControllerEventRelayService>();
 
 // Adapters: expose standalone services as the interfaces the shared API controllers expect
-builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabularyMonitor(sp.GetRequiredService<WatchListFileService>()));
+builder.Services.AddSingleton<IVocabularyMonitor>(sp => new StandaloneVocabularyMonitor(sp.GetRequiredService<WatchListFileService>(), sp.GetRequiredService<IAppLogger>()));
 builder.Services.AddSingleton<IAgentGrpcDispatcher>(sp => new StandaloneAgentDispatcher(
     sp.GetRequiredService<AgentGrpcClientManager>(),
     sp.GetRequiredService<AgentRegistry>(),

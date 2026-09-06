@@ -77,7 +77,7 @@ public sealed partial class RegressionViewModel : ObservableObject
         _matcher = matcher;
         _logger = logger;
         _to = DateTime.Today;
-        _from = DateTime.Today;
+        _from = DateTime.Today.AddDays(-2);
         _recipients = resultsConfig.ReportRecipients;
         InitSource();
         RefreshAuthState();
@@ -313,12 +313,16 @@ public sealed partial class RegressionViewModel : ObservableObject
     // Off by default: Universal-Packages manifest bumps are hidden; turn on "All changes" to include them.
     [ObservableProperty] private bool _showAllChanges;
 
+    // Coverage axis: show only rows with no automated or manual suite mapped — the churn this tool surfaces.
+    [ObservableProperty] private bool _showUnmappedOnly;
+
     partial void OnFilterBugChanged(bool value) => ApplyFilter();
     partial void OnFilterStoryChanged(bool value) => ApplyFilter();
     partial void OnFilterImsChanged(bool value) => ApplyFilter();
     partial void OnHideAutomatedChangesChanged(bool value) => ApplyFilter();
     partial void OnShowAllFilesChanged(bool value) => ApplyFilter();
     partial void OnShowAllChangesChanged(bool value) => ApplyFilter();
+    partial void OnShowUnmappedOnlyChanged(bool value) => ApplyFilter();
 
     [ObservableProperty] private string _scopeLabel = "";
     [ObservableProperty] private string _rangeText = "";
@@ -376,6 +380,21 @@ public sealed partial class RegressionViewModel : ObservableObject
     partial void OnShowRuntimeChanged(bool value) => ApplyFilter();
     partial void OnShowConfigChanged(bool value) => ApplyFilter();
 
+    /// <summary>Resets every filter axis to its default (Context + Author on, everything else off).</summary>
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        ShowRuntime = true;
+        ShowConfig = true;
+        HideAutomatedChanges = true;
+        ShowAllChanges = false;
+        ShowAllFiles = false;
+        FilterBug = false;
+        FilterStory = false;
+        FilterIms = false;
+        ShowUnmappedOnly = false;
+    }
+
     [RelayCommand]
     private void SelectScope(string scopeName)
     {
@@ -386,7 +405,7 @@ public sealed partial class RegressionViewModel : ObservableObject
         var today = DateTime.Today;
         (From, To) = scope switch
         {
-            RegressionScopeKind.Build => (today, today),
+            RegressionScopeKind.Build => (today.AddDays(-2), today),
             RegressionScopeKind.Weekly => (today.AddDays(-7), today),
             RegressionScopeKind.Release => (today.AddDays(-45), today),
             _ => (From, To), // Custom: leave as-is, user drives via date pickers
@@ -419,9 +438,9 @@ public sealed partial class RegressionViewModel : ObservableObject
         var startedAtMs = Environment.TickCount64;
         try
         {
-            // Build scope shows the current build's changes vs the previous build (latest-build mode, no date window).
-            DateOnly? fromDate = SelectedScope == RegressionScopeKind.Build ? null : DateOnly.FromDateTime(From);
-            DateOnly? toDate = SelectedScope == RegressionScopeKind.Build ? null : DateOnly.FromDateTime(To);
+            // Default (Build) = the last 2 days, so only components with changes in that window are retrieved.
+            DateOnly? fromDate = DateOnly.FromDateTime(From);
+            DateOnly? toDate = DateOnly.FromDateTime(To);
             var branch = SelectedBranch == AllBranches ? null : SelectedBranch;
 
             // Offload to a background thread so the UI thread is free to paint the busy indicator,
@@ -527,6 +546,10 @@ public sealed partial class RegressionViewModel : ObservableObject
                 (FilterStory && vm.HasStory) ||
                 (FilterIms && vm.HasIms)).ToList();
         }
+
+        // Coverage axis: keep only rows with no automated or manual suite mapped.
+        if (ShowUnmappedOnly)
+            list = list.Where(vm => vm.AutomatedSuiteCount == 0 && vm.ManualSuiteCount == 0).ToList();
 
         Rows.Clear();
         var n = 1;

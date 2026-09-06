@@ -126,6 +126,41 @@ public class RegressionImpactMatcherTests
         Assert.Equal(["Alpha", "Beta", "Gamma"], matches.Select(m => m.ImpactedArea).ToArray());
     }
 
+    [Fact]
+    public async Task MatchAsync_Should_FeedWorkItemTitlesAsPrNarrative()
+    {
+        ChangePayload? captured = null;
+        var engine = new CapturingEngine(p => captured = p);
+        var change = new RegressionChangeRef("c1", "Merged PR 1: fix", DateTimeOffset.UtcNow, ["a.cs"],
+            [new RegressionWorkItemRef(5011025, RegressionWorkItemKind.Bug, "Non-Warm Redundant Engine LMX Rejection", null)],
+            RegressionChangeKind.PullRequest);
+
+        await Matcher(engine).MatchAsync(Row(changes: change), CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.Contains("Non-Warm Redundant Engine LMX Rejection", captured!.PrDescription);
+        Assert.Contains(5011025, captured.LinkedWorkItemIds);
+    }
+
+    private sealed class CapturingEngine(Action<ChangePayload> capture) : IImpactTestMappingService
+    {
+        public Task<ImpactMappingResult> MapAsync(ImpactedArea area, ChangePayload payload, SelectionTier tier, CancellationToken ct)
+        {
+            capture(payload);
+            return Task.FromResult(new ImpactMappingResult(
+                area, [], [], [], [], new AnchorResult([], 0, false),
+                new SelectionDiagnostics(TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0, null),
+                tier, false, [], TimeSpan.Zero, Guid.NewGuid()));
+        }
+
+        public async IAsyncEnumerable<ImpactMappingProgress> MapWithProgressAsync(
+            ImpactedArea area, ChangePayload payload, SelectionTier tier, [EnumeratorCancellation] CancellationToken ct)
+        {
+            ImpactMappingResult result = await MapAsync(area, payload, tier, ct);
+            yield return new ImpactMappingProgress("Done", 1, 1, "done", result);
+        }
+    }
+
     private sealed class FakeEngine(Func<ImpactedArea, IReadOnlyList<MappedTestCase>> select) : IImpactTestMappingService
     {
         public Task<ImpactMappingResult> MapAsync(ImpactedArea area, ChangePayload payload, SelectionTier tier, CancellationToken ct)

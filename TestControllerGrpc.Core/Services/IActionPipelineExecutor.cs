@@ -54,6 +54,12 @@ public interface IActionPipelineExecutor
     Task<bool> ExecuteSingleActionTrackedAsync(string watchItemTag, ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct);
 
     /// <summary>
+    /// Executes a Template's children directly (a standalone, named action list) with session tracking,
+    /// as if they were a sequential Event. Used to run a Template independently of any WatchItem.
+    /// </summary>
+    Task ExecuteTemplateTrackedAsync(string pipelineTag, TemplateConfig template, PipelineExecutionContext ctx, CancellationToken ct);
+
+    /// <summary>
     /// Re-executes only the actions that failed in a previous session,
     /// using the same resolved parameters from the original run.
     /// </summary>

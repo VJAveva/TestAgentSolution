@@ -1631,6 +1631,13 @@
                                                     <TextBlock Text="Exec Action" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding ExecuteTemplateCommand}"
+                                                    ToolTip="Execute the selected Template (all its Actions and ActionGroups)">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE71B;" Foreground="{DynamicResource AccGreen}" />
+                                                    <TextBlock Text="Exec Template" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                         <TextBlock Text="Run" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
                                                    HorizontalAlignment="Center" Margin="0,4,0,0" />

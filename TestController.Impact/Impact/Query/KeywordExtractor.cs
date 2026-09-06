@@ -53,6 +53,9 @@ public sealed class KeywordExtractor : IKeywordExtractor
             new("identity", 1.00, TokenizeAll([area.DisplayName, area.Vob, area.Subsystem])),
             new("literals", 0.95, TokenizeAll(doc.ChangedLiterals)),
             new("api", 0.85, TokenizeAll(doc.PublicApiChanges)),
+            // The change narrative (PR/commit subjects + work-item titles) is functional English — the
+            // vocabulary test cases are written in — so it drives retrieval even when HyDE/embeddings are off.
+            new("narrative", 0.75, TokenizeAll([doc.PrNarrative])),
         };
 
         int totalFiles = area.ChangedPaths.Count;

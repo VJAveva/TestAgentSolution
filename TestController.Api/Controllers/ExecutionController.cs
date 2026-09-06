@@ -12,6 +12,7 @@ using TestControllerGrpc.Identity;
 using TestControllerGrpc.Locking;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.Core.Maintenance;
 
 namespace TestController.Api.Controllers;
 
@@ -42,6 +43,7 @@ public class ExecutionController : ControllerBase
     private readonly IEventAggregator _events;
     private readonly ILockRegistry? _lockRegistry;
     private readonly IAuthenticationModeProvider _modeProvider;
+    private readonly IMaintenanceStateStore? _maintenanceState;
 
     /// <summary>Per-tag locks to prevent TOCTOU race without serializing unrelated triggers.</summary>
     private static readonly ConcurrentDictionary<string, object> _triggerLocks = new(StringComparer.OrdinalIgnoreCase);
@@ -61,7 +63,8 @@ public class ExecutionController : ControllerBase
         ISecurityAuditLogger auditLogger,
         IEventAggregator events,
         IAuthenticationModeProvider modeProvider,
-        ILockRegistry? lockRegistry = null)
+        ILockRegistry? lockRegistry = null,
+        IMaintenanceStateStore? maintenanceState = null)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -75,6 +78,7 @@ public class ExecutionController : ControllerBase
         _events = events;
         _modeProvider = modeProvider;
         _lockRegistry = lockRegistry;
+        _maintenanceState = maintenanceState;
     }
 
     /// <summary>GET /api/execution/sessions � list active sessions.</summary>
@@ -357,6 +361,21 @@ public class ExecutionController : ControllerBase
 
         // Extract required agents (resolved from variables)
         var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
+
+        // Fleet-maintenance gate: a node being reverted/rebooted/updated/quarantined is not dispatchable.
+        // Return a typed fleet-unavailable result rather than a bare 409.
+        // TODO (run queue): this is the insertion point where a future queue would hold the request instead of failing.
+        if (_maintenanceState is not null)
+        {
+            var unavailable = DispatchGate.GetMaintenanceBlockers(_maintenanceState, requiredAgents);
+            if (unavailable is not null)
+                return Conflict(new
+                {
+                    error = "fleet-unavailable",
+                    message = $"{unavailable.BlockedNodes.Count} required agent(s) are in maintenance and cannot take work.",
+                    blockedNodes = unavailable.BlockedNodes.Select(b => new { agent = b.NodeId, reason = b.Reason }),
+                });
+        }
 
         // Optimistic locking: reject if lock state changed since pre-flight check
         if (request?.LockVersion.HasValue == true &&

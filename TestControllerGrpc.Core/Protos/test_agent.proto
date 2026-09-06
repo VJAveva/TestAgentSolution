@@ -119,6 +119,8 @@ enum ExecutionEventType {
   EVENT_TERMINATED    = 8;
   EVENT_STATE_CHANGED = 9;
   EVENT_HEARTBEAT     = 10;
+  // Windows Update posture snapshot (Part 2); JSON payload rides in ExecutionEvent.detail.
+  EVENT_WINDOWS_UPDATE = 11;
 }
 
 enum OutputKind {

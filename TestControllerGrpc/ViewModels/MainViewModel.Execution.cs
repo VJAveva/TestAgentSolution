@@ -11,6 +11,7 @@ using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
 using TestControllerGrpc.Views.Dialogs;
@@ -71,6 +72,53 @@ public sealed partial class MainViewModel
             return null;
         }
         return (result as TestControllerGrpc.Locking.AcquireResult.Success)?.Lock.Token ?? string.Empty;
+    }
+
+    /// <summary>Maintenance dispatch gate for WPF triggers: true = blocked (already logged and cleaned up).</summary>
+    private bool IsBlockedByMaintenance(string tag, IReadOnlyList<string> requiredAgents, string? pipelineToken, PipelineSession session)
+    {
+        var unavailable = _maintenanceState is null
+            ? null
+            : DispatchGate.GetMaintenanceBlockers(_maintenanceState, requiredAgents);
+        if (unavailable is null) return false;
+
+        var detail = string.Join("\n", unavailable.BlockedNodes.Select(b => $"  {b.NodeId} \u2014 {b.Reason}"));
+        AddLog($"Cannot start '{tag}' \u2014 agent(s) in maintenance:\n{detail}", LogSeverity.Warning);
+        if (pipelineToken is not null)
+            _lockRegistry.TryRelease(tag, pipelineToken);
+        Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
+        return true;
+    }
+
+    // ── Maintenance activity → execution log ─────────────────────────
+    // Every revert/reboot phase tick and terminal outcome is mirrored into the main execution log so fleet
+    // maintenance appears alongside pipeline runs. Fires on the engine's background thread; AddLog is thread-safe.
+    private void OnMaintenanceProgressLog(object? sender, MaintenanceProgress p)
+        => AddLog($"[Maintenance] {p.NodeId}: {p.Message} (step {p.StepNumber}/{p.StepCount}, {p.Phase})",
+            LogSeverity.Info, agentName: p.NodeId);
+
+    private void OnMaintenanceCompletedLog(object? sender, MaintenanceOperation op)
+    {
+        var severity = op.State switch
+        {
+            MaintenanceOperationState.Succeeded => LogSeverity.Success,
+            MaintenanceOperationState.Cancelled => LogSeverity.Warning,
+            MaintenanceOperationState.Failed => LogSeverity.Error,
+            _ => LogSeverity.Info,
+        };
+        var elapsed = (op.CompletedUtc ?? DateTimeOffset.UtcNow) - op.StartedUtc;
+        string detail;
+        if (op.State == MaintenanceOperationState.Succeeded)
+        {
+            detail = $"in {(int)elapsed.TotalMinutes}m {elapsed.Seconds:D2}s";
+        }
+        else
+        {
+            detail = $"at {op.FailurePhase?.ToString() ?? op.Phase.ToString()}";
+            if (op.ExitCode is int code && code != 0)
+                detail += $" (exit {code})";
+        }
+        AddLog($"[Maintenance] {op.NodeId}: {op.Kind} {op.State} {detail}.", severity, agentName: op.NodeId);
     }
 
     private bool CanTriggerEvent
@@ -138,6 +186,7 @@ public sealed partial class MainViewModel
         var requiredAgents = wiConfig != null
             ? AgentResolver.ExtractAgentNames(ev, ctx.Parameters)
             : [];
+        if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -298,6 +347,7 @@ public sealed partial class MainViewModel
         // Acquire agent locks for all agents across all events
         var parameters = CollectInitializeParameters(SelectedNode);
         var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+        if (IsBlockedByMaintenance(wi.Tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -509,6 +559,7 @@ public sealed partial class MainViewModel
                 ? CollectInitializeParameters(wiNode)
                 : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+            if (IsBlockedByMaintenance(wi.Tag, requiredAgents, pipelineToken, session)) return true;
             if (requiredAgents.Count > 0)
             {
                 var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -622,15 +673,20 @@ public sealed partial class MainViewModel
         if (!allSuccess) ScrollLogToLastError();
     }
 
-    private bool CanExecuteGroup => SelectedNode?.NodeKind == NodeKinds.ActionGroup;
+    /// <summary>The tree node the execute commands act on — the Templates tree when it is active, else the WatchList tree.</summary>
+    private TreeNodeViewModel? ActiveExecNode =>
+        ActiveEditingContext == "Templates" ? SelectedTemplateNode : SelectedNode;
 
-    /// <summary>Execute a single ActionGroup and its children.</summary>
+    private bool CanExecuteGroup => ActiveExecNode?.NodeKind == NodeKinds.ActionGroup;
+
+    /// <summary>Execute a single ActionGroup and its children (from the WatchList or the Templates tree).</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteGroup), AllowConcurrentExecutions = true)]
     private async Task ExecuteGroup()
     {
-        if (SelectedNode?.ModelObject is not ActionGroupConfig ag) return;
+        var node = ActiveExecNode;
+        if (node?.ModelObject is not ActionGroupConfig ag) return;
 
-        var tag = FindWatchItemTag(SelectedNode) ?? ag.Tag;
+        var tag = FindWatchItemTag(node) ?? FindTemplateTag(node) ?? ag.Tag;
         if (IsWatchItemRunning(tag))
         {
             AddLog($"WatchItem '{tag}' is already running");
@@ -640,18 +696,19 @@ public sealed partial class MainViewModel
         WriteBackAll();
 
         var session = CreateSession(tag);
-        var wiConfig = FindAncestorModel<WatchItemConfig>(SelectedNode);
+        var wiConfig = FindAncestorModel<WatchItemConfig>(node);
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:Group:{ag.Tag}]",
-            Parameters = CollectInitializeParameters(SelectedNode),
+            Parameters = CollectInitializeParameters(node),
             SessionId = session.SessionId,
         };
         StampOwner(ctx);
 
         // Acquire agent locks so Registry/Monitor reflect live status
         var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters);
+        if (IsBlockedByMaintenance(tag, requiredAgents, null, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -678,7 +735,7 @@ public sealed partial class MainViewModel
             });
         }
 
-        var groupNode = SelectedNode;
+        var groupNode = node;
         groupNode.SetStatusRecursive("Running");
         groupNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered ActionGroup: {ag.Tag}");
@@ -729,15 +786,125 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanExecuteSingleAction => SelectedNode?.NodeKind == NodeKinds.Action;
+    private bool CanExecuteTemplate => SelectedTemplateNode?.NodeKind == NodeKinds.Template;
 
-    /// <summary>Execute a single Action node.</summary>
+    /// <summary>Execute a Template directly — all of its Actions and ActionGroups — independent of any WatchItem.</summary>
+    [RelayCommand(CanExecute = nameof(CanExecuteTemplate), AllowConcurrentExecutions = true)]
+    private async Task ExecuteTemplate()
+    {
+        if (SelectedTemplateNode is not { } templateNode || templateNode.ModelObject is not TemplateConfig tpl) return;
+
+        var tag = $"Template:{tpl.ID}";
+        if (IsWatchItemRunning(tag))
+        {
+            AddLog($"Template '{tpl.ID}' is already running");
+            return;
+        }
+
+        WriteBackAll();
+
+        var session = CreateSession(tag);
+
+        // Templates have no WatchItem context — collect only their own Initialize parameters.
+        var initCtx = new PipelineExecutionContext();
+        GatherInitializeParams(templateNode, initCtx);
+        var ctx = new PipelineExecutionContext
+        {
+            WatchItemPath = "",
+            TriggerFileName = $"[ManualTrigger:Template:{tpl.ID}]",
+            Parameters = initCtx.Parameters,
+            SessionId = session.SessionId,
+        };
+        StampOwner(ctx);
+
+        var requiredAgents = AgentResolver.ExtractAgentNames(tpl, ctx.Parameters);
+        if (IsBlockedByMaintenance(tag, requiredAgents, null, session)) return;
+        if (requiredAgents.Count > 0)
+        {
+            var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
+            var (locked, conflicts) = _lockManager.TryLockAgents(
+                requiredAgents, session.SessionId, tag, wpfUser, "WPF");
+            if (!locked)
+            {
+                var conflictMsg = string.Join("\n",
+                    conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start template '{tpl.ID}' \u2014 agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
+                return;
+            }
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Template execution: {tpl.ID}",
+            });
+        }
+
+        templateNode.SetStatusRecursive("Running");
+        templateNode.PropagateStatusUp();
+        AddLog($"[{session.SessionId}] Triggered Template: {tpl.ID}");
+
+        _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, $"Template:{tpl.ID}", "WPF"));
+
+        try
+        {
+            await _executor.ExecuteTemplateTrackedAsync(tag, tpl, ctx, session.Cts.Token);
+            templateNode.ExecutionStatus = "Success";
+            templateNode.PropagateStatusUp();
+            AddLog($"[{session.SessionId}] Template completed: {tpl.ID}", LogSeverity.Success);
+            var execSession = _sessionManager.GetSession(session.SessionId)
+                ?? _sessionManager.GetLastSession(tag);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Success",
+                execSession?.SucceededCount ?? 0, execSession?.FailedCount ?? 0, execSession?.TotalActions ?? 0));
+        }
+        catch (OperationCanceledException)
+        {
+            templateNode.CancelWithDescendants();
+            templateNode.PropagateStatusUp();
+            AddLog($"[{session.SessionId}] Template cancelled: {tpl.ID}", LogSeverity.Warning);
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Cancelled", 0, 0, 0));
+        }
+        catch (Exception ex)
+        {
+            templateNode.SetFailed(ex.Message);
+            templateNode.PropagateStatusUp();
+            AddLog($"[{session.SessionId}] Template failed: {tpl.ID} \u2014 {ex.Message}", LogSeverity.Error);
+            ScrollLogToLastError();
+            _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
+        }
+        finally
+        {
+            _lockManager.ReleaseSession(session.SessionId);
+            _events.Publish(new AgentLocksChangedEvent
+            {
+                Locks = _lockManager.GetAllLocks()
+                    .Select(l => new AgentLockInfo
+                    {
+                        AgentName = l.AgentName, SessionId = l.SessionId,
+                        WatchItemTag = l.WatchItemTag, UserId = l.UserId,
+                        Source = l.Source, LockedAtUtc = l.LockedAtUtc,
+                    }).ToList(),
+                Reason = $"Template completed: {tpl.ID}",
+            });
+            CompleteSession(session);
+        }
+    }
+
+    private bool CanExecuteSingleAction => ActiveExecNode?.NodeKind == NodeKinds.Action;
+
+    /// <summary>Execute a single Action node (from the WatchList or the Templates tree).</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteSingleAction), AllowConcurrentExecutions = true)]
     private async Task ExecuteSingleAction()
     {
-        if (SelectedNode?.ModelObject is not ActionConfig action) return;
+        var node = ActiveExecNode;
+        if (node?.ModelObject is not ActionConfig action) return;
 
-        var tag = FindWatchItemTag(SelectedNode) ?? action.Command;
+        var tag = FindWatchItemTag(node) ?? FindTemplateTag(node) ?? action.Command;
         if (IsWatchItemRunning(tag))
         {
             AddLog($"WatchItem '{tag}' is already running");
@@ -747,18 +914,19 @@ public sealed partial class MainViewModel
         WriteBackAll();
 
         var session = CreateSession(tag);
-        var wiConfig = FindAncestorModel<WatchItemConfig>(SelectedNode);
+        var wiConfig = FindAncestorModel<WatchItemConfig>(node);
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
             TriggerFileName = $"[ManualTrigger:Action:{action.Command}]",
-            Parameters = CollectInitializeParameters(SelectedNode),
+            Parameters = CollectInitializeParameters(node),
             SessionId = session.SessionId,
         };
         StampOwner(ctx);
 
         // Acquire agent lock so Registry/Monitor reflect live status
         var requiredAgents = AgentResolver.ExtractAgentNames(action, ctx.Parameters);
+        if (IsBlockedByMaintenance(tag, requiredAgents, null, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -785,7 +953,7 @@ public sealed partial class MainViewModel
             });
         }
 
-        var actionNode = SelectedNode;
+        var actionNode = node;
         actionNode.ExecutionStatus = "Running";
         actionNode.PropagateStatusUp();
         AddLog($"[{session.SessionId}] Triggered Action: {action.Type} � {action.Command}");
@@ -951,24 +1119,24 @@ public sealed partial class MainViewModel
     {
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // Walk up to find the WatchItem root
+        // Walk up to the WatchItem or Template root, then gather Initialize params from there down.
         var current = node;
-        TreeNodeViewModel? watchItemNode = null;
+        TreeNodeViewModel? root = null;
         while (current != null)
         {
-            if (current.NodeKind == NodeKinds.WatchItem)
+            if (current.NodeKind is NodeKinds.WatchItem or NodeKinds.Template)
             {
-                watchItemNode = current;
+                root = current;
                 break;
             }
             current = current.Parent;
         }
 
-        if (watchItemNode == null) return parameters;
+        if (root == null) return parameters;
 
         // Use a temporary context to leverage the existing ParameterResolver
         var tempCtx = new PipelineExecutionContext();
-        GatherInitializeParams(watchItemNode, tempCtx);
+        GatherInitializeParams(root, tempCtx);
 
         if (tempCtx.Parameters.Count > 0)
         {

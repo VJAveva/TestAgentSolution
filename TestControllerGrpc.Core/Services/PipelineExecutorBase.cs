@@ -197,6 +197,20 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         }
     }
 
+    public Task ExecuteTemplateTrackedAsync(
+        string pipelineTag, TemplateConfig template, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        // A template is a named, standalone list of action nodes; run it as a synthetic sequential Event so it
+        // reuses the tracked event pipeline (session, snapshot isolation, lock lifecycle) with no duplication.
+        var synthetic = new EventConfig
+        {
+            Type = $"Template:{template.ID}",
+            ExecutionType = ExecutionMode.Sequential,
+            Children = template.Children,
+        };
+        return ExecuteEventTrackedAsync(pipelineTag, synthetic, ctx, ct);
+    }
+
     public async Task<bool> ExecuteGroupTrackedAsync(
         string watchItemTag, ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
     {

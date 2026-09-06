@@ -112,4 +112,18 @@ public sealed class KeywordExtractorTests
 
         Assert.Equal(first, second);
     }
+
+    [Fact]
+    public void Extract_Should_IncludeNarrativeGroup_When_PrNarrativePresent()
+    {
+        var doc = new ChangeDocument("AREA-1", PathTokens: [], ChangedSymbols: [], ChangedLiterals: [],
+            PublicApiChanges: [], PrNarrative: "Non-Warm Redundant Engine LMX Rejection", RawText: "", Fingerprint: "");
+
+        IReadOnlyList<KeywordGroup> groups = Extractor().Extract(Area(), doc, hyde: null);
+
+        KeywordGroup narrative = groups.Single(g => g.Label == "narrative");
+        Assert.Equal(0.75, narrative.Weight);
+        Assert.Contains("redundant", narrative.Terms);
+        Assert.Contains("rejection", narrative.Terms);
+    }
 }

@@ -52,6 +52,18 @@ public static class AgentResolver
     }
 
     /// <summary>
+    /// Extracts agent names from a Template's action list (used for direct template execution).
+    /// </summary>
+    public static List<string> ExtractAgentNames(
+        TemplateConfig template,
+        Dictionary<string, string>? parameters = null)
+    {
+        var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectFromNodes(template.Children, agents, parameters);
+        return agents.ToList();
+    }
+
+    /// <summary>
     /// Extracts the agent name from a single Action (used by partial execution).
     /// </summary>
     public static List<string> ExtractAgentNames(

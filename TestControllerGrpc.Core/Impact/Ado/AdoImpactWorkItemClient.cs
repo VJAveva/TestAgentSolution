@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -116,23 +117,76 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
         return ToReadOnly(result);
     }
 
+    // ADO WIQL is SQL Server-backed and rejects dates before 1753-01-01 with TF51586. A full rebuild passes
+    // DateTimeOffset.MinValue (year 0001) to mean "everything"; clamp to a safe floor so the query is valid.
+    private static readonly DateTimeOffset MinWiqlDate = new(1900, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    // A flat WIQL query returns at most 20000 rows and throws VS402337 when it MATCHES more (independent of
+    // $top). A full rebuild spans the whole corpus, so we walk [since, now) in adaptive date windows: an
+    // overflowing window is halved and retried; a sparse window is doubled so empty history is skipped fast.
+    // [System.ChangedDate] has DAY precision in WIQL (a time component is rejected), so windows are whole days
+    // and boundaries are formatted date-only — halving stays integer so a boundary never lands mid-day.
+    private const int WiqlRowCap = 20000;
+    private const int InitialWindowDays = 180;
+    private const int MinWindowDays = 1;
+    private const int MaxWindowDays = 3650;
+
     public async IAsyncEnumerable<AdoWorkItemRef> EnumerateChangedSinceAsync(
         string workItemType, DateTimeOffset since, int pageSize, [EnumeratorCancellation] CancellationToken ct)
     {
         var type = WiqlEscaper.EscapeLiteral(workItemType);
-        var sinceStr = since.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
-        var wiql =
-            $"SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = '{type}' " +
-            $"AND [System.ChangedDate] >= '{sinceStr}' ORDER BY [System.ChangedDate] ASC";
+        var floor = since < MinWiqlDate ? MinWiqlDate : since;
+        var cursor = new DateTimeOffset(floor.UtcDateTime.Date, TimeSpan.Zero);
+        var upper = new DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date, TimeSpan.Zero).AddDays(1);
+        var windowDays = InitialWindowDays;
 
-        var ids = await QueryIdsAsync(wiql, 20000, ct);
-        foreach (var chunk in ids.Chunk(Math.Max(1, pageSize)))
+        while (cursor < upper)
         {
             ct.ThrowIfCancellationRequested();
-            foreach (var dto in await HydrateDtosAsync(chunk, ChangeFields, ct))
-                yield return ToRef(dto);
+            var end = cursor.AddDays(windowDays);
+            if (end > upper) end = upper;
+
+            IReadOnlyList<int> ids;
+            try
+            {
+                ids = await QueryWindowIdsAsync(type, cursor, end, ct);
+            }
+            catch (AdoApiException ex) when (IsResultSizeExceeded(ex) && windowDays > MinWindowDays)
+            {
+                // Too many work items in this span — halve the window and retry the same start.
+                windowDays = Math.Max(MinWindowDays, windowDays / 2);
+                continue;
+            }
+
+            foreach (var chunk in ids.Chunk(Math.Max(1, pageSize)))
+            {
+                ct.ThrowIfCancellationRequested();
+                foreach (var dto in await HydrateDtosAsync(chunk, ChangeFields, ct))
+                    yield return ToRef(dto);
+            }
+
+            cursor = end;
+            // Grow the window when a span is sparse so empty history is skipped in a few queries.
+            if (ids.Count < WiqlRowCap / 4 && windowDays < MaxWindowDays)
+                windowDays = Math.Min(MaxWindowDays, windowDays * 2);
         }
     }
+
+    private async Task<IReadOnlyList<int>> QueryWindowIdsAsync(
+        string escapedType, DateTimeOffset startInclusive, DateTimeOffset endExclusive, CancellationToken ct)
+    {
+        var from = startInclusive.ToUniversalTime().ToString("yyyy-MM-dd");
+        var to = endExclusive.ToUniversalTime().ToString("yyyy-MM-dd");
+        var wiql =
+            $"SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = '{escapedType}' " +
+            $"AND [System.ChangedDate] >= '{from}' AND [System.ChangedDate] < '{to}' " +
+            $"ORDER BY [System.ChangedDate] ASC";
+        return await QueryIdsAsync(wiql, WiqlRowCap, ct);
+    }
+
+    private static bool IsResultSizeExceeded(AdoApiException ex) =>
+        ex.StatusCode == HttpStatusCode.BadRequest &&
+        ex.Message.Contains("VS402337", StringComparison.OrdinalIgnoreCase);
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
