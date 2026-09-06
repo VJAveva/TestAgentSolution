@@ -62,7 +62,7 @@ public class ChurnReportTests
 
         var csv = new ChurnReportBuilder(new ChurnSummarizer()).BuildCsv(Report(row));
 
-        Assert.Contains("User Story 4105526", csv);
+        Assert.Contains("User Stories: 4105526", csv);
         Assert.Contains("https://dev.azure.com/AVEVA-VSTS/_workitems/edit/4105526", csv);
         Assert.Contains("SafeDllLoadHelper.cs", csv);
     }
@@ -92,7 +92,7 @@ public class ChurnReportTests
 
         Assert.Contains(">Activity<", html);
         Assert.Contains(">Work Items<", html);
-        Assert.Contains(">Change Links<", html);
+        Assert.Contains(">Build Status<", html);
         Assert.Contains("Files changed: 23", html);
         Assert.Contains("Engine.cpp", html);
         Assert.DoesNotContain("README.md", html); // source-only files (.h/.cpp/.cs), matching the Excel
@@ -100,11 +100,63 @@ public class ChurnReportTests
     }
 
     [Fact]
+    public void BuildHtml_Should_DropSummaryAndChangeLinkColumns()
+    {
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1,
+            changes: Change("fix crash", RegressionChangeKind.PullRequest));
+
+        var html = new ChurnReportBuilder(new ChurnSummarizer()).BuildHtml(Report(row));
+
+        Assert.DoesNotContain(">Summary<", html);
+        Assert.DoesNotContain(">Change Links<", html);
+        Assert.DoesNotContain(">Risk<", html);
+        Assert.DoesNotContain(">Latest OK<", html);
+    }
+
+    [Fact]
+    public void BuildHtml_Should_GroupWorkItemsAsBugsThenImsThenStories()
+    {
+        var bug = new RegressionWorkItemRef(11, RegressionWorkItemKind.Bug, "b", "https://ado/wi/11");
+        var ims = new RegressionWorkItemRef(22, RegressionWorkItemKind.Ims, "i", "https://ado/wi/22");
+        var story = new RegressionWorkItemRef(33, RegressionWorkItemKind.Story, "s", "https://ado/wi/33");
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1,
+            changes: Change("work", RegressionChangeKind.PullRequest, story, ims, bug));
+
+        var html = new ChurnReportBuilder(new ChurnSummarizer()).BuildHtml(Report(row));
+
+        var bugsAt = html.IndexOf("Bugs", StringComparison.Ordinal);
+        var imsAt = html.IndexOf(">IMS<", StringComparison.Ordinal);
+        var storiesAt = html.IndexOf("User Stories", StringComparison.Ordinal);
+
+        Assert.True(bugsAt > 0 && imsAt > bugsAt && storiesAt > imsAt,
+            $"expected Bugs < IMS < User Stories, got {bugsAt}/{imsAt}/{storiesAt}");
+        Assert.Contains("Bug 11", html);
+        Assert.Contains("IMS 22", html);
+        Assert.Contains("User Story 33", html);
+    }
+
+    [Fact]
+    public void BuildHtml_Should_ShowLinkedBuildNumberAndGreenSucceeded()
+    {
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1, risk: "succeeded",
+                changes: Change("fix", RegressionChangeKind.PullRequest))
+            with { LatestSuccessfulBuild = "20260906.3", LatestSuccessfulBuildUrl = "https://ado/build/9" };
+
+        var html = new ChurnReportBuilder(new ChurnSummarizer()).BuildHtml(Report(row));
+
+        Assert.Contains("href=\"https://ado/build/9\"", html);
+        Assert.Contains("20260906.3", html);
+        Assert.Contains("Succeeded", html);
+        Assert.Contains("#2e7d32", html); // green
+    }
+
+    [Fact]
     public void BuildCsv_Should_IncludeChangeAzureLinks()
     {
-        var change = new RegressionChangeRef("PR-960370", "Merged PR", DateTimeOffset.UtcNow, [], [],
+        var change = new RegressionChangeRef("PR-960370", "Merged PR", DateTimeOffset.UtcNow, ["src/Engine.cpp"], [],
             RegressionChangeKind.PullRequest, "https://dev.azure.com/AVEVA-VSTS/System%20Platform/_git/repo/pullrequest/960370");
-        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1, changes: change);
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1, changes: change)
+            with { FilesModified = ["src/Engine.cpp"] };
 
         var csv = new ChurnReportBuilder(new ChurnSummarizer()).BuildCsv(Report(row));
 
@@ -126,8 +178,9 @@ public class ChurnReportTests
         using var wb = new XLWorkbook(new MemoryStream(bytes));
         var ws = wb.Worksheet(1);
         Assert.Equal("Component", ws.Cell(4, 2).GetString());
+        Assert.Equal("Build Status", ws.Cell(4, 11).GetString());
         Assert.Contains("ExtInterfaces", ws.Cell(5, 2).GetString());
-        Assert.True(ws.Cell(5, 10).HasHyperlink); // work-item link (Work Items column)
+        Assert.True(ws.Cell(5, 7).HasHyperlink); // work-item link (Work Items column)
     }
 
     [Fact]
@@ -146,12 +199,35 @@ public class ChurnReportTests
         Assert.Contains("Files changed: 23", activity);
         Assert.Contains("PR's: 1", activity);
         Assert.Contains("WI: 1", activity);
-        var files = ws.Cell(5, 11).GetString();
+        var files = ws.Cell(5, 8).GetString();
         Assert.Contains("Engine.cpp", files);
         Assert.Contains("Engine.h", files);
         Assert.Contains("App.cs", files);
         Assert.DoesNotContain("README.md", files);
         Assert.DoesNotContain("notes.txt", files);
+    }
+
+    [Fact]
+    public void BuildXlsx_Should_GroupWorkItemsByCategory_InBugsImsStoriesOrder()
+    {
+        var bug = new RegressionWorkItemRef(11, RegressionWorkItemKind.Bug, "b", "https://ado/wi/11");
+        var ims = new RegressionWorkItemRef(22, RegressionWorkItemKind.Ims, "i", "https://ado/wi/22");
+        var story = new RegressionWorkItemRef(33, RegressionWorkItemKind.Story, "s", "https://ado/wi/33");
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1,
+            changes: Change("work", RegressionChangeKind.PullRequest, story, ims, bug));
+
+        var bytes = new ChurnXlsxBuilder().BuildXlsx(Report(row));
+
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        var cell = wb.Worksheet(1).Cell(5, 7).GetString();
+        var bugsAt = cell.IndexOf("Bugs", StringComparison.Ordinal);
+        var imsAt = cell.IndexOf("IMS", StringComparison.Ordinal);
+        var storiesAt = cell.IndexOf("User Stories", StringComparison.Ordinal);
+
+        Assert.True(bugsAt >= 0 && imsAt > bugsAt && storiesAt > imsAt,
+            $"expected Bugs < IMS < User Stories in '{cell}'");
+        Assert.Contains("Bug 11", cell);
+        Assert.Contains("User Story 33", cell);
     }
 
     [Fact]
@@ -236,14 +312,15 @@ public class ChurnReportTests
     }
 
     [Fact]
-    public void BuildCsv_Should_QuoteAndEscapeField_When_SummaryContainsCommaAndQuote()
+    public void BuildCsv_Should_QuoteAndEscapeField_When_ValueContainsCommaAndQuote()
     {
         var builder = new ChurnReportBuilder(new ChurnSummarizer());
 
+        // Component still ships in the CSV, so it is the field that exercises RFC-4180 escaping.
         var csv = builder.BuildCsv(Report(
-            Row("Alpha", RegressionCategoryKind.Runtime, 1, changes: Change("fix a, b and \"c\"", RegressionChangeKind.Commit))));
+            Row("a, b and \"c\"", RegressionCategoryKind.Runtime, 1, changes: Change("fix", RegressionChangeKind.Commit))));
 
-        Assert.Contains("\"fix a, b and \"\"c\"\"\"", csv);
+        Assert.Contains("\"a, b and \"\"c\"\"\"", csv);
     }
 
     [Fact]

@@ -22,8 +22,8 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         var headers = new[]
         {
             "#", "Component", "Category", "Repository", "Branch", "Activity",
-            "Risk", "Latest OK", "Summary", "Work Items", "Modified Files (.h/.cpp/.cs)", "Change Links",
-            "Impacted Functionality", "Test Use Cases",
+            "Work Items", "Modified Files (.h/.cpp/.cs)",
+            "Impacted Functionality", "Test Use Cases", "Build Status",
         };
         const int headerRow = 4;
         for (var c = 0; c < headers.Length; c++)
@@ -40,12 +40,10 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         foreach (var r in report.Rows)
         {
             var wis = DistinctWorkItems(r);
-            var summary = r.Changes.Count == 0 ? "" : r.Changes[0].Summary;
             var prCount = r.Changes.Count(c => c.Kind == RegressionChangeKind.PullRequest);
             var commitCount = r.Changes.Count(c => c.Kind == RegressionChangeKind.Commit);
             var autoCount = r.Changes.Count(c => c.Kind == RegressionChangeKind.Automated);
             var sourceFiles = r.FilesModified.Where(FileNoiseFilter.IsSourceFile).ToList();
-            var changeLinks = r.Changes.Select(c => c.Url).Where(u => !string.IsNullOrEmpty(u)).Distinct().ToList();
             var firstWiUrl = wis.Select(w => w.Url).FirstOrDefault(u => !string.IsNullOrEmpty(u));
 
             ws.Cell(row, 1).Value = n;
@@ -62,31 +60,39 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
             ws.Cell(row, 6).Value =
                 $"Files changed: {r.TotalFilesModified}\nPR's: {prCount}\nCommits: {commitCount}\nWI: {wis.Count}\nAuto: {autoCount}";
 
-            ws.Cell(row, 7).Value = r.RiskTier ?? "";
-
-            var okCell = ws.Cell(row, 8);
-            okCell.Value = r.LatestSuccessfulBuild ?? "";
-            Link(okCell, r.LatestSuccessfulBuildUrl);
-
-            ws.Cell(row, 9).Value = summary;
-
-            // Work items — one per line; the cell links to the first. The "Work Items" sheet has per-item links.
-            var wiCell = ws.Cell(row, 10);
-            wiCell.Value = wis.Count > 0 ? string.Join("\n", wis.Select(WorkItemLabel)) : "";
+            // Work items grouped Bugs / IMS / User Stories, each under its own heading. A single Excel cell
+            // can hold only one hyperlink, so the per-item links live on the "Work Items" sheet.
+            var groups = GroupWorkItems(r);
+            var wiCell = ws.Cell(row, 7);
+            wiCell.Value = groups.Count == 0
+                ? ""
+                : string.Join("\n\n", groups.Select(g =>
+                    $"{g.Heading}\n{new string('-', g.Heading.Length)}\n" +
+                    string.Join("\n", g.Items.Select(WorkItemLabel))));
             Link(wiCell, firstWiUrl);
+            var wiLines = groups.Sum(g => g.Items.Count + 3);
 
             // Modified source files only (.h/.cpp/.cs), full paths, one per line.
-            ws.Cell(row, 11).Value = sourceFiles.Count > 0 ? string.Join("\n", sourceFiles) : "";
+            ws.Cell(row, 8).Value = sourceFiles.Count > 0 ? string.Join("\n", sourceFiles) : "";
 
-            var changeCell = ws.Cell(row, 12);
-            changeCell.Value = changeLinks.Count > 0 ? string.Join("\n", changeLinks) : "";
-            Link(changeCell, changeLinks.FirstOrDefault());
+            ws.Cell(row, 9).Value = Join(r.RegressionAreas);
+            ws.Cell(row, 10).Value = Join(r.UseCases);
 
-            ws.Cell(row, 13).Value = Join(r.RegressionAreas);
-            ws.Cell(row, 14).Value = Join(r.UseCases);
+            // Build status: latest OK build number, linked, with its result underneath.
+            var statusCell = ws.Cell(row, 11);
+            var result = r.RiskTier ?? "";
+            var build = r.LatestSuccessfulBuild ?? "";
+            statusCell.Value = string.IsNullOrEmpty(build) ? result : $"{build}\n{Capitalize(result)}";
+            Link(statusCell, r.LatestSuccessfulBuildUrl);
+            if (!string.IsNullOrEmpty(result))
+            {
+                var succeeded = result.Equals("succeeded", StringComparison.OrdinalIgnoreCase);
+                statusCell.Style.Font.FontColor = succeeded ? XLColor.FromHtml("#2E7D32") : XLColor.FromHtml("#C62828");
+                statusCell.Style.Font.Bold = true;
+            }
 
             // Size the row so every wrapped line is visible (capped to avoid oversized rows).
-            var maxLines = Math.Max(5, Math.Max(wis.Count, Math.Max(sourceFiles.Count, changeLinks.Count)));
+            var maxLines = Math.Max(5, Math.Max(wiLines, sourceFiles.Count));
             ws.Row(row).Height = Math.Min(maxLines, 30) * 15.0;
 
             row++;
@@ -106,7 +112,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         ws.SheetView.FreezeRows(headerRow);
         ws.SheetView.FreezeColumns(2);
 
-        double[] widths = [5, 22, 12, 26, 14, 18, 12, 16, 42, 22, 55, 50, 28, 24];
+        double[] widths = [5, 22, 12, 26, 14, 18, 26, 55, 28, 24, 18];
         for (var c = 0; c < widths.Length; c++)
             ws.Column(c + 1).Width = widths[c];
 
@@ -197,24 +203,26 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 14;
 
-        var headers = new[] { "Component", "Type", "ID", "Title" };
+        var headers = new[] { "Component", "Category", "Type", "ID", "Title" };
         const int headerRow = 3;
         WriteHeaders(ws, headerRow, headers);
 
         var row = headerRow + 1;
         foreach (var r in report.Rows)
-            foreach (var w in DistinctWorkItems(r))
-            {
-                ws.Cell(row, 1).Value = r.Component;
-                ws.Cell(row, 2).Value = w.Kind.ToString();
-                var idCell = ws.Cell(row, 3);
-                idCell.Value = w.Id;
-                Link(idCell, w.Url);
-                ws.Cell(row, 4).Value = w.Title;
-                row++;
-            }
+            foreach (var (heading, items) in GroupWorkItems(r))
+                foreach (var w in items)
+                {
+                    ws.Cell(row, 1).Value = r.Component;
+                    ws.Cell(row, 2).Value = heading;
+                    ws.Cell(row, 3).Value = w.Kind.ToString();
+                    var idCell = ws.Cell(row, 4);
+                    idCell.Value = w.Id;
+                    Link(idCell, w.Url);
+                    ws.Cell(row, 5).Value = w.Title;
+                    row++;
+                }
 
-        FinishSheet(ws, headerRow, row, headers.Length, [24, 12, 12, 90]);
+        FinishSheet(ws, headerRow, row, headers.Length, [24, 14, 12, 12, 90]);
     }
 
     /// <summary>Dedicated sheet: one row per (component, change) so every PR/commit is an individually clickable link.</summary>
@@ -276,6 +284,28 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
 
     private static IReadOnlyList<RegressionWorkItemRef> DistinctWorkItems(SubsystemRow r) =>
         r.Changes.SelectMany(c => c.WorkItems).GroupBy(w => w.Id).Select(g => g.First()).ToList();
+
+    /// <summary>Work items grouped for display, in the required order: Bugs, IMS, User Stories, then anything else.</summary>
+    private static IReadOnlyList<(string Heading, IReadOnlyList<RegressionWorkItemRef> Items)> GroupWorkItems(SubsystemRow r)
+    {
+        var all = DistinctWorkItems(r);
+        var groups = new List<(string, IReadOnlyList<RegressionWorkItemRef>)>();
+
+        void Add(string heading, Func<RegressionWorkItemRef, bool> match)
+        {
+            var items = all.Where(match).OrderBy(w => w.Id).ToList();
+            if (items.Count > 0) groups.Add((heading, items));
+        }
+
+        Add("Bugs", w => w.Kind == RegressionWorkItemKind.Bug);
+        Add("IMS", w => w.Kind == RegressionWorkItemKind.Ims);
+        Add("User Stories", w => w.Kind == RegressionWorkItemKind.Story);
+        Add("Other", w => w.Kind is RegressionWorkItemKind.Feature or RegressionWorkItemKind.Other);
+        return groups;
+    }
+
+    private static string Capitalize(string value) =>
+        string.IsNullOrEmpty(value) ? value : char.ToUpperInvariant(value[0]) + value[1..];
 
     private static string WorkItemLabel(RegressionWorkItemRef w) => w.Kind switch
     {
