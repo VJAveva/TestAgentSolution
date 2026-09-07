@@ -81,6 +81,35 @@ public class RegressionImpactMatcherTests
     }
 
     [Fact]
+    public async Task MatchAsync_Should_AttachLinkedWorkItems_When_AnchoredByLinkedWorkItem()
+    {
+        // The reviewer's question is "why is this test in my list?" — answer with the Bug/Story it verifies.
+        var bug = new RegressionWorkItemRef(3522032, RegressionWorkItemKind.Bug, "Bootstrap crash", "https://ado/wi/3522032");
+        var row = Row(changes: new RegressionChangeRef(
+            "c1", "Merged PR", DateTimeOffset.UtcNow, ["a.cs"], [bug], RegressionChangeKind.PullRequest));
+        var engine = new FakeEngine(
+            _ => [Mapped(4536616, "BootStrap.TC24", 0, 3, 0.9, "anchor edge")],
+            anchors: [new AnchorEdge(4536616, 3522032, AnchorSource.LinkedWorkItem, 1.0, "Linked from work item 3522032.")]);
+
+        var matches = await Matcher(engine).MatchAsync(row, CancellationToken.None);
+
+        RegressionWorkItemRef linked = Assert.Single(Assert.Single(matches).LinkedWorkItems!);
+        Assert.Equal(3522032, linked.Id);
+        Assert.Equal(RegressionWorkItemKind.Bug, linked.Kind);
+        Assert.Equal("Bootstrap crash", linked.Title);
+    }
+
+    [Fact]
+    public async Task MatchAsync_Should_LeaveLinkedWorkItemsEmpty_When_MatchedByRetrievalOnly()
+    {
+        var engine = new FakeEngine(_ => [Mapped(4536616, "BootStrap.TC24", 0, 2, 0.8, "text match")]);
+
+        var matches = await Matcher(engine).MatchAsync(Row(changes: ChangeWithWorkItem(100)), CancellationToken.None);
+
+        Assert.True(Assert.Single(matches).LinkedWorkItems is null or { Count: 0 });
+    }
+
+    [Fact]
     public async Task MatchAsync_Should_ReturnEmpty_When_EngineThrows()
     {
         var engine = new FakeEngine(_ => throw new InvalidOperationException("no anchors"));
@@ -88,6 +117,42 @@ public class RegressionImpactMatcherTests
         var matches = await Matcher(engine).MatchAsync(Row(changes: ChangeWithWorkItem(1)), CancellationToken.None);
 
         Assert.Empty(matches);
+    }
+
+    [Fact]
+    public async Task MatchAsync_Should_Rethrow_When_IndexUnavailable()
+    {
+        // An unusable index must NOT be reported as "no impacted test cases" — that is indistinguishable
+        // from a genuine empty result, and test selection here is recall-biased.
+        var health = new ImpactIndexHealth
+        {
+            Status = ImpactIndexStatus.Missing,
+            IndexFilePath = @"C:\ProgramData\TestAgentSolution\ImpactIndex\impact-index.db",
+            Message = "No impact index. Rebuild with: powershell -File deploy\\Rebuild-ImpactIndex.ps1",
+        };
+        var engine = new FakeEngine(_ => throw new ImpactIndexUnavailableException(health));
+
+        var ex = await Assert.ThrowsAsync<ImpactIndexUnavailableException>(
+            () => Matcher(engine).MatchAsync(Row(changes: ChangeWithWorkItem(1)), CancellationToken.None));
+
+        Assert.Equal(ImpactIndexStatus.Missing, ex.Health.Status);
+        Assert.Contains("Rebuild-ImpactIndex.ps1", ex.Message);
+    }
+
+    [Fact]
+    public async Task MatchManyAsync_Should_Rethrow_When_IndexUnavailable()
+    {
+        var health = new ImpactIndexHealth
+        {
+            Status = ImpactIndexStatus.Corrupt,
+            IndexFilePath = "x",
+            Message = "corrupt",
+        };
+        var engine = new FakeEngine(_ => throw new ImpactIndexUnavailableException(health));
+        var rows = new[] { Row("A", changes: ChangeWithWorkItem(1)), Row("B", changes: ChangeWithWorkItem(2)) };
+
+        await Assert.ThrowsAsync<ImpactIndexUnavailableException>(
+            () => Matcher(engine).MatchManyAsync(rows, CancellationToken.None));
     }
 
     [Fact]
@@ -161,13 +226,15 @@ public class RegressionImpactMatcherTests
         }
     }
 
-    private sealed class FakeEngine(Func<ImpactedArea, IReadOnlyList<MappedTestCase>> select) : IImpactTestMappingService
+    private sealed class FakeEngine(
+        Func<ImpactedArea, IReadOnlyList<MappedTestCase>> select,
+        IReadOnlyList<AnchorEdge>? anchors = null) : IImpactTestMappingService
     {
         public Task<ImpactMappingResult> MapAsync(ImpactedArea area, ChangePayload payload, SelectionTier tier, CancellationToken ct)
         {
             IReadOnlyList<MappedTestCase> selected = select(area);
             return Task.FromResult(new ImpactMappingResult(
-                area, [], [], selected, [], new AnchorResult([], 0, false),
+                area, [], [], selected, [], new AnchorResult(anchors ?? [], 0, false),
                 new SelectionDiagnostics(TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0, null),
                 tier, false, [], TimeSpan.Zero, Guid.NewGuid()));
         }

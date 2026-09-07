@@ -153,10 +153,12 @@ public sealed class ImpactTestMappingServiceTests
     private sealed class FakeIndexStore(IndexSnapshot feature, IndexSnapshot testCase) : IRetrievalIndexStore
     {
         public bool SnapshotRequested { get; private set; }
+        public IReadOnlyCollection<string>? LastTerms { get; private set; }
 
-        public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, CancellationToken ct)
+        public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, IReadOnlyCollection<string>? terms, CancellationToken ct)
         {
             SnapshotRequested = true;
+            LastTerms = terms;
             return Task.FromResult(kind == IndexKind.Feature ? feature : testCase);
         }
     }

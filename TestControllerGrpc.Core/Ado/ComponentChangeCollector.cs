@@ -253,12 +253,14 @@ public sealed class ComponentChangeCollector
         var prs = (await _git.GetPullRequestsTargetingBranchAsync(omiProject, repoId, branch, MaxPrsPerComponent, ct))
             .Where(p => (p.CreationDate ?? DateTimeOffset.MaxValue) >= since)
             .ToList();
+        var manualSuitesForRow = new List<RegressionSuiteRef>();
         foreach (var pr in prs)
         {
             var prWiIds = await _git.GetPullRequestWorkItemIdsAsync(omiProject, repoId, pr.PullRequestId, ct);
             var prWorkItems = prWiIds.Count == 0
                 ? new List<RegressionWorkItemRef>()
-                : (await _workItems.GetByIdsAsync(prWiIds, ct)).Select(ToWorkItemRef).ToList();
+                : (await _workItems.GetWithRelationsAsync(prWiIds, ct)).Select(ToWorkItemRef).ToList();
+            manualSuitesForRow.AddRange(await GetManualSuitesAsync(prWiIds, ct));
             changeRefs.Add(new RegressionChangeRef(
                 ChangeId: $"PR-{pr.PullRequestId}",
                 Summary: pr.Title ?? $"PR {pr.PullRequestId}",
@@ -274,7 +276,7 @@ public sealed class ComponentChangeCollector
 
         var solutionNames = await GetSolutionNamesCachedAsync(omiProject, repoId, ct);
         var latestSuccessful = headerBuild.Result == "succeeded" ? headerBuild : null;
-        return BuildRow(omiProject, comp, headerBuild, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames);
+        return BuildRow(omiProject, comp, headerBuild, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames, manualSuitesForRow);
     }
 
     private string? PullRequestWebUrl(string project, string? repo, int prId) =>
@@ -312,8 +314,9 @@ public sealed class ComponentChangeCollector
             return null;
 
         var workItemIds = await _builds.GetBuildWorkItemIdsAsync(omiProject, build.Id, ct);
-        var workItems = await _workItems.GetByIdsAsync(workItemIds, ct);
+        var workItems = await _workItems.GetWithRelationsAsync(workItemIds, ct);
         var workItemRefs = workItems.Select(ToWorkItemRef).ToList();
+        var manualSuites = await GetManualSuitesAsync(workItems, ct);
 
         // Resolve the component's repo explicitly from the configured name; fall back to the build's own repo.
         string? repoId = null;
@@ -348,7 +351,7 @@ public sealed class ComponentChangeCollector
         }
 
         var solutionNames = await GetSolutionNamesCachedAsync(omiProject, repoId, ct);
-        return BuildRow(omiProject, comp, build, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames);
+        return BuildRow(omiProject, comp, build, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames, manualSuites);
     }
 
     /// <summary>
@@ -375,6 +378,7 @@ public sealed class ComponentChangeCollector
         var changeRefs = new List<RegressionChangeRef>();
         var seenChangeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fileLookups = 0;
+        var manualSuitesForRow = new List<RegressionSuiteRef>();
 
         foreach (var build in builds.Take(MaxBuildsPerComponentInRange))
         {
@@ -384,8 +388,10 @@ public sealed class ComponentChangeCollector
                 continue;
 
             var workItemIds = await _builds.GetBuildWorkItemIdsAsync(omiProject, build.Id, ct);
-            var workItems = await _workItems.GetByIdsAsync(workItemIds, ct);
+            var workItems = await _workItems.GetWithRelationsAsync(workItemIds, ct);
             var workItemRefs = workItems.Select(ToWorkItemRef).ToList();
+            var manualSuites = await GetManualSuitesAsync(workItems, ct);
+            manualSuitesForRow.AddRange(manualSuites);
 
             foreach (var ch in changes)
             {
@@ -412,7 +418,7 @@ public sealed class ComponentChangeCollector
             return null; // component didn't actually change anywhere in the window
 
         var solutionNames = await GetSolutionNamesCachedAsync(omiProject, repoId, ct);
-        return BuildRow(omiProject, comp, headerBuild, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames);
+        return BuildRow(omiProject, comp, headerBuild, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames, manualSuitesForRow);
     }
 
     private async Task<IReadOnlyList<string>> SafeGetFilesAsync(string project, string? repoId, string commitId, CancellationToken ct)
@@ -443,7 +449,44 @@ public sealed class ComponentChangeCollector
         return _slnByRepo.GetOrAdd(repoId, id => _git.GetSolutionNamesAsync(project, id, ct));
     }
 
-    private SubsystemRow BuildRow(string omiProject, ComponentBuildInfo comp, AdoBuildDto build, AdoBuildDto? latestSuccessful, List<RegressionChangeRef> changes, List<string> files, string? defaultBranch, IReadOnlyList<string> solutionNames)
+    private async Task<IReadOnlyList<RegressionSuiteRef>> GetManualSuitesAsync(IReadOnlyList<int> workItemIds, CancellationToken ct)
+    {
+        if (workItemIds.Count == 0)
+            return [];
+
+        var workItems = await _workItems.GetWithRelationsAsync(workItemIds, ct);
+        return await GetManualSuitesAsync(workItems, ct);
+    }
+
+    private async Task<IReadOnlyList<RegressionSuiteRef>> GetManualSuitesAsync(IReadOnlyList<AdoWorkItemDto> workItems, CancellationToken ct)
+    {
+        var relationUrls = workItems
+            .SelectMany(w => w.Relations)
+            .Where(r => string.Equals(r.Rel, "Microsoft.VSTS.Common.TestedBy-Forward", StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.Url)
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (relationUrls.Count == 0)
+            return [];
+
+        var ids = relationUrls
+            .Select(url => url is not null && int.TryParse(url.AsSpan(url.LastIndexOf('/') + 1), out int id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+        if (ids.Length == 0)
+            return [];
+
+        var testCases = await _workItems.GetByIdsAsync(ids, ct);
+        var byId = testCases.ToDictionary(w => w.Id);
+        return ids.Select(id => byId.TryGetValue(id, out var testCase)
+                ? new RegressionSuiteRef(id.ToString(), true, testCase.Url, RegressionEvidenceKind.Observed, testCase.Title)
+                : new RegressionSuiteRef(id.ToString(), true, relationUrls.FirstOrDefault(url => url!.EndsWith('/' + id.ToString(), StringComparison.Ordinal))!, RegressionEvidenceKind.Observed, $"Test Case {id}"))
+            .ToList();
+    }
+
+    private SubsystemRow BuildRow(string omiProject, ComponentBuildInfo comp, AdoBuildDto build, AdoBuildDto? latestSuccessful, List<RegressionChangeRef> changes, List<string> files, string? defaultBranch, IReadOnlyList<string> solutionNames, IReadOnlyList<RegressionSuiteRef> manualSuites)
     {
         // Category comes from docs/impact/component-categories.xml; Declared when found, Assumed otherwise.
         var category = _categorizer.Categorize(comp.ComponentId);
@@ -461,7 +504,7 @@ public sealed class ComponentChangeCollector
             Changes: changes,
             RiskTier: build.Result ?? "unknown",
             AutomatedSuites: [],
-            ManualSuites: [],
+            ManualSuites: manualSuites.DistinctBy(s => s.SuiteId).ToList(),
             EstimatedMinutes: 0,
             IsEstimate: true,
             RegressionAreas: comp.RegressionAreas,
@@ -497,7 +540,8 @@ public sealed class ComponentChangeCollector
         Kind: ParseWorkItemKind(dto.WorkItemType),
         Title: dto.Title ?? $"Work item {dto.Id}",
         Url: WorkItemWebUrl(dto.Id),
-        CreatedUtc: dto.CreatedUtc);
+        CreatedUtc: dto.CreatedUtc,
+        WorkItemType: dto.WorkItemType);
 
     private static RegressionChangeKind ClassifyChange(string? message)
     {

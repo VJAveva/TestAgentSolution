@@ -39,6 +39,23 @@ public static class AdoServiceCollectionExtensions
         services.TryAddSingleton<Reporting.IChurnSummarizer, Reporting.ChurnSummarizer>();
         services.TryAddSingleton<Reporting.IChurnReportBuilder, Reporting.ChurnReportBuilder>();
 
+        // Work-item policy (Task exclusion + Feature roll-up). Validated here so a bad
+        // CodeChurn:WorkItemPolicy section fails at startup naming the setting, not mid-report.
+        services.TryAddSingleton(sp =>
+            Reporting.CodeChurnWorkItemPolicy.Load(sp.GetRequiredService<IConfiguration>()));
+
+        // Resolved lazily: IWorkItemQueries only exists when ADO ingest is enabled below.
+        services.TryAddSingleton<Reporting.IWorkItemHierarchyResolver>(sp =>
+        {
+            var queries = sp.GetService<IWorkItemQueries>();
+            return queries is null
+                ? new Reporting.NullWorkItemHierarchyResolver()
+                : new Reporting.WorkItemHierarchyResolver(
+                    queries, sp.GetRequiredService<Reporting.CodeChurnWorkItemPolicy>());
+        });
+
+        services.TryAddSingleton<Reporting.ICodeChurnReportBuilder, Reporting.CodeChurnReportBuilder>();
+
         // Async LLM change-summarizer. Resolves the diff-grounded LlmChurnSummarizer when the LLM is
         // enabled + wired (ILlmClient/IChangeDiffSource present), else an offline pass-through over the
         // deterministic summarizer. Registered unconditionally so callers always resolve one.

@@ -1233,7 +1233,8 @@
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenReportCardCommand}"
-                                ToolTip="Build Report Card" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="{Binding OpenReportCardToolTip}" ToolTipService.ShowOnDisabled="True"
+                                Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenWatchBuilderCommand}"
@@ -1241,7 +1242,8 @@
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F5;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
-                                ToolTip="CodeChurn Tab (build/change impact)" Height="28" MinWidth="28" Padding="4,2">
+                                ToolTip="{Binding OpenRegressionToolTip}" ToolTipService.ShowOnDisabled="True"
+                                Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" FontSize="14" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnAccent}" Command="{Binding OpenHelpCommand}"
@@ -1802,7 +1804,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenReportCardCommand}"
-                                                    ToolTip="Open the Build Report Card">
+                                                    ToolTip="{Binding OpenReportCardToolTip}" ToolTipService.ShowOnDisabled="True">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Report Card" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />
@@ -1818,7 +1820,7 @@
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding OpenRegressionCommand}"
-                                                    ToolTip="Open the CodeChurn tab (build/change impact planning)">
+                                                    ToolTip="{Binding OpenRegressionToolTip}" ToolTipService.ShowOnDisabled="True">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="CodeChurn" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" />

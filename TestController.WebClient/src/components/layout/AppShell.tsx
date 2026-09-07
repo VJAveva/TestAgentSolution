@@ -23,6 +23,8 @@ import { useWatchList } from '../../hooks/useWatchList';
 import { useAgents } from '../../hooks/useAgents';
 import { useExecution } from '../../hooks/useExecution';
 import { useHashRoute } from '../../hooks/useHashRoute';
+import { useCan } from '../../hooks/useCapabilities';
+import { useSystemModeStore } from '../../stores/systemModeStore';
 
 type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results' | 'report' | 'regression';
 
@@ -46,6 +48,16 @@ export default function AppShell() {
   const { fetchAgents } = useAgents();
   const { fetchSessions } = useExecution();
 
+  // These features are intentionally Secured-mode only. Default mode is the legacy/no-RBAC mode and must not
+  // present Code Churn or Report Card as usable screens backed by mock or incomplete data.
+  const isSecured = useSystemModeStore((s) => s.isSecured);
+  const canReportCard = useCan('ReportCard_View');
+  const canCodeChurn = useCan('CodeChurn_View');
+  const denied: Partial<Record<Tab, boolean>> = {
+    report: !isSecured || !canReportCard,
+    regression: !isSecured || !canCodeChurn,
+  };
+
   const loadAll = useCallback(() => {
     setLoadError(null);
     Promise.allSettled([fetchConfig(), fetchAgents(), fetchSessions()]).then(results => {
@@ -66,18 +78,25 @@ export default function AppShell() {
       <header className="flex items-center bg-bg-ribbon border-b border-bdr px-4 h-11 shrink-0">
         <span className="text-accent font-bold text-sm tracking-wide mr-8">TestController</span>
         <nav className="flex gap-1">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => navigate(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors
-                ${activeTab === t.id
-                  ? 'bg-white/10 text-accent'
-                  : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'}`}
-            >
-              {t.icon}{t.label}
-            </button>
-          ))}
+          {tabs.map(t => {
+            const isDenied = denied[t.id] === true;
+            return (
+              <button
+                key={t.id}
+                onClick={() => !isDenied && navigate(t.id)}
+                disabled={isDenied}
+                title={isDenied ? 'Requires Administrator or Sr Manager' : undefined}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors
+                  ${isDenied
+                    ? 'text-text-secondary/40 cursor-not-allowed'
+                    : activeTab === t.id
+                      ? 'bg-white/10 text-accent'
+                      : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'}`}
+              >
+                {t.icon}{t.label}
+              </button>
+            );
+          })}
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
@@ -111,8 +130,20 @@ export default function AppShell() {
         {activeTab === 'monitor'   && <MonitorPage subTab={seg1} navigate={navigate} />}
         {activeTab === 'logs'      && <LogsPage />}
         {activeTab === 'results'   && <ResultsPage />}
-        {activeTab === 'report'    && <ReportCardPage />}
-        {activeTab === 'regression' && <RegressionPage />}
+        {activeTab === 'report'    && (denied.report ? <PermissionDenied /> : <ReportCardPage />)}
+        {activeTab === 'regression' && (denied.regression ? <PermissionDenied /> : <RegressionPage />)}
+      </div>
+    </div>
+  );
+}
+
+// Reached by typing a hash route directly; the nav button for it is already disabled.
+function PermissionDenied() {
+  return (
+    <div className="flex flex-1 items-center justify-center text-xs text-text-secondary">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={14} className="text-acc-red" />
+        Available only in Secured mode for authorized users.
       </div>
     </div>
   );

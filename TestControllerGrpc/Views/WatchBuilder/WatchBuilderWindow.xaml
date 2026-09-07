@@ -92,6 +92,15 @@
                 <CheckBox Content="Fail and continue" Margin="0,8,0,0"
                           Foreground="{DynamicResource TextPrimaryBrush}"
                           IsChecked="{Binding FailAndContinue}" />
+                <CheckBox Content="Skip evaluator" Margin="0,8,0,0"
+                          Foreground="{DynamicResource TextPrimaryBrush}"
+                          ToolTip="Skip this action group and its descendants during execution"
+                          IsChecked="{Binding Skip}" />
+                <TextBlock Style="{StaticResource FieldLabel}" Text="Skip reason" />
+                <TextBox Text="{Binding SkipReason, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Style="{StaticResource FieldLabel}" Text="Comment" />
+                <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}"
+                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="45" />
             </StackPanel>
         </DataTemplate>
 
@@ -153,6 +162,15 @@
                     <CheckBox Content="Fail and continue" Margin="0,8,0,0"
                               Foreground="{DynamicResource TextPrimaryBrush}"
                               IsChecked="{Binding FailAndContinue}" />
+                    <CheckBox Content="Skip evaluator" Margin="0,8,0,0"
+                              Foreground="{DynamicResource TextPrimaryBrush}"
+                              ToolTip="Skip this action and its execution"
+                              IsChecked="{Binding Skip}" />
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="Skip reason" />
+                    <TextBox Text="{Binding SkipReason, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="Comment" />
+                    <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="45" />
                 </StackPanel>
             </ScrollViewer>
         </DataTemplate>

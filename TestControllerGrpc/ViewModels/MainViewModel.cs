@@ -587,6 +587,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 NotifyExecutionCanExecuteChanged();
                 RefreshUserBadge();
                 RefreshUsersTabVisibility();
+                RefreshToolsPermissions();
             }
             else
             {
@@ -597,6 +598,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     NotifyExecutionCanExecuteChanged();
                     RefreshUserBadge();
                     RefreshUsersTabVisibility();
+                    RefreshToolsPermissions();
                 });
             }
         }

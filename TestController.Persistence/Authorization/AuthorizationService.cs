@@ -156,11 +156,16 @@ public sealed class AuthorizationService : IAuthorizationService
         Permission.Audit_Export or
         Permission.System_ChangeMode;
 
+    // Not IsReadPermission: that bucket also grants Guests, and Code Churn / Report Card are
+    // Administrator + Senior Manager only.
     private static bool IsSeniorManagerOnlyPermission(Permission p) => p is
         Permission.Pipeline_TriggerAll or
         Permission.Pipeline_CancelAll or
         Permission.Pipeline_ForceRelease or
-        Permission.Report_Generate;
+        Permission.Report_Generate or
+        Permission.CodeChurn_View or
+        Permission.CodeChurn_Export or
+        Permission.ReportCard_View;
 
     private static bool IsPipelineScopedPermission(Permission p) => p is
         Permission.Pipeline_Trigger or

@@ -85,9 +85,8 @@ public sealed class RegressionImpactMatcherEngineTests
     [Fact]
     public async Task MatchAsync_Should_SurfaceAnchorTestCases_When_BelowEarlyExit_AndIndexEmpty()
     {
-        // Declared regression areas force anchor coverage to 0 (NullDeclaredMappingSource) so early-exit CANNOT
-        // fire, and there are only 3 linked child test cases (< MinAnchorsForEarlyExit=5). They must still surface
-        // via the full path now that anchors are folded into the candidate set.
+        // Only 3 linked child test cases (< MinAnchorsForEarlyExit=5), so early-exit cannot fire. They must
+        // still surface via the full path now that anchors are folded into the candidate set.
         var emptyIndex = new FakeIndexStore(Snapshot(IndexKind.Feature), Snapshot(IndexKind.TestCase));
         FakeAdo ado = AdoWithCorpus(); // Children[900] = [101,102,103]
         var anchors = new AnchorEdgeProvider(ado, new FakeOutcomes(), NullDeclaredMappingSource.Instance,
@@ -113,6 +112,46 @@ public sealed class RegressionImpactMatcherEngineTests
         var matches = await Matcher(engine).MatchAsync(Row(workItemIds: 900), CancellationToken.None);
 
         Assert.Empty(matches);
+    }
+
+    [Fact]
+    public async Task MatchAsync_Should_SurfaceAnchorTestCases_When_IndexUnusableAndLinkedTestCasesExist()
+    {
+        // The live production state: impact-index.db exists but holds 0 documents, so the store throws instead
+        // of returning an empty snapshot. Anchors come from ADO links and need no index, so they must survive.
+        var health = new ImpactIndexHealth
+        {
+            Status = ImpactIndexStatus.Empty,
+            IndexFilePath = @"C:\ProgramData\TestAgentSolution\ImpactIndex\impact-index.db",
+            Message = "contains 0 documents",
+        };
+        FakeAdo ado = AdoWithCorpus();
+        var anchors = new AnchorEdgeProvider(ado, new FakeOutcomes(), NullDeclaredMappingSource.Instance,
+            Options.Create(new ImpactMappingOptions()), new NoopAppLogger());
+        ImpactTestMappingService engine = BuildEngine(anchors, new ThrowingIndexStore(health), ado);
+
+        var matches = await Matcher(engine).MatchAsync(Row(regressionAreas: ["Deploy"], workItemIds: 900), CancellationToken.None);
+
+        Assert.NotEmpty(matches);
+        Assert.All(matches, m => Assert.Contains(m.TestCaseId, new[] { 101, 102, 103 }));
+    }
+
+    [Fact]
+    public async Task MatchAsync_Should_Rethrow_When_IndexUnusableAndNoAnchors()
+    {
+        // With no anchors there is nothing to answer from, so the index problem must stay loud rather than
+        // degrade into an empty list that reads as "no impacted tests".
+        var health = new ImpactIndexHealth
+        {
+            Status = ImpactIndexStatus.Empty, IndexFilePath = "x", Message = "contains 0 documents",
+        };
+        var ado = new FakeAdo();
+        var anchors = new AnchorEdgeProvider(ado, new FakeOutcomes(), NullDeclaredMappingSource.Instance,
+            Options.Create(new ImpactMappingOptions()), new NoopAppLogger());
+        ImpactTestMappingService engine = BuildEngine(anchors, new ThrowingIndexStore(health), ado);
+
+        await Assert.ThrowsAsync<ImpactIndexUnavailableException>(
+            () => Matcher(engine).MatchAsync(Row(workItemIds: 900), CancellationToken.None));
     }
 
     // ── Engine wiring + fakes (mirrors ImpactTestMappingServiceTests) ────────────────────────────
@@ -170,8 +209,14 @@ public sealed class RegressionImpactMatcherEngineTests
 
     private sealed class FakeIndexStore(IndexSnapshot feature, IndexSnapshot testCase) : IRetrievalIndexStore
     {
-        public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, CancellationToken ct)
+        public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, IReadOnlyCollection<string>? terms, CancellationToken ct)
             => Task.FromResult(kind == IndexKind.Feature ? feature : testCase);
+    }
+
+    private sealed class ThrowingIndexStore(ImpactIndexHealth health) : IRetrievalIndexStore
+    {
+        public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, IReadOnlyCollection<string>? terms, CancellationToken ct)
+            => throw new ImpactIndexUnavailableException(health);
     }
 
     private sealed class FakeAdo : IAdoWorkItemClient

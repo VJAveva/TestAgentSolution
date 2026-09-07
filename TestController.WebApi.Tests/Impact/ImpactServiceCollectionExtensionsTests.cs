@@ -32,6 +32,27 @@ public sealed class ImpactServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetService<IImpactTestMappingService>());
     }
 
+    [Theory]
+    [InlineData(ImpactHostRole.Reader)]
+    [InlineData(ImpactHostRole.ReaderWriter)]
+    public void AddImpactMapping_Should_RegisterStorageServices_ForEveryRole(ImpactHostRole role)
+    {
+        // The WPF host registers as Reader, and its Code Churn health banner resolves IImpactIndexHealthCheck.
+        // Persistence must also be present on readers, or a reader's learning data dies with a snapshot revert.
+        IConfiguration config = new ConfigurationBuilder().AddInMemoryCollection([]).Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IAppLogger, NoopAppLogger>();
+        services.AddSingleton<IAdoWorkItemClient, ThrowingAdo>();
+
+        services.AddImpactMapping(config, role);
+
+        using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+        Assert.NotNull(provider.GetService<IImpactIndexPathProvider>());
+        Assert.NotNull(provider.GetService<IImpactIndexHealthCheck>());
+        Assert.NotNull(provider.GetService<IImpactPersistenceService>());
+    }
+
     [Fact]
     public void AddImpactMapping_ReaderWriter_Should_ValidateGraph_WithRealAdoClientChain()
     {

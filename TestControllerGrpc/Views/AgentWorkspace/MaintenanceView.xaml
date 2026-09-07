@@ -45,7 +45,7 @@
                                 ToolTip="Queues a reboot for every node reporting Reboot required that is not draining."
                                 Background="#1AF0B070" Foreground="#FFF0B070"
                                 BorderBrush="#44F0B070" BorderThickness="1"/>
-                        <UniformGrid Rows="1" Columns="4">
+                        <WrapPanel>
                             <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
                                     Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
                                 <StackPanel>
@@ -78,20 +78,22 @@
                                     <TextBlock Text="install failed" FontSize="9" Foreground="{DynamicResource TextS}"/>
                                 </StackPanel>
                             </Border>
-                        </UniformGrid>
+                        </WrapPanel>
                     </DockPanel>
 
                     <DataGrid ItemsSource="{Binding Updates.Rows}" MaxHeight="200"
                               AutoGenerateColumns="False" IsReadOnly="True"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                              Background="Transparent" BorderThickness="0" FontSize="10">
+                              Background="Transparent" BorderThickness="0" FontSize="10"
+                              FrozenColumnCount="1"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Agent" Binding="{Binding AgentName}" Width="130"/>
-                            <DataGridTextColumn Header="Update state" Binding="{Binding StateText}" Width="110"/>
-                            <DataGridTextColumn Header="Last install" Binding="{Binding LastInstall}" Width="120"/>
-                            <DataGridTextColumn Header="Pending" Binding="{Binding PendingCount}" Width="60"/>
-                            <DataGridTextColumn Header="Detected by" Binding="{Binding DetectedBy}" Width="100"/>
-                            <DataGridTextColumn Header="Last report" Binding="{Binding LastReport}" Width="90">
+                            <DataGridTextColumn Header="Agent" Binding="{Binding AgentName}" Width="130" MinWidth="120"/>
+                            <DataGridTextColumn Header="Update state" Binding="{Binding StateText}" Width="110" MinWidth="110"/>
+                            <DataGridTextColumn x:Name="LastInstallColumn" Header="Last install" Binding="{Binding LastInstall}" Width="120" MinWidth="110"/>
+                            <DataGridTextColumn Header="Pending" Binding="{Binding PendingCount}" Width="60" MinWidth="70"/>
+                            <DataGridTextColumn x:Name="DetectedByColumn" Header="Detected by" Binding="{Binding DetectedBy}" Width="100" MinWidth="130"/>
+                            <DataGridTextColumn Header="Last report" Binding="{Binding LastReport}" Width="90" MinWidth="100">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
@@ -102,8 +104,9 @@
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
-                            <DataGridTextColumn Header="Dispatch" Binding="{Binding DispatchText}" Width="80"/>
-                            <DataGridTemplateColumn Header="Actions" Width="*">
+                            <DataGridTextColumn Header="Dispatch" Binding="{Binding DispatchText}" Width="80" MinWidth="90"/>
+                            <!-- Auto, never *: a star column absorbs the deficit and collapses, which is what made these buttons unreachable. -->
+                            <DataGridTemplateColumn Header="Actions" Width="Auto" MinWidth="160">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">

@@ -88,7 +88,8 @@ public sealed class AnchorEdgeProvider : IAnchorEdgeProvider
             .ThenBy(e => e.TestCaseId)
             .ToList();
 
-        double coverage = ComputeCoverage(area, declared.CoveredRegressionAreas, edges.Count);
+        int linkedEdgeCount = edges.Count(e => e.Source == AnchorSource.LinkedWorkItem);
+        double coverage = ComputeCoverage(area, declared.CoveredRegressionAreas, edges.Count, linkedEdgeCount);
         bool sufficient = IsSufficientForEarlyExit(area, coverage, edges.Count);
 
         _logger.Info("ImpactAnchor",
@@ -121,11 +122,19 @@ public sealed class AnchorEdgeProvider : IAnchorEdgeProvider
         return edges;
     }
 
-    private double ComputeCoverage(ImpactedArea area, IReadOnlySet<string> coveredAreas, int edgeCount)
+    private double ComputeCoverage(ImpactedArea area, IReadOnlySet<string> coveredAreas, int edgeCount, int linkedEdgeCount)
     {
         if (area.DeclaredRegressionAreas.Count == 0)
         {
             return edgeCount > 0 ? 1.0 : 0.0;
+        }
+
+        // Declared coverage is area-scoped, but a linked work item is evidence about THIS change. Without this
+        // branch any component that declares regression areas scores 0 whenever no declared-mapping source is
+        // configured (the default), so the deterministic path could never be taken.
+        if (linkedEdgeCount > 0)
+        {
+            return 1.0;
         }
 
         var covered = new HashSet<string>(coveredAreas, StringComparer.OrdinalIgnoreCase);

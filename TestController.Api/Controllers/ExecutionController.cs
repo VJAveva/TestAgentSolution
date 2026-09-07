@@ -339,6 +339,11 @@ public class ExecutionController : ControllerBase
             }
         }
 
+        // Caller-supplied values only. File-sourced parameters above are admin-authored (editing them already
+        // requires controller filesystem access) and stay untouched, so existing pipelines are unaffected.
+        if (TriggerParameterValidator.Validate(request) is { } rejection)
+            return BadRequest(ApiErrorFactory.BadRequest(rejection));
+
         if (!string.IsNullOrEmpty(request?.BuildNumber))
         {
             parameters["_BuildNumber"] = request.BuildNumber;
@@ -890,38 +895,9 @@ public class ExecutionController : ControllerBase
     /// P4-1: enforces a fine-grained RBAC permission on a mutating execution action.
     /// Fails OPEN when RBAC is disabled (Default mode) or its services are not wired,
     /// preserving legacy behaviour; enforces <c>CanAsync</c> only in Secured mode.
-    /// Resolves RBAC services lazily so hosts without RBAC fall back to legacy rules.
     /// </summary>
-    private async Task<bool> IsRbacAuthorizedAsync(Permission permission, string? resourceId, CancellationToken ct)
-    {
-        var rbacOptions = HttpContext.RequestServices
-            .GetService(typeof(Microsoft.Extensions.Options.IOptionsMonitor<TestControllerGrpc.Configuration.RbacOptions>))
-            as Microsoft.Extensions.Options.IOptionsMonitor<TestControllerGrpc.Configuration.RbacOptions>;
-
-        // Default mode (RBAC off) → preserve legacy behaviour (no fine-grained gate).
-        if (rbacOptions is null || !rbacOptions.CurrentValue.Enabled)
-            return true;
-
-        var authzService = HttpContext.RequestServices
-            .GetService(typeof(TestControllerGrpc.Authorization.IAuthorizationService))
-            as TestControllerGrpc.Authorization.IAuthorizationService;
-        var authInterceptor = HttpContext.RequestServices
-            .GetService(typeof(SessionAuthInterceptor)) as SessionAuthInterceptor;
-        if (authzService is null || authInterceptor is null)
-            return true; // host without RBAC wired → legacy behaviour
-
-        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault();
-        var clientKind = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase)
-            ? ClientKind.Wpf : ClientKind.Web;
-
-        var authHeader = HttpContext.Request.Headers.Authorization.FirstOrDefault();
-        var user = await authInterceptor.ResolveUserAsync(authHeader, clientKind, ct);
-        if (user is null)
-            return false; // Secured + unauthenticated → deny
-
-        var decision = await authzService.CanAsync(user, permission, resourceId, ct);
-        return decision.Allowed;
-    }
+    private Task<bool> IsRbacAuthorizedAsync(Permission permission, string? resourceId, CancellationToken ct)
+        => RbacGate.IsAuthorizedAsync(HttpContext, permission, resourceId, ct);
 
     // ?? Force-release endpoints (admin only) ?????????????????????????
 

@@ -32,6 +32,11 @@ public interface IChurnSummarizer
 /// <summary>Renders a churn report to shareable CSV / HTML.</summary>
 public interface IChurnReportBuilder
 {
-    string BuildCsv(ChurnReport report);
-    string BuildHtml(ChurnReport report);
+    /// <param name="policy">
+    /// Feature roll-up and exclusion accounting. Optional so existing callers are unaffected; when supplied,
+    /// the renderer adds the Feature grouping and the exclusion footer without filtering anything itself.
+    /// </param>
+    string BuildCsv(ChurnReport report, CodeChurnReportModel? policy = null);
+
+    string BuildHtml(ChurnReport report, CodeChurnReportModel? policy = null);
 }

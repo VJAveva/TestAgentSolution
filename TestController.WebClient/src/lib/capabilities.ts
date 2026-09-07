@@ -14,11 +14,13 @@ export const PERMISSION_CATALOG: Readonly<Record<string, readonly string[]>> = O
     'Pipeline_ForceRelease', 'User_Create', 'User_Update', 'User_Delete',
     'User_Assign', 'User_Revoke', 'Report_View', 'Report_Generate',
     'Audit_View', 'Audit_Export', 'Notification_Mute',
+    'CodeChurn_View', 'CodeChurn_Export', 'ReportCard_View',
   ]),
   SeniorManager: Object.freeze([
     'Pipeline_View', 'Pipeline_Trigger', 'Pipeline_Cancel', 'Pipeline_Retry',
     'Pipeline_TriggerAll', 'Pipeline_CancelAll', 'Pipeline_ForceRelease',
     'Report_View', 'Report_Generate', 'Notification_Mute',
+    'CodeChurn_View', 'CodeChurn_Export', 'ReportCard_View',
   ]),
   Engineer: Object.freeze([
     'Pipeline_View', 'Pipeline_Trigger', 'Pipeline_Cancel', 'Pipeline_Retry',

@@ -144,6 +144,10 @@ public partial class App : Application
                 services.AddWindowsUpdatePosture();
                 services.AddHostedService<NodeUpdateStatusRelay>();
 
+                // Closes out maintenance operations orphaned by a crash; without it a node interrupted
+                // mid-revert silently returns to the dispatchable pool.
+                services.AddHostedService<MaintenanceRecoveryService>();
+
                 // Phase 8: Automatic notification dispatcher
                 services.AddHostedService<NotificationDispatcher>();
 

@@ -52,12 +52,13 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
         // These integration tests validate the WebApi's own (standalone) execution path.
         // Clear ControllerProxyUrl so the host runs in standalone mode — otherwise the
         // execution-forwarding middleware would forward trigger/cancel/retry to a controller
-        // that isn't running in the test host. Added last so it overrides appsettings.json.
-        builder.ConfigureAppConfiguration((_, cfg) =>
-            cfg.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ControllerProxyUrl"] = string.Empty,
-            }));
+        // that isn't running in the test host.
+        //
+        // UseSetting, not ConfigureAppConfiguration: the host is a minimal-hosting WebApplicationBuilder,
+        // whose ConfigurationManager is already disposed by the time that callback runs, throwing
+        // ObjectDisposedException before any test executes. UseSetting writes straight to the host
+        // builder's own configuration and still overrides appsettings.json.
+        builder.UseSetting("ControllerProxyUrl", string.Empty);
 
         builder.ConfigureServices(services =>
         {

@@ -12,6 +12,7 @@ import type {
   ChurnSummary,
   ImpactedComponentAnalysis,
   SubsystemRow,
+  ImpactIndexHealth,
 } from '../types/api';
 import type { FilterState } from '../components/regression/helpers';
 
@@ -45,6 +46,7 @@ export function useRegression() {
   const setSyncStatus = useRegressionStore((s) => s.setSyncStatus);
   const setConnection = useRegressionStore((s) => s.setConnection);
   const setSummary = useRegressionStore((s) => s.setSummary);
+  const setIndexHealth = useRegressionStore((s) => s.setIndexHealth);
   const setAiLoading = useRegressionStore((s) => s.setAiLoading);
   const setBranches = useRegressionStore((s) => s.setBranches);
   const setComponents = useRegressionStore((s) => s.setComponents);
@@ -57,25 +59,27 @@ export function useRegression() {
       setError(null);
       const range = `?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}`;
       try {
-        const [consolidated, scope, sync, connection, summary] = await Promise.all([
+        const [consolidated, scope, sync, connection, summary, health] = await Promise.all([
           apiFetch<ConsolidatedImpact>(`/api/impact/consolidated${range}`),
           apiFetch<RegressionScope>(`/api/impact/scope${range}`),
           apiFetch<RegressionSyncStatus>('/api/impact/sync-status'),
           apiFetch<RegressionConnectionInfo>('/api/impact/connection').catch(() => null),
           apiFetch<ChurnSummary>(`/api/impact/summary${range}`).catch(() => null),
+          apiFetch<ImpactIndexHealth>('/health/impact-index').catch(() => null),
         ]);
         setConsolidated(consolidated);
         setScope(scope);
         setSyncStatus(sync);
         if (connection) setConnection(connection);
         setSummary(summary);
+        setIndexHealth(health);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load regression data');
       } finally {
         setLoading(false);
       }
     },
-    [setConsolidated, setScope, setSyncStatus, setConnection, setSummary, setLoading, setError],
+    [setConsolidated, setScope, setSyncStatus, setConnection, setSummary, setIndexHealth, setLoading, setError],
   );
 
   const fetchBranches = useCallback(async () => {

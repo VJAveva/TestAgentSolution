@@ -22,6 +22,10 @@ public static class PermissionCatalog
         Permission.Report_View,
         Permission.Report_Generate,
         Permission.Notification_Mute,
+        // Must mirror AuthorizationService.IsSeniorManagerOnlyPermission; PermissionCatalogConsistencyTests pins it.
+        Permission.CodeChurn_View,
+        Permission.CodeChurn_Export,
+        Permission.ReportCard_View,
     ];
 
     private static readonly Permission[] EngineerPermissions =

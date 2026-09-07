@@ -96,7 +96,8 @@ public sealed class AdoChangeTranslator
         Id: dto.Id,
         Kind: ParseWorkItemKind(dto.WorkItemType),
         Title: dto.Title ?? $"Work item {dto.Id}",
-        Url: dto.Url);
+        Url: dto.Url,
+        WorkItemType: dto.WorkItemType);
 
     private static RegressionWorkItemKind ParseWorkItemKind(string? type)
     {

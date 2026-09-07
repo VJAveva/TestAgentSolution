@@ -47,7 +47,7 @@ public static class WatchListXmlParser
         // Parse <WatchItem> elements
         foreach (var wiEl in root.Elements("WatchItem"))
         {
-            var wi = new WatchItemConfig
+            var wi = ReadSkip(new WatchItemConfig
             {
                 Tag = Attr(wiEl, "Tag"),
                 Path = Attr(wiEl, "Path"),
@@ -56,15 +56,15 @@ public static class WatchListXmlParser
                 BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
                 DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
                 BuildBasePath = Attr(wiEl, "BuildBasePath"),
-            };
+            }, wiEl);
             foreach (var evEl in wiEl.Elements("Event"))
             {
-                wi.Events.Add(new EventConfig
+                wi.Events.Add(ReadSkip(new EventConfig
                 {
                     Type = Attr(evEl, "Type", "Renamed"),
                     ExecutionType = ParseExecMode(Attr(evEl, "ExecutionType")),
                     Children = ParseChildren(evEl),
-                });
+                }, evEl));
             }
             config.WatchItems.Add(wi);
         }
@@ -80,17 +80,17 @@ public static class WatchListXmlParser
             switch (el.Name.LocalName)
             {
                 case "ActionGroup":
-                    list.Add(new ActionGroupConfig
+                    list.Add(ReadSkip(new ActionGroupConfig
                     {
                         Tag = Attr(el, "Tag"),
                         ExecutionType = ParseExecMode(Attr(el, "ExecutionType")),
                         FailAndContinue = AttrBool(el, "FailAndContinue"),
                         Children = ParseChildren(el),
-                    });
+                    }, el));
                     break;
 
                 case "Action":
-                    list.Add(new ActionConfig
+                    list.Add(ReadSkip(new ActionConfig
                     {
                         Type = ParseActionType(Attr(el, "Type")),
                         AgentName = Attr(el, "AgentName"),
@@ -117,7 +117,7 @@ public static class WatchListXmlParser
                         RetryDelaySeconds = AttrInt(el, "RetryDelaySeconds", 10),
                         RetryBackoff = Attr(el, "RetryBackoff", "Exponential"),
                         RetryOnExitCodes = Attr(el, "RetryOnExitCodes"),
-                    });
+                    }, el));
                     break;
 
                 case "Initialize":
@@ -160,12 +160,14 @@ public static class WatchListXmlParser
             AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
             AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
             AddIfNotEmpty(wiEl, "BuildBasePath", wi.BuildBasePath);
+            WriteSkip(wiEl, wi);
 
             foreach (var ev in wi.Events)
             {
                 var evEl = new XElement("Event",
                     new XAttribute("Type", ev.Type),
                     new XAttribute("ExecutionType", ev.ExecutionType.ToString()));
+                WriteSkip(evEl, ev);
                 WriteChildren(evEl, ev.Children);
                 wiEl.Add(evEl);
             }
@@ -199,6 +201,7 @@ public static class WatchListXmlParser
                         new XAttribute("Tag", ag.Tag),
                         new XAttribute("ExecutionType", ag.ExecutionType.ToString()));
                     if (ag.FailAndContinue) agEl.Add(new XAttribute("FailAndContinue", "true"));
+                    WriteSkip(agEl, ag);
                     WriteChildren(agEl, ag.Children);
                     parent.Add(agEl);
                     break;
@@ -233,6 +236,7 @@ public static class WatchListXmlParser
                     if (a.MaxRetries > 0 && !string.Equals(a.RetryBackoff, "Exponential", StringComparison.OrdinalIgnoreCase))
                         aEl.Add(new XAttribute("RetryBackoff", a.RetryBackoff));
                     AddIfNotEmpty(aEl, "RetryOnExitCodes", a.RetryOnExitCodes);
+                    WriteSkip(aEl, a);
                     parent.Add(aEl);
                     break;
 
@@ -267,12 +271,14 @@ public static class WatchListXmlParser
         AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
         AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
         AddIfNotEmpty(wiEl, "BuildBasePath", wi.BuildBasePath);
+        WriteSkip(wiEl, wi);
 
         foreach (var ev in wi.Events)
         {
             var evEl = new XElement("Event",
                 new XAttribute("Type", ev.Type),
                 new XAttribute("ExecutionType", ev.ExecutionType.ToString()));
+            WriteSkip(evEl, ev);
             WriteChildren(evEl, ev.Children);
             wiEl.Add(evEl);
         }
@@ -284,7 +290,7 @@ public static class WatchListXmlParser
         var wiEl = XElement.Parse(xml);
         if (wiEl.Name.LocalName != "WatchItem") return null;
 
-        var wi = new WatchItemConfig
+        var wi = ReadSkip(new WatchItemConfig
         {
             Tag = Attr(wiEl, "Tag"),
             Path = Attr(wiEl, "Path"),
@@ -293,15 +299,15 @@ public static class WatchListXmlParser
             BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
             DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
             BuildBasePath = Attr(wiEl, "BuildBasePath"),
-        };
+        }, wiEl);
         foreach (var evEl in wiEl.Elements("Event"))
         {
-            wi.Events.Add(new EventConfig
+            wi.Events.Add(ReadSkip(new EventConfig
             {
                 Type = Attr(evEl, "Type", "Renamed"),
                 ExecutionType = ParseExecMode(Attr(evEl, "ExecutionType")),
                 Children = ParseChildren(evEl),
-            });
+            }, evEl));
         }
         return wi;
     }
@@ -352,12 +358,14 @@ public static class WatchListXmlParser
                 wiEl.Add(new XAttribute("Tag", wi.Tag));
             AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
             AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
+            WriteSkip(wiEl, wi);
 
             foreach (var ev in wi.Events)
             {
                 var evEl = new XElement("Event",
                     new XAttribute("Type", ev.Type),
                     new XAttribute("ExecutionType", ev.ExecutionType.ToString()));
+                WriteSkip(evEl, ev);
                 WriteChildren(evEl, ev.Children);
                 wiEl.Add(evEl);
             }
@@ -401,22 +409,22 @@ public static class WatchListXmlParser
 
         foreach (var wiEl in root.Elements("WatchItem"))
         {
-            var wi = new WatchItemConfig
+            var wi = ReadSkip(new WatchItemConfig
             {
                 Tag = Attr(wiEl, "Tag"),
                 Path = Attr(wiEl, "Path"),
                 Filter = Attr(wiEl, "Filter", "*.*"),
                 BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
                 DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
-            };
+            }, wiEl);
             foreach (var evEl in wiEl.Elements("Event"))
             {
-                wi.Events.Add(new EventConfig
+                wi.Events.Add(ReadSkip(new EventConfig
                 {
                     Type = Attr(evEl, "Type", "Renamed"),
                     ExecutionType = ParseExecMode(Attr(evEl, "ExecutionType")),
                     Children = ParseChildren(evEl),
-                });
+                }, evEl));
             }
             config.WatchItems.Add(wi);
         }
@@ -452,6 +460,42 @@ public static class WatchListXmlParser
 
     private static string Attr(XElement el, string name, string def = "")
         => el.Attribute(name)?.Value?.Trim() ?? def;
+
+    /// <summary>
+    /// Reads skip/comment state. Absent attributes mean "not skipped, no comment", so a WatchList written by
+    /// an older build loads unchanged with no warning and no migration step.
+    /// </summary>
+    private static T ReadSkip<T>(T node, XElement el) where T : ISkippableNode
+    {
+        node.Skip = AttrBool(el, "Skip");
+        node.SkipReason = NullIfBlank(Attr(el, "SkipReason"));
+        node.SkippedBy = NullIfBlank(Attr(el, "SkippedBy"));
+        node.SkippedAtUtc = DateTimeOffset.TryParse(
+            Attr(el, "SkippedAtUtc"),
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind,
+            out var skippedAt) ? skippedAt : null;
+        node.Comment = NullIfBlank(el.Element("Comment")?.Value);
+        return node;
+    }
+
+    /// <summary>
+    /// Writes skip/comment state only when set, so a file with nothing skipped round-trips byte-identically
+    /// rather than gaining noise on every save.
+    /// </summary>
+    private static void WriteSkip(XElement el, ISkippableNode node)
+    {
+        if (node.Skip) el.Add(new XAttribute("Skip", "true"));
+        AddIfNotEmpty(el, "SkipReason", node.SkipReason ?? "");
+        AddIfNotEmpty(el, "SkippedBy", node.SkippedBy ?? "");
+        if (node.SkippedAtUtc is { } at)
+            el.Add(new XAttribute("SkippedAtUtc", at.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+        if (!string.IsNullOrWhiteSpace(node.Comment))
+            el.Add(new XElement("Comment", node.Comment));
+    }
+
+    private static string? NullIfBlank(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool AttrBool(XElement el, string name)
         => string.Equals(Attr(el, name), "true", StringComparison.OrdinalIgnoreCase);
@@ -625,12 +669,14 @@ public static class WatchListXmlParser
         var wiEl = new XElement("WatchItem", attrs.ToArray());
         AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
         AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
+        WriteSkip(wiEl, wi);
 
         foreach (var ev in wi.Events)
         {
             var evEl = new XElement("Event",
                 new XAttribute("Type", ev.Type),
                 new XAttribute("ExecutionType", ev.ExecutionType.ToString()));
+            WriteSkip(evEl, ev);
             WriteChildren(evEl, ev.Children);
             wiEl.Add(evEl);
         }
@@ -639,22 +685,22 @@ public static class WatchListXmlParser
 
     private static WatchItemConfig ParseSingleWatchItemElement(XElement wiEl)
     {
-        var wi = new WatchItemConfig
+        var wi = ReadSkip(new WatchItemConfig
         {
             Tag = Attr(wiEl, "Tag"),
             Path = Attr(wiEl, "Path"),
             Filter = Attr(wiEl, "Filter", "*.*"),
             BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
             DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
-        };
+        }, wiEl);
         foreach (var evEl in wiEl.Elements("Event"))
         {
-            wi.Events.Add(new EventConfig
+            wi.Events.Add(ReadSkip(new EventConfig
             {
                 Type = Attr(evEl, "Type", "Renamed"),
                 ExecutionType = ParseExecMode(Attr(evEl, "ExecutionType")),
                 Children = ParseChildren(evEl),
-            });
+            }, evEl));
         }
         return wi;
     }

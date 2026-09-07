@@ -95,6 +95,7 @@ export default function RegressionView() {
   const syncStatus = useRegressionStore((s) => s.syncStatus);
   const connection = useRegressionStore((s) => s.connection);
   const summary = useRegressionStore((s) => s.summary);
+  const indexHealth = useRegressionStore((s) => s.indexHealth);
   const branches = useRegressionStore((s) => s.branches);
   const components = useRegressionStore((s) => s.components);
   const showRuntime = useRegressionStore((s) => s.showRuntime);
@@ -449,6 +450,17 @@ export default function RegressionView() {
       </div>
 
       {/* AI summary banner (collapsible) */}
+      {indexHealth && indexHealth.status !== 'Ready' && (
+        <div className={`flex items-start gap-2 px-4 py-2 border-b shrink-0 ${indexHealth.status === 'Stale' ? 'bg-acc-amber/10 border-acc-amber/30 text-acc-amber' : 'bg-acc-red/10 border-acc-red/30 text-acc-red'}`}>
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-semibold">Impacted test cases are unavailable: {indexHealth.status}</div>
+            <div className="text-[11px] opacity-90 break-words">{indexHealth.message}</div>
+          </div>
+        </div>
+      )}
+
+      {/* AI summary banner (collapsible) */}
       {summary && (
         <div className="px-4 py-2 border-b border-bdr bg-bg-panel/60 shrink-0">
           <div className="flex items-center gap-2">
@@ -631,7 +643,9 @@ function FragmentRow({ row, index, isOpen, onToggle }: { row: SubsystemRow; inde
         <td className="px-3 py-2">
           <div className="flex flex-wrap gap-1">
             {row.manualSuites.map((s) => (
-              <span key={s.suiteId} className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${s.isLinked ? 'bg-acc-blue/20 text-acc-blue' : 'border border-dashed border-acc-blue/50 text-acc-blue'}`}>{s.suiteId}</span>
+              s.url
+                ? <a key={s.suiteId} href={s.url} target="_blank" rel="noreferrer" title={s.title} className={`px-1.5 py-0.5 rounded font-mono text-[10px] bg-acc-blue/20 text-acc-blue hover:underline`}>TC {s.suiteId}{s.title ? ` - ${s.title}` : ''}</a>
+                : <span key={s.suiteId} title={s.title} className="px-1.5 py-0.5 rounded font-mono text-[10px] border border-dashed border-acc-blue/50 text-acc-blue">TC {s.suiteId}{s.title ? ` - ${s.title}` : ''}</span>
             ))}
           </div>
         </td>
@@ -697,6 +711,11 @@ function RowDetail({ row }: { row: SubsystemRow }) {
         </div>
         {matchesLoading && <div className="text-text-muted font-mono">Analyzing changes…</div>}
         {matchesError && <div className="text-acc-red">{matchesError}</div>}
+        {analysis?.indexHealthMessage && (
+          <div className="rounded border border-acc-amber/30 bg-acc-amber/10 px-2.5 py-2 text-acc-amber">
+            Indexed matches unavailable. The offline change analysis below is still valid. {analysis.indexHealthMessage}
+          </div>
+        )}
         {analysis && analysis.matches.length > 0 && (
           <div className="flex flex-col gap-1.5">
             {analysis.matches.map((m) => (
@@ -714,6 +733,16 @@ function RowDetail({ row }: { row: SubsystemRow }) {
                 <div className="text-[11px] text-text-muted mt-0.5">
                   Parent feature: {m.parentFeatureId > 0 ? `#${m.parentFeatureId}` : 'does not exist'}
                 </div>
+                {m.linkedWorkItems && m.linkedWorkItems.length > 0 && (
+                  <div className="text-[11px] mt-0.5 flex flex-wrap items-center gap-1">
+                    <span className="text-text-muted">Verifies:</span>
+                    {m.linkedWorkItems.map((w) => (
+                      w.url
+                        ? <a key={w.id} href={w.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">{w.kind} {w.id} - {w.title}</a>
+                        : <span key={w.id} className="text-text-primary">{w.kind} {w.id} - {w.title}</span>
+                    ))}
+                  </div>
+                )}
                 {m.matchReason && <div className="text-text-secondary mt-0.5 leading-relaxed">{m.matchReason}</div>}
                 {m.description && <div className="text-text-muted mt-0.5 leading-relaxed italic line-clamp-3">{m.description}</div>}
               </div>

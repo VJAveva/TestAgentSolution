@@ -30,12 +30,17 @@ public enum RegressionWorkItemKind { Ims, Bug, Story, Feature, Other }
 public enum RegressionChangeKind { PullRequest, Automated, Commit }
 
 /// <summary>A single linked Azure DevOps work item (Changes / work items column, R9 col 5).</summary>
+/// <param name="WorkItemType">
+/// Raw ADO type ("Task", "Bug", "User Story"...). Kept alongside <paramref name="Kind"/> because Kind folds
+/// Task, Feature and every unmapped type into Other, so it cannot drive type-name exclusion policy.
+/// </param>
 public sealed record RegressionWorkItemRef(
     int Id,
     RegressionWorkItemKind Kind,
     string Title,
     string? Url,
-    DateTimeOffset? CreatedUtc = null);
+    DateTimeOffset? CreatedUtc = null,
+    string? WorkItemType = null);
 
 /// <summary>One observed change (commit/PR) touching a subsystem.</summary>
 public sealed record RegressionChangeRef(
@@ -52,7 +57,8 @@ public sealed record RegressionSuiteRef(
     string SuiteId,
     bool IsLinked,
     string? Url,
-    RegressionEvidenceKind Evidence);
+    RegressionEvidenceKind Evidence,
+    string? Title = null);
 
 /// <summary>One row of the Regression grid (R9) — a subsystem within the current scope.</summary>
 public sealed record SubsystemRow(

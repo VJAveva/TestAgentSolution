@@ -25,5 +25,10 @@ public enum Permission
     Audit_View,
     Audit_Export,
     Notification_Mute,
-    System_ChangeMode
+    System_ChangeMode,
+
+    // Appended, never reordered: audit rows persist this enum.
+    CodeChurn_View,
+    CodeChurn_Export,
+    ReportCard_View
 }

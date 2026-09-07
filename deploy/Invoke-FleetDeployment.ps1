@@ -276,6 +276,56 @@ function Invoke-Robocopy {
     return $LASTEXITCODE
 }
 
+<#
+.SYNOPSIS
+    Pre-flight: finds deployed files that /MIR would delete because they are absent from the payload.
+
+.DESCRIPTION
+    robocopy /MIR makes the destination match the source, so anything on the node that the publish output
+    does not contain is removed unless it is explicitly preserved. Those files are exactly the host's live
+    state - WatchList.xml, orchestrator.db (RBAC users/roles/audit), Parameters\, learning databases.
+
+    This has already bitten once: a deploy silently deleted 344 KB of ranker learning data from jvgr22
+    because impact-outcomes.db was neither in the payload nor in preserveFiles. Nothing failed; the loss
+    was only visible days later.
+
+    Anything reported here is either state that belongs in preserveFiles/preserveFolders, or a stale
+    artifact that genuinely should go. Both are decisions a human should make deliberately, so this
+    reports rather than blocks.
+#>
+function Get-UnprotectedState {
+    param([string]$Remote, [string]$Source, [string[]]$PreserveFiles, [string[]]$PreserveFolders)
+
+    if (-not (Test-Path $Remote) -or -not (Test-Path $Source)) { return @() }
+
+    $sourceRoot = (Resolve-Path $Source).Path
+    $payload = @{}
+    foreach ($f in Get-ChildItem $Source -Recurse -File) {
+        $payload[$f.FullName.Substring($sourceRoot.Length).TrimStart('\')] = $true
+    }
+
+    $preservedFiles = @($PreserveFiles)   | ForEach-Object { $_.ToLowerInvariant() }
+    $preservedDirs  = @($PreserveFolders) | ForEach-Object { $_.ToLowerInvariant() }
+
+    $orphans = [System.Collections.Generic.List[object]]::new()
+    foreach ($f in Get-ChildItem $Remote -Recurse -File -ErrorAction SilentlyContinue) {
+        $rel = $f.FullName.Substring($Remote.Length).TrimStart('\')
+        if ($payload.ContainsKey($rel)) { continue }
+
+        $leaf = [IO.Path]::GetFileName($rel).ToLowerInvariant()
+        if ($preservedFiles -contains $leaf) { continue }
+
+        $topDir = ($rel -split '\\')[0].ToLowerInvariant()
+        if ($rel.Contains('\') -and $preservedDirs -contains $topDir) { continue }
+
+        # Config backups this script writes are disposable by design.
+        if ($leaf -like '*.bak-*') { continue }
+
+        $orphans.Add([pscustomobject]@{ Path = $rel; KB = [math]::Round($f.Length / 1KB, 1) })
+    }
+    return $orphans
+}
+
 # -- per-node deployment -------------------------------------------------------
 function Deploy-Node {
     param($Spec, $Patch, [hashtable]$Tokens, [string]$Kind)
@@ -287,7 +337,7 @@ function Deploy-Node {
 
     $r = [ordered]@{
         Node = $node; Kind = $Kind; Result = 'PENDING'; Stopped = ''; Backup = ''
-        FilesCopied = 0; ConfigChanges = @(); Started = ''; Port = ''; Error = ''
+        FilesCopied = 0; ConfigChanges = @(); AtRisk = @(); Started = ''; Port = ''; Error = ''
         StartedAt = (Get-Date).ToString('HH:mm:ss')
     }
     Write-Node "$node ($Kind)"
@@ -299,6 +349,18 @@ function Deploy-Node {
 
         $probe = Join-Path $remote $Spec.LockProbe
         $srcCount = (Get-ChildItem $source -Recurse -File).Count
+
+        # Pass 0: anything here is live state that /MIR will delete unless preserved.
+        $atRisk = @(Get-UnprotectedState -Remote $remote -Source $source `
+                        -PreserveFiles $Spec.PreserveFiles -PreserveFolders $Spec.PreserveFolders)
+        $r.AtRisk = @($atRisk | ForEach-Object { "$($_.Path) ($($_.KB) KB)" })
+        if ($atRisk.Count -gt 0) {
+            Warn "$($atRisk.Count) deployed file(s) are NOT in the payload and NOT preserved - /MIR will DELETE them:"
+            $atRisk | Sort-Object -Property @{e={$_.KB}} -Descending | Select-Object -First 15 |
+                ForEach-Object { Warn ("    {0,10:N1} KB  {1}" -f $_.KB, $_.Path) }
+            Warn "    add real state to preserveFiles/preserveFolders in the inventory before deploying."
+        }
+        else { Ok 'pre-flight: no unprotected state on the node' }
 
         # Report planned config edits even in dry-run.
         $planned = Invoke-ConfigPatch -ConfigPath $cfg -Patch $Patch -Tokens $Tokens -WhatIfOnly
@@ -376,6 +438,7 @@ function Deploy-Node {
 
         $r.Result = if ($Spec.LaunchMode -eq 'ScheduledTask' -and $r.Started -ne 'Running') { 'WARN' }
                     elseif ($r.Port -like '*CLOSED*') { 'WARN' }
+                    elseif ($r.AtRisk.Count -gt 0) { 'WARN' }   # state was deleted; say so loudly
                     else { 'SUCCESS' }
     }
     catch {
@@ -397,7 +460,7 @@ function Restore-Node {
     $remote = "\\$node\$($Spec.SharePath)"
     $bdir   = Join-Path $backupRoot "$Kind-$node\$BackupStamp"
     $r = [ordered]@{ Node = $node; Kind = $Kind; Result = 'PENDING'; Stopped = ''; Backup = $BackupStamp
-                     FilesCopied = 0; ConfigChanges = @(); Started = ''; Port = ''; Error = ''
+                     FilesCopied = 0; ConfigChanges = @(); AtRisk = @(); Started = ''; Port = ''; Error = ''
                      StartedAt = (Get-Date).ToString('HH:mm:ss') }
     Write-Node "$node ($Kind) - ROLLBACK"
 
@@ -451,11 +514,15 @@ function Write-Report {
     $rowHtml = foreach ($r in $Results) {
         $cls = switch ($r.Result) { 'SUCCESS' {'ok'} 'DRY-RUN' {'dry'} 'WARN' {'warn'} default {'bad'} }
         $cfg = if ($r.ConfigChanges) { ($r.ConfigChanges | ForEach-Object { [Web.HttpUtility]::HtmlEncode($_) }) -join '<br/>' } else { '<span class="dim">no change</span>' }
+        $risk = if ($r.AtRisk) {
+            '<div class="err">UNPROTECTED STATE (/MIR would delete):<br/>' +
+            (($r.AtRisk | ForEach-Object { [Web.HttpUtility]::HtmlEncode($_) }) -join '<br/>') + '</div>'
+        } else { '' }
         $err = if ($r.Error) { '<div class="err">' + [Web.HttpUtility]::HtmlEncode($r.Error) + '</div>' } else { '' }
         @"
 <tr>
   <td><b>$([Web.HttpUtility]::HtmlEncode($r.Node))</b><div class="dim">$($r.Kind)</div></td>
-  <td><span class="pill $cls">$($r.Result)</span>$err</td>
+  <td><span class="pill $cls">$($r.Result)</span>$err$risk</td>
   <td>$($r.Stopped)</td>
   <td>$($r.Backup)</td>
   <td class="num">$($r.FilesCopied)</td>

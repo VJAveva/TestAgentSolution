@@ -7,7 +7,7 @@ namespace TestControllerGrpc.Core.Impact.Testing;
 public sealed class InMemoryRetrievalIndexStore(IndexSnapshot featureSnapshot, IndexSnapshot testCaseSnapshot) : IRetrievalIndexStore
 {
     /// <inheritdoc />
-    public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, CancellationToken ct)
+    public Task<IndexSnapshot> GetSnapshotAsync(IndexKind kind, IReadOnlyCollection<string>? terms, CancellationToken ct)
         => Task.FromResult(kind == IndexKind.Feature ? featureSnapshot : testCaseSnapshot);
 }
 

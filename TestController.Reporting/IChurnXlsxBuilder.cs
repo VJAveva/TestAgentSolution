@@ -12,5 +12,8 @@ public interface IChurnXlsxBuilder
     /// Builds the workbook. When <paramref name="testCaseMatches"/> is non-empty, a second
     /// "Impacted Test Cases" worksheet is appended (one row per matched Test Case).
     /// </summary>
-    byte[] BuildXlsx(ChurnReport report, IReadOnlyList<ImpactedTestCaseMatch>? testCaseMatches = null);
+    byte[] BuildXlsx(
+        ChurnReport report,
+        IReadOnlyList<ImpactedTestCaseMatch>? testCaseMatches = null,
+        CodeChurnReportModel? policy = null);
 }

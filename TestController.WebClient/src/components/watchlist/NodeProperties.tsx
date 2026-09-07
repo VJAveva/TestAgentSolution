@@ -92,6 +92,9 @@ function ActionProps({ model }: { model: ActionConfig }) {
       <PropRow label="Parameters" value={model.parameters} />
       <PropRow label="Timeout" value={model.timeout > 0 ? `${model.timeout}s` : 'None'} />
       <PropRow label="FailAndContinue" value={model.failAndContinue} />
+      <PropRow label="Skip evaluator" value={model.skip} />
+      <PropRow label="Skip reason" value={model.skipReason ?? undefined} />
+      <PropRow label="Comment" value={model.comment ?? undefined} />
       <PropRow label="IsReboot" value={model.isReboot} />
       {model.type === 'SendMail' && (
         <>
@@ -110,6 +113,9 @@ function ActionGroupProps({ model }: { model: ActionGroupConfig }) {
       <PropRow label="Tag" value={model.tag} />
       <PropRow label="Execution" value={model.executionType} />
       <PropRow label="FailAndContinue" value={model.failAndContinue} />
+      <PropRow label="Skip evaluator" value={model.skip} />
+      <PropRow label="Skip reason" value={model.skipReason ?? undefined} />
+      <PropRow label="Comment" value={model.comment ?? undefined} />
       <PropRow label="Children" value={model.children.length} />
     </Card>
   );

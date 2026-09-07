@@ -2,6 +2,7 @@ using System.Net.Mail;
 using System.Text;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -26,6 +27,7 @@ public sealed class FleetAlertDispatcher : BackgroundService
     private readonly ExecutionSessionManager _sessionManager;
     private readonly BuildResultsConfig _resultsConfig;
     private readonly IOptionsMonitor<NotificationOptions> _options;
+    private readonly IMaintenanceStateStore? _maintenanceState;
     private readonly IAppLogger _logger;
 
     // Last-known healthy flag per agent; used to detect transitions (null = unseen).
@@ -40,13 +42,15 @@ public sealed class FleetAlertDispatcher : BackgroundService
         ExecutionSessionManager sessionManager,
         BuildResultsConfig resultsConfig,
         IOptionsMonitor<NotificationOptions> options,
-        IAppLogger logger)
+        IAppLogger logger,
+        IMaintenanceStateStore? maintenanceState = null)
     {
         _dispatcher = dispatcher;
         _sessionManager = sessionManager;
         _resultsConfig = resultsConfig;
         _options = options;
         _logger = logger;
+        _maintenanceState = maintenanceState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -90,6 +94,17 @@ public sealed class FleetAlertDispatcher : BackgroundService
 
         foreach (var (agent, health) in _dispatcher.GetAllAgentHealth())
         {
+            // A node being reverted, rebooted or updated is EXPECTED to be unreachable. Alerting on it
+            // pages someone for every planned maintenance operation, which trains operators to ignore the
+            // alert that matters. AgentLivenessMonitor already applies this rule to run dispatch.
+            if (IsUnderMaintenance(agent))
+            {
+                // Treat as healthy so the return to service does not fire a spurious "recovered" mail.
+                _lastHealthy[agent] = true;
+                _lastDownAlertUtc.Remove(agent);
+                continue;
+            }
+
             var wasHealthy = _lastHealthy.TryGetValue(agent, out var prev) ? prev : true;
             var isHealthy = health.IsHealthy;
             _lastHealthy[agent] = isHealthy;
@@ -115,6 +130,13 @@ public sealed class FleetAlertDispatcher : BackgroundService
         }
     }
 
+    /// <summary>True while the node is being reverted, rebooted, updated or is quarantined — states in which
+    /// an unreachable agent is the expected outcome, not a fault.</summary>
+    internal static bool IsUnderMaintenance(IMaintenanceStateStore? store, string agent) =>
+        store is not null && store.Get(agent) != MaintenanceState.None;
+
+    private bool IsUnderMaintenance(string agent) => IsUnderMaintenance(_maintenanceState, agent);
+
     private void CheckRunOverruns(NotificationOptions opts)
     {
         var now = DateTime.UtcNow;
@@ -136,8 +158,7 @@ public sealed class FleetAlertDispatcher : BackgroundService
         _overrunAlerted.RemoveWhere(id => !activeIds.Contains(id));
     }
 
-    private void SendAgentDownAlert(string agent, AgentHealthState health)
-    {
+    private void SendAgentDownAlert(string agent, AgentHealthState health)    {
         var lastSuccess = health.LastSuccessUtc is { } ls
             ? ls.ToLocalTime().ToString("u")
             : "never";

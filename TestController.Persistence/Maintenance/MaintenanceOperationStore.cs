@@ -53,6 +53,19 @@ public sealed class MaintenanceOperationStore : IMaintenanceOperationStore
         return rows.Select(ToDomain).ToList();
     }
 
+    public async Task<IReadOnlyList<MaintenanceOperation>> GetUnfinishedAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+
+        var rows = await db.MaintenanceOperations
+            .AsNoTracking()
+            .Where(m => m.State == MaintenanceOperationState.Queued || m.State == MaintenanceOperationState.Running)
+            .OrderBy(m => m.StartedUtc)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToDomain).ToList();
+    }
+
     private static MaintenanceOperationRecord ToEntity(MaintenanceOperation op) => new()
     {
         Id = op.Id.ToString(),

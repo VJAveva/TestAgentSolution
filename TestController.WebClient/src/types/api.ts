@@ -38,6 +38,9 @@ export interface ActionGroupConfig {
   tag: string;
   executionType: ExecutionMode;
   failAndContinue: boolean;
+  skip?: boolean;
+  skipReason?: string | null;
+  comment?: string | null;
   children: ActionNode[];
 }
 
@@ -50,6 +53,9 @@ export interface ActionConfig {
   timeout: number;
   pollInterval: number;
   failAndContinue: boolean;
+  skip?: boolean;
+  skipReason?: string | null;
+  comment?: string | null;
   isReboot: boolean;
   order: string;
   tag: string;
@@ -483,6 +489,7 @@ export interface RegressionWorkItemRef {
   title: string;
   url?: string;
   createdUtc?: string;
+  workItemType?: string;
 }
 
 export interface RegressionChangeRef {
@@ -500,6 +507,7 @@ export interface RegressionSuiteRef {
   isLinked: boolean;
   url?: string;
   evidence: RegressionEvidenceKind;
+  title?: string;
 }
 
 export interface SubsystemRow {
@@ -564,6 +572,14 @@ export interface RegressionSyncStatus {
   unresolvedRepositories: string[];
 }
 
+export interface ImpactIndexHealth {
+  status: 'Ready' | 'Missing' | 'Empty' | 'Corrupt' | 'Stale' | string;
+  healthy: boolean;
+  message: string;
+  documentCount: number;
+  lastBuiltUtc?: string;
+}
+
 export interface RegressionConnectionInfo {
   enabled: boolean;
   mode: string;
@@ -605,6 +621,7 @@ export interface ImpactedTestCaseMatch {
   matchType: string;
   confidencePercent: number;
   matchReason: string;
+  linkedWorkItems?: RegressionWorkItemRef[] | null;
 }
 
 /** A functional test recommended for a change; `relevant` when its name matches the change's themes. */
@@ -618,5 +635,6 @@ export interface ImpactedComponentAnalysis {
   matches: ImpactedTestCaseMatch[];
   changeSummary: string;
   recommendedTests: RecommendedTest[];
+  indexHealthMessage?: string | null;
 }
 

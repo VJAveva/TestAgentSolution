@@ -129,7 +129,20 @@ public static class ImpactServiceCollectionExtensions
         services.TryAddSingleton<IOutcomeStore, OutcomeStore>();
         services.TryAddSingleton<IRetrievalIndexStore, RetrievalIndexStore>();
         services.TryAddSingleton<RetrievalIndexBuilder>();
-        services.TryAddSingleton<IDeclaredMappingSource, NullDeclaredMappingSource>();
+
+        // Resolved through a factory so a host without the ADO component map still starts, degrading to no
+        // declared edges rather than failing DI validation.
+        services.TryAddSingleton<IDeclaredMappingSource>(sp =>
+        {
+            IComponentBuildMap? map = sp.GetService<IComponentBuildMap>();
+            return map is null
+                ? NullDeclaredMappingSource.Instance
+                : new ComponentMapDeclaredMappingSource(
+                    map,
+                    sp.GetRequiredService<IRetrievalIndexStore>(),
+                    sp.GetRequiredService<IOptions<ImpactMappingOptions>>(),
+                    sp.GetRequiredService<IAppLogger>());
+        });
 
         // Stateless components.
         services.TryAddSingleton<IChangeDocumentBuilder, ChangeDocumentBuilder>();

@@ -61,7 +61,9 @@ public sealed partial class RegressionViewModel : ObservableObject
         BuildResultsConfig resultsConfig,
         IOptions<AdoOptions> adoOptions,
         IRegressionImpactMatcher matcher,
-        IAppLogger logger)
+        IAppLogger logger,
+        IImpactIndexHealthCheck? indexHealth = null,
+        ICodeChurnReportBuilder? policyBuilder = null)
     {
         _provider = provider;
         _catalog = catalog;
@@ -76,12 +78,63 @@ public sealed partial class RegressionViewModel : ObservableObject
         _defaultBranch = adoOptions.Value.DefaultBranch ?? "";
         _matcher = matcher;
         _logger = logger;
+        _indexHealth = indexHealth;
+        _policyBuilder = policyBuilder;
         _to = DateTime.Today;
         _from = DateTime.Today.AddDays(-2);
         _recipients = resultsConfig.ReportRecipients;
         InitSource();
         RefreshAuthState();
         _ = InitializeAsync();
+        _ = RefreshIndexHealthAsync();
+    }
+
+    private readonly IImpactIndexHealthCheck? _indexHealth;
+    private readonly ICodeChurnReportBuilder? _policyBuilder;
+
+    /// <summary>Feature roll-up + exclusion footer; null degrades the export rather than failing it.</summary>
+    private async Task<CodeChurnReportModel?> BuildPolicyModelAsync(ChurnReport report)
+    {
+        if (_policyBuilder is null) return null;
+        try
+        {
+            return await _policyBuilder.BuildAsync(report, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Regression", $"Feature roll-up unavailable: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Operator-facing index problem, or empty when the index is usable (spec R24 / Prompt 9).</summary>
+    [ObservableProperty] private string _indexHealthMessage = "";
+
+    /// <summary>True when the index cannot serve queries at all — amber banner rather than informational.</summary>
+    [ObservableProperty] private bool _isIndexUnusable;
+
+    public bool HasIndexProblem => !string.IsNullOrEmpty(IndexHealthMessage);
+
+    partial void OnIndexHealthMessageChanged(string value) => OnPropertyChanged(nameof(HasIndexProblem));
+
+    /// <summary>
+    /// Non-blocking: a missing index must be visible here rather than only surfacing as empty
+    /// "Impacted Test Cases" once someone expands a row.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshIndexHealthAsync()
+    {
+        if (_indexHealth is null) return;
+        try
+        {
+            ImpactIndexHealth health = await Task.Run(() => _indexHealth.CheckAsync(CancellationToken.None));
+            IsIndexUnusable = health.IsUnusable;
+            IndexHealthMessage = health.IsReady ? "" : health.Message;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Regression", $"Index health check failed: {ex.Message}");
+        }
     }
 
     public ObservableCollection<SubsystemRowViewModel> Rows { get; } = new();
@@ -667,16 +720,17 @@ public sealed partial class RegressionViewModel : ObservableObject
         try
         {
             var report = BuildCurrentReport();
+            CodeChurnReportModel? policy = await BuildPolicyModelAsync(report);
             if (dlg.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
             {
                 StatusMessage = "Matching test cases for the workbook\u2026";
                 var matches = await MatchWorkbookTestCasesAsync(report);
-                File.WriteAllBytes(dlg.FileName, _xlsx.BuildXlsx(report, matches));
+                File.WriteAllBytes(dlg.FileName, _xlsx.BuildXlsx(report, matches, policy));
             }
             else
             {
                 var isCsv = dlg.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
-                var content = isCsv ? _reportBuilder.BuildCsv(report) : _reportBuilder.BuildHtml(report);
+                var content = isCsv ? _reportBuilder.BuildCsv(report, policy) : _reportBuilder.BuildHtml(report, policy);
                 File.WriteAllText(dlg.FileName, content, Encoding.UTF8);
             }
             StatusMessage = $"Exported {Rows.Count} row(s) to {dlg.FileName}";
@@ -707,9 +761,10 @@ public sealed partial class RegressionViewModel : ObservableObject
         {
             StatusMessage = $"Emailing report to {Recipients}\u2026";
             var report = BuildCurrentReport();
-            var html = _reportBuilder.BuildHtml(report);
+            CodeChurnReportModel? policy = await BuildPolicyModelAsync(report);
+            var html = _reportBuilder.BuildHtml(report, policy);
             var matches = await MatchWorkbookTestCasesAsync(report);
-            var xlsx = _xlsx.BuildXlsx(report, matches);
+            var xlsx = _xlsx.BuildXlsx(report, matches, policy);
             var xlsxName = $"churn-report-{report.From:yyyyMMdd}-{report.To:yyyyMMdd}.xlsx";
             var subject = $"Code churn report \u00b7 {report.RangeText} \u00b7 {report.Rows.Count} component(s)";
             var recipients = Recipients;

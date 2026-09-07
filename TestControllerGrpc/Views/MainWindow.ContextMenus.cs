@@ -95,6 +95,20 @@ public partial class MainWindow : Window
             menu.Items.Add(CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
         }
+        if (node.NodeKind is "ActionGroup" or "Action")
+        {
+            var skippable = node.ModelObject as ISkippableNode;
+            var skipItem = new MenuItem
+            {
+                Header = "Skip evaluator",
+                IsCheckable = true,
+                IsChecked = skippable?.Skip == true,
+                ToolTip = "Skip this node during execution",
+            };
+            skipItem.Click += (_, _) => _vm.SetNodeSkip(node, skipItem.IsChecked);
+            menu.Items.Add(skipItem);
+            menu.Items.Add(new Separator());
+        }
 
         // ?? Add commands (context-sensitive) ??????????????????????????
         if (node.NodeKind is "WatchList")
@@ -266,6 +280,7 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(CreateMenuItemWithIcon("Execute Group", _vm.ExecuteGroupCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
+            AddSkipMenuItem(menu, node);
             menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
             menu.Items.Add(CreateMenuItemWithIcon("Add ActionGroup", _vm.AddGroupToTemplateCommand, "\uE8F1", "Accent"));
             menu.Items.Add(CreateMenuItemWithIcon("Add Ref", _vm.AddRefToTemplateCommand, "\uE71B", "AccMauve"));
@@ -286,6 +301,7 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"));
             menu.Items.Add(new Separator());
+            AddSkipMenuItem(menu, node);
             menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
         }
         else if (node.NodeKind is not "TemplateList")
@@ -318,6 +334,20 @@ public partial class MainWindow : Window
         }
 
         return menu;
+    }
+
+    private void AddSkipMenuItem(ContextMenu menu, TreeNodeViewModel node)
+    {
+        var skippable = node.ModelObject as ISkippableNode;
+        var skipItem = new MenuItem
+        {
+            Header = "Skip evaluator",
+            IsCheckable = true,
+            IsChecked = skippable?.Skip == true,
+            ToolTip = "Skip this node during execution",
+        };
+        skipItem.Click += (_, _) => _vm.SetNodeSkip(node, skipItem.IsChecked);
+        menu.Items.Add(skipItem);
     }
 
     private static bool CanShowMoveItems(TreeNodeViewModel node)

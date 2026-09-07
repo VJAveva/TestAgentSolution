@@ -70,7 +70,9 @@ export interface WorkItemGroup {
 }
 
 export function workItemGroups(row: SubsystemRow): WorkItemGroup[] {
-  const all = allWorkItems(row);
+  // Tasks are implementation links, not report-level work items. Feature roll-up is handled server-side;
+  // keep Feature rows out of this list as well so reports show Bugs, IMS, and User Stories only.
+  const all = allWorkItems(row).filter((w) => w.workItemType?.toLowerCase() !== 'task' && w.kind !== 'Feature');
   const byCreated = (a: RegressionWorkItemRef, b: RegressionWorkItemRef) => {
     const av = a.createdUtc ?? '';
     const bv = b.createdUtc ?? '';

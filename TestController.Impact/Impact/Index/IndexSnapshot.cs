@@ -35,13 +35,18 @@ public sealed class IndexSnapshot
     }
 
     /// <summary>Creates a searchable snapshot from corpus totals, term frequencies and documents.</summary>
+    /// <param name="medianChildCount">
+    /// Corpus-wide median, supplied when <paramref name="documents"/> is a query-scoped subset. Deriving it from
+    /// a subset would make the P17 fan-out penalty drift with the query. Null derives it from the documents.
+    /// </param>
     public IndexSnapshot(
         int documentCount,
         double averageDocumentLength,
         IReadOnlyDictionary<string, int> documentFrequencies,
         IReadOnlyList<SnapshotDocument> documents,
         double bm25K1 = 1.2,
-        double bm25B = 0.75)
+        double bm25B = 0.75,
+        int? medianChildCount = null)
     {
         ArgumentNullException.ThrowIfNull(documentFrequencies);
         ArgumentNullException.ThrowIfNull(documents);
@@ -55,7 +60,7 @@ public sealed class IndexSnapshot
         _documents = documents;
         _bm25K1 = bm25K1;
         _bm25B = bm25B;
-        MedianChildCount = ComputeMedianChildCount(documents);
+        MedianChildCount = medianChildCount ?? ComputeMedianChildCount(documents);
 
         var vectors = new Dictionary<int, float[]>();
         foreach (SnapshotDocument document in documents)
@@ -117,6 +122,31 @@ public sealed class IndexSnapshot
         }
 
         return TopByScore(scored, limit);
+    }
+
+    /// <summary>
+    /// Documents whose postings contain EVERY term, lowest id first. Conjunctive and unranked on purpose:
+    /// a declared mapping is deterministic evidence, not a BM25 best guess.
+    /// </summary>
+    public IReadOnlyList<int> MatchAllTerms(IReadOnlyCollection<string> terms, int limit)
+    {
+        ArgumentNullException.ThrowIfNull(terms);
+        if (terms.Count == 0 || _documents.Count == 0 || limit <= 0)
+        {
+            return [];
+        }
+
+        var hits = new List<int>();
+        foreach (SnapshotDocument doc in _documents)
+        {
+            if (terms.All(doc.TermFrequencies.ContainsKey))
+            {
+                hits.Add(doc.WorkItemId);
+            }
+        }
+
+        hits.Sort();
+        return hits.Count <= limit ? hits : hits.GetRange(0, limit);
     }
 
     /// <summary>Ranks documents by cosine similarity to the dense query, returning the top ids best-first.</summary>

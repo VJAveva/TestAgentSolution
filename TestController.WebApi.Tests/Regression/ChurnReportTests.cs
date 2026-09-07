@@ -136,6 +136,24 @@ public class ChurnReportTests
     }
 
     [Fact]
+    public void BuildHtml_Should_ExcludeTaskAndFeatureLinksFromWorkItems()
+    {
+        var bug = new RegressionWorkItemRef(11, RegressionWorkItemKind.Bug, "Bug title", "https://ado/wi/11", WorkItemType: "Bug");
+        var task = new RegressionWorkItemRef(22, RegressionWorkItemKind.Other, "Implementation task", "https://ado/wi/22", WorkItemType: "Task");
+        var feature = new RegressionWorkItemRef(33, RegressionWorkItemKind.Feature, "Feature title", "https://ado/wi/33", WorkItemType: "Feature");
+        var row = Row("Alpha", RegressionCategoryKind.Runtime, 1,
+            changes: Change("work", RegressionChangeKind.PullRequest, bug, task, feature));
+
+        var html = new ChurnReportBuilder(new ChurnSummarizer()).BuildHtml(Report(row));
+
+        Assert.Contains("Bug title", html);
+        Assert.DoesNotContain("Implementation task", html);
+        Assert.DoesNotContain("https://ado/wi/22", html);
+        Assert.DoesNotContain("Feature title", html);
+        Assert.DoesNotContain("https://ado/wi/33", html);
+    }
+
+    [Fact]
     public void BuildHtml_Should_ShowLinkedBuildNumberAndGreenSucceeded()
     {
         var row = Row("Alpha", RegressionCategoryKind.Runtime, 1, risk: "succeeded",

@@ -46,13 +46,22 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
         try
         {
             ImpactMappingResult result = await _engine.MapAsync(area, payload, Tier, ct).ConfigureAwait(false);
+            IReadOnlyDictionary<int, IReadOnlyList<RegressionWorkItemRef>> linkedByTestCase =
+                MapAnchorsToWorkItems(result, row);
             return result.MappedTestCases
-                .Select(m => Project(area.DisplayName, m))
+                .Select(m => Project(area.DisplayName, m, linkedByTestCase))
                 .OrderByDescending(m => m.ConfidencePercent)
                 .ToList();
         }
         catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (ImpactIndexUnavailableException)
+        {
+            // Must escape the blanket catch below. An unusable index would otherwise be reported as
+            // "no impacted test cases" — indistinguishable from a genuine empty result, which is the
+            // worst outcome for recall-biased test selection.
             throw;
         }
         catch (Exception ex)
@@ -134,7 +143,8 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
             LinkedWorkItemIds: workItems.Select(w => w.Id).ToList());
     }
 
-    private ImpactedTestCaseMatch Project(string area, MappedTestCase m)
+    private ImpactedTestCaseMatch Project(
+        string area, MappedTestCase m, IReadOnlyDictionary<int, IReadOnlyList<RegressionWorkItemRef>> linkedByTestCase)
     {
         int grade = m.Judgement?.Grade ?? 0;
         string matchType = grade >= 3 ? "full" : "partial";
@@ -152,7 +162,30 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
             ParentFeatureId: m.FeatureId,
             MatchType: matchType,
             ConfidencePercent: pct,
-            MatchReason: m.Judgement?.Reason ?? "");
+            MatchReason: m.Judgement?.Reason ?? "",
+            LinkedWorkItems: linkedByTestCase.GetValueOrDefault(m.TestCase.Item.Id));
+    }
+
+    // AnchorEdge carries the linked work-item id in FeatureId; the row already carries that work item's type,
+    // title and URL, so the join gives each test case the Bug/IMS/Story that put it in scope.
+    private static IReadOnlyDictionary<int, IReadOnlyList<RegressionWorkItemRef>> MapAnchorsToWorkItems(
+        ImpactMappingResult result, SubsystemRow row)
+    {
+        Dictionary<int, RegressionWorkItemRef> byId = row.Changes
+            .SelectMany(c => c.WorkItems)
+            .GroupBy(w => w.Id)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return result.Anchors.Edges
+            .Where(e => e.Source == AnchorSource.LinkedWorkItem && e.FeatureId is { } id && byId.ContainsKey(id))
+            .GroupBy(e => e.TestCaseId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<RegressionWorkItemRef>)g
+                    .Select(e => byId[e.FeatureId!.Value])
+                    .DistinctBy(w => w.Id)
+                    .OrderBy(w => w.Id)
+                    .ToList());
     }
 
     // The calibrated ranking score drives the confidence % (it is what orders the list); the rerank

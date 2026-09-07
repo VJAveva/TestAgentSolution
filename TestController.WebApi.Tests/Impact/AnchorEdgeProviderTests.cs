@@ -87,6 +87,35 @@ public sealed class AnchorEdgeProviderTests
         Assert.Single(result.Edges, e => e.TestCaseId == 101 && e.Source == AnchorSource.LinkedWorkItem);
     }
 
+    [Fact]
+    public async Task GetAnchors_Should_CoverDeclaredAreas_When_LinkedWorkItemsPresent()
+    {
+        // Declared coverage comes from IDeclaredMappingSource, which defaults to the null source. Without
+        // crediting linked work items, any component declaring regression areas scored 0 and could never
+        // take the deterministic path.
+        var options = new ImpactMappingOptions();
+        options.Anchors.MinAnchorsForEarlyExit = 2;
+        var ado = new FakeAdo { Children = { [900] = [101, 102] } };
+
+        AnchorResult result = await Provider(ado, new FakeOutcomes(), NullDeclaredMappingSource.Instance, options)
+            .GetAnchorsAsync(Area(RiskTier.High, ["AreaA", "AreaB"]), Payload(900), CancellationToken.None);
+
+        Assert.Equal(1.0, result.CoverageScore);
+        Assert.True(result.SufficientForEarlyExit);
+    }
+
+    [Fact]
+    public async Task GetAnchors_Should_ReportZeroCoverage_When_NoLinkedOrDeclaredEvidence()
+    {
+        var outcomes = new FakeOutcomes { Historical = [new AnchorEdge(103, null, AnchorSource.HistoricalFailure, 0.8, "failed before")] };
+
+        AnchorResult result = await Provider(new FakeAdo(), outcomes, NullDeclaredMappingSource.Instance)
+            .GetAnchorsAsync(Area(RiskTier.High, ["AreaA"]), Payload(), CancellationToken.None);
+
+        Assert.Equal(0.0, result.CoverageScore);
+        Assert.False(result.SufficientForEarlyExit);
+    }
+
     private sealed class FakeAdo : IAdoWorkItemClient
     {
         public Dictionary<int, IReadOnlyList<int>> Children { get; } = [];

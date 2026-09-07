@@ -42,8 +42,12 @@
   "$preserveNote": "robocopy /MIR DELETES destination files absent from the publish source. Everything here is host-local STATE, not a deliverable: omitting impact-*.db once destroyed 344 KB of ranker learning data on jvgr22. Verify with: compare the deployed folder against publish\\controller and add anything that is not a build artifact.",
   "preserveFiles": [
     "appsettings.json",
+    "appsettings.json.bak-*",
     "commandpolicy.json",
     "WatchList.xml",
+    "Prepare-Agent.bat",
+    "*.bat",
+    "*.cmd",
     "orchestrator.db",
     "orchestrator.db-wal",
     "orchestrator.db-shm",
@@ -54,7 +58,7 @@
     "impact-outcomes.db-wal",
     "impact-outcomes.db-shm"
   ],
-  "preserveFolders": [ "Logs", "Data", "Parameters" ],
+  "preserveFolders": [ "Logs", "Data", "Parameters", "maintenance-logs" ],
 
   "agentConfigPatch": {
     "merge": {

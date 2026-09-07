@@ -99,6 +99,9 @@ public sealed class AdoWorkItemDto
     [JsonPropertyName("url")] public string? Url { get; set; }
     [JsonPropertyName("fields")] public Dictionary<string, System.Text.Json.JsonElement> Fields { get; set; } = [];
 
+    /// <summary>Populated only when the request asked for <c>$expand=relations</c>.</summary>
+    [JsonPropertyName("relations")] public List<AdoWorkItemRelationDto> Relations { get; set; } = [];
+
     public string? Title => GetString("System.Title");
     public string? WorkItemType => GetString("System.WorkItemType");
 
@@ -106,10 +109,37 @@ public sealed class AdoWorkItemDto
         Fields.TryGetValue("System.CreatedDate", out var el) && el.ValueKind == System.Text.Json.JsonValueKind.String
             && DateTimeOffset.TryParse(el.GetString(), out var dt) ? dt : null;
 
+    /// <summary>Id of the parent work item, or null when this is a root.</summary>
+    public int? ParentId
+    {
+        get
+        {
+            foreach (AdoWorkItemRelationDto relation in Relations)
+            {
+                if (!string.Equals(relation.Rel, "System.LinkTypes.Hierarchy-Reverse", StringComparison.Ordinal))
+                    continue;
+
+                // The parent id is the last segment of the relation url.
+                string? url = relation.Url;
+                int slash = url?.LastIndexOf('/') ?? -1;
+                if (slash >= 0 && int.TryParse(url!.AsSpan(slash + 1), out int parent))
+                    return parent;
+            }
+            return null;
+        }
+    }
+
     private string? GetString(string key) =>
         Fields.TryGetValue(key, out var el) && el.ValueKind == System.Text.Json.JsonValueKind.String
             ? el.GetString()
             : null;
+}
+
+/// <summary>One work item link; <c>System.LinkTypes.Hierarchy-Reverse</c> is the parent edge.</summary>
+public sealed class AdoWorkItemRelationDto
+{
+    [JsonPropertyName("rel")] public string? Rel { get; set; }
+    [JsonPropertyName("url")] public string? Url { get; set; }
 }
 
 /// <summary>Simplified test suite shape — the real Test Plans API is deeper; we only need id/name/plan for chip linking.</summary>

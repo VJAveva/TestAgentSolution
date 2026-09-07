@@ -24,4 +24,8 @@
     <ProjectReference Include="..\TestController.Reporting\TestController.Reporting.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestController.WebApi.Tests" />
+  </ItemGroup>
+
 </Project>

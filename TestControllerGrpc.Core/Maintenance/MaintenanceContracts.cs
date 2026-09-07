@@ -97,6 +97,14 @@ public interface IMaintenanceOperationStore
         DateTimeOffset? fromUtc,
         DateTimeOffset? toUtc,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Operations still in a non-terminal state (Queued or Running). After a controller restart these are
+    /// necessarily orphaned: the engine's in-flight state is process-local, so nothing is still driving them.
+    /// Default implementation returns none, so existing fakes and mocks keep compiling.
+    /// </summary>
+    Task<IReadOnlyList<MaintenanceOperation>> GetUnfinishedAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<MaintenanceOperation>>([]);
 }
 
 /// <summary>

@@ -238,10 +238,16 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
         IsMatchesLoading = true;
         MatchesStatus = "Analyzing changes\u2026";
         IReadOnlyList<ImpactedTestCaseMatch> matches = [];
+        string? indexProblem = null;
         try
         {
             // Offload the engine cascade; the continuation resumes on the UI thread to touch the collection.
             matches = await Task.Run(() => _matcher.MatchAsync(Model, CancellationToken.None));
+        }
+        catch (ImpactIndexUnavailableException ex)
+        {
+            // Distinct from "no matches": the operator needs to know the index is the problem and how to fix it.
+            indexProblem = ex.Message;
         }
         catch
         {
@@ -265,8 +271,8 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
             ShowChangeFallback = true;
         }
 
-        _matchesLoaded = true;
-        MatchesStatus = "";
+        _matchesLoaded = indexProblem is null;   // retry on next expand once the index is rebuilt
+        MatchesStatus = indexProblem ?? "";
         IsMatchesLoading = false;
         OnPropertyChanged(nameof(HasTestMatches));
         OnPropertyChanged(nameof(HasRecommendedTests));

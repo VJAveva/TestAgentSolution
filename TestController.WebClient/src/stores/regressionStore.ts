@@ -6,6 +6,7 @@ import type {
   RegressionConnectionInfo,
   RegressionComponentRef,
   ChurnSummary,
+  ImpactIndexHealth,
 } from '../types/api';
 
 interface RegressionState {
@@ -14,6 +15,7 @@ interface RegressionState {
   syncStatus: RegressionSyncStatus | null;
   connection: RegressionConnectionInfo | null;
   summary: ChurnSummary | null;
+  indexHealth: ImpactIndexHealth | null;
   branches: string[];
   components: RegressionComponentRef[];
   showRuntime: boolean;
@@ -31,6 +33,7 @@ interface RegressionState {
   setSyncStatus: (v: RegressionSyncStatus | null) => void;
   setConnection: (v: RegressionConnectionInfo | null) => void;
   setSummary: (v: ChurnSummary | null) => void;
+  setIndexHealth: (v: ImpactIndexHealth | null) => void;
   setBranches: (v: string[]) => void;
   setComponents: (v: RegressionComponentRef[]) => void;
   setShowRuntime: (v: boolean) => void;
@@ -51,6 +54,7 @@ export const useRegressionStore = create<RegressionState>((set) => ({
   syncStatus: null,
   connection: null,
   summary: null,
+  indexHealth: null,
   branches: [],
   components: [],
   showRuntime: true,
@@ -68,6 +72,7 @@ export const useRegressionStore = create<RegressionState>((set) => ({
   setSyncStatus: (syncStatus) => set({ syncStatus }),
   setConnection: (connection) => set({ connection }),
   setSummary: (summary) => set({ summary }),
+  setIndexHealth: (indexHealth) => set({ indexHealth }),
   setAiLoading: (aiLoading) => set({ aiLoading }),
   setBranches: (branches) => set({ branches }),
   setComponents: (components) => set({ components }),

@@ -157,11 +157,29 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
 
         // T2 — dual-branch retrieval and feature resolution.
         Report(progress, "T2:Retrieval", 2, 6, "Retrieving features and test cases…");
-        Task<IndexSnapshot> featureSnapshotTask = _indexStore.GetSnapshotAsync(IndexKind.Feature, ct);
-        Task<IndexSnapshot> testCaseSnapshotTask = _indexStore.GetSnapshotAsync(IndexKind.TestCase, ct);
-        await Task.WhenAll(featureSnapshotTask, testCaseSnapshotTask).ConfigureAwait(false);
-        IndexSnapshot featureSnapshot = featureSnapshotTask.Result;
-        IndexSnapshot testCaseSnapshot = testCaseSnapshotTask.Result;
+        // Scope the load to the query's vocabulary: BM25 can only score documents that carry a query term,
+        // so loading the whole corpus would fetch millions of irrelevant postings for the same ranking.
+        string[] queryTerms = groups.SelectMany(g => g.Terms).Distinct(StringComparer.Ordinal).ToArray();
+        IndexSnapshot featureSnapshot;
+        IndexSnapshot testCaseSnapshot;
+        try
+        {
+            Task<IndexSnapshot> featureSnapshotTask = _indexStore.GetSnapshotAsync(IndexKind.Feature, queryTerms, ct);
+            Task<IndexSnapshot> testCaseSnapshotTask = _indexStore.GetSnapshotAsync(IndexKind.TestCase, queryTerms, ct);
+            await Task.WhenAll(featureSnapshotTask, testCaseSnapshotTask).ConfigureAwait(false);
+            featureSnapshot = featureSnapshotTask.Result;
+            testCaseSnapshot = testCaseSnapshotTask.Result;
+        }
+        catch (ImpactIndexUnavailableException ex) when (anchors.Edges.Count > 0)
+        {
+            // Tier-0 anchors are resolved from ADO links and need no index at all. Letting an index outage
+            // discard them turns "run these linked tests" into no result, which is the worst answer available.
+            AddWarning(warnings, $"Retrieval unavailable, answered from anchors only: {ex.Health.Message}");
+            ImpactMappingResult anchorOnly =
+                await EarlyExitAsync(area, anchors, tier, runId, warnings, stopwatch, ct).ConfigureAwait(false);
+            Report(progress, "Done", 6, 6, "Complete (anchors only; index unavailable).", anchorOnly);
+            return anchorOnly;
+        }
 
         Task<IReadOnlyList<IReadOnlyList<Scored<FeatureCandidate>>>> branchATask =
             RunFeatureBranchAsync(groups, featureSnapshot, denseQuery, area, warnings, ct);

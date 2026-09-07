@@ -16,6 +16,10 @@ namespace TestControllerGrpc.Core.Impact;
 /// <param name="MatchType">"full" for a grade-3 judgement, otherwise "partial".</param>
 /// <param name="ConfidencePercent">Ranking confidence as a whole percent (0-100).</param>
 /// <param name="MatchReason">Natural-language reason the engine matched this test case.</param>
+/// <param name="LinkedWorkItems">
+/// The Bug/IMS/User Story work items whose ADO links put this test case in scope (Tier-0 anchor evidence).
+/// Empty when the test case was found by text retrieval rather than an explicit link.
+/// </param>
 public sealed record ImpactedTestCaseMatch(
     string ImpactedArea,
     int TestCaseId,
@@ -25,7 +29,8 @@ public sealed record ImpactedTestCaseMatch(
     int ParentFeatureId,
     string MatchType,
     int ConfidencePercent,
-    string MatchReason);
+    string MatchReason,
+    IReadOnlyList<RegressionWorkItemRef>? LinkedWorkItems = null);
 
 /// <summary>
 /// Maps an impacted component (<see cref="SubsystemRow"/>) to the Test Cases the impact-mapping engine

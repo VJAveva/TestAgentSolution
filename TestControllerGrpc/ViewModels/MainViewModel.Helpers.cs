@@ -393,6 +393,13 @@ public sealed partial class MainViewModel
         RebuildTemplateIds();
     }
 
+    public void SetNodeSkip(TreeNodeViewModel node, bool skip)
+    {
+        if (node.ModelObject is not ISkippableNode skippable) return;
+        skippable.Skip = skip;
+        StatusMessage = skip ? $"Skipped '{node.DisplayText}'" : $"Enabled '{node.DisplayText}'";
+    }
+
     private void OnConfigReloaded(WatchListConfig config)
     {
         if (_sessionManager.HasAnyActiveExecution)

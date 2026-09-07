@@ -14,7 +14,8 @@ public sealed record RecommendedTest(string Name, bool Relevant);
 public sealed record ImpactedComponentAnalysis(
     IReadOnlyList<ImpactedTestCaseMatch> Matches,
     string ChangeSummary,
-    IReadOnlyList<RecommendedTest> RecommendedTests);
+    IReadOnlyList<RecommendedTest> RecommendedTests,
+    string? IndexHealthMessage = null);
 
 /// <summary>
 /// Deterministic, offline analysis of an impacted component's changes — grounded in the PR/commit titles and

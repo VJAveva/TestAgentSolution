@@ -9,6 +9,7 @@ using TestController.Api.Security;
 using TestControllerGrpc.Ado;
 using TestControllerGrpc.Ado.Reporting;
 using TestControllerGrpc.Ado.Reporting.Llm;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -59,6 +60,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/consolidated?from&amp;to — R1/R2/R5/R9 subsystem rollup.</summary>
     [HttpGet("consolidated")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<ConsolidatedImpact>> GetConsolidated(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? branch, CancellationToken ct)
     {
@@ -73,6 +75,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/scope?from&amp;to&amp;category — R11-13 recommended plan.</summary>
     [HttpGet("scope")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<RegressionScope>> GetScope(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
         [FromQuery] RegressionCategoryKind? category, [FromQuery] string? branch, CancellationToken ct)
@@ -88,6 +91,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/sync-status — R14 status bar.</summary>
     [HttpGet("sync-status")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<RegressionSyncStatus>> GetSyncStatus(CancellationToken ct)
     {
         var result = await _provider.GetSyncStatusAsync(ct);
@@ -96,6 +100,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>POST /api/impact/suites — R7/R9 col 8-9 inline suite chip edit.</summary>
     [HttpPost("suites")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<IActionResult> PostSuiteEdit([FromBody] RegressionSuiteEdit edit, CancellationToken ct)
     {
         var corr = Corr;
@@ -116,38 +121,56 @@ public class ImpactController : ControllerBase
 
     /// <summary>POST /api/impact/test-matches — impact-mapped Test Cases + change-analysis fallback for one component (grid row-expand).</summary>
     [HttpPost("test-matches")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<ImpactedComponentAnalysis>> PostTestMatches([FromBody] SubsystemRow row, CancellationToken ct)
     {
         if (row is null || string.IsNullOrWhiteSpace(row.Component))
             return ValidationProblem("A subsystem row with a component is required.");
 
         var matcher = HttpContext.RequestServices.GetService<IRegressionImpactMatcher>();
-        IReadOnlyList<ImpactedTestCaseMatch> matches = matcher is null
-            ? Array.Empty<ImpactedTestCaseMatch>()
-            : await matcher.MatchAsync(row, ct);
+        IReadOnlyList<ImpactedTestCaseMatch> matches = [];
+        string? indexHealthMessage = null;
+        if (matcher is not null)
+        {
+            try
+            {
+                matches = await matcher.MatchAsync(row, ct);
+            }
+            catch (ImpactIndexUnavailableException ex)
+            {
+                // Keep the deterministic change analysis usable while clearly identifying why indexed
+                // test-case matches are unavailable. Do not turn an operational index problem into a blank pane.
+                indexHealthMessage = ex.Health.Message;
+            }
+        }
 
         // Always return the offline change summary + recommended tests so an empty match set is still useful.
         return Ok(new ImpactedComponentAnalysis(
             matches,
             RegressionChangeAnalyzer.Summarize(row),
-            RegressionChangeAnalyzer.RecommendTests(row)));
+            RegressionChangeAnalyzer.RecommendTests(row),
+            indexHealthMessage));
     }
 
     /// <summary>GET /api/impact/connection — ADO connection/credential banner state.</summary>
     [HttpGet("connection")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public ActionResult<RegressionConnectionInfo> GetConnection() => Ok(_catalog.GetConnectionInfo());
 
     /// <summary>GET /api/impact/components — component/definition picker list.</summary>
     [HttpGet("components")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public ActionResult<IReadOnlyList<RegressionComponentRef>> GetComponents() => Ok(_catalog.GetComponents());
 
     /// <summary>GET /api/impact/components/{definitionId}/builds — recent builds for the build picker.</summary>
     [HttpGet("components/{definitionId:int}/builds")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<IReadOnlyList<RegressionBuildRef>>> GetComponentBuilds(int definitionId, CancellationToken ct)
         => Ok(await _catalog.GetComponentBuildsAsync(definitionId, ct));
 
     /// <summary>GET /api/impact/components/{definitionId}/builds/{buildId} — one build's impact row.</summary>
     [HttpGet("components/{definitionId:int}/builds/{buildId:int}")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<SubsystemRow>> GetComponentBuild(int definitionId, int buildId, CancellationToken ct)
     {
         var row = await _catalog.GetComponentBuildImpactAsync(definitionId, buildId, ct);
@@ -156,6 +179,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/branches — release branches for the parallel-dev switcher.</summary>
     [HttpGet("branches")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<IReadOnlyList<string>>> GetBranches(CancellationToken ct)
         => Ok(await _catalog.GetBranchesAsync(ct));
 
@@ -166,6 +190,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/summary?from&amp;to&amp;branch — computed AI summary of the scope.</summary>
     [HttpGet("summary")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<ChurnSummary>> GetSummary(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? branch,
         [FromQuery] RegressionRowFilterOptions filter, CancellationToken ct)
@@ -179,6 +204,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/ai-summary?from&amp;to&amp;branch — diff-grounded LLM summary (falls back to the offline summary when the model is disabled).</summary>
     [HttpGet("ai-summary")]
+    [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<ChurnSummary>> GetAiSummary(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? branch,
         [FromQuery] RegressionRowFilterOptions filter, CancellationToken ct)
@@ -192,6 +218,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>GET /api/impact/report?from&amp;to&amp;branch&amp;format=csv|html — downloadable churn report.</summary>
     [HttpGet("report")]
+    [RequirePermission(Permission.CodeChurn_Export)]
     public async Task<IActionResult> GetReport(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? branch, [FromQuery] string? format,
         [FromQuery] RegressionRowFilterOptions filter, CancellationToken ct)
@@ -200,21 +227,23 @@ public class ImpactController : ControllerBase
         if (from_ > to_)
             return ValidationProblem("'from' must not be after 'to'.");
         var report = await BuildReportAsync(from_, to_, branch, filter, ct);
+        CodeChurnReportModel? policy = await BuildPolicyModelAsync(report, ct);
         if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase))
         {
             var matches = await MatchTestCasesAsync(report.Rows, ct);
-            return File(_xlsx.BuildXlsx(report, matches),
+            return File(_xlsx.BuildXlsx(report, matches, policy),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"churn-report-{from_:yyyyMMdd}-{to_:yyyyMMdd}.xlsx");
         }
         var isCsv = string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase);
-        var content = isCsv ? _reportBuilder.BuildCsv(report) : _reportBuilder.BuildHtml(report);
+        var content = isCsv ? _reportBuilder.BuildCsv(report, policy) : _reportBuilder.BuildHtml(report, policy);
         var fileName = $"churn-report-{from_:yyyyMMdd}-{to_:yyyyMMdd}.{(isCsv ? "csv" : "html")}";
         return File(Encoding.UTF8.GetBytes(content), isCsv ? "text/csv" : "text/html", fileName);
     }
 
     /// <summary>POST /api/impact/email — email the churn report (HTML body + CSV attachment) via the host SMTP.</summary>
     [HttpPost("email")]
+    [RequirePermission(Permission.CodeChurn_Export)]
     public async Task<IActionResult> EmailReport([FromBody] EmailReportRequest req, [FromQuery] RegressionRowFilterOptions filter, CancellationToken ct)
     {
         if (req is null || string.IsNullOrWhiteSpace(req.Recipients))
@@ -228,6 +257,7 @@ public class ImpactController : ControllerBase
             return ValidationProblem("BuildResults:FromAddress is not configured on the server.");
 
         var report = await BuildReportAsync(from_, to_, req.Branch, filter, ct);
+        CodeChurnReportModel? policy = await BuildPolicyModelAsync(report, ct);
         var smtpServer = _config["BuildResults:SmtpServer"] ?? "smtp";
         var smtpPort = int.TryParse(_config["BuildResults:SmtpPort"], out var p) ? p : 25;
         try
@@ -236,12 +266,12 @@ public class ImpactController : ControllerBase
             using var message = new MailMessage(fromAddress, req.Recipients.Replace(';', ','))
             {
                 Subject = $"Code churn report \u00b7 {report.RangeText} \u00b7 {report.Rows.Count} component(s)",
-                Body = _reportBuilder.BuildHtml(report),
+                Body = _reportBuilder.BuildHtml(report, policy),
                 IsBodyHtml = true,
             };
             var csvName = $"churn-report-{from_:yyyyMMdd}-{to_:yyyyMMdd}.xlsx";
             var matches = await MatchTestCasesAsync(report.Rows, ct);
-            message.Attachments.Add(new Attachment(new MemoryStream(_xlsx.BuildXlsx(report, matches)), csvName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+            message.Attachments.Add(new Attachment(new MemoryStream(_xlsx.BuildXlsx(report, matches, policy)), csvName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             await smtp.SendMailAsync(message, ct);
             _logger.Info("Regression", $"[{Corr}] Churn report emailed to {req.Recipients}.");
             return Ok(new { sent = true, recipients = req.Recipients });
@@ -265,6 +295,24 @@ public class ImpactController : ControllerBase
             To: to,
             GeneratedUtc: DateTimeOffset.UtcNow,
             Rows: rows);
+    }
+
+    // Feature roll-up + Task-exclusion accounting. Resolved lazily so a host without the ADO reporting
+    // stack still exports, just without the Features section. A hierarchy failure must not kill the report.
+    private async Task<CodeChurnReportModel?> BuildPolicyModelAsync(ChurnReport report, CancellationToken ct)
+    {
+        var builder = HttpContext.RequestServices.GetService<ICodeChurnReportBuilder>();
+        if (builder is null) return null;
+
+        try
+        {
+            return await builder.BuildAsync(report, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Regression", $"[{Corr}] Feature roll-up unavailable: {ex.Message}");
+            return null;
+        }
     }
 
     // Runs the impact-mapping engine per component when it is registered in this host; degrades to no

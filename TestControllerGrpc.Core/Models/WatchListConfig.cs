@@ -31,12 +31,18 @@ public sealed class WatchListConfig
 // =============================================================================
 // <WatchItem Tag="ConsolidatedBuild" Path="C:\ManualTrigger\" Filter="Consolidated.txt">
 // =============================================================================
-public sealed class WatchItemConfig
+public sealed class WatchItemConfig : ISkippableNode
 {
     public string Tag { get; set; } = "";
     public string Path { get; set; } = "";
     public string Filter { get; set; } = "*.*";
     public List<EventConfig> Events { get; set; } = new();
+
+    public bool Skip { get; set; }
+    public string? SkipReason { get; set; }
+    public string? Comment { get; set; }
+    public DateTimeOffset? SkippedAtUtc { get; set; }
+    public string? SkippedBy { get; set; }
 
     /// <summary>Runtime: is this WatchItem currently enabled?</summary>
     public bool IsEnabled { get; set; } = true;
@@ -58,11 +64,17 @@ public sealed class WatchItemConfig
 // =============================================================================
 // <Event Type="Renamed" ExecutionType="Sequential">
 // =============================================================================
-public sealed class EventConfig
+public sealed class EventConfig : ISkippableNode
 {
     public string Type { get; set; } = "Renamed";         // Renamed, Created, Changed
     public ExecutionMode ExecutionType { get; set; } = ExecutionMode.Sequential;
     public List<IActionNode> Children { get; set; } = new();
+
+    public bool Skip { get; set; }
+    public string? SkipReason { get; set; }
+    public string? Comment { get; set; }
+    public DateTimeOffset? SkippedAtUtc { get; set; }
+    public string? SkippedBy { get; set; }
 }
 
 // =============================================================================
@@ -89,7 +101,7 @@ public interface IActionNode
 // =============================================================================
 // <ActionGroup Tag="..." ExecutionType="Sequential|Parallel" FailAndContinue="true">
 // =============================================================================
-public sealed class ActionGroupConfig : IActionNode
+public sealed class ActionGroupConfig : IActionNode, ISkippableNode
 {
     [JsonIgnore]
     public string NodeType => "ActionGroup";
@@ -99,12 +111,18 @@ public sealed class ActionGroupConfig : IActionNode
     public ExecutionMode ExecutionType { get; set; } = ExecutionMode.Sequential;
     public bool FailAndContinue { get; set; }
     public List<IActionNode> Children { get; set; } = new();
+
+    public bool Skip { get; set; }
+    public string? SkipReason { get; set; }
+    public string? Comment { get; set; }
+    public DateTimeOffset? SkippedAtUtc { get; set; }
+    public string? SkippedBy { get; set; }
 }
 
 // =============================================================================
 // <Action Type="RunCommand|RunRemoteCommand|SendMail" ... />
 // =============================================================================
-public sealed class ActionConfig : IActionNode
+public sealed class ActionConfig : IActionNode, ISkippableNode
 {
     [JsonIgnore]
     public string NodeType => "Action";
@@ -202,6 +220,12 @@ public sealed class ActionConfig : IActionNode
     /// Example: "-1,1,2" retries only on those exit codes.
     /// </summary>
     public string RetryOnExitCodes { get; set; } = "";
+
+    public bool Skip { get; set; }
+    public string? SkipReason { get; set; }
+    public string? Comment { get; set; }
+    public DateTimeOffset? SkippedAtUtc { get; set; }
+    public string? SkippedBy { get; set; }
 }
 
 // =============================================================================
@@ -480,7 +504,20 @@ public sealed class ActionExecutionResult
             : Duration.ToString(@"mm\:ss");
 }
 
-public enum ActionOutcome { Unknown, Success, Failed, Terminated, TimedOut }
+/// <summary>
+/// Outcome of one action. <see cref="Skipped"/> is a THIRD state, not a flavour of success — a skipped step
+/// reported as passed is a lie that costs a debugging day. Values are explicit and appended only: this enum
+/// is persisted in session state and crosses gRPC.
+/// </summary>
+public enum ActionOutcome
+{
+    Unknown = 0,
+    Success = 1,
+    Failed = 2,
+    Terminated = 3,
+    TimedOut = 4,
+    Skipped = 5,
+}
 
 /// <summary>
 /// Well-known parameter keys used across the WatchList pipeline.

@@ -215,6 +215,9 @@ public sealed partial class ActionGroupNodeViewModel : WatchBuilderNodeViewModel
         _tag = model.Tag;
         _executionType = model.ExecutionType;
         _failAndContinue = model.FailAndContinue;
+        _skip = model.Skip;
+        _skipReason = model.SkipReason ?? "";
+        _comment = model.Comment ?? "";
 
         foreach (var node in model.Children)
             Children.Add(ActionNodeFactory.Create(node, this));
@@ -230,10 +233,16 @@ public sealed partial class ActionGroupNodeViewModel : WatchBuilderNodeViewModel
     [ObservableProperty] private string _tag;
     [ObservableProperty] private ExecutionMode _executionType;
     [ObservableProperty] private bool _failAndContinue;
+    [ObservableProperty] private bool _skip;
+    [ObservableProperty] private string _skipReason;
+    [ObservableProperty] private string _comment;
 
     partial void OnTagChanged(string value) { _model.Tag = value; RaiseEdited(); }
     partial void OnExecutionTypeChanged(ExecutionMode value) { _model.ExecutionType = value; RaiseEdited(); }
     partial void OnFailAndContinueChanged(bool value) { _model.FailAndContinue = value; RaiseEdited(); }
+    partial void OnSkipChanged(bool value) { _model.Skip = value; RaiseEdited(); }
+    partial void OnSkipReasonChanged(string value) { _model.SkipReason = string.IsNullOrWhiteSpace(value) ? null : value; RaiseEdited(); }
+    partial void OnCommentChanged(string value) { _model.Comment = string.IsNullOrWhiteSpace(value) ? null : value; RaiseEdited(); }
 
     public override WatchBuilderNodeViewModel? AddChild(WatchNodeKind kind)
     {
@@ -274,6 +283,9 @@ public sealed partial class ActionNodeViewModel : WatchBuilderNodeViewModel, IAc
         _timeout = model.Timeout;
         _pollInterval = model.PollInterval;
         _failAndContinue = model.FailAndContinue;
+        _skip = model.Skip;
+        _skipReason = model.SkipReason ?? "";
+        _comment = model.Comment ?? "";
         _isReboot = model.IsReboot;
         _userName = model.UserName;
         _password = model.Password;
@@ -309,6 +321,9 @@ public sealed partial class ActionNodeViewModel : WatchBuilderNodeViewModel, IAc
     [ObservableProperty] private int _timeout;
     [ObservableProperty] private int _pollInterval;
     [ObservableProperty] private bool _failAndContinue;
+    [ObservableProperty] private bool _skip;
+    [ObservableProperty] private string _skipReason;
+    [ObservableProperty] private string _comment;
     [ObservableProperty] private bool _isReboot;
     [ObservableProperty] private string _userName;
     [ObservableProperty] private string _password;
@@ -343,6 +358,9 @@ public sealed partial class ActionNodeViewModel : WatchBuilderNodeViewModel, IAc
     partial void OnTimeoutChanged(int value) { _model.Timeout = value; RaiseEdited(); }
     partial void OnPollIntervalChanged(int value) { _model.PollInterval = value; RaiseEdited(); }
     partial void OnFailAndContinueChanged(bool value) { _model.FailAndContinue = value; RaiseEdited(); }
+    partial void OnSkipChanged(bool value) { _model.Skip = value; RaiseEdited(); }
+    partial void OnSkipReasonChanged(string value) { _model.SkipReason = string.IsNullOrWhiteSpace(value) ? null : value; RaiseEdited(); }
+    partial void OnCommentChanged(string value) { _model.Comment = string.IsNullOrWhiteSpace(value) ? null : value; RaiseEdited(); }
     partial void OnIsRebootChanged(bool value) { _model.IsReboot = value; RaiseEdited(); }
     partial void OnUserNameChanged(string value) { _model.UserName = value; RaiseEdited(); }
     partial void OnPasswordChanged(string value) { _model.Password = value; RaiseEdited(); }

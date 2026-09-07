@@ -8,7 +8,10 @@ namespace TestControllerGrpc.Ado.Reporting;
 /// <summary>ClosedXML implementation of <see cref="IChurnXlsxBuilder"/>.</summary>
 public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
 {
-    public byte[] BuildXlsx(ChurnReport report, IReadOnlyList<ImpactedTestCaseMatch>? testCaseMatches = null)
+    public byte[] BuildXlsx(
+        ChurnReport report,
+        IReadOnlyList<ImpactedTestCaseMatch>? testCaseMatches = null,
+        CodeChurnReportModel? policy = null)
     {
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add("Code Churn");
@@ -23,7 +26,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         {
             "#", "Component", "Category", "Repository", "Branch", "Activity",
             "Work Items", "Modified Files (.h/.cpp/.cs)",
-            "Impacted Functionality", "Test Use Cases", "Build Status",
+            "Impacted Functionality", "Test Use Cases", "Build Status", "Manual Test Cases",
         };
         const int headerRow = 4;
         for (var c = 0; c < headers.Length; c++)
@@ -91,8 +94,13 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
                 statusCell.Style.Font.Bold = true;
             }
 
+            var manualCell = ws.Cell(row, 12);
+            manualCell.Value = string.Join("\n", r.ManualSuites.Select(s =>
+                string.IsNullOrWhiteSpace(s.Title) ? $"Test Case {s.SuiteId}" : $"Test Case {s.SuiteId} - {s.Title}"));
+            Link(manualCell, r.ManualSuites.Select(s => s.Url).FirstOrDefault(u => !string.IsNullOrEmpty(u)));
+
             // Size the row so every wrapped line is visible (capped to avoid oversized rows).
-            var maxLines = Math.Max(5, Math.Max(wiLines, sourceFiles.Count));
+            var maxLines = Math.Max(5, Math.Max(wiLines, Math.Max(sourceFiles.Count, r.ManualSuites.Count)));
             ws.Row(row).Height = Math.Min(maxLines, 30) * 15.0;
 
             row++;
@@ -112,7 +120,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         ws.SheetView.FreezeRows(headerRow);
         ws.SheetView.FreezeColumns(2);
 
-        double[] widths = [5, 22, 12, 26, 14, 18, 26, 55, 28, 24, 18];
+        double[] widths = [5, 22, 12, 26, 14, 18, 26, 55, 28, 24, 18, 34];
         for (var c = 0; c < widths.Length; c++)
             ws.Column(c + 1).Width = widths[c];
 
@@ -122,9 +130,51 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         if (testCaseMatches is { Count: > 0 })
             AddTestCaseMatchesSheet(wb, testCaseMatches);
 
+        if (policy is not null)
+            AddFeaturesSheet(wb, policy);
+
         using var stream = new MemoryStream();
         wb.SaveAs(stream);
         return stream.ToArray();
+    }
+
+    /// <summary>Feature roll-up plus the exclusion footer, which every output is required to carry.</summary>
+    private static void AddFeaturesSheet(XLWorkbook wb, CodeChurnReportModel policy)
+    {
+        var ws = wb.Worksheets.Add("Features");
+
+        var headers = new[] { "Feature", "Work Items", "Changes", "Files" };
+        for (var c = 0; c < headers.Length; c++)
+        {
+            var cell = ws.Cell(1, c + 1);
+            cell.Value = headers[c];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#232140");
+            cell.Style.Font.FontColor = XLColor.White;
+        }
+
+        var row = 2;
+        foreach (CodeChurnFeatureGroup group in policy.GroupsForDisplay)
+        {
+            ws.Cell(row, 1).Value = group.FeatureId is { } id ? $"{id} \u00b7 {group.FeatureTitle}" : group.FeatureTitle;
+            ws.Cell(row, 2).Value = group.WorkItemCount;
+            ws.Cell(row, 3).Value = group.ChangeCount;
+            ws.Cell(row, 4).Value = group.FileCount;
+            if (group.IsOrphanBucket)
+                ws.Row(row).Style.Font.FontColor = XLColor.Gray;
+            row++;
+        }
+
+        row++;
+        ws.Cell(row, 1).Value = policy.ExclusionFooter;
+        ws.Cell(row, 1).Style.Font.Italic = true;
+        ws.Cell(row, 1).Style.Font.FontColor = XLColor.Gray;
+
+        double[] widths = [46, 12, 12, 10];
+        for (var c = 0; c < widths.Length; c++)
+            ws.Column(c + 1).Width = widths[c];
+
+        ws.SheetView.FreezeRows(1);
     }
 
     /// <summary>
@@ -144,6 +194,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         var headers = new[]
         {
             "Impacted Area", "TC ID", "TC Title", "Parent Feature ID", "Match Type", "Confidence", "Match Reason",
+            "Linked Work Items",
         };
         const int headerRow = 4;
         for (var c = 0; c < headers.Length; c++)
@@ -177,6 +228,12 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
             reasonCell.Style.Alignment.WrapText = true;
             reasonCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
 
+            // Why this test case is in scope, in the reviewer's vocabulary: the Bug/IMS/Story it verifies.
+            var linkedCell = ws.Cell(row, 8);
+            IReadOnlyList<RegressionWorkItemRef> linked = m.LinkedWorkItems ?? [];
+            linkedCell.Value = string.Join("\n", linked.Select(WorkItemLabel));
+            Link(linkedCell, linked.Select(w => w.Url).FirstOrDefault(u => !string.IsNullOrEmpty(u)));
+
             row++;
         }
 
@@ -190,7 +247,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         ws.Range(headerRow, 1, Math.Max(headerRow, row - 1), headers.Length).SetAutoFilter();
         ws.SheetView.FreezeRows(headerRow);
 
-        double[] widths = [34, 10, 52, 16, 12, 12, 70];
+        double[] widths = [34, 10, 52, 16, 12, 12, 70, 40];
         for (var c = 0; c < widths.Length; c++)
             ws.Column(c + 1).Width = widths[c];
     }
@@ -283,7 +340,12 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
     }
 
     private static IReadOnlyList<RegressionWorkItemRef> DistinctWorkItems(SubsystemRow r) =>
-        r.Changes.SelectMany(c => c.WorkItems).GroupBy(w => w.Id).Select(g => g.First()).ToList();
+        r.Changes.SelectMany(c => c.WorkItems)
+            .Where(w => !IsReportTask(w) && w.Kind != RegressionWorkItemKind.Feature)
+            .GroupBy(w => w.Id).Select(g => g.First()).ToList();
+
+    private static bool IsReportTask(RegressionWorkItemRef workItem) =>
+        string.Equals(workItem.WorkItemType, "Task", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Work items grouped for display, in the required order: Bugs, IMS, User Stories, then anything else.</summary>
     private static IReadOnlyList<(string Heading, IReadOnlyList<RegressionWorkItemRef> Items)> GroupWorkItems(SubsystemRow r)
@@ -309,12 +371,17 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
 
     private static string WorkItemLabel(RegressionWorkItemRef w) => w.Kind switch
     {
-        RegressionWorkItemKind.Bug => $"Bug {w.Id}",
-        RegressionWorkItemKind.Story => $"User Story {w.Id}",
-        RegressionWorkItemKind.Feature => $"Feature {w.Id}",
-        RegressionWorkItemKind.Ims => $"IMS {w.Id}",
-        _ => $"Work Item {w.Id}",
+        RegressionWorkItemKind.Bug => WorkItemLabel("Bug", w),
+        RegressionWorkItemKind.Story => WorkItemLabel("User Story", w),
+        RegressionWorkItemKind.Feature => WorkItemLabel("Feature", w),
+        RegressionWorkItemKind.Ims => WorkItemLabel("IMS", w),
+        _ => WorkItemLabel("Work Item", w),
     };
+
+    private static string WorkItemLabel(string kind, RegressionWorkItemRef workItem) =>
+        string.IsNullOrWhiteSpace(workItem.Title)
+            ? $"{kind} {workItem.Id}"
+            : $"{kind} {workItem.Id} - {workItem.Title}";
 
     // Excel allows one hyperlink per cell — style it blue/underlined so multi-line cells read as links.
     private static void Link(IXLCell cell, string? url)

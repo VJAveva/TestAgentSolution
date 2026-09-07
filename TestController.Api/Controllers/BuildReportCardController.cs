@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using TestController.Api.Security;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -31,6 +32,7 @@ public class BuildReportCardController : ControllerBase
 
     /// <summary>GET /api/reportcard/builds — list available build folders (newest first).</summary>
     [HttpGet("builds")]
+    [RequirePermission(Permission.ReportCard_View)]
     public IActionResult GetBuilds()
     {
         try
@@ -47,6 +49,7 @@ public class BuildReportCardController : ControllerBase
 
     /// <summary>GET /api/reportcard?build={buildNumber} — aggregate the report card.</summary>
     [HttpGet]
+    [RequirePermission(Permission.ReportCard_View)]
     public async Task<IActionResult> GetReportCard([FromQuery] string? build, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
