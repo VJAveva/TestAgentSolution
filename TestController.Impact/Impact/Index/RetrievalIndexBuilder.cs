@@ -122,7 +122,9 @@ public sealed class RetrievalIndexBuilder
             refs.Add(item);
         }
 
-        return refs;
+        // Adaptive date windows can return the same work item more than once; hydrating it twice is wasted
+        // ADO traffic and would produce duplicate index rows.
+        return refs.DistinctBy(r => r.Id).ToList();
     }
 
     private static DocumentDraft DraftFrom(TestCaseCandidate testCase)
@@ -148,6 +150,10 @@ public sealed class RetrievalIndexBuilder
         {
             return (0, 0);
         }
+
+        // The prior rows are deleted once per batch, so a document repeated inside the batch would insert its
+        // terms twice and trip the (DocumentId, Term) unique constraint, aborting the whole build.
+        drafts = drafts.GroupBy(d => d.Id, StringComparer.Ordinal).Select(g => g.Last()).ToList();
 
         string[] ids = drafts.Select(d => d.Id).ToArray();
         Dictionary<string, string> existing = await ctx.Documents

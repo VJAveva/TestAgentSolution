@@ -147,6 +147,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<TestController.Api
 // RBAC feature (identity, authorization, audit — NO local DB; routes through controller)
 builder.Services.AddRbacFeature(builder.Configuration, isPrimaryHost: false);
 
+// This host's session store is a no-op, so permission gates on the endpoints it serves itself must resolve
+// the caller through the controller that owns the sessions.
+builder.Services.AddSingleton<TestController.Api.Security.IRemoteCapabilityResolver, ProxyCapabilityResolver>();
+
 // Keep this secondary host's RBAC mode in sync with the controller (source of truth)
 // so the IIS-hosted web client switches Default/Secured when the WPF app does.
 builder.Services.AddHostedService<SystemModeSyncService>();

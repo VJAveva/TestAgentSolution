@@ -40,7 +40,16 @@ internal static class RbacGate
         var authHeader = http.Request.Headers.Authorization.FirstOrDefault();
         IUserContext? user = await authInterceptor.ResolveUserAsync(authHeader, clientKind, ct);
         if (user is null)
-            return false;
+        {
+            // A host that proxies identity has a no-op session store, so it can never resolve a token locally.
+            // Denying here 403s every gated endpoint it serves in its own right; ask the primary host instead.
+            var remote = http.RequestServices.GetService<IRemoteCapabilityResolver>();
+            if (remote is null)
+                return false;
+
+            IReadOnlySet<string>? capabilities = await remote.GetCapabilitiesAsync(authHeader, ct);
+            return capabilities is not null && capabilities.Contains(permission.ToString());
+        }
 
         AuthDecision decision = await authzService.CanAsync(user, permission, resourceId, ct);
         return decision.Allowed;

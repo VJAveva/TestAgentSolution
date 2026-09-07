@@ -156,6 +156,10 @@ export default function RegressionView() {
   const reload = (f: Date, t: Date, b: string | null) => {
     setFocusedRow(null);
     setSelectedBuildId(null);
+    // These load once on mount and swallow their errors, so a single failed load would otherwise leave the
+    // pickers empty until a full page reload.
+    if (branches.length === 0) fetchBranches();
+    if (components.length === 0) fetchComponents();
     loadAll(f, t, b);
   };
 

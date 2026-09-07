@@ -86,6 +86,28 @@ public sealed class RetrievalIndexBuilderTests
         Assert.Equal(3, VectorBlob.ToFloats(vector.Vector).Length);
     }
 
+    [Fact]
+    public async Task BuildAsync_Should_Succeed_When_AdoReturnsSameWorkItemTwice()
+    {
+        // Adaptive WIQL date windows can return one work item in two windows. Prior rows are deleted once per
+        // batch, so the repeat inserted (DocumentId, Term) twice and killed the whole build with
+        // "SQLite Error 19: UNIQUE constraint failed: DocumentTerms.DocumentId, DocumentTerms.Term".
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var factory = new SharedConnectionFactory(connection);
+        var builder = new RetrievalIndexBuilder(
+            factory, new FakeAdoWorkItemClient(TestCases, Features, duplicateEveryItem: true),
+            NullEmbeddingProvider.Instance, Options.Create(new ImpactMappingOptions()), new NoopAppLogger());
+
+        IndexBuildResult result = await builder.BuildAsync(fullRebuild: true, progress: null, CancellationToken.None);
+
+        Assert.Equal(3, result.DocumentsIndexed);
+
+        await using ImpactIndexDbContext ctx = factory.CreateDbContext();
+        Assert.Equal(3, await ctx.Documents.CountAsync());
+        Assert.Equal(3, (await ctx.DocumentTerms.Select(t => t.DocumentId).ToListAsync()).Distinct().Count());
+    }
+
     private static RetrievalIndexBuilder CreateBuilder(SharedConnectionFactory factory, IEmbeddingProvider embeddings)
         => new(factory, new FakeAdoWorkItemClient(TestCases, Features), embeddings,
             Options.Create(new ImpactMappingOptions()), new NoopAppLogger());
@@ -104,7 +126,8 @@ public sealed class RetrievalIndexBuilderTests
     }
 
     private sealed class FakeAdoWorkItemClient(
-        IReadOnlyList<TestCaseCandidate> testCases, IReadOnlyList<FeatureCandidate> features) : IAdoWorkItemClient
+        IReadOnlyList<TestCaseCandidate> testCases, IReadOnlyList<FeatureCandidate> features,
+        bool duplicateEveryItem = false) : IAdoWorkItemClient
     {
         public async IAsyncEnumerable<AdoWorkItemRef> EnumerateChangedSinceAsync(
             string workItemType, DateTimeOffset since, int pageSize, [EnumeratorCancellation] CancellationToken ct)
@@ -117,6 +140,10 @@ public sealed class RetrievalIndexBuilderTests
             {
                 ct.ThrowIfCancellationRequested();
                 yield return item;
+                if (duplicateEveryItem)
+                {
+                    yield return item;
+                }
             }
 
             await Task.CompletedTask;
