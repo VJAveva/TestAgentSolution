@@ -375,3 +375,5 @@ impact-index.db-shm
 impact-outcomes.db
 impact-outcomes.db-wal
 impact-outcomes.db-shm
+
+webapi-tests.txt
