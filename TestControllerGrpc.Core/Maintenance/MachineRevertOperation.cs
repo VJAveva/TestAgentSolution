@@ -75,7 +75,7 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
                 return await FailPrecheckAsync(op, $"Node '{request.NodeId}' is not registered.", log, stopwatch, progress);
 
             var currentState = _stateStore.Get(request.NodeId);
-            if (currentState != MaintenanceState.None)
+            if (IsHeldByAnotherOperation(currentState))
                 return await FailPrecheckAsync(op, $"Node '{request.NodeId}' is already in maintenance ({currentState}).", log, stopwatch, progress);
 
             if (string.IsNullOrWhiteSpace(request.SnapshotName))
@@ -266,6 +266,10 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
         Report(progress, cancelled, StepOf(phase), "Cancelled.", stopwatch);
         return cancelled;
     }
+
+    // Draining/Updating are the Windows Update posture awaiting a reboot; a revert supersedes it either way.
+    private static bool IsHeldByAnotherOperation(MaintenanceState state)
+        => state is MaintenanceState.Reverting or MaintenanceState.Rebooting or MaintenanceState.Quarantined;
 
     private async Task<MaintenanceOperation> FailPrecheckAsync(
         MaintenanceOperation op, string reason,

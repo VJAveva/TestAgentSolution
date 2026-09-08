@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel, type IRetryPolicy, type RetryContext } from '@microsoft/signalr';
 import { apiGet } from '../lib/api';
 import { useWatchListStore } from '../stores/watchlistStore';
@@ -37,15 +37,28 @@ const indefiniteRetryPolicy: IRetryPolicy = {
   },
 };
 
-export function useSignalR(enabled = true): HubConnection | null {
-  const [connection, setConnection] = useState<HubConnection | null>(null);
-  const started = useRef(false);
-  const unmountedRef = useRef(false);
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connRef = useRef<HubConnection | null>(null);
+// The hub is a page-lifetime singleton. These were per-call-site useRefs, which meant every
+// caller of useSignalR built its own socket and its cleanup stopped it mid-negotiate.
+const started = { current: false };
+const unmountedRef = { current: false };
+const restartTimerRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
+const connRef: { current: HubConnection | null } = { current: null };
+const subscribers = new Set<(conn: HubConnection | null) => void>();
+let liveConnection: HubConnection | null = null;
 
-  // Defined here so the onclose handler (which lives inside useEffect) and
-  // the visibility-change listener (also inside useEffect) can both call it.
+function setConnection(conn: HubConnection | null) {
+  liveConnection = conn;
+  for (const notify of subscribers) notify(conn);
+}
+
+export function useSignalR(enabled = true): HubConnection | null {
+  const [connection, setLocalConnection] = useState<HubConnection | null>(liveConnection);
+
+  useEffect(() => {
+    subscribers.add(setLocalConnection);
+    return () => { subscribers.delete(setLocalConnection); };
+  }, []);
+
   const tryStart = useCallback((conn: HubConnection) => {
     if (unmountedRef.current) return;
     if (conn.state !== HubConnectionState.Disconnected) return;
@@ -346,20 +359,8 @@ export function useSignalR(enabled = true): HubConnection | null {
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
 
-    return () => {
-      unmountedRef.current = true;
-      started.current = false;
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('online', onOnline);
-      if (restartTimerRef.current) {
-        clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = null;
-      }
-      useConnectionStore.getState().setConnection(null);
-      useConnectionStore.getState().setStatus('disconnected');
-      conn.stop().catch(err => console.error('[SignalR] Stop error:', err));
-      connRef.current = null;
-    };
+    // Nothing is torn down here: the hub outlives any single consumer, and stopping it
+    // when one unmounted was aborting another's in-flight negotiate. The page unload ends it.
   }, [tryStart, enabled]);
 
   return connection;

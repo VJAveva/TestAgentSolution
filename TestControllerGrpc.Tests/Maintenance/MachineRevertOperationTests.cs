@@ -105,6 +105,39 @@ public class MachineRevertOperationTests
         Assert.Contains(h.Invocations, i => i.Arguments.Contains("snap 1"));
     }
 
+    [Theory]
+    [InlineData(MaintenanceState.Draining)]
+    [InlineData(MaintenanceState.Updating)]
+    public async Task ExecuteAsync_Should_Proceed_When_NodeAwaitsRebootFromUpdatePosture(MaintenanceState posture)
+    {
+        var h = new Harness();
+        h.StateStore.Set(Node, posture);
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Succeeded, result.State);
+        Assert.Equal(MaintenanceState.None, h.StateStore.Get(Node));
+    }
+
+    [Theory]
+    [InlineData(MaintenanceState.Reverting)]
+    [InlineData(MaintenanceState.Rebooting)]
+    [InlineData(MaintenanceState.Quarantined)]
+    public async Task ExecuteAsync_Should_RejectAtPrecheck_When_NodeHeldByAnotherOperation(MaintenanceState held)
+    {
+        var h = new Harness();
+        h.StateStore.Set(Node, held);
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.Precheck, result.FailurePhase);
+        Assert.Equal(held, h.StateStore.Get(Node));
+        h.ScriptRunner.Verify(
+            r => r.RunAsync(It.IsAny<ScriptInvocation>(), It.IsAny<IProgress<ScriptOutputLine>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task ExecuteAsync_Should_RejectAtPrecheckAndLeaveNodeUntouched_When_BusyAndNotForced()
     {

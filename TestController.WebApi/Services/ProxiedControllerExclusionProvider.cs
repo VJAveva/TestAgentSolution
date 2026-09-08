@@ -22,6 +22,8 @@ public sealed class ProxiedControllerExclusionProvider : IApplicationFeatureProv
         typeof(AuthController),
         // Pipeline locks: require the lock registry/database — proxied via LockEndpoints.
         typeof(LocksController),
+        // Notification mutes: MuteService is primary-host only — proxied via NotificationEndpoints.
+        typeof(NotificationsController),
     ];
 
     public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)

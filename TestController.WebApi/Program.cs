@@ -492,6 +492,7 @@ app.MapGroup("/api").MapLockEndpoints().RequireAuthorization(SecurityPolicies.Us
 // Auth is proxied to the controller (secondary host has no session store); allow anonymous so
 // login/guest reach the controller, which performs the real authentication.
 app.MapGroup("/api").MapAuthEndpoints().AllowAnonymous();
+app.MapGroup("/api/notifications").MapNotificationEndpoints().RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 app.MapGroup("/api/tokens").MapTokenManagementEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);

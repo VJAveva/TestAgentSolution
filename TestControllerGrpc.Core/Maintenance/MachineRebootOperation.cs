@@ -60,7 +60,7 @@ public sealed class MachineRebootOperation : IMachineRebootOperation
                 return await FailPrecheckAsync(op, $"Node '{request.NodeId}' is not registered.", stopwatch, progress);
 
             var currentState = _stateStore.Get(request.NodeId);
-            if (currentState != MaintenanceState.None)
+            if (IsHeldByAnotherOperation(currentState))
                 return await FailPrecheckAsync(op, $"Node '{request.NodeId}' is already in maintenance ({currentState}).", stopwatch, progress);
 
             var existingLock = _lockManager.GetLock(request.NodeId);
@@ -141,6 +141,10 @@ public sealed class MachineRebootOperation : IMachineRebootOperation
             return faulted;
         }
     }
+
+    // Draining/Updating are the Windows Update posture asking for a reboot, so they must not block one.
+    private static bool IsHeldByAnotherOperation(MaintenanceState state)
+        => state is MaintenanceState.Reverting or MaintenanceState.Rebooting or MaintenanceState.Quarantined;
 
     private async Task<MaintenanceOperation> FailPrecheckAsync(
         MaintenanceOperation op, string reason, Stopwatch stopwatch, IProgress<MaintenanceProgress> progress)

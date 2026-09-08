@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code churn header — compaction mockup</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --band:#f8fafc;
+    --band-2:#f1f5f9;
+    --border:#e2e8f0;
+    --border-2:#cbd5e1;
+    --text:#1e293b;
+    --head:#0f172a;
+    --muted:#64748b;
+    --faint:#94a3b8;
+    --accent:#2563eb;
+    --accent-weak:#eff6ff;
+    --accent-line:#bfdbfe;
+    --green:#15803d; --green-weak:#dcfce7; --green-line:#bbf7d0;
+    --amber:#b45309; --amber-weak:#fef3c7; --amber-line:#fde68a;
+    --red:#dc2626;   --red-weak:#fee2e2;  --red-line:#fecaca;
+    --chip:#eff6ff;  --chip-text:#1d4ed8; --chip-line:#dbeafe;
+    --shell:#0f172a;
+    --shell-2:#1e293b;
+    --shell-text:#e2e8f0;
+    --shell-muted:#94a3b8;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  .frame[data-theme="dark"]{
+    --bg:#0f172a;
+    --band:#1e293b;
+    --band-2:#334155;
+    --border:#334155;
+    --border-2:#475569;
+    --text:#e2e8f0;
+    --head:#f8fafc;
+    --muted:#94a3b8;
+    --faint:#64748b;
+    --accent:#60a5fa;
+    --accent-weak:#1e3a5f;
+    --accent-line:#1e40af;
+    --green:#4ade80; --green-weak:#14532d; --green-line:#166534;
+    --amber:#fbbf24; --amber-weak:#451a03; --amber-line:#78350f;
+    --red:#f87171;   --red-weak:#450a0a;  --red-line:#7f1d1d;
+    --chip:#1e3a5f;  --chip-text:#93c5fd; --chip-line:#1e40af;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--shell);
+    font-family:var(--sans);
+    color:var(--shell-text);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ─────────────── mockup chrome (not part of the product) ─────────────── */
+  .tool{
+    position:sticky; top:0; z-index:50;
+    background:var(--shell);
+    border-bottom:1px solid #334155;
+    padding:14px 20px 12px;
+  }
+  .tool-title{
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+    margin-bottom:12px;
+  }
+  .tool-title h1{
+    font-size:15px; font-weight:600; margin:0; letter-spacing:-0.01em;
+    color:#f8fafc;
+  }
+  .tool-title p{
+    margin:0; font-size:12.5px; color:var(--shell-muted);
+  }
+  .controls{display:flex; gap:20px; flex-wrap:wrap; align-items:flex-end}
+  .ctl{display:flex; flex-direction:column; gap:5px}
+  .ctl > span{
+    font-family:var(--mono); font-size:10px; color:var(--shell-muted);
+    letter-spacing:0.04em;
+  }
+  .seg{display:flex; background:var(--shell-2); border-radius:7px; padding:2px; gap:2px}
+  .seg button{
+    font-family:inherit; font-size:12px; font-weight:500;
+    padding:5px 11px; border:0; border-radius:5px; cursor:pointer;
+    background:transparent; color:var(--shell-muted); transition:none;
+  }
+  .seg button:hover{color:#f1f5f9}
+  .seg button[aria-pressed="true"]{background:#475569; color:#fff}
+  .seg button:focus-visible{outline:2px solid #60a5fa; outline-offset:1px}
+
+  .readout{
+    margin-left:auto; display:flex; gap:22px; align-items:flex-end;
+    font-family:var(--mono);
+  }
+  .readout div{text-align:right}
+  .readout .k{font-size:10px; color:var(--shell-muted); display:block; letter-spacing:0.04em}
+  .readout .v{font-size:19px; color:#f8fafc; font-weight:500; line-height:1.15}
+  .readout .v.good{color:#4ade80}
+
+  /* ─────────────── stage ─────────────── */
+  .stage{padding:24px 20px 40px; overflow-x:auto}
+  .scaler{transform-origin:top left}
+  .frame{
+    background:var(--bg);
+    color:var(--text);
+    border:1px solid #334155;
+    border-radius:10px;
+    overflow:hidden;
+    box-shadow:0 18px 40px -18px rgba(0,0,0,.6);
+    font-size:13px;
+  }
+
+  /* ─────────────── app nav (unchanged, for context) ─────────────── */
+  .nav{
+    display:flex; align-items:center; gap:22px;
+    padding:0 16px; height:34px;
+    background:var(--bg); border-bottom:1px solid var(--border);
+  }
+  .brand{font-weight:600; color:var(--accent); font-size:13.5px}
+  .nav a{
+    color:var(--text); text-decoration:none; font-size:12.5px;
+    display:flex; align-items:center; gap:5px; opacity:.75;
+  }
+  .nav a.on{color:var(--accent); opacity:1; font-weight:500}
+  .nav .right{margin-left:auto; display:flex; align-items:center; gap:10px}
+  .icon{width:13px; height:13px; display:inline-block; vertical-align:-2px}
+
+  /* ─────────────── shared control primitives ─────────────── */
+  .unit{display:inline-flex; align-items:center; white-space:nowrap; gap:6px}
+  .divider{width:1px; height:15px; background:var(--border); flex:none}
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px;
+    height:25px; padding:0 10px; border-radius:13px;
+    border:1px solid var(--border-2); background:var(--bg);
+    font-size:12px; color:var(--text); cursor:pointer; font-family:inherit;
+  }
+  .pill:hover{background:var(--band-2)}
+  .pill.on{border-color:var(--accent); background:var(--accent-weak); color:var(--accent); font-weight:500}
+  .pill.on.green{border-color:var(--green-line); background:var(--green-weak); color:var(--green)}
+  .pill .badge{
+    font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums;
+  }
+  .pill.on .badge{color:inherit; opacity:.8}
+
+  .segment{
+    display:inline-flex; border:1px solid var(--border-2); border-radius:6px;
+    overflow:hidden; height:25px; background:var(--bg);
+  }
+  .segment button{
+    font-family:inherit; font-size:12px; padding:0 10px; border:0; cursor:pointer;
+    background:transparent; color:var(--text); border-right:1px solid var(--border);
+  }
+  .segment button:last-child{border-right:0}
+  .segment button.on{background:var(--accent); color:#fff; font-weight:500}
+  .segment button:not(.on):hover{background:var(--band-2)}
+
+  .field{
+    height:25px; min-width:120px; padding:0 9px; border-radius:6px;
+    border:1px solid var(--border-2); background:var(--bg);
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--muted); cursor:pointer;
+  }
+  .field b{color:var(--text); font-weight:500}
+  .field:hover{background:var(--band-2)}
+
+  .btn{
+    height:26px; padding:0 11px; border-radius:6px; font-size:12px; font-family:inherit;
+    border:1px solid var(--border-2); background:var(--bg); color:var(--text);
+    cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn:hover{background:var(--band-2)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.ghost{border-color:transparent; color:var(--muted)}
+  .btn.ghost:hover{background:var(--band-2); color:var(--text)}
+
+  /* ─────────────── AFTER header ─────────────── */
+  .hdr{position:relative; background:var(--band); border-bottom:1px solid var(--border)}
+
+  .row-identity{
+    display:flex; align-items:center; gap:14px;
+    height:40px; padding:0 14px; position:relative;
+  }
+
+  /* component picker placement */
+  .u-component{display:none}
+  .frame[data-cp="rail"] .u-component{display:inline-flex}
+  .frame[data-cp="rail"] .picker{
+    border-color:transparent; background:none; cursor:default; padding-left:0;
+    font-weight:400; color:var(--muted); pointer-events:none;
+  }
+  .frame[data-cp="rail"] .picker .chev{display:none}
+  .frame[data-cp="rail"][data-w="1024"] .u-component{display:none}
+  .title{font-size:14px; font-weight:600; color:var(--head); letter-spacing:-0.01em}
+  .crumb{font-size:12px; color:var(--muted); display:inline-flex; align-items:center; gap:5px}
+  .picker{
+    font-family:inherit; font-size:12px; font-weight:500; color:var(--head);
+    background:var(--bg); border:1px solid var(--border-2); border-radius:6px;
+    height:24px; padding:0 7px 0 9px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:7px;
+  }
+  .picker:hover{background:var(--band-2); border-color:var(--accent-line)}
+  .picker[aria-expanded="true"]{border-color:var(--accent); background:var(--accent-weak); color:var(--accent)}
+  .picker.set{border-color:var(--accent); background:var(--accent-weak); color:var(--accent)}
+  .picker .chev{font-size:9px; color:var(--muted); margin-top:-1px}
+  .picker[aria-expanded="true"] .chev, .picker.set .chev{color:inherit}
+
+  /* component popover */
+  .pop{
+    position:absolute; top:36px; left:14px; z-index:40; width:308px;
+    background:var(--bg); border:1px solid var(--border-2); border-radius:8px;
+    box-shadow:0 14px 32px -10px rgba(15,23,42,.4); padding:7px; display:none;
+    text-align:left;
+  }
+  .pop.open{display:block}
+  .pop .search{
+    width:100%; height:28px; padding:0 9px; font-family:inherit; font-size:12px;
+    border:1px solid var(--border-2); border-radius:6px; background:var(--band);
+    color:var(--text); margin-bottom:5px;
+  }
+  .pop .search::placeholder{color:var(--faint)}
+  .pop .list{max-height:236px; overflow-y:auto}
+  .pop .grp{
+    font-size:10px; color:var(--muted); padding:8px 8px 4px; letter-spacing:.03em;
+  }
+  .pop .opt{
+    display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:5px;
+    cursor:pointer; font-size:12px; color:var(--text);
+  }
+  .pop .opt:hover{background:var(--band-2)}
+  .pop .opt .cb{
+    width:13px; height:13px; border:1px solid var(--border-2); border-radius:3px;
+    flex:none; display:flex; align-items:center; justify-content:center;
+    font-size:9px; color:#fff; line-height:1;
+  }
+  .pop .opt.sel .cb{background:var(--accent); border-color:var(--accent)}
+  .pop .opt .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pop .opt .n{margin-left:auto; font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; flex:none}
+  .pop .opt.quiet .nm{color:var(--muted)}
+  .pop .opt.quiet .n{color:var(--faint)}
+  .pop .foot{
+    display:flex; gap:6px; align-items:center; padding:7px 3px 1px;
+    border-top:1px solid var(--border); margin-top:5px;
+  }
+  .pop .foot .hint{font-size:10.5px; color:var(--faint); margin-left:auto}
+
+  /* stat strip */
+  .stats{display:flex; align-items:center; gap:0; margin-left:10px; flex:1; min-width:0}
+  .stat{
+    display:inline-flex; align-items:baseline; gap:5px;
+    height:24px; padding:0 10px; border:0; border-radius:5px;
+    background:none; font-family:inherit; color:var(--text);
+    white-space:nowrap; align-self:center;
+  }
+  .stat + .stat{box-shadow:-1px 0 0 var(--border)}
+  .stat b{font-size:13.5px; font-weight:600; color:var(--head); font-variant-numeric:tabular-nums}
+  .stat span{font-size:11.5px; color:var(--muted)}
+  .stat.act{cursor:pointer}
+  .stat.act:hover{background:var(--band-2)}
+  .stat.warn b{color:var(--amber)}
+  .stat.warn span{color:var(--amber); opacity:.85}
+  .stat.zero b, .stat.zero span{color:var(--faint)}
+  .stat.more{
+    font-size:11.5px; color:var(--muted); cursor:pointer;
+    border:1px dashed var(--border-2); height:22px; display:none;
+  }
+  .stats-collapsed{display:none}
+
+  .row-filters{
+    display:flex; align-items:center; gap:9px;
+    height:40px; padding:0 14px; border-top:1px solid var(--border);
+    background:var(--bg);
+  }
+  .filters-more{display:none}
+
+  .ai{
+    display:flex; align-items:center; gap:9px;
+    height:28px; padding:0 14px; border-top:1px solid var(--border);
+    background:var(--band-2); font-size:12px; min-width:0;
+  }
+  .ai .tag{
+    display:inline-flex; align-items:center; gap:5px;
+    color:var(--accent); font-size:11px; font-weight:500; flex:none;
+  }
+  .ai .txt{
+    color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;
+  }
+  .ai .btn{height:20px; font-size:11px; flex:none}
+
+  /* condensed state */
+  .hdr.is-condensed .row-identity{height:44px}
+  .hdr.is-condensed .row-filters,
+  .hdr.is-condensed .ai{display:none}
+  .hdr.is-condensed .crumb{display:none}
+  .hdr.is-condensed .cond-only{display:inline-flex}
+  .cond-only{display:none}
+  .fchip{
+    display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px;
+    border-radius:10px; background:var(--accent-weak); color:var(--chip-text);
+    font-size:11px; border:1px solid var(--chip-line);
+  }
+  .hdr.is-condensed .stat:nth-child(n+4){display:none}
+
+  /* ─────────────── BEFORE header ─────────────── */
+  .old-title{
+    display:flex; align-items:center; height:48px; padding:0 14px;
+    background:var(--band); border-bottom:1px solid var(--border);
+  }
+  .old-title .t{font-size:15px; font-weight:600; color:var(--head)}
+  .old-title .c{font-size:11.5px; color:var(--muted); margin-top:2px}
+  .old-row{
+    display:flex; align-items:center; gap:10px; height:44px; padding:0 14px;
+    background:var(--bg); border-bottom:1px solid var(--border);
+  }
+  .lbl{font-size:12px; color:var(--muted); flex:none}
+  .tiles{display:flex; border-bottom:1px solid var(--border); background:var(--bg)}
+  .tile{
+    flex:1; padding:11px 14px; border-right:1px solid var(--border);
+  }
+  .tile:last-child{border-right:0}
+  .tile b{display:block; font-size:19px; font-weight:500; color:var(--head); line-height:1.2}
+  .tile span{display:block; font-size:11.5px; color:var(--muted); margin-top:3px}
+  .old-ai{
+    display:flex; align-items:center; gap:9px; height:28px; padding:0 14px;
+    background:var(--accent-weak); border-bottom:1px solid var(--border); font-size:12px;
+  }
+  .old-chips{
+    display:flex; align-items:center; gap:9px; height:40px; padding:0 14px;
+    background:var(--bg); border-bottom:1px solid var(--border);
+  }
+  .capchip{
+    font-size:11px; font-weight:600; letter-spacing:.05em; padding:4px 9px; border-radius:4px;
+  }
+  .capchip.g{background:var(--green-weak); color:var(--green); border:1px solid var(--green-line)}
+  .capchip.b{background:var(--chip); color:var(--chip-text); border:1px solid var(--chip-line)}
+  .capchip.r{background:var(--red-weak); color:var(--red); border:1px solid var(--red-line)}
+  .dotmeta{font-size:11.5px; color:var(--muted)}
+
+  /* ─────────────── grid ─────────────── */
+  .grid-wrap{overflow:hidden; position:relative}
+  table{width:100%; border-collapse:collapse; table-layout:fixed}
+  thead th{
+    position:sticky; top:0; z-index:2;
+    background:var(--band); border-bottom:1px solid var(--border-2);
+    font-size:10px; font-weight:600; letter-spacing:.06em; color:var(--muted);
+    text-align:left; padding:7px 8px; text-transform:uppercase;
+  }
+  tbody td{
+    border-bottom:1px solid var(--border); padding:8px; vertical-align:top;
+    font-size:11.5px; color:var(--text); line-height:1.45;
+  }
+  tbody tr:hover{background:var(--band)}
+  .cat{
+    display:inline-block; font-size:10.5px; padding:2px 7px; border-radius:4px;
+    background:var(--green-weak); color:var(--green); border:1px solid var(--green-line);
+  }
+  .cat.cfg{background:var(--chip); color:var(--chip-text); border-color:var(--chip-line)}
+  .repo b{color:var(--head); display:block}
+  .repo span{font-family:var(--mono); font-size:10px; color:var(--accent)}
+  .tc{
+    display:inline-block; font-family:var(--mono); font-size:9.5px;
+    padding:2px 5px; margin:0 3px 3px 0; border-radius:3px;
+    background:var(--chip); color:var(--chip-text); border:1px solid var(--chip-line);
+    max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    vertical-align:top;
+  }
+  .tc.more{
+    background:var(--bg); color:var(--muted); border-style:dashed; cursor:pointer;
+    font-family:var(--sans); font-size:10.5px;
+  }
+  .ok{color:var(--green)}
+  .lnk{color:var(--accent); font-family:var(--mono); font-size:10.5px}
+  .muted{color:var(--muted)}
+  .cut{
+    text-align:center; padding:9px; font-size:11px; color:var(--faint);
+    background:repeating-linear-gradient(-45deg,transparent,transparent 6px,var(--band) 6px,var(--band) 12px);
+    border-bottom:1px solid var(--border);
+  }
+
+  /* ─────────────── annotations ─────────────── */
+  [data-anno]{position:relative}
+  .frame.anno [data-anno]{
+    outline:1px dashed rgba(37,99,235,.5); outline-offset:-1px;
+  }
+  .frame.anno [data-anno]::after{
+    content:attr(data-anno);
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.02em;
+    background:var(--accent); color:#fff; padding:2px 6px; border-radius:3px;
+    z-index:9; pointer-events:none; white-space:nowrap;
+    box-shadow:0 1px 4px rgba(0,0,0,.25);
+  }
+  .frame.anno .grid-wrap::before{
+    content:"reclaimed space"; position:absolute; inset:0; z-index:8;
+    background:rgba(34,197,94,.06); pointer-events:none;
+    font-family:var(--mono); font-size:10px; color:var(--green);
+    display:flex; align-items:flex-start; justify-content:center; padding-top:40px;
+    letter-spacing:.08em;
+  }
+  .frame:not(.anno) .grid-wrap::before{display:none}
+
+  /* ─────────────── width variants ─────────────── */
+  .frame[data-w="1280"] .stat.more{display:inline-flex}
+  .frame[data-w="1280"] .stat:nth-of-type(5),
+  .frame[data-w="1280"] .stat:nth-of-type(6){display:none}
+  .frame[data-w="1280"] .u-workitem,
+  .frame[data-w="1280"] .u-noise{display:none}
+  .frame[data-w="1280"] .filters-more{display:inline-flex}
+
+  .frame[data-w="1024"] .stats-full{display:none}
+  .frame[data-w="1024"] .stats-collapsed{display:inline-flex}
+  .frame[data-w="1024"] .u-workitem,
+  .frame[data-w="1024"] .u-noise,
+  .frame[data-w="1024"] .u-coverage,
+  .frame[data-w="1024"] .u-author{display:none}
+  .frame[data-w="1024"] .filters-more{display:inline-flex}
+  .frame[data-w="1024"] .updated{display:none}
+  .frame[data-w="1024"] .nav a:nth-of-type(n+5){display:none}
+
+  /* ─────────────── notes ─────────────── */
+  .notes{
+    max-width:1000px; margin:0 auto; padding:8px 20px 60px;
+    color:var(--shell-text);
+  }
+  .notes h2{
+    font-size:13px; font-weight:600; margin:34px 0 12px; color:#f8fafc;
+    padding-bottom:8px; border-bottom:1px solid #334155;
+  }
+  .notes table{width:100%; border-collapse:collapse; table-layout:auto}
+  .notes th{
+    text-align:left; font-size:10px; font-family:var(--mono); color:var(--shell-muted);
+    padding:0 10px 7px 0; font-weight:500; letter-spacing:.04em; border-bottom:1px solid #334155;
+    text-transform:none;
+  }
+  .notes td{
+    padding:9px 10px 9px 0; font-size:12.5px; color:#cbd5e1;
+    border-bottom:1px solid #1e293b; vertical-align:top; line-height:1.5;
+  }
+  .notes td:first-child{font-family:var(--mono); font-size:11px; color:#60a5fa; white-space:nowrap}
+  .notes td.n{font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
+  .notes td.n.gain{color:#4ade80}
+  .notes tr.total td{font-weight:600; color:#f8fafc; border-bottom:0}
+  .notes p{font-size:13px; line-height:1.65; color:#cbd5e1; max-width:70ch}
+  .notes code{
+    font-family:var(--mono); font-size:11.5px; background:#1e293b;
+    padding:1.5px 5px; border-radius:3px; color:#93c5fd;
+  }
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="tool">
+  <div class="tool-title">
+    <h1>Code churn header — compaction mockup</h1>
+    <p>Implementation target for prompts P03–P14. Toggle Before/After and watch the grid.</p>
+  </div>
+  <div class="controls">
+    <div class="ctl">
+      <span>VERSION</span>
+      <div class="seg" id="ver">
+        <button data-v="before">Before</button>
+        <button data-v="after" aria-pressed="true">After</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span>VIEWPORT</span>
+      <div class="seg" id="wid">
+        <button data-w="1440" aria-pressed="true">1440</button>
+        <button data-w="1280">1280</button>
+        <button data-w="1024">1024</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span>COMPONENT PICKER</span>
+      <div class="seg" id="cp">
+        <button data-cp="crumb" aria-pressed="true">In breadcrumb</button>
+        <button data-cp="rail">In filter rail</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span>SCROLL STATE</span>
+      <div class="seg" id="cond">
+        <button data-c="0" aria-pressed="true">At top</button>
+        <button data-c="1">Scrolled</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span>OVERLAY</span>
+      <div class="seg" id="anno">
+        <button data-a="0" aria-pressed="true">Off</button>
+        <button data-a="1">Region anchors</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span>THEME</span>
+      <div class="seg" id="thm">
+        <button data-t="light" aria-pressed="true">Light</button>
+        <button data-t="dark">Dark</button>
+      </div>
+    </div>
+    <div class="readout">
+      <div><span class="k">CHROME</span><span class="v" id="r-chrome">108px</span></div>
+      <div><span class="k">GRID</span><span class="v" id="r-grid">757px</span></div>
+      <div><span class="k">RECLAIMED</span><span class="v good" id="r-gain">+158px</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+ <div class="scaler" id="scaler">
+  <div class="frame" id="frame" data-w="1440" data-theme="light" style="width:1440px">
+
+    <!-- app nav — unchanged -->
+    <nav class="nav">
+      <span class="brand">TestController</span>
+      <a href="#">WatchList</a>
+      <a href="#">Agents</a>
+      <a href="#">Execution</a>
+      <a href="#">Monitor</a>
+      <a href="#">Logs</a>
+      <a href="#">Results</a>
+      <a href="#">Report Card</a>
+      <a href="#" class="on">CodeChurn</a>
+      <span class="right">
+        <span style="font-size:11px;color:var(--muted)">ravivemula</span>
+        <span style="font-size:10px;color:var(--muted)">● Offline</span>
+      </span>
+    </nav>
+
+    <!-- ══════════ AFTER ══════════ -->
+    <div id="after">
+      <div class="hdr" id="hdr" data-anno="CC-H1 header shell">
+
+        <div class="row-identity" data-anno="CC-H2 · 40px">
+          <span class="unit">
+            <span class="title">Code churn</span>
+            <span class="divider"></span>
+            <span class="crumb">
+              AppServer OMI /
+              <button class="picker" id="picker" aria-expanded="false" aria-haspopup="listbox">
+                <span id="picker-label">All components</span>
+                <span class="chev">▾</span>
+              </button>
+            </span>
+          </span>
+
+          <div class="pop" id="pop" role="dialog" aria-label="Select components">
+            <input class="search" id="pop-search" placeholder="Filter components…" autocomplete="off">
+            <div class="list" id="pop-list"></div>
+            <div class="foot">
+              <button class="btn ghost" id="pop-clear" style="height:22px;font-size:11px">All components</button>
+              <span class="hint">Esc to close</span>
+            </div>
+          </div>
+
+          <span class="unit cond-only" style="gap:6px">
+            <span class="fchip">Weekly</span>
+            <span class="fchip">Runtime + Config</span>
+            <span class="fchip">Human only</span>
+          </span>
+
+          <span class="stats stats-full" data-anno="CC-H3">
+            <span class="stat"><b>695</b><span>Changes</span></span>
+            <span class="stat"><b>425</b><span>Files</span></span>
+            <span class="stat"><b>13</b><span>Subsystems</span></span>
+            <button class="stat act warn"><b>1</b><span>No suite</span></button>
+            <button class="stat act"><b>v1</b><span>Impact map</span></button>
+            <button class="stat act zero"><b>0</b><span>Unresolved</span></button>
+            <button class="stat more">+2</button>
+          </span>
+          <span class="stats stats-collapsed">
+            <button class="stat act"><b>695</b><span>changes, 425 files ⌄</span></button>
+          </span>
+
+          <span class="unit" style="margin-left:auto">
+            <span class="pill on green" style="cursor:default">● ADO</span>
+            <span class="updated" style="font-size:11px;color:var(--muted)" title="2026-09-08 20:42:11 IST">updated 08:42 PM</span>
+            <button class="btn ghost" style="padding:0 7px">↻</button>
+            <span class="divider"></span>
+            <button class="btn">✦ AI summary</button>
+            <button class="btn primary">Export ⌄</button>
+          </span>
+        </div>
+
+        <div class="row-filters" data-anno="CC-H4 · 40px">
+          <span class="unit">
+            <span class="segment" title="Weekly = 2026-09-01 – 2026-09-08">
+              <button>Build 20260908.3</button>
+              <button class="on">Weekly</button>
+              <button>Custom</button>
+              <button>Release</button>
+            </span>
+          </span>
+          <span class="unit"><span class="field">Branch: <b>all</b> ⌄</span></span>
+          <span class="divider"></span>
+          <span class="unit">
+            <button class="pill on green">Runtime <span class="badge">9</span></button>
+            <button class="pill on">Config <span class="badge">6</span></button>
+          </span>
+          <span class="unit u-author"><button class="pill on">Human only</button></span>
+          <span class="unit u-workitem">
+            <button class="pill">Bug</button>
+            <button class="pill">Story</button>
+            <button class="pill">IMS</button>
+          </span>
+          <span class="unit u-coverage"><span class="field">Coverage: <b>No suite</b> <span class="badge">1</span> ⌄</span></span>
+          <span class="unit u-noise"><span class="field">Noise: <b>All changes</b> ⌄</span></span>
+          <span class="unit filters-more"><button class="pill">⋯ More <span class="badge">2</span></button></span>
+          <span class="unit u-component"><span class="field" style="min-width:170px">Component: <b id="rail-label">all</b> ⌄</span></span>
+          <span class="unit" style="margin-left:auto"><button class="btn ghost" id="clear-btn">Clear 3 filters</button></span>
+        </div>
+
+        <div class="ai" data-anno="CC-H5 · 28px">
+          <span class="tag">✦ AI summary</span>
+          <span class="txt">13 components changed between 2026-09-01 and 2026-09-08: 662 changes across 203 files. Highest-risk surface is AppServer.AABootstrap — 31 PRs touching node registration.</span>
+          <button class="btn ghost">Details ⌄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ BEFORE ══════════ -->
+    <div id="before" style="display:none">
+      <div class="old-title">
+        <div>
+          <div class="t">Code churn</div>
+          <div class="c">AppServer OMI / All components</div>
+        </div>
+        <span class="unit" style="margin-left:auto">
+          <span class="pill on green" style="cursor:default">● ADO</span>
+          <span style="font-size:11px;color:var(--muted)">updated 08:42 PM</span>
+          <button class="btn ghost" style="padding:0 7px">↻</button>
+        </span>
+      </div>
+
+      <div class="old-row">
+        <span class="lbl">Branch</span>
+        <span class="field" style="min-width:230px">all branches</span>
+        <span class="lbl">Range</span>
+        <span class="segment">
+          <button>Build 20260908.3</button>
+          <button class="on">Weekly</button>
+          <button>Custom</button>
+          <button>Release</button>
+        </span>
+        <span class="unit" style="margin-left:auto">
+          <span class="lbl">Component</span>
+          <span class="field" style="min-width:230px">(all components)</span>
+        </span>
+      </div>
+
+      <div class="old-row">
+        <span class="lbl">Context</span>
+        <button class="pill on green">Runtime <span class="badge">9</span></button>
+        <button class="pill on">Config <span class="badge">6</span></button>
+        <span class="lbl">Author</span>
+        <button class="pill on">Human only</button>
+        <span class="lbl">Work item</span>
+        <button class="pill">Bug</button><button class="pill">Story</button><button class="pill">IMS</button>
+        <span class="lbl">Coverage</span>
+        <button class="pill">No suite mapped <span class="badge">1</span></button>
+        <span class="lbl">Noise</span>
+        <button class="pill">All changes</button>
+        <span class="lbl">Clear</span>
+        <span class="unit" style="margin-left:auto">
+          <button class="btn">✦ AI summary</button>
+          <button class="btn primary">Export ⌄</button>
+        </span>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><b>695</b><span>Changes</span></div>
+        <div class="tile"><b>425</b><span>Files</span></div>
+        <div class="tile"><b>13</b><span>Subsystems</span></div>
+        <div class="tile"><b>1</b><span>No suite mapped</span></div>
+        <div class="tile"><b>v1</b><span>Impact map</span></div>
+        <div class="tile"><b>0</b><span>Unresolved paths</span></div>
+      </div>
+
+      <div class="old-ai">
+        <span style="color:var(--accent);font-size:11px;font-weight:500">✦ AI SUMMARY</span>
+        <span>13 component(s) changed in 2026-09-01 – 2026-09-08: 662 change(s) across 203 file(s).</span>
+        <span style="margin-left:auto;color:var(--accent);font-size:11.5px">Details ⌄</span>
+      </div>
+
+      <div class="old-chips">
+        <span class="capchip g">RUNTIME 9</span>
+        <span class="capchip b">CONFIG 6</span>
+        <span class="capchip r">NO SUITE 1</span>
+        <span class="dotmeta">695 changes · 13 subsystems · 425 files · 2026-09-01 – 2026-09-08</span>
+      </div>
+    </div>
+
+    <!-- ══════════ GRID ══════════ -->
+    <div class="grid-wrap" id="gridwrap" data-anno="CC-H8 grid">
+      <table>
+        <colgroup>
+          <col style="width:34px"><col style="width:78px"><col style="width:150px">
+          <col style="width:180px"><col style="width:130px"><col style="width:230px">
+          <col style="width:76px"><col style="width:66px"><col style="width:86px">
+          <col style="width:52px"><col>
+        </colgroup>
+        <thead>
+          <tr>
+            <th>#</th><th>Category</th><th>Repositories</th><th>Subsystems</th><th>Files</th>
+            <th>Summary</th><th>Changes</th><th>Risk</th><th>Latest OK</th><th>Auto</th><th>Manual</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+ </div>
+</div>
+
+<div class="notes">
+  <h2>Where the pixels went</h2>
+  <table>
+    <thead><tr><th>Band</th><th>Prompt</th><th style="text-align:right">Before</th><th style="text-align:right">After</th><th style="text-align:right">Δ</th></tr></thead>
+    <tbody>
+      <tr><td>Page title + breadcrumb</td><td style="font-family:var(--sans);color:#cbd5e1">P04, P07</td><td class="n">48</td><td class="n">merged</td><td class="n gain">−48</td></tr>
+      <tr><td>Branch / Range / Component</td><td style="font-family:var(--sans);color:#cbd5e1">P08</td><td class="n">44</td><td class="n">40</td><td class="n gain">−48</td></tr>
+      <tr><td>Context / Author / Work item / …</td><td style="font-family:var(--sans);color:#cbd5e1">P08, P09</td><td class="n">44</td><td class="n">↑ merged</td><td class="n"></td></tr>
+      <tr><td>Six metric tiles</td><td style="font-family:var(--sans);color:#cbd5e1">P05, P06</td><td class="n">62</td><td class="n">24 inline</td><td class="n gain">−62</td></tr>
+      <tr><td>AI summary strip</td><td style="font-family:var(--sans);color:#cbd5e1">P10</td><td class="n">28</td><td class="n">28</td><td class="n">0</td></tr>
+      <tr><td>Summary chip row</td><td style="font-family:var(--sans);color:#cbd5e1">P03</td><td class="n">40</td><td class="n">deleted</td><td class="n gain">−40</td></tr>
+      <tr class="total"><td>Total chrome</td><td></td><td class="n">266</td><td class="n">108</td><td class="n gain">−158</td></tr>
+      <tr class="total"><td>Condensed on scroll</td><td style="font-family:var(--sans);color:#cbd5e1">P11</td><td class="n">266</td><td class="n">44</td><td class="n gain">−222</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Region anchors</h2>
+  <table>
+    <thead><tr><th>Anchor</th><th>Element</th><th>Built by</th></tr></thead>
+    <tbody>
+      <tr><td>CC-H1</td><td>Sticky header shell, owns the <code>.is-condensed</code> state</td><td>P11</td></tr>
+      <tr><td>CC-H2</td><td>Identity row — title, breadcrumb picker, stats, actions</td><td>P07</td></tr>
+      <tr><td>CC-H3</td><td>Inline stat strip, six metrics with overflow popover</td><td>P05, P06</td></tr>
+      <tr><td>CC-H4</td><td>Filter rail, one line, ResizeObserver overflow into More</td><td>P08, P09</td></tr>
+      <tr><td>CC-H5</td><td>Single-line AI summary with Details disclosure</td><td>P10</td></tr>
+      <tr><td>CC-H8</td><td>Grid container bound to <code>--cc-chrome-h</code></td><td>P12</td></tr>
+      <tr><td>CC-H9</td><td>Capped chip lists in Manual / Subsystems / Files</td><td>P13</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Read this before you build</h2>
+  <p>The Before view shows one aabootstrap row consuming the whole viewport. That is not the header's fault — it is 25 test-case chips rendering inline in the Manual column. Switch to After and the same row is 3 chips plus a <code>+22 more</code> popover. Header work alone would have moved the problem, not fixed it.</p>
+  <p>At 1024px watch the stat strip collapse into a single button and four filters move into <code>⋯ More</code> with a badge showing how many of the hidden ones are active. Nothing wraps at any width. That is the acceptance bar for Checkpoint 3.</p>
+  <p>Both zero-tone stats stay on screen at every width. <code>0 Unresolved</code> in grey is the whole point — a metric that disappears at zero cannot be noticed when it turns into one.</p>
+</div>
+
+<script>
+(function(){
+  const frame  = document.getElementById('frame');
+  const scaler = document.getElementById('scaler');
+  const stage  = document.querySelector('.stage');
+  const hdr    = document.getElementById('hdr');
+  const before = document.getElementById('before');
+  const after  = document.getElementById('after');
+  const grid   = document.getElementById('gridwrap');
+
+  const FRAME_H = 880;   // fixed viewport height for the mock
+  const NAV_H   = 34;
+
+  const state = { v:'after', w:1440, c:0, a:0, t:'light', cp:'crumb' };
+
+  /* ---------- grid data ---------- */
+  const tcs = [
+    'TC 3619288 – US3307571.PlatformRemovalUtility.MissingPlatformRegistryEntries',
+    'TC 3619265 – US3307571.PlatformRemovalUtility.ValidateFrameworkSubkeyRemoval',
+    'TC 3619304 – US3307571.PlatformRemovalUtility.MissingCheckPointerFiles.TC004',
+    'TC 1285481 – FR1245266.OPCUA.Double.Read/Write.TC040',
+    'TC 1569885 – FR1025703.ASBDropTesting.MGC.UnPair.TC009',
+    'TC 1285471 – FR1245266.OPCUA.Service.deploy.GRNode.TC030',
+    'TC 1235874 – FR114309.Security.TC001',
+    'TC 1793176 – FR1313591.AvevaConnectSupport.AVEVAConnect.ArchestrAIDE.Security',
+    'TC 1235882 – FR114309.Security.OSUser.TC002',
+    'TC 1818138 – UC108.SSOLogin.SecurityMode.AuthenticationProvider.ValidCredential',
+    'TC 1285472 – FR1245266.OPCUA.Service.deploy.Remotenode.TC031',
+    'TC 1569879 – FR1025703.ASBDropTesting.MGC.BackwardCombability.GalaxyBrowser',
+    'TC 1569880 – FR1025703.ASBDropTesting.MGC.BackwardCompatibility.SecuredVerify',
+    'TC 3651831 – FR1074657.MGC.GalaxyWithOutLogging.RemoteGalaxy.TC001',
+    'TC 1235869 – FR114309.Security.TC004',
+    'TC 1569883 – FR1025703.ASBDropTesting.MGC.SecuredVerified Writes.TC008',
+    'TC 1793178 – FR1313591.AvevaConnectSupport.AVEVAConnect.ArchestrAIDE.RemoteLog',
+    'TC 1285477 – FR1245266.OPCUA.Boolean.Read/Write.TC037',
+    'TC 2418235 – FR1394109.Modernization.Configure.MultiGalaxy.Passphrase.Save',
+    'TC 3302183 – FR1349109.MGC.Pairing.ClickCancelButton.TC001',
+    'TC 1285479 – FR1245266.OPCUA.Integer.Read/Write.TC041',
+    'TC 1285483 – FR1245266.OPCUA.String.Read/Write.TC042',
+    'TC 3619290 – US3307571.PlatformRemovalUtility.RegistryCleanup.TC007',
+    'TC 1569891 – FR1025703.ASBDropTesting.MGC.Pair.TC010',
+    'TC 1235877 – FR114309.Security.DomainUser.TC006'
+  ];
+
+  const rows = [
+    { cat:'Runtime', repo:'aabootstrap', pkg:'AppServer.AABootstrap',
+      subs:'AVEVA.BSProxy, Bootstrap, BootstrapUnitTest, CleanupPlatform, DCOMTransport, FileCopyService, MergeModule, PIMUtil, SocketTransport, TestAppEngine, TestFileCopyService, TestGrpcWebService, WWPim',
+      files:'/src, /src/Bootstrap (+19 more)',
+      sum:'Merged PR 1356929: Unregister the node from the ASB solution only when it is already registered (+59 more)',
+      ch:'31 PR · 29 commit', risk:'succeeded', ok:'20260907.1', auto:'—', n:25 },
+    { cat:'Runtime', repo:'aaengine', pkg:'AppServer.AAEngine',
+      subs:'EngineHost, ScanGroup, CheckpointMgr, RedundancyBroker, TimeSync',
+      files:'/src/Engine (+8 more)',
+      sum:'Merged PR 1357004: Reduce checkpoint write amplification on redundant pairs (+12 more)',
+      ch:'12 PR · 18 commit', risk:'succeeded', ok:'20260907.1', auto:'4', n:9 },
+    { cat:'Config', repo:'galaxyrepository', pkg:'AppServer.GR',
+      subs:'GRAccess, DeployService, PackageManager, SchemaMigrate',
+      files:'/src/GR (+11 more)',
+      sum:'Merged PR 1356880: Schema migration guard for multi-galaxy passphrase store (+7 more)',
+      ch:'8 PR · 11 commit', risk:'succeeded', ok:'20260906.4', auto:'2', n:6 },
+    { cat:'Runtime', repo:'mxaccess', pkg:'AppServer.MXAccess',
+      subs:'MXProxy, LMXProxy, DataAccess, QualityMap',
+      files:'/src/MXAccess (+5 more)',
+      sum:'Merged PR 1356941: Correct quality propagation for OPC UA boolean writes (+4 more)',
+      ch:'6 PR · 9 commit', risk:'failed', ok:'20260905.2', auto:'7', n:11 },
+    { cat:'Config', repo:'omi-viewapp', pkg:'OMI.ViewApp',
+      subs:'LayoutEngine, PaneManager, ContentPresenter',
+      files:'/src/OMI (+6 more)',
+      sum:'Merged PR 1356972: Persist pane split ratios across ViewApp restarts (+3 more)',
+      ch:'5 PR · 7 commit', risk:'succeeded', ok:'20260907.1', auto:'3', n:4 },
+    { cat:'Runtime', repo:'platformcommon', pkg:'AppServer.PlatformCommon',
+      subs:'Logging, Diagnostics, ConfigStore, CertUtil',
+      files:'/src/Common (+4 more)',
+      sum:'Merged PR 1356918: Rotate diagnostic log files on size as well as age (+2 more)',
+      ch:'4 PR · 6 commit', risk:'succeeded', ok:'20260907.1', auto:'1', n:3 }
+  ];
+
+  function chips(n, capped){
+    const list = tcs.slice(0, n);
+    if(!capped) return list.map(t=>`<span class="tc">${t}</span>`).join('');
+    const shown = list.slice(0,3).map(t=>`<span class="tc">${t}</span>`).join('');
+    const rest  = n-3;
+    return shown + (rest>0 ? `<span class="tc more">+${rest} more</span>` : '');
+  }
+
+  function renderGrid(){
+    const capped = state.v === 'after';
+    document.getElementById('tbody').innerHTML = rows.map((r,i)=>`
+      <tr>
+        <td class="muted">${i+1}</td>
+        <td><span class="cat ${r.cat==='Config'?'cfg':''}">${r.cat}</span></td>
+        <td class="repo"><b>${r.repo}</b><span>(${r.pkg})</span></td>
+        <td class="muted">${r.subs}</td>
+        <td class="muted">${r.files}</td>
+        <td>${r.sum}</td>
+        <td class="muted">${r.ch}</td>
+        <td class="${r.risk==='failed'?'':'ok'}" style="${r.risk==='failed'?'color:var(--red)':''}">${r.risk}</td>
+        <td><span class="lnk">${r.ok}</span></td>
+        <td class="muted">${r.auto}</td>
+        <td>${chips(r.n, capped)}</td>
+      </tr>`).join('') +
+      `<tr><td class="cut" colspan="11">…rows continue below the fold</td></tr>`;
+  }
+
+  function apply(){
+    // version
+    after.style.display  = state.v==='after'  ? '' : 'none';
+    before.style.display = state.v==='before' ? '' : 'none';
+
+    // condensed only exists in after
+    hdr.classList.toggle('is-condensed', state.v==='after' && state.c===1);
+
+    // width
+    frame.dataset.w = state.w;
+    frame.style.width = state.w + 'px';
+
+    // annotations
+    frame.classList.toggle('anno', state.a===1 && state.v==='after');
+
+    // theme + component picker placement
+    frame.dataset.theme = state.t;
+    frame.dataset.cp = state.cp;
+
+    renderGrid();
+
+    // measure
+    requestAnimationFrame(()=>{
+      const headEl = state.v==='after' ? hdr : before;
+      const chrome = headEl.getBoundingClientRect().height / currentScale();
+      const gridH  = FRAME_H - NAV_H - chrome;
+      grid.style.height = gridH + 'px';
+      grid.style.overflowY = 'auto';
+
+      document.getElementById('r-chrome').textContent = Math.round(chrome) + 'px';
+      document.getElementById('r-grid').textContent   = Math.round(gridH) + 'px';
+      const gain = 266 - chrome;
+      const g = document.getElementById('r-gain');
+      g.textContent = (gain>0?'+':'') + Math.round(gain) + 'px';
+      g.className = 'v' + (gain>0?' good':'');
+      fit();
+    });
+  }
+
+  let _scale = 1;
+  function currentScale(){ return _scale; }
+
+  function fit(){
+    const avail = stage.clientWidth - 40;
+    _scale = Math.min(1, avail / state.w);
+    scaler.style.transform = `scale(${_scale})`;
+    stage.style.height = (frame.offsetHeight * _scale + 64) + 'px';
+  }
+
+  function wire(id, key, cast){
+    const box = document.getElementById(id);
+    box.addEventListener('click', e=>{
+      const b = e.target.closest('button'); if(!b) return;
+      [...box.children].forEach(x=>x.setAttribute('aria-pressed','false'));
+      b.setAttribute('aria-pressed','true');
+      state[key] = cast(b.dataset[key]);
+      apply();
+    });
+  }
+  wire('ver','v',String);
+  wire('wid','w',Number);
+  wire('cond','c',Number);
+  wire('anno','a',Number);
+  wire('thm','t',String);
+  wire('cp','cp',String);
+
+  /* ---------- component picker ---------- */
+  const changed = [
+    ['aabootstrap',695],['aaengine',118],['galaxyrepository',74],['mxaccess',61],
+    ['omi-viewapp',44],['platformcommon',31],['opcua-server',28],['scriptengine',19],
+    ['securityprovider',14],['platformmanager',11],['historian-client',7],
+    ['licensing',5],['ide-shell',3]
+  ];
+  const quiet = [
+    ['bootstrap-installer',0],['objectviewer',0],['aagr-tools',0],['pimutil',0],
+    ['dcomtransport',0],['mergemodule',0],['wwpim',0],['filecopyservice',0],['testappengine',0]
+  ];
+  const sel = new Set();
+
+  const pop    = document.getElementById('pop');
+  const picker = document.getElementById('picker');
+  const search = document.getElementById('pop-search');
+  const list   = document.getElementById('pop-list');
+
+  function row(name, n, isQuiet){
+    return `<div class="opt${sel.has(name)?' sel':''}${isQuiet?' quiet':''}" data-c="${name}">
+      <span class="cb">${sel.has(name)?'✓':''}</span>
+      <span class="nm">${name}</span>
+      <span class="n">${n||'—'}</span>
+    </div>`;
+  }
+
+  function renderList(){
+    const q = search.value.trim().toLowerCase();
+    const c = changed.filter(([n])=>n.includes(q));
+    const u = quiet.filter(([n])=>n.includes(q));
+    let html = '';
+    if(c.length) html += `<div class="grp">Changed in range · ${c.length}</div>` +
+      c.map(([n,v])=>row(n,v,false)).join('');
+    if(u.length) html += `<div class="grp">No changes in range · ${u.length}</div>` +
+      u.map(([n,v])=>row(n,v,true)).join('');
+    if(!html) html = `<div class="grp">No component matches "${search.value}"</div>`;
+    list.innerHTML = html;
+  }
+
+  function syncLabels(){
+    const n = sel.size;
+    const label = n===0 ? 'All components'
+                : n===1 ? [...sel][0]
+                : `${n} components`;
+    document.getElementById('picker-label').textContent = label;
+    picker.classList.toggle('set', n>0);
+    document.getElementById('rail-label').textContent = n===0 ? 'all' : (n===1 ? [...sel][0] : n+' selected');
+    document.getElementById('clear-btn').textContent = `Clear ${3 + (n>0?1:0)} filters`;
+  }
+
+  function openPop(open){
+    pop.classList.toggle('open', open);
+    picker.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if(open){ search.value=''; renderList(); search.focus(); }
+  }
+
+  picker.addEventListener('click', e=>{
+    e.stopPropagation();
+    openPop(!pop.classList.contains('open'));
+  });
+  search.addEventListener('input', renderList);
+  list.addEventListener('click', e=>{
+    const o = e.target.closest('.opt'); if(!o) return;
+    const n = o.dataset.c;
+    sel.has(n) ? sel.delete(n) : sel.add(n);
+    renderList(); syncLabels();
+  });
+  document.getElementById('pop-clear').addEventListener('click', ()=>{
+    sel.clear(); renderList(); syncLabels();
+  });
+  document.addEventListener('click', e=>{
+    if(!pop.contains(e.target) && e.target !== picker) openPop(false);
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape' && pop.classList.contains('open')){ openPop(false); picker.focus(); }
+  });
+  syncLabels();
+
+  window.addEventListener('resize', fit);
+  apply();
+})();
+</script>
+</body>
+</html>

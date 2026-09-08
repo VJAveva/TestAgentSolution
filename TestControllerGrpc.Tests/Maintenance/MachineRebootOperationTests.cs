@@ -105,4 +105,40 @@ public class MachineRebootOperationTests
         Assert.Equal(RevertPhase.AgentWait, result.FailurePhase);
         Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
     }
+
+    [Theory]
+    [InlineData(MaintenanceState.Draining)]
+    [InlineData(MaintenanceState.Updating)]
+    public async Task ExecuteAsync_Should_Proceed_When_NodeAwaitsRebootFromUpdatePosture(MaintenanceState posture)
+    {
+        var h = new Harness();
+        h.StateStore.Set(Node, posture);
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Succeeded, result.State);
+        Assert.Equal(MaintenanceState.None, h.StateStore.Get(Node));
+        h.Dispatcher.Verify(
+            d => d.ExecuteRemoteCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData(MaintenanceState.Reverting)]
+    [InlineData(MaintenanceState.Rebooting)]
+    [InlineData(MaintenanceState.Quarantined)]
+    public async Task ExecuteAsync_Should_RejectAtPrecheck_When_NodeHeldByAnotherOperation(MaintenanceState held)
+    {
+        var h = new Harness();
+        h.StateStore.Set(Node, held);
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.Precheck, result.FailurePhase);
+        Assert.Equal(held, h.StateStore.Get(Node));
+        h.Dispatcher.Verify(
+            d => d.ExecuteRemoteCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }
