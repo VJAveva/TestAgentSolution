@@ -1,4 +1,5 @@
 import { getUserId } from './userIdentity';
+import { countRest } from './uiPerf';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -100,6 +101,7 @@ export async function apiFetch<T>(
     }
 
     const data = await response.json();
+    countRest(url, Number(response.headers.get('content-length')) || 0);
     console.log(`[API] [${correlationId}] 200 ${url} (${elapsed}ms)`);
     return data as T;
 

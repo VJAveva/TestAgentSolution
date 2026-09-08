@@ -25,6 +25,7 @@ import { useExecution } from '../../hooks/useExecution';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import { useCan } from '../../hooks/useCapabilities';
 import { useSystemModeStore } from '../../stores/systemModeStore';
+import { mark, measure } from '../../lib/uiPerf';
 
 type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results' | 'report' | 'regression';
 
@@ -71,6 +72,13 @@ export default function AppShell() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // TEMPORARY (P03): time from route switch to first paint of that route.
+  useEffect(() => {
+    mark(`route:${activeTab}`);
+    const id = requestAnimationFrame(() => measure(`route-load:${activeTab}`, `route:${activeTab}`));
+    return () => cancelAnimationFrame(id);
+  }, [activeTab]);
 
   return (
     <div className="flex flex-col h-screen bg-bg">

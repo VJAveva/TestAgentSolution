@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
@@ -23,6 +24,10 @@ public sealed partial class ExecutionHistoryPanelVM : ObservableObject, IDisposa
 
     private const int MaxLiveActions = 500;
     private const int MaxSessions = 50;
+
+    /// <summary>Burst buffer for <see cref="NodeProgressEvent"/>; drained by a single dispatcher post.</summary>
+    private readonly ConcurrentQueue<NodeProgressEvent> _pendingProgress = new();
+    private int _progressPumpScheduled;
 
     public ExecutionHistoryPanelVM(IEventAggregator events, ExecutionSessionManager sessions)
     {
@@ -55,6 +60,7 @@ public sealed partial class ExecutionHistoryPanelVM : ObservableObject, IDisposa
     [RelayCommand]
     private void RefreshSessions()
     {
+        using var _perf = TestControllerGrpc.Diagnostics.UiPerfDiagnostics.Measure("ExecutionHistoryPanelVM.RefreshSessions");
         Sessions.Clear();
         SessionActions.Clear();
 
@@ -108,25 +114,37 @@ public sealed partial class ExecutionHistoryPanelVM : ObservableObject, IDisposa
     // ── Live progress handler ───────────────────────────────────────
     private void OnNodeProgress(NodeProgressEvent e)
     {
+        // One dispatcher post per burst instead of per event: the feed is capped at
+        // MaxLiveActions anyway, so posting each event only bought UI-queue pressure.
+        _pendingProgress.Enqueue(e);
+        while (_pendingProgress.Count > MaxLiveActions * 2 && _pendingProgress.TryDequeue(out _)) { }
+
+        if (Interlocked.CompareExchange(ref _progressPumpScheduled, 1, 0) != 0) return;
+
         _dispatcher.InvokeAsync(() =>
         {
-            LiveActions.Add(new LiveActionItem
+            Interlocked.Exchange(ref _progressPumpScheduled, 0);
+
+            while (_pendingProgress.TryDequeue(out var evt))
             {
-                Timestamp = DateTime.Now,
-                SessionId = e.SessionId,
-                AgentName = e.AgentName,
-                NodeTag = e.NodeTag,
-                ActionType = e.ActionType,
-                Command = e.Command,
-                Status = e.Status,
-                ExitCode = e.ExitCode,
-                ErrorMessage = e.ErrorMessage,
-                Duration = e.Duration,
-            });
+                LiveActions.Add(new LiveActionItem
+                {
+                    Timestamp = DateTime.Now,
+                    SessionId = evt.SessionId,
+                    AgentName = evt.AgentName,
+                    NodeTag = evt.NodeTag,
+                    ActionType = evt.ActionType,
+                    Command = evt.Command,
+                    Status = evt.Status,
+                    ExitCode = evt.ExitCode,
+                    ErrorMessage = evt.ErrorMessage,
+                    Duration = evt.Duration,
+                });
+            }
 
             while (LiveActions.Count > MaxLiveActions)
                 LiveActions.RemoveAt(0);
-        });
+        }, DispatcherPriority.Background);
     }
 
     public void Dispose()

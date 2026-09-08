@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 import { StatsBar } from './StatsBar';
 import type { ActionExecution, AgentExecution, SessionSummary } from '../../types/execution';
@@ -22,6 +23,7 @@ interface TimelineBar {
 }
 
 export default function TimelineView() {
+  useRenderCount('TimelineView');
   const { activeSessions, completedSessions } = useExecutionDashboard();
   const containerRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());

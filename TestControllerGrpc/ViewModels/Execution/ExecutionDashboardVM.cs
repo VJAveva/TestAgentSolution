@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -44,6 +45,11 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
     /// <summary>Soft cap for log entries; <see cref="AddLogEntry"/> evicts in batches once exceeded.</summary>
     private const int MaxLogEntries = 5000;
     private const int LogEvictBatch = 500;
+
+    /// <summary>Burst buffer for <see cref="AgentOutputEvent"/>; drained by a single dispatcher post.</summary>
+    private readonly ConcurrentQueue<AgentOutputEvent> _pendingOutput = new();
+    private int _outputPumpScheduled;
+    private const int MaxPendingOutput = 10_000;
 
     /// <summary>Per-session count of log entries already mirrored into <see cref="LogEntries"/>.</summary>
     private readonly Dictionary<string, int> _logCursors = new(StringComparer.Ordinal);
@@ -398,26 +404,44 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
     private void OnAgentOutput(AgentOutputEvent e)
     {
+        // AgentOutputEvent is published once per stdout/stderr LINE, from a ThreadPool
+        // thread. Posting one InvokeAsync per line put one dispatcher item + one closure
+        // on the UI queue per line; a chatty agent starved the UI thread on its own.
+        // Self-coalescing pump: one post per burst, and no added latency when idle.
+        _pendingOutput.Enqueue(e);
+        while (_pendingOutput.Count > MaxPendingOutput && _pendingOutput.TryDequeue(out _)) { }
+
+        if (Interlocked.CompareExchange(ref _outputPumpScheduled, 1, 0) != 0) return;
+
         _dispatcher.InvokeAsync(() =>
         {
-            var sessionName = !string.IsNullOrEmpty(e.SessionId)
-                ? Sessions.FirstOrDefault(s => s.SessionId == e.SessionId)?.WatchItemTag ?? ""
-                : "";
-            AddLogEntry(new LogEntryVM
+            // Reset first: an event arriving mid-drain must be able to schedule the
+            // next pump, otherwise it would sit in the queue until the following event.
+            Interlocked.Exchange(ref _outputPumpScheduled, 0);
+
+            while (_pendingOutput.TryDequeue(out var evt))
             {
-                Timestamp = e.Timestamp.ToString("HH:mm:ss"),
-                SessionId = e.SessionId,
-                SessionName = sessionName,
-                AgentName = e.AgentName,
-                Category = e.Kind,
-                Message = e.Line,
-                Severity = e.Kind == "stderr" ? "Error" : "Info",
-            });
-        });
+                var sessionName = !string.IsNullOrEmpty(evt.SessionId)
+                    ? Sessions.FirstOrDefault(s => s.SessionId == evt.SessionId)?.WatchItemTag ?? ""
+                    : "";
+                AddLogEntry(new LogEntryVM
+                {
+                    Timestamp = evt.Timestamp.ToString("HH:mm:ss"),
+                    SessionId = evt.SessionId,
+                    SessionName = sessionName,
+                    AgentName = evt.AgentName,
+                    Category = evt.Kind,
+                    Message = evt.Line,
+                    Severity = evt.Kind == "stderr" ? "Error" : "Info",
+                });
+            }
+        }, DispatcherPriority.Background);
     }
 
     private void OnRefreshTick(object? sender, EventArgs e)
     {
+        using var _perf = Diagnostics.UiPerfDiagnostics.Measure("ExecutionDashboardVM.RefreshTick");
+
         // UI thread (DispatcherTimer). After the move to push events
         // (Phase 1.13) this loop only needs to refresh the elapsed-time
         // string for running cards. The pill state arrives via

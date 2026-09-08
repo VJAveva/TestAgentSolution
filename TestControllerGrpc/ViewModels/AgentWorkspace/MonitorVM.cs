@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Input;
@@ -28,6 +29,11 @@ public partial class MonitorVM : ObservableObject
 
     private DispatcherTimer? _telemetryTimer;
     private DispatcherTimer? _elapsedTimer;
+
+    /// <summary>Burst buffer for <see cref="AgentOutputEvent"/>; drained by a single dispatcher post.</summary>
+    private readonly ConcurrentQueue<AgentOutputEvent> _pendingOutput = new();
+    private int _outputPumpScheduled;
+    private const int MaxPendingOutput = 10_000;
     private CancellationTokenSource? _pollingCts;
     private IDisposable? _agentOutputSub;
     private IDisposable? _locksChangedSub;
@@ -442,17 +448,30 @@ public partial class MonitorVM : ObservableObject
         if (!string.Equals(e.AgentName, AgentName, StringComparison.OrdinalIgnoreCase))
             return;
 
+        // One dispatcher post per burst rather than per stdout line (see
+        // ExecutionDashboardVM.OnAgentOutput for the same pattern).
+        _pendingOutput.Enqueue(e);
+        while (_pendingOutput.Count > MaxPendingOutput && _pendingOutput.TryDequeue(out _)) { }
+
+        if (Interlocked.CompareExchange(ref _outputPumpScheduled, 1, 0) != 0) return;
+
         _uiDispatcher.InvokeAsync(() =>
         {
-            LiveLog.Add(new LiveLogEntryVM
+            Interlocked.Exchange(ref _outputPumpScheduled, 0);
+
+            while (_pendingOutput.TryDequeue(out var evt))
             {
-                Timestamp = e.Timestamp.ToString("HH:mm:ss"),
-                Tag = e.Kind == "stderr" ? "ERR" : "INFO",
-                Message = e.Line,
-            });
-            if (LiveLog.Count > 200)
+                LiveLog.Add(new LiveLogEntryVM
+                {
+                    Timestamp = evt.Timestamp.ToString("HH:mm:ss"),
+                    Tag = evt.Kind == "stderr" ? "ERR" : "INFO",
+                    Message = evt.Line,
+                });
+            }
+
+            while (LiveLog.Count > 200)
                 LiveLog.RemoveAt(0);
-        });
+        }, DispatcherPriority.Background);
     }
 
     // ═══════════════════════════════════════════════════

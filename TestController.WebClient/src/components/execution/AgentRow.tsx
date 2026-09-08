@@ -1,4 +1,5 @@
 import { ActionPill } from './ActionPill';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import type { AgentExecution } from '../../types/execution';
 
 const agentStatusClasses: Record<string, { color: string; text: string }> = {
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export function AgentRow({ agent, onClick }: Props) {
+  useRenderCount('AgentRow');
   const status = agentStatusClasses[agent.status] || agentStatusClasses.Idle;
   const progressBg = agentProgressBg[agent.status] || 'bg-text-muted';
 

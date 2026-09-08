@@ -570,6 +570,7 @@ public sealed partial class RegressionViewModel : ObservableObject
 
     private void ApplyFilter()
     {
+        using var _perf = TestControllerGrpc.Diagnostics.UiPerfDiagnostics.Measure("RegressionViewModel.ApplyFilter");
         var filtered = _allRows.Where(r =>
             r.Category == RegressionCategoryKind.Unclassified ||
             r.Category == RegressionCategoryKind.Both ||

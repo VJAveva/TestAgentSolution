@@ -1,6 +1,6 @@
 import React, {
   createContext, useContext, useReducer, useState,
-  useCallback, useEffect, type ReactNode, type Dispatch
+  useCallback, useEffect, useMemo, useRef, type ReactNode, type Dispatch
 } from 'react';
 import { useConnectionStore, type SignalRStatus } from '../stores/connectionStore';
 import { joinSession } from './useSignalR';
@@ -36,12 +36,13 @@ type Action =
   | { type: 'EXECUTION_COMPLETED'; data: any }
   | { type: 'ACTION_PROGRESS'; data: any }
   | { type: 'AGENT_OUTPUT'; data: any }
+  | { type: 'AGENT_OUTPUT_BATCH'; batch: any[] }
   | { type: 'LOG_ENTRY'; data: DashboardLogEntry }
   | { type: 'SELECT_SESSION'; sessionId: string | null }
   | { type: 'SELECT_AGENT'; agentName: string | null }
   | { type: 'CLEAR_LOGS' };
 
-function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashboardState {
+export function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashboardState {
   switch (action.type) {
     case 'SET_SESSIONS': {
       const map = new Map<string, SessionSummary>();
@@ -279,20 +280,25 @@ function reducer(state: ExecutionDashboardState, action: Action): ExecutionDashb
     }
 
     case 'LOG_ENTRY':
-    case 'AGENT_OUTPUT': {
-      const entry: DashboardLogEntry = action.type === 'LOG_ENTRY'
-        ? action.data
-        : {
-            timestamp: action.data.timestamp || new Date().toLocaleTimeString(),
-            sessionId: action.data.sessionId || '',
-            agentName: action.data.agentName || '',
-            category: action.data.kind || 'output',
-            message: action.data.line || action.data.message || '',
-            severity: action.data.kind === 'stderr' || action.data.severity === 'Error'
-              ? 'Error' : 'Info',
-          };
+    case 'AGENT_OUTPUT':
+    case 'AGENT_OUTPUT_BATCH': {
+      const toOutputEntry = (d: any): DashboardLogEntry => ({
+        timestamp: d.timestamp || new Date().toLocaleTimeString(),
+        sessionId: d.sessionId || '',
+        agentName: d.agentName || '',
+        category: d.kind || 'output',
+        message: d.line || d.message || '',
+        severity: d.kind === 'stderr' || d.severity === 'Error' ? 'Error' : 'Info',
+      });
 
-      let logs = [...state.logs, entry];
+      const entries: DashboardLogEntry[] =
+        action.type === 'LOG_ENTRY' ? [action.data]
+        : action.type === 'AGENT_OUTPUT' ? [toOutputEntry(action.data)]
+        : action.batch.map(toOutputEntry);
+
+      if (entries.length === 0) return state;
+
+      let logs = state.logs.concat(entries);
       if (logs.length > state.maxLogs) {
         logs = logs.slice(-state.maxLogs);
       }
@@ -332,6 +338,11 @@ export function useExecutionDashboard() {
   return useContext(ExecutionDashboardContext);
 }
 
+// The proxy-merge route exists only on the standalone WebApi; the WPF-embedded
+// host serves the plain one. Which host we are talking to is discovered at runtime.
+const PROXY_SESSIONS_PATH = '/api/execution/proxy/dashboard-sessions';
+const LOCAL_SESSIONS_PATH = '/api/execution/dashboard-sessions';
+
 // ── Provider ──
 export function ExecutionDashboardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -344,26 +355,40 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
   // plain /dashboard-sessions endpoint only returns this host's local sessions,
   // so WPF-origin runs never appeared via polling. Falls back to local data when
   // no controller proxy is configured.
-  const fetchProxySessions = useCallback(() => {
-    return apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>('/api/execution/proxy/dashboard-sessions')
-      .then(data => {
-        setFetchError(null);
-        const all = [
-          ...(data.active || []),
-          ...(data.history || []).slice(0, 20),
-        ];
-        dispatch({ type: 'SET_SESSIONS', sessions: all });
+  const sessionsPathRef = useRef(PROXY_SESSIONS_PATH);
 
-        // Join SignalR groups for active sessions
-        for (const s of data.active || []) {
-          joinSession(connection, s.sessionId);
-        }
-        return data;
-      })
-      .catch(err => {
-        setFetchError(err?.detail || err?.error || 'Failed to load sessions');
-        throw err;
-      });
+  const fetchProxySessions = useCallback(async () => {
+    const load = (path: string) =>
+      apiFetch<{ active: SessionSummary[]; history: SessionSummary[] }>(path);
+
+    try {
+      let data: { active: SessionSummary[]; history: SessionSummary[] };
+      try {
+        data = await load(sessionsPathRef.current);
+      } catch (err: any) {
+        // Against the WPF-embedded host the proxy route does not exist. Latch onto
+        // the local route so the next poll does not repeat the 404 every interval.
+        if (err?.status !== 404 || sessionsPathRef.current === LOCAL_SESSIONS_PATH) throw err;
+        sessionsPathRef.current = LOCAL_SESSIONS_PATH;
+        data = await load(LOCAL_SESSIONS_PATH);
+      }
+
+      setFetchError(null);
+      const all = [
+        ...(data.active || []),
+        ...(data.history || []).slice(0, 20),
+      ];
+      dispatch({ type: 'SET_SESSIONS', sessions: all });
+
+      // Join SignalR groups for active sessions
+      for (const s of data.active || []) {
+        joinSession(connection, s.sessionId);
+      }
+      return data;
+    } catch (err: any) {
+      setFetchError(err?.detail || err?.error || 'Failed to load sessions');
+      throw err;
+    }
   }, [connection]);
 
   // Load existing sessions on mount
@@ -441,8 +466,10 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
       dispatch({ type: 'EXECUTION_COMPLETED', data: { ...data, state: 'Cancelled' } });
     };
 
+    // The server batches output every ~500ms specifically to cut message rate;
+    // fanning it back out to one dispatch per line would undo that.
     const onOutputBatch = (batch: any[]) => {
-      for (const data of batch) onOutput(data);
+      dispatch({ type: 'AGENT_OUTPUT_BATCH', batch });
     };
 
     connection.on('ExecutionStarted', onStarted);
@@ -464,12 +491,15 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     };
   }, [connection]);
 
-  // Derived data
-  const sessions: SessionSummary[] = Array.from(state.sessions.values());
-  const activeSessions = sessions
+  // Derived data. These recompute only when their real inputs change — before,
+  // every SignalR message re-filtered up to maxLogs (10k) entries.
+  const sessions: SessionSummary[] = useMemo(
+    () => Array.from(state.sessions.values()), [state.sessions]);
+
+  const activeSessions = useMemo(() => sessions
     .filter((s: SessionSummary) => s.status === 'Running' || s.status === 'Queued')
     .sort((a: SessionSummary, b: SessionSummary) =>
-      new Date(b.startedUtc).getTime() - new Date(a.startedUtc).getTime());
+      new Date(b.startedUtc).getTime() - new Date(a.startedUtc).getTime()), [sessions]);
 
   // Update polling speed and log targets when active sessions change
   const currentHasActive = activeSessions.length > 0;
@@ -485,15 +515,15 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     });
   }, [currentActiveIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const completedSessions = sessions
+  const completedSessions = useMemo(() => sessions
     .filter((s: SessionSummary) => s.status !== 'Running' && s.status !== 'Queued')
     .sort((a: SessionSummary, b: SessionSummary) =>
       new Date(b.completedUtc || b.startedUtc).getTime() -
       new Date(a.completedUtc || a.startedUtc).getTime())
-    .slice(0, 20);
+    .slice(0, 20), [sessions]);
 
   // Filtered logs based on selection
-  const filteredLogs = state.logs.filter((entry: DashboardLogEntry) => {
+  const filteredLogs = useMemo(() => state.logs.filter((entry: DashboardLogEntry) => {
     if (state.selectedSessionId && entry.sessionId !== state.selectedSessionId) {
       return false;
     }
@@ -501,7 +531,7 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
       return false;
     }
     return true;
-  });
+  }), [state.logs, state.selectedSessionId, state.selectedAgentName]);
 
   const selectSession = useCallback((id: string | null) => {
     dispatch({ type: 'SELECT_SESSION', sessionId: id });
@@ -512,12 +542,15 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     dispatch({ type: 'SELECT_AGENT', agentName: name });
   }, []);
 
+  // A fresh object literal here re-rendered every consumer on every provider render.
+  const value = useMemo(() => ({
+    state, dispatch,
+    activeSessions, completedSessions, filteredLogs,
+    fetchError, selectSession, selectAgent,
+  }), [state, activeSessions, completedSessions, filteredLogs, fetchError, selectSession, selectAgent]);
+
   return (
-    <ExecutionDashboardContext.Provider value={{
-      state, dispatch,
-      activeSessions, completedSessions, filteredLogs,
-      fetchError, selectSession, selectAgent,
-    }}>
+    <ExecutionDashboardContext.Provider value={value}>
       {children}
     </ExecutionDashboardContext.Provider>
   );

@@ -11,6 +11,7 @@ import { getUserId } from '../lib/userIdentity';
 import { registerSystemModeEvents } from '../signalr/SystemModeEvents';
 import { registerLockEvents } from '../signalr/LockEvents';
 import { registerPermissionEvents } from '../signalr/PermissionEvents';
+import { instrumentHubConnection } from '../lib/uiPerf';
 import type { NodeStatus, WatchListConfig, BuildSummary } from '../types/api';
 
 /** Tracks joined sessions for auto-rejoin after reconnect. */
@@ -127,6 +128,10 @@ export function useSignalR(enabled = true): HubConnection | null {
     // server dead, otherwise spurious "offline" flashes occur.
     conn.serverTimeoutInMilliseconds = 60_000;     // 2 ? server keepalive
     conn.keepAliveIntervalInMilliseconds = 15_000; // match server
+
+    // TEMPORARY (P03): wraps conn.on once so every subscription in the app is
+    // counted. Must run before any .on() call below. No-op unless uiPerf is on.
+    instrumentHubConnection(conn as never);
 
     conn.onreconnecting((error) => {
       console.warn('[SignalR] Reconnecting...', error?.message);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, memo } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useWatchListStore, useFilteredWatchItems } from '../../stores/watchlistStore';
 import { useLockStore } from '../../stores/lockStore';
@@ -94,6 +95,7 @@ function flattenVisible(roots: TreeNode[]): TreeNode[] {
 }
 
 export default function WatchListTree() {
+  useRenderCount('WatchListTree');
   const treeRoots = useWatchListStore(s => s.treeRoots);
   const loading = useWatchListStore(s => s.loading);
   const error = useWatchListStore(s => s.error);

@@ -276,6 +276,11 @@ public partial class App : Application
 
         Services = _host.Services;
 
+        // TEMPORARY (docs/reliability/UIPerformance-CopilotPrompts.md P02). No-op unless
+        // UiPerf:Enabled=true or UIPERF=1.
+        Diagnostics.UiPerfDiagnostics.Install(
+            Services.GetRequiredService<IConfiguration>(), Dispatcher);
+
         // Phase 1a: post-login routing.
         // Default mode (RBAC:Enabled=false) → go straight to MainWindow.
         // Secured mode → show LoginPage first.

@@ -381,26 +381,31 @@ public sealed partial class MainViewModel
             WatchItemTag = watchItemTag,
         };
 
-        // Track error/warning counts and session IDs on the UI thread
-        void TrackCounts()
-        {
-            if (entry.Severity == LogSeverity.Error) LogErrorCount++;
-            if (entry.Severity == LogSeverity.Warning) LogWarningCount++;
-            if (!string.IsNullOrEmpty(sessionId) && !AvailableSessionIds.Contains(sessionId))
-                AvailableSessionIds.Add(sessionId);
-        }
-
-        if (Application.Current?.Dispatcher.CheckAccess() == true)
-            TrackCounts();
-        else
-            Application.Current?.Dispatcher.InvokeAsync(TrackCounts);
-
         // Enqueue into the high-performance buffer (lock-free, any thread).
-        // The buffer drains in batches on the UI thread every 100ms.
+        // The buffer drains in batches on the UI thread every 100ms, and
+        // OnLogBatchProcessed does the error/warning/session bookkeeping there.
         if (_logBuffer is not null)
         {
             _logBuffer.IsPaused = IsLogPaused;
             _logBuffer.Enqueue(entry);
+        }
+    }
+
+    /// <summary>
+    /// UI-thread bookkeeping for a whole flush batch. Previously this ran as one
+    /// <c>Dispatcher.InvokeAsync</c> per log line, which put one dispatcher item and
+    /// one closure on the UI queue for every stdout line from every agent — defeating
+    /// the batching the buffer next to it exists to provide.
+    /// </summary>
+    private void OnLogBatchProcessed(IReadOnlyList<LogEntryViewModel> batch)
+    {
+        foreach (var e in batch)
+        {
+            if (e.Severity == LogSeverity.Error) LogErrorCount++;
+            else if (e.Severity == LogSeverity.Warning) LogWarningCount++;
+
+            if (!string.IsNullOrEmpty(e.SessionId) && !AvailableSessionIds.Contains(e.SessionId))
+                AvailableSessionIds.Add(e.SessionId);
         }
     }
 

@@ -1,9 +1,11 @@
 import { useRef, useMemo, useEffect } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pause, Play, Trash2 } from 'lucide-react';
 import { useExecutionStore } from '../../stores/executionStore';
 
 export default function LiveLogger() {
+  useRenderCount('LiveLogger');
   const logs = useExecutionStore(s => s.logs);
   const isPaused = useExecutionStore(s => s.isLogPaused);
   const togglePause = useExecutionStore(s => s.togglePause);

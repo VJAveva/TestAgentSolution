@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { AlertTriangle, RotateCw, ChevronRight, ChevronDown, Download, Mail, Brain, Sparkles } from 'lucide-react';
 import { useRegression } from '../../hooks/useRegression';
 import { useRegressionStore } from '../../stores/regressionStore';
@@ -208,6 +209,7 @@ function InlineStat({ label, value, flag, ok, active, onClick }: { label: string
 }
 
 export default function RegressionView() {
+  useRenderCount('RegressionView');
   const { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, downloadReport, emailReport, summarizeWithAi } = useRegression();
   const consolidated = useRegressionStore((s) => s.consolidated);
   const scope = useRegressionStore((s) => s.scope);

@@ -57,6 +57,12 @@ public sealed class LogBufferService : IDisposable
     /// </summary>
     public event Action<int>? BatchFlushed;
 
+    /// <summary>
+    /// Raised on the UI thread with the entries of each flush batch, so callers can do
+    /// per-entry UI bookkeeping once per batch instead of one dispatcher post per entry.
+    /// </summary>
+    public event Action<IReadOnlyList<LogEntryViewModel>>? BatchProcessed;
+
     public LogBufferService(
         RangeObservableCollection<LogEntryViewModel> target,
         RangeObservableCollection<LogEntryViewModel> filteredTarget)
@@ -131,9 +137,10 @@ public sealed class LogBufferService : IDisposable
             _filteredTarget.AddRange(matching);
     }
 
-    /// <summary>Timer callback — drains the channel in batches on the UI thread.</summary>
+    /// <summary>Timer callback ï¿½ drains the channel in batches on the UI thread.</summary>
     private void OnFlush(object? sender, EventArgs e)
     {
+        using var _perf = TestControllerGrpc.Diagnostics.UiPerfDiagnostics.Measure("LogBufferService.Flush");
         var reader = _channel.Reader;
         var batch = new List<LogEntryViewModel>();
 
@@ -170,6 +177,7 @@ public sealed class LogBufferService : IDisposable
             }
         }
 
+        BatchProcessed?.Invoke(batch);
         BatchFlushed?.Invoke(batch.Count);
     }
 

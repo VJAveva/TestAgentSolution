@@ -428,6 +428,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Initialize high-performance log buffer (GAP 1 + 4 fix)
         // Decouples log producers from the UI thread via Channel<T>.
         _logBuffer = new LogBufferService(LogEntries, FilteredLogEntries);
+        _logBuffer.BatchProcessed += OnLogBatchProcessed;
 
         // Track active sessions for concurrent execution
         ActiveSessions.CollectionChanged += (_, _) =>

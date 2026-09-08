@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { useExecutionStore } from '../../stores/executionStore';
@@ -22,6 +23,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export default function LogViewer() {
+  useRenderCount('LogViewer');
   const [allEntries, setAllEntries] = useState<LogEntry[]>([]);
   const [filterSession, setFilterSession] = useState('');
   const [filterAgent, setFilterAgent] = useState('');
@@ -54,48 +56,60 @@ export default function LogViewer() {
   useEffect(() => {
     if (!connection) return;
 
-    const handleLog = (entry: { message?: string; agent?: string; agentName?: string; sessionId?: string; timestamp?: string; severity?: string }) => {
-      const logEntry: LogEntry = {
-        message: entry.message ?? '',
-        agent: entry.agentName ?? entry.agent ?? '',
-        sessionId: entry.sessionId ?? '',
-        timestamp: entry.timestamp ?? new Date().toISOString(),
-        severity: (entry.severity ?? 'info').toLowerCase(),
-      };
+    const toEntry = (entry: { message?: string; agent?: string; agentName?: string; sessionId?: string; timestamp?: string; severity?: string }): LogEntry => ({
+      message: entry.message ?? '',
+      agent: entry.agentName ?? entry.agent ?? '',
+      sessionId: entry.sessionId ?? '',
+      timestamp: entry.timestamp ?? new Date().toISOString(),
+      severity: (entry.severity ?? 'info').toLowerCase(),
+    });
+
+    const fromOutput = (data: { agentName?: string; line?: string; kind?: string; sessionId?: string; timestamp?: string }) => ({
+      message: data.line,
+      agent: data.agentName,
+      sessionId: data.sessionId,
+      timestamp: data.timestamp ?? new Date().toISOString(),
+      severity: data.kind === 'stderr' ? 'error' : 'info',
+    });
+
+    // One state write per SignalR message, batch or single. Appending per item
+    // copied the whole (up to 50k) array once per line.
+    const append = (entries: LogEntry[]) => {
+      if (entries.length === 0) return;
 
       if (paused) {
-        bufferRef.current.push(logEntry);
-        if (bufferRef.current.length > MAX_LOG_ENTRIES)
-          bufferRef.current = bufferRef.current.slice(-MAX_LOG_ENTRIES);
+        const buffered = bufferRef.current.concat(entries);
+        bufferRef.current = buffered.length > MAX_LOG_ENTRIES
+          ? buffered.slice(-MAX_LOG_ENTRIES)
+          : buffered;
         return;
       }
 
       setAllEntries(prev => {
-        const next = [...prev, logEntry];
+        const next = prev.concat(entries);
         return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
       });
     };
 
-    const handleEvent = (data: { agentName?: string; line?: string; kind?: string; sessionId?: string; timestamp?: string }) => {
-      handleLog({
-        message: data.line,
-        agent: data.agentName,
-        sessionId: data.sessionId,
-        timestamp: data.timestamp ?? new Date().toISOString(),
-        severity: data.kind === 'stderr' ? 'error' : 'info',
-      });
-    };
+    const handleLog = (entry: { message?: string; agent?: string; agentName?: string; sessionId?: string; timestamp?: string; severity?: string }) =>
+      append([toEntry(entry)]);
+
+    const handleEvent = (data: { agentName?: string; line?: string; kind?: string; sessionId?: string; timestamp?: string }) =>
+      append([toEntry(fromOutput(data))]);
+
+    const handleBatch = (batch: Array<{ agentName?: string; line?: string; kind?: string; sessionId?: string; timestamp?: string }>) =>
+      append(batch.map(d => toEntry(fromOutput(d))));
 
     connection.on('LogEntry', handleLog);
     connection.on('AgentOutput', handleEvent);
-    connection.on('AgentOutputBatch', (batch: any[]) => {
-      for (const data of batch) handleEvent(data);
-    });
+    connection.on('AgentOutputBatch', handleBatch);
 
     return () => {
       connection.off('LogEntry', handleLog);
       connection.off('AgentOutput', handleEvent);
-      connection.off('AgentOutputBatch');
+      // Must pass the handler: off(name) alone removes EVERY subscriber's
+      // handler for that event, including useExecutionDashboard's.
+      connection.off('AgentOutputBatch', handleBatch);
     };
   }, [connection, paused]);
 

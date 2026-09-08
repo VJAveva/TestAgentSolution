@@ -160,12 +160,35 @@
                         </DockPanel>
                     </Border>
 
-                    <!-- Session cards -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled">
-                        <ItemsControl x:Name="PipelineSessionList"
-                                      ItemsSource="{Binding SessionsView}" Margin="8,4">
-                            <ItemsControl.ItemTemplate>
+                    <!-- Session cards.
+                         A bare ItemsControl has no ScrollViewer in its template and a
+                         plain StackPanel as its items panel, so wrapping it in a
+                         ScrollViewer gave it infinite height and realized every card
+                         (up to MaxSessionCards=50) plus every nested agent row and
+                         action pill. The template below puts the ScrollViewer inside
+                         the control so CanContentScroll can drive a VirtualizingStackPanel;
+                         ScrollUnit=Pixel keeps scrolling smooth with variable-height cards. -->
+                    <ItemsControl Grid.Row="1" x:Name="PipelineSessionList"
+                                  ItemsSource="{Binding SessionsView}" Margin="8,4"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer CanContentScroll="True"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Focusable="False">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type exec:SessionCardVM}">
                                     <Border Background="{DynamicResource CardBg}"
                                             BorderBrush="{DynamicResource CardBorder}"
@@ -443,7 +466,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
                 </Grid>
             </TabItem>
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 import { AgentRow } from './AgentRow';
 import { apiFetch } from '../../lib/api';
@@ -23,6 +24,7 @@ const statusClasses: Record<string, { badge: string; label: string }> = {
 export function SessionCard({
   session, isSelected, onSelect, collapsed = false
 }: Props) {
+  useRenderCount('SessionCard');
   const [isExpanded, setIsExpanded] = useState(!collapsed);
   const { selectAgent } = useExecutionDashboard();
   const style = statusClasses[session.status] || statusClasses.Queued;

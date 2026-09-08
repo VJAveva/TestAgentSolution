@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 import { SessionCard } from './SessionCard';
 import { LogPanel } from './LogPanel';
@@ -7,6 +8,7 @@ import { apiFetch } from '../../lib/api';
 import { logCatch } from '../../lib/logger';
 
 export default function ExecutionDashboard() {
+  useRenderCount('ExecutionDashboard');
   const {
     activeSessions, completedSessions,
     state, dispatch, selectSession

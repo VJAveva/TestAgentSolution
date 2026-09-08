@@ -208,6 +208,7 @@ public partial class FleetVM : ObservableObject, IDisposable
 
     public void Refresh()
     {
+        using var _perf = Diagnostics.UiPerfDiagnostics.Measure("FleetVM.Refresh");
         var agents = _dispatcher.RegisteredAgents.ToList();
         var allHealth = _dispatcher.GetAllAgentHealth();
         var allLocks = _lockManager.GetAllLocks();

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 import { StatsBar } from './StatsBar';
@@ -11,6 +12,7 @@ const severityRowClass: Record<string, string> = {
 };
 
 export default function UnifiedLogView() {
+  useRenderCount('UnifiedLogView');
   const { state, filteredLogs, selectSession, selectAgent } = useExecutionDashboard();
   const parentRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);

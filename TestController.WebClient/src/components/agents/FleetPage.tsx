@@ -1,4 +1,5 @@
 import { memo, useRef } from 'react';
+import { useRenderCount } from '../../hooks/useRenderCount';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Server, Lock, Unlock, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useFleetState } from '../../hooks/useFleetState';
@@ -14,6 +15,7 @@ interface FleetPageProps {
 }
 
 export default function FleetPage({ onSelectAgent }: FleetPageProps) {
+  useRenderCount('FleetPage');
   const { fleet, loading, error, refresh } = useFleetState();
   const parentRef = useRef<HTMLDivElement>(null);
 
