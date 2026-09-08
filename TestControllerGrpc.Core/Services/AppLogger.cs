@@ -241,7 +241,10 @@ public sealed class AppLogger : IAppLogger, IDisposable
         // FileShare.ReadWrite allows other processes (WPF + WebApi) to write to the same file,
         // and allows the health endpoint to read while we're writing.
         var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-        return new StreamWriter(fs, Encoding.UTF8) { AutoFlush = true };
+        // The buffer must exceed a whole entry — FormatLine folds a full stack trace into one string, and
+        // _lock only serialises writers inside one process. A split write lets the other process interleave,
+        // which is what tore exception messages away from their stack traces in app_*.log.
+        return new StreamWriter(fs, Encoding.UTF8, bufferSize: 64 * 1024) { AutoFlush = true };
     }
 
     private static string FormatLine(AppLogEntry entry)

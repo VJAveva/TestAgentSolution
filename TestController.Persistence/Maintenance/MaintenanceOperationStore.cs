@@ -44,13 +44,16 @@ public sealed class MaintenanceOperationStore : IMaintenanceOperationStore
         IQueryable<MaintenanceOperationRecord> query = db.MaintenanceOperations.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(nodeId))
             query = query.Where(m => m.NodeId == nodeId);
-        if (fromUtc is { } from)
-            query = query.Where(m => m.StartedUtc >= from);
-        if (toUtc is { } to)
-            query = query.Where(m => m.StartedUtc <= to);
 
-        var rows = await query.OrderByDescending(m => m.StartedUtc).ToListAsync(cancellationToken);
-        return rows.Select(ToDomain).ToList();
+        // SQLite translates neither comparison nor ORDER BY over DateTimeOffset, so the date window and the
+        // sort are both applied after materialisation.
+        IEnumerable<MaintenanceOperationRecord> rows = await query.ToListAsync(cancellationToken);
+        if (fromUtc is { } from)
+            rows = rows.Where(m => m.StartedUtc >= from);
+        if (toUtc is { } to)
+            rows = rows.Where(m => m.StartedUtc <= to);
+
+        return rows.OrderByDescending(m => m.StartedUtc).Select(ToDomain).ToList();
     }
 
     public async Task<IReadOnlyList<MaintenanceOperation>> GetUnfinishedAsync(CancellationToken cancellationToken)
@@ -60,10 +63,9 @@ public sealed class MaintenanceOperationStore : IMaintenanceOperationStore
         var rows = await db.MaintenanceOperations
             .AsNoTracking()
             .Where(m => m.State == MaintenanceOperationState.Queued || m.State == MaintenanceOperationState.Running)
-            .OrderBy(m => m.StartedUtc)
             .ToListAsync(cancellationToken);
 
-        return rows.Select(ToDomain).ToList();
+        return rows.OrderBy(m => m.StartedUtc).Select(ToDomain).ToList();
     }
 
     private static MaintenanceOperationRecord ToEntity(MaintenanceOperation op) => new()
