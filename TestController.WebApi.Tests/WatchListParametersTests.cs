@@ -15,6 +15,9 @@ public class WatchListParametersTests : IDisposable
     private readonly string _paramFile =
         Path.Combine(Path.GetTempPath(), $"vars_{Guid.NewGuid():N}.txt");
 
+    private readonly string _jsonFile =
+        Path.Combine(Path.GetTempPath(), $"cfg_{Guid.NewGuid():N}.json");
+
     private sealed class FakeVocabularyMonitor : IVocabularyMonitor
     {
 #pragma warning disable CS0067 // Raised by the real monitor only; tests set CurrentConfig directly.
@@ -99,9 +102,52 @@ public class WatchListParametersTests : IDisposable
         Assert.Equal(@"\\file\path\", parameters["_BuildBasePath"]);
     }
 
+    [Fact]
+    public void GetParameters_Should_ResolveLayeredConfig_When_ParameterFileIsJson()
+    {
+        File.WriteAllText(_jsonFile, """
+            {
+              "version": 1,
+              "global":    { "_BuildNumber": "GLOBAL", "_VCloudPassword": "s3cret-value" },
+              "profiles":  { "Warm": { "_Agent1": "warmgr" } },
+              "pipelines": { "Revert 9 Nodes - Install SP2023R2SP2": { "_BuildNumber": "PINNED" } }
+            }
+            """);
+
+        var watchItem = new WatchItemConfig
+        {
+            Tag = Tag,
+            Events =
+            [
+                new EventConfig
+                {
+                    Children = [new InitializeConfig { ParameterFile = _jsonFile, Profile = "Warm" }],
+                },
+            ],
+        };
+        var monitor = new FakeVocabularyMonitor
+        {
+            CurrentConfig = new WatchListConfig { WatchItems = [watchItem] },
+        };
+        var controller = new WatchListController(monitor, new ExecutionSessionManager());
+
+        var parameters = ParametersOf(controller.GetParameters(Tag));
+
+        Assert.Equal("PINNED", parameters["_BuildNumber"]);
+        Assert.Equal("warmgr", parameters["_Agent1"]);
+
+        // Parsed as CSV the whole JSON line becomes the key, which puts the secret somewhere
+        // value-based redaction cannot reach.
+        Assert.DoesNotContain("s3cret-value", string.Join("|", parameters.Values));
+        Assert.DoesNotContain("s3cret-value", string.Join("|", parameters.Keys));
+        Assert.DoesNotContain(parameters.Keys, k => k.Contains("version", StringComparison.OrdinalIgnoreCase));
+    }
+
     public void Dispose()
     {
         if (File.Exists(_paramFile))
             File.Delete(_paramFile);
+        if (File.Exists(_jsonFile))
+            File.Delete(_jsonFile);
     }
 }

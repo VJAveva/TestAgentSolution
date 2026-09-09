@@ -101,20 +101,27 @@ public class WatchListController : ControllerBase
                 parameters["BuildBasePath"] = watchItem.BuildBasePath;
             }
 
-            var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
-            if (paramFile == null || !System.IO.File.Exists(paramFile))
-                return Ok(new { parameters, file = "", warning = paramFile == null ? "No Initialize node found" : $"Parameter file not found: {Path.GetFileName(paramFile)}" });
+            var nodes = WatchListHelpers.FindInitializeNodes(watchItem);
+            if (nodes.Count == 0)
+                return Ok(new { parameters, file = "", warning = "No Initialize node found" });
 
-            var entries = ParameterResolver.ParseParameterFile(paramFile);
-            foreach (var (key, value) in entries)
+            // Resolve through the same layered loader the executor uses, so the dialog shows the
+            // values the run will resolve rather than a raw view of one file. A JSON config parsed
+            // as CSV yields whole lines as keys, which would place a secret in a key name where
+            // value-based redaction cannot reach it.
+            var ctx = new PipelineExecutionContext { WatchItemTag = watchItem.Tag };
+            foreach (var init in nodes)
             {
-                var shown = IsSecretParameter(key) ? RedactedValue : value;
-                parameters[key] = shown;
-                if (key.StartsWith('_'))
-                    parameters[key[1..]] = shown;
+                if (init.ParameterFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    ParameterResolver.LoadJsonConfig(ctx, init.ParameterFile, init.Profile, watchItem.Tag);
+                else
+                    ParameterResolver.LoadParameterFile(ctx, init.ParameterFile);
             }
 
-            return Ok(new { parameters, file = Path.GetFileName(paramFile) });
+            foreach (var entry in ctx.Parameters)
+                parameters[entry.Key] = IsSecretParameter(entry.Key) ? RedactedValue : entry.Value;
+
+            return Ok(new { parameters, file = Path.GetFileName(nodes[0].ParameterFile) });
         }
         catch (Exception ex)
         {

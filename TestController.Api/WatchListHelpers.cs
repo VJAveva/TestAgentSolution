@@ -28,6 +28,29 @@ public static class WatchListHelpers
         return files;
     }
 
+    /// <summary>
+    /// Every Initialize node in declaration order. Callers that resolve parameters need the node
+    /// rather than just its path, because a layered JSON config also carries a Profile selector.
+    /// </summary>
+    public static IReadOnlyList<InitializeConfig> FindInitializeNodes(WatchItemConfig watchItem)
+    {
+        var nodes = new List<InitializeConfig>();
+        foreach (var ev in watchItem.Events)
+            CollectInitializeNodes(ev.Children, nodes);
+        return nodes;
+    }
+
+    private static void CollectInitializeNodes(List<IActionNode> children, List<InitializeConfig> into)
+    {
+        foreach (var child in children)
+        {
+            if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
+                into.Add(init);
+            else if (child is ActionGroupConfig group)
+                CollectInitializeNodes(group.Children, into);
+        }
+    }
+
     private static void CollectInitializeFiles(List<IActionNode> children, List<string> into)
     {
         foreach (var child in children)
