@@ -92,17 +92,26 @@ public class WatchListController : ControllerBase
             if (watchItem == null)
                 return NotFound(ApiErrorFactory.InvalidTag(tag));
 
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // Drives the build picker. It is a WatchItem attribute, not a parameter-file entry; file entries below still win.
+            if (!string.IsNullOrWhiteSpace(watchItem.BuildBasePath))
+            {
+                parameters["_BuildBasePath"] = watchItem.BuildBasePath;
+                parameters["BuildBasePath"] = watchItem.BuildBasePath;
+            }
+
             var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
             if (paramFile == null || !System.IO.File.Exists(paramFile))
-                return Ok(new { parameters = new Dictionary<string, string>(), file = "", warning = paramFile == null ? "No Initialize node found" : $"Parameter file not found: {Path.GetFileName(paramFile)}" });
+                return Ok(new { parameters, file = "", warning = paramFile == null ? "No Initialize node found" : $"Parameter file not found: {Path.GetFileName(paramFile)}" });
 
-            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var entries = ParameterResolver.ParseParameterFile(paramFile);
             foreach (var (key, value) in entries)
             {
-                parameters[key] = value;
+                var shown = IsSecretParameter(key) ? RedactedValue : value;
+                parameters[key] = shown;
                 if (key.StartsWith('_'))
-                    parameters[key[1..]] = value;
+                    parameters[key[1..]] = shown;
             }
 
             return Ok(new { parameters, file = Path.GetFileName(paramFile) });
@@ -116,6 +125,15 @@ public class WatchListController : ControllerBase
             });
         }
     }
+
+    private const string RedactedValue = "********";
+
+    private static readonly string[] SecretKeyFragments =
+        ["password", "passwd", "pwd", "secret", "token", "apikey", "api_key", "credential"];
+
+    // This payload is rendered verbatim in the web trigger dialog, so credentials must never leave the server.
+    private static bool IsSecretParameter(string key) =>
+        SecretKeyFragments.Any(fragment => key.Contains(fragment, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>GET /api/watchlist/tree — hierarchical PlanNode tree with action-type badges and aggregate counts.</summary>
     [HttpGet("tree")]
