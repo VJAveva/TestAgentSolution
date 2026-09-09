@@ -43,10 +43,12 @@ public sealed partial class MainViewModel
     {
         if (ActiveEditNode?.NodeKind != NodeKinds.Initialize) return;
         if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile)) return;
-        LoadParameterFileEntries(ActiveEditNode.ParameterFile);
+        LoadParameterFileEntries(
+            ActiveEditNode.ParameterFile,
+            (ActiveEditNode.ModelObject as InitializeConfig)?.Profile ?? "");
     }
 
-    private void LoadParameterFileEntries(string filePath)
+    private void LoadParameterFileEntries(string filePath, string profile = "")
     {
         ParameterFileEntries.Clear();
         ParameterFileStatus = "";
@@ -65,7 +67,6 @@ public sealed partial class MainViewModel
             if (isJson)
             {
                 // Layered config: show what this node actually resolves rather than raw file text.
-                var profile = (ActiveEditNode?.ModelObject as InitializeConfig)?.Profile ?? "";
                 var ctx = new PipelineExecutionContext();
                 ParameterResolver.LoadJsonConfig(ctx, filePath, profile, null);
                 entries = ctx.Parameters

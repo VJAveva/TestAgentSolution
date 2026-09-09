@@ -902,7 +902,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Load Initialize parameter file entries
         if (value.NodeKind == NodeKinds.Initialize && !string.IsNullOrWhiteSpace(value.ParameterFile))
-            LoadParameterFileEntries(value.ParameterFile);
+            LoadParameterFileEntries(value.ParameterFile, (value.ModelObject as InitializeConfig)?.Profile ?? "");
         else
             ParameterFileEntries.Clear();
 
@@ -920,6 +920,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         ActiveEditNode = value;
         ActiveEditingContext = "Templates";
+
+        // The Templates tree must refresh the grid too. Without this it keeps whatever the
+        // WatchList tree last loaded, so a Warm template shows Sanity parameters.
+        if (value.NodeKind == NodeKinds.Initialize && !string.IsNullOrWhiteSpace(value.ParameterFile))
+            LoadParameterFileEntries(value.ParameterFile, (value.ModelObject as InitializeConfig)?.Profile ?? "");
+        else
+            ParameterFileEntries.Clear();
 
         // Update watermark visibility
         ShowWatermark = false;
