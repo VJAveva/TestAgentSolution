@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using TestControllerGrpc.Models;
 
@@ -31,21 +32,17 @@ public static partial class ParameterResolver
     /// Keys with leading underscore are stored both with and without the underscore
     /// so tokens like [ControllerName] and [_ControllerName] both resolve.
     /// </summary>
-    public static void LoadParameterFile(PipelineExecutionContext ctx, string parameterFilePath)
+    public static void LoadParameterFile(
+        PipelineExecutionContext ctx,
+        string parameterFilePath,
+        ParameterRank rank = ParameterRank.ParameterFile)
     {
         if (!File.Exists(parameterFilePath)) return;
 
         try
         {
-            var entries = ParseParameterFile(parameterFilePath);
-            foreach (var (key, value) in entries)
-            {
-                ctx.Parameters[key] = value;
-
-                // Also store without leading underscore so [ControllerName] works
-                if (key.StartsWith('_'))
-                    ctx.Parameters[key[1..]] = value;
-            }
+            foreach (var (key, value) in ParseParameterFile(parameterFilePath))
+                SetParameter(ctx, key, value, rank);
         }
         catch (IOException)
         {
@@ -106,6 +103,94 @@ public static partial class ParameterResolver
     }
 
     /// <summary>
+    /// Applies a value unless a higher-ranked source already supplied that key. Equal rank still
+    /// overwrites, so a later Initialize node keeps replacing an earlier one as it always has.
+    /// </summary>
+    public static void SetParameter(PipelineExecutionContext ctx, string key, string value, ParameterRank rank)
+    {
+        if (string.IsNullOrEmpty(key)) return;
+
+        Apply(ctx, key, value, rank);
+
+        // Both [BuildNumber] and [_BuildNumber] must resolve, so the alias carries the same rank.
+        if (key.StartsWith('_') && key.Length > 1)
+            Apply(ctx, key[1..], value, rank);
+
+        static void Apply(PipelineExecutionContext ctx, string key, string value, ParameterRank rank)
+        {
+            if (ctx.ParameterRanks.TryGetValue(key, out var winning) && winning > (int)rank)
+                return;
+
+            ctx.Parameters[key] = value;
+            ctx.ParameterRanks[key] = (int)rank;
+        }
+    }
+
+    /// <summary>Applies caller-supplied values for this run only. Outranks every file source.</summary>
+    public static void ApplyRunOverrides(
+        PipelineExecutionContext ctx,
+        IEnumerable<KeyValuePair<string, string>> overrides)
+    {
+        foreach (var entry in overrides)
+            SetParameter(ctx, entry.Key, entry.Value, ParameterRank.RunOverride);
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
+    /// <summary>Reads the layered JSON config, or null when it is missing or unreadable.</summary>
+    public static PipelineParameterConfig? ReadJsonConfig(string filePath)
+    {
+        if (!File.Exists(filePath)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<PipelineParameterConfig>(
+                File.ReadAllText(filePath), JsonOptions);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Applies the layered JSON config: shared globals, then the named stage profile, then any
+    /// build pinned to this pipeline. Each layer carries its own rank, so a pin is not undone by
+    /// a profile and neither is undone by an Initialize node running later.
+    /// </summary>
+    public static void LoadJsonConfig(
+        PipelineExecutionContext ctx,
+        string filePath,
+        string? profile,
+        string? pipelineTag)
+    {
+        var config = ReadJsonConfig(filePath);
+        if (config is null) return;
+
+        foreach (var entry in config.Global)
+            SetParameter(ctx, entry.Key, entry.Value, ParameterRank.Global);
+
+        if (!string.IsNullOrWhiteSpace(profile)
+            && config.Profiles.TryGetValue(profile, out var stage))
+        {
+            foreach (var entry in stage)
+                SetParameter(ctx, entry.Key, entry.Value, ParameterRank.ParameterFile);
+        }
+
+        if (!string.IsNullOrWhiteSpace(pipelineTag)
+            && config.Pipelines.TryGetValue(pipelineTag, out var pinned))
+        {
+            foreach (var entry in pinned)
+                SetParameter(ctx, entry.Key, entry.Value, ParameterRank.PipelinePin);
+        }
+    }
+
+    /// <summary>
     /// Replaces all [Token] placeholders in a string with resolved values.
     /// Unresolved tokens are left as-is.
     /// </summary>
@@ -163,16 +248,8 @@ public static partial class ParameterResolver
 
         try
         {
-            var entries = ParseParameterFile(triggerFilePath);
-            foreach (var (key, value) in entries)
-            {
-                ctx.Parameters[key] = value;
-
-                // Also store without leading underscore so [BuildNumber] works
-                // when file has _BuildNumber,Value
-                if (key.StartsWith('_'))
-                    ctx.Parameters[key[1..]] = value;
-            }
+            foreach (var (key, value) in ParseParameterFile(triggerFilePath))
+                SetParameter(ctx, key, value, ParameterRank.TriggerFile);
         }
         catch (IOException)
         {

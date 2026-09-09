@@ -167,6 +167,12 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ApplyOwnerAttribution(session, ctx);
 
         ctx.SessionId = session.SessionId;
+
+        // Every trigger path funnels through here, so the JSON config's per-pipeline layer resolves
+        // without each call site having to remember to set the tag. Set only when the caller did not.
+        if (string.IsNullOrEmpty(ctx.WatchItemTag))
+            ctx.WatchItemTag = watchItemTag;
+
         Log("Session", $"Started {session.SessionId} for {watchItemTag}:{evt.Type}");
 
         // Capture the single-run lock token now so we release exactly THIS run's lock
@@ -553,7 +559,12 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         var path = ParameterResolver.Resolve(init.ParameterFile, ctx);
         Log("Initialize", $"Loading parameters from: {path}");
-        ParameterResolver.LoadParameterFile(ctx, path);
+
+        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            ParameterResolver.LoadJsonConfig(ctx, path, init.Profile, ctx.WatchItemTag);
+        else
+            ParameterResolver.LoadParameterFile(ctx, path);
+
         return true;
     }
 

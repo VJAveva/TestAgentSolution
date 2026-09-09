@@ -1,0 +1,42 @@
+{
+  "version": 1,
+
+  "global": {
+    "_ControllerName": "jvgr22",
+    "_RevertAgentsDirectory": "C:\\TestSetup\\RevertAgents",
+    "_SP2023R2SP2Path": "C:\\TestSetup\\SP2023R2SP2",
+    "_SP2023R2SP2ResponsePath": "SP2023R2SP2_ResponseFiles",
+    "_DestTestExecutionFolder": "C:\\TestBinaries",
+    "_OrgName": "AppServerPool2",
+    "_Product": "AVEVA System Platform",
+    "_EmailCheck": "vinodkumar.javvadi@aveva.com",
+    "_VCloudUser": "teamautotest1",
+    "_VCloudPassword": "__SET_VCLOUD_PASSWORD__",
+    "_BuildNumber": "OAK_SP-2023-R2-SP2_20260909.4",
+    "_DropLocation": "\\\\DevTFSBldoaksp\\REPL\\Ado\\SP-2023-R2-SP2\\OAK_SP-2023-R2-SP2_20260909.4"
+  },
+
+  "profiles": {
+    "Warm": {
+      "_Agent1": "warmgr",
+      "_Agent2": "warmpri",
+      "_Agent3": "warmbak",
+      "_Agent4": "warmhist",
+      "_AgentsGroup": "\"warmgr,warmpri,warmbak,warmhist\""
+    },
+    "Sanity": {
+      "_Agent1": "jvgr1",
+      "_Agent2": "jvgr2",
+      "_Agent3": "jvhist",
+      "_Agent4": "jvkpri",
+      "_Agent5": "jvkbak",
+      "_AgentsGroup": "\"jvgr1,jvgr2,jvhist,jvkpri,jvkbak\""
+    }
+  },
+
+  "pipelines": {
+    "Revert 9 Nodes - Install SP2023R2SP2": {"_BuildNumber": "OAK_SP-2023-R2-SP2_20260909.3",
+  "_DropLocation": "\\\\DevTFSBldoaksp\\REPL\\Ado\\SP-2023-R2-SP2\\OAK_SP-2023-R2-SP2_20260909.3"
+     }
+  }
+}

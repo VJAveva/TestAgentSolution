@@ -538,6 +538,10 @@ public class ExecutionController : ControllerBase
             LockToken = pipelineLockToken,
         };
 
+        // Rank the caller's choices above every file source. Without this the Initialize node that
+        // runs later reloads its parameter file and puts the run back on the previous build.
+        ParameterResolver.ApplyRunOverrides(ctx, callerOverrides);
+
         // Bridge the client request id (X-Request-Id, also visible in the browser
         // console + apiFetch logs) to the canonical run id (sessionId) so a single
         // grep ties the WebClient action to the whole server/agent trace. runId is

@@ -239,6 +239,9 @@ public sealed class InitializeConfig : IActionNode
     public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string Tag { get; set; } = "";
     public string ParameterFile { get; set; } = "";
+
+    /// <summary>Stage profile to apply when ParameterFile points at a layered JSON config.</summary>
+    public string Profile { get; set; } = "";
 }
 
 // =============================================================================
@@ -284,8 +287,20 @@ public enum ActionType
 public sealed class PipelineExecutionContext
 {
     public string WatchItemPath { get; set; } = "";
+
+    /// <summary>Tag of the WatchItem being run. Selects that pipeline's entry in the JSON config.</summary>
+    public string WatchItemTag { get; set; } = "";
+
     public string TriggerFileName { get; set; } = "";
     public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Rank of the source that supplied each entry in <see cref="Parameters"/>. A lower-ranked
+    /// source must not overwrite a value a higher-ranked one already set, so a build pinned to a
+    /// pipeline survives the Initialize node that runs later in the same pipeline.
+    /// </summary>
+    public Dictionary<string, int> ParameterRanks { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public CancellationToken CancellationToken { get; set; }
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
 

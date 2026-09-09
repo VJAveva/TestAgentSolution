@@ -125,6 +125,7 @@ public static class WatchListXmlParser
                     {
                         Tag = Attr(el, "Tag"),
                         ParameterFile = Attr(el, "ParameterFile"),
+                        Profile = Attr(el, "Profile"),
                     });
                     break;
 
@@ -241,9 +242,11 @@ public static class WatchListXmlParser
                     break;
 
                 case InitializeConfig init:
-                    parent.Add(new XElement("Initialize",
+                    var initEl = new XElement("Initialize",
                         new XAttribute("Tag", init.Tag),
-                        new XAttribute("ParameterFile", init.ParameterFile)));
+                        new XAttribute("ParameterFile", init.ParameterFile));
+                    AddIfNotEmpty(initEl, "Profile", init.Profile);
+                    parent.Add(initEl);
                     break;
 
                 case RefConfig r:

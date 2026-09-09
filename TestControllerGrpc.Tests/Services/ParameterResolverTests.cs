@@ -249,6 +249,141 @@ public class ParameterResolverTests : IDisposable
         Assert.Empty(ctx.Parameters);
     }
 
+    // Rank-based precedence
+
+    [Fact]
+    public void LoadParameterFile_Should_NotOverwrite_When_TriggerFileSuppliedKey()
+    {
+        var trigger = WriteTempFile("trigger.txt", "_BuildNumber,PINNED");
+        var initialize = WriteTempFile("init.txt", "_BuildNumber,FROM_FILE\n_Agent1,ServerA");
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadTriggerFile(ctx, trigger);
+        ParameterResolver.LoadParameterFile(ctx, initialize);
+
+        Assert.Equal("PINNED", ctx.Parameters["_BuildNumber"]);
+        Assert.Equal("PINNED", ctx.Parameters["BuildNumber"]);
+        Assert.Equal("ServerA", ctx.Parameters["_Agent1"]);
+    }
+
+    [Fact]
+    public void LoadParameterFile_Should_Overwrite_When_EarlierSourceHasSameRank()
+    {
+        var warm = WriteTempFile("warm.txt", "_Agent1,warmgr");
+        var sanity = WriteTempFile("sanity.txt", "_Agent1,jvgr1");
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadParameterFile(ctx, warm);
+        ParameterResolver.LoadParameterFile(ctx, sanity);
+
+        Assert.Equal("jvgr1", ctx.Parameters["_Agent1"]);
+    }
+
+    [Fact]
+    public void LoadParameterFile_Should_Overwrite_When_GlobalSuppliedKey()
+    {
+        var global = WriteTempFile("global.txt", "_BuildNumber,GLOBAL");
+        var stage = WriteTempFile("stage.txt", "_BuildNumber,STAGE");
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadParameterFile(ctx, global, ParameterRank.Global);
+        ParameterResolver.LoadParameterFile(ctx, stage);
+
+        Assert.Equal("STAGE", ctx.Parameters["_BuildNumber"]);
+    }
+
+    [Fact]
+    public void ApplyRunOverrides_Should_Win_When_TriggerFileSuppliedKey()
+    {
+        var trigger = WriteTempFile("trigger.txt", "_BuildNumber,PINNED");
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadTriggerFile(ctx, trigger);
+        ParameterResolver.ApplyRunOverrides(
+            ctx, new Dictionary<string, string> { ["_BuildNumber"] = "THIS_RUN" });
+
+        Assert.Equal("THIS_RUN", ctx.Parameters["_BuildNumber"]);
+        Assert.Equal("THIS_RUN", ctx.Parameters["BuildNumber"]);
+    }
+
+    [Fact]
+    public void SetParameter_Should_ProtectAlias_When_LowerRankWritesUnprefixedKey()
+    {
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.SetParameter(ctx, "_BuildNumber", "PINNED", ParameterRank.TriggerFile);
+        ParameterResolver.SetParameter(ctx, "BuildNumber", "FROM_FILE", ParameterRank.ParameterFile);
+
+        Assert.Equal("PINNED", ctx.Parameters["BuildNumber"]);
+    }
+
+    // Layered JSON config
+
+    private const string LayeredJson = """
+        {
+          "version": 1,
+          "global":    { "_BuildNumber": "GLOBAL", "_OrgName": "AppServerPool2" },
+          "profiles":  { "Warm": { "_Agent1": "warmgr" }, "Sanity": { "_Agent1": "jvgr1" } },
+          "pipelines": { "Pipe A": { "_BuildNumber": "PINNED" } }
+        }
+        """;
+
+    [Fact]
+    public void LoadJsonConfig_Should_ApplyGlobal_When_PipelineHasNoOverride()
+    {
+        var path = WriteTempFile("config.json", LayeredJson);
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadJsonConfig(ctx, path, profile: null, pipelineTag: "Pipe B");
+
+        Assert.Equal("GLOBAL", ctx.Parameters["_BuildNumber"]);
+        Assert.Equal("AppServerPool2", ctx.Parameters["OrgName"]);
+    }
+
+    [Fact]
+    public void LoadJsonConfig_Should_PreferPipelinePin_When_TagHasOverride()
+    {
+        var path = WriteTempFile("config.json", LayeredJson);
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadJsonConfig(ctx, path, profile: null, pipelineTag: "Pipe A");
+
+        Assert.Equal("PINNED", ctx.Parameters["_BuildNumber"]);
+        Assert.Equal("PINNED", ctx.Parameters["BuildNumber"]);
+    }
+
+    [Fact]
+    public void LoadJsonConfig_Should_ApplyNamedProfile_When_ProfileRequested()
+    {
+        var path = WriteTempFile("config.json", LayeredJson);
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadJsonConfig(ctx, path, profile: "Sanity", pipelineTag: null);
+
+        Assert.Equal("jvgr1", ctx.Parameters["_Agent1"]);
+    }
+
+    [Fact]
+    public void LoadJsonConfig_Should_KeepPin_When_ParameterFileLoadedAfterwards()
+    {
+        var path = WriteTempFile("config.json", LayeredJson);
+        var stage = WriteTempFile("stage.txt", "_BuildNumber,FROM_TXT");
+        var ctx = new PipelineExecutionContext();
+
+        ParameterResolver.LoadJsonConfig(ctx, path, profile: null, pipelineTag: "Pipe A");
+        ParameterResolver.LoadParameterFile(ctx, stage);
+
+        Assert.Equal("PINNED", ctx.Parameters["_BuildNumber"]);
+    }
+
+    [Fact]
+    public void LoadJsonConfig_Should_NotThrow_When_FileDoesNotExist()
+    {
+        var ctx = new PipelineExecutionContext();
+        ParameterResolver.LoadJsonConfig(ctx, @"C:\nonexistent\config.json", null, null);
+        Assert.Empty(ctx.Parameters);
+    }
+
     // ???????????????????????????????????????????????????????????????????
     // ResolveAction
     // ???????????????????????????????????????????????????????????????????
