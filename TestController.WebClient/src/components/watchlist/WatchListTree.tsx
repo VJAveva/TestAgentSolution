@@ -198,7 +198,7 @@ export default function WatchListTree() {
                 className="absolute top-0 left-0 w-full"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
-                <TreeNodeRow node={node} onTriggerRequest={setTriggerTarget} />
+                <TreeNodeRow node={node} onTriggerRequest={setTriggerTarget} onOverrideRequest={setConflictLock} />
               </div>
             );
           })}
@@ -227,7 +227,7 @@ export default function WatchListTree() {
 
 type PipelineState = 'triggerable' | 'viewOnly' | 'disabled' | 'locked';
 
-const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void }) {
+const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverrideRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void; onOverrideRequest: (lock: PipelineLockDto) => void }) {
   const selectNode = useWatchListStore(s => s.selectNode);
   const toggleExpand = useWatchListStore(s => s.toggleExpand);
   const selectedNode = useWatchListStore(s => s.selectedNode);
@@ -257,6 +257,17 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest }: { node
   // View-only is intentionally dimmed; disabled stays readable.
   const rowOpacity = permissionState === 'viewOnly' ? 'opacity-[0.65]' : '';
   const isOwnLock = !!lock && lock.ownerUserId === currentUserId;
+  const canForceRelease = useCan('Pipeline_ForceRelease', node.tag ?? undefined);
+  const { cancelSession, fetchSessions } = useExecution();
+
+  // The lock identifies the pipeline but not the run, so resolve the session on demand rather
+  // than depending on the execution store being populated in the WatchList view.
+  const cancelOwnRun = async () => {
+    if (!node.tag || !confirm(`Cancel your run of "${node.tag}"?`)) return;
+    const data = await fetchSessions();
+    const session = data.sessions?.find(s => s.watchItemTag === node.tag);
+    if (session) await cancelSession(session.sessionId);
+  };
 
   return (
     <div
@@ -298,17 +309,37 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest }: { node
       {/* Permission pill for WatchItem rows */}
       {isWatchItem && <PermissionPill state={permissionState} isSecured={isSecured} />}
 
-      {/* Per-row trigger affordance with centralized gating */}
+      {/* Per-row action: cancel your own run, override another owner's lock, otherwise trigger */}
       {isWatchItem && node.tag && (
-        <div className="shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
-          <DisabledTriggerButton
-            pipelineTag={node.tag}
-            label="Trigger"
-            className="px-2 py-0.5 text-[10px]"
-            forceDisabled={isPipelineDisabled}
-            forceReason="This pipeline is disabled"
-            onTrigger={() => onTriggerRequest(node.tag!)}
-          />
+        <div className="shrink-0 ml-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {isOwnLock ? (
+            <button
+              className="px-2 py-0.5 text-[10px] rounded border border-acc-red/40 text-acc-red hover:bg-acc-red/10"
+              title="Cancel your run"
+              onClick={cancelOwnRun}
+            >
+              Cancel
+            </button>
+          ) : (
+            <DisabledTriggerButton
+              pipelineTag={node.tag}
+              label="Trigger"
+              className="px-2 py-0.5 text-[10px]"
+              forceDisabled={isPipelineDisabled}
+              forceReason="This pipeline is disabled"
+              onTrigger={() => onTriggerRequest(node.tag!)}
+            />
+          )}
+
+          {lock && !isOwnLock && canForceRelease && (
+            <button
+              className="px-2 py-0.5 text-[10px] rounded bg-acc-mauve/80 text-white hover:bg-acc-mauve"
+              title={`Override the lock held by ${lock.ownerDisplayName}`}
+              onClick={() => onOverrideRequest(lock)}
+            >
+              Override
+            </button>
+          )}
         </div>
       )}
 
