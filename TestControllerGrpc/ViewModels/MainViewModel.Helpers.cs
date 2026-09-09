@@ -222,16 +222,16 @@ public sealed partial class MainViewModel
 
         foreach (var wi in config.WatchItems)
             foreach (var ev in wi.Events)
-                LoadTokensFromChildren(ev.Children);
+                LoadTokensFromChildren(ev.Children, wi.Tag);
         foreach (var t in config.Templates)
-            LoadTokensFromChildren(t.Children);
+            LoadTokensFromChildren(t.Children, "");
 
         // Refresh resolved text across all trees
         WatchListRoot?.RefreshResolvedTextRecursive();
         TemplateListRoot?.RefreshResolvedTextRecursive();
     }
 
-    private void LoadTokensFromChildren(List<IActionNode> children)
+    private void LoadTokensFromChildren(List<IActionNode> children, string pipelineTag)
     {
         foreach (var child in children)
         {
@@ -239,13 +239,16 @@ public sealed partial class MainViewModel
             {
                 try
                 {
-                    var entries = ParameterResolver.ParseParameterFile(init.ParameterFile);
-                    foreach (var (key, value) in entries)
-                    {
-                        TreeNodeViewModel.TokenValues[key] = value;
-                        if (key.StartsWith('_'))
-                            TreeNodeViewModel.TokenValues[key[1..]] = value;
-                    }
+                    // Layered loader, not the CSV parser: a JSON config parsed as CSV yields whole
+                    // lines as keys, so every [Token] in the tree would render unresolved.
+                    var ctx = new PipelineExecutionContext { WatchItemTag = pipelineTag };
+                    if (init.ParameterFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                        ParameterResolver.LoadJsonConfig(ctx, init.ParameterFile, init.Profile, pipelineTag);
+                    else
+                        ParameterResolver.LoadParameterFile(ctx, init.ParameterFile);
+
+                    foreach (var entry in ctx.Parameters)
+                        TreeNodeViewModel.TokenValues[entry.Key] = entry.Value;
                 }
                 catch (Exception ex)
                 {
@@ -254,7 +257,7 @@ public sealed partial class MainViewModel
             }
             else if (child is ActionGroupConfig ag)
             {
-                LoadTokensFromChildren(ag.Children);
+                LoadTokensFromChildren(ag.Children, pipelineTag);
             }
         }
     }

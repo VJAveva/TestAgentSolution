@@ -325,24 +325,13 @@ public class ExecutionController : ControllerBase
         if (evt == null)
             return BadRequest(ApiErrorFactory.BadRequest($"Event type '{eventType}' not found on WatchItem '{watchItemTag}'"));
 
-        // Build parameters (needed for agent variable resolution)
-        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Build parameters (needed for agent variable resolution). Resolved through the layered
+        // loader so a JSON config is never handed to the CSV parser, and so this view matches what
+        // the executor will resolve - later Initialize nodes overwrite earlier ones at equal rank.
+        var resolveCtx = new PipelineExecutionContext { WatchItemTag = watchItem.Tag };
+        ParameterResolver.LoadForWatchItem(resolveCtx, watchItem);
+        var parameters = new Dictionary<string, string>(resolveCtx.Parameters, StringComparer.OrdinalIgnoreCase);
         var paramFiles = WatchListHelpers.FindInitializeFiles(watchItem);
-        foreach (var file in paramFiles)
-        {
-            if (!System.IO.File.Exists(file))
-                continue;
-
-            foreach (var (key, value) in ParameterResolver.ParseParameterFile(file))
-            {
-                // First declaration wins, so a single-file pipeline behaves exactly as before and
-                // additional files only contribute keys the earlier ones did not define.
-                if (!parameters.ContainsKey(key))
-                    parameters[key] = value;
-                if (key.StartsWith('_'))
-                    parameters.TryAdd(key[1..], value);
-            }
-        }
 
         // Caller-supplied values only. File-sourced parameters above are admin-authored (editing them already
         // requires controller filesystem access) and stay untouched, so existing pipelines are unaffected.
@@ -503,6 +492,12 @@ public class ExecutionController : ControllerBase
             foreach (var file in paramFiles)
             {
                 if (!System.IO.File.Exists(file))
+                    continue;
+
+                // A layered JSON config is not a flat key,value list - rewriting it here would
+                // replace the whole file with CSV lines. The caller's values already reach this run
+                // as a run override, so nothing is lost by skipping it.
+                if (file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 try
@@ -1072,18 +1067,9 @@ public class ExecutionController : ControllerBase
 
     private static Dictionary<string, string> LoadParametersForWatchItem(WatchItemConfig watchItem)
     {
-        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
-        if (paramFile != null && System.IO.File.Exists(paramFile))
-        {
-            foreach (var (key, value) in ParameterResolver.ParseParameterFile(paramFile))
-            {
-                parameters[key] = value;
-                if (key.StartsWith('_'))
-                    parameters[key[1..]] = value;
-            }
-        }
-        return parameters;
+        var ctx = new PipelineExecutionContext { WatchItemTag = watchItem.Tag };
+        ParameterResolver.LoadForWatchItem(ctx, watchItem);
+        return new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase);
     }
 
     private static object ToSessionDto(ExecutionSession s) => new

@@ -59,7 +59,25 @@ public sealed partial class MainViewModel
 
         try
         {
-            var entries = ParameterResolver.ParseParameterFile(filePath);
+            var isJson = filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+            List<(string Key, string Value)> entries;
+
+            if (isJson)
+            {
+                // Layered config: show what this node actually resolves rather than raw file text.
+                var profile = (ActiveEditNode?.ModelObject as InitializeConfig)?.Profile ?? "";
+                var ctx = new PipelineExecutionContext();
+                ParameterResolver.LoadJsonConfig(ctx, filePath, profile, null);
+                entries = ctx.Parameters
+                    .Where(p => p.Key.StartsWith('_'))
+                    .Select(p => (p.Key, p.Value))
+                    .ToList();
+            }
+            else
+            {
+                entries = ParameterResolver.ParseParameterFile(filePath);
+            }
+
             foreach (var (key, value) in entries)
             {
                 ParameterFileEntries.Add(new ParameterEntryViewModel { Key = key, Value = value });
@@ -74,8 +92,10 @@ public sealed partial class MainViewModel
             WatchListRoot?.RefreshResolvedTextRecursive();
             TemplateListRoot?.RefreshResolvedTextRecursive();
 
-            ParameterFileStatus = $"Loaded {entries.Count} parameters from {Path.GetFileName(filePath)}";
-            AddLog($"Loaded {entries.Count} parameters from {Path.GetFileName(filePath)}");
+            ParameterFileStatus = isJson
+                ? $"Loaded {entries.Count} resolved parameters from {Path.GetFileName(filePath)} (layered config - edit the file directly)"
+                : $"Loaded {entries.Count} parameters from {Path.GetFileName(filePath)}";
+            AddLog(ParameterFileStatus);
         }
         catch (Exception ex)
         {
@@ -111,6 +131,15 @@ public sealed partial class MainViewModel
         if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile))
         {
             ParameterFileStatus = "No parameter file path set. Use Browse to select a file.";
+            return;
+        }
+
+        // Writing this flat grid over a layered JSON config would replace global/profiles/pipelines
+        // with Key,Value lines and destroy every other pipeline's settings.
+        if (ActiveEditNode.ParameterFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            ParameterFileStatus = "Layered JSON config - saving a flat list here would discard its structure. Edit the file directly.";
+            AddLog(ParameterFileStatus, LogSeverity.Warning);
             return;
         }
 

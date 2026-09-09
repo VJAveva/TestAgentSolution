@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import { useWatchListStore } from '../../stores/watchlistStore';
+import { apiGet } from '../../lib/api';
 import type { WatchItemConfig, ActionConfig, ActionGroupConfig, InitializeConfig, RefConfig, EventConfig } from '../../types/api';
 
 export default function NodeProperties() {
@@ -59,12 +61,37 @@ function Card({ children }: { children: React.ReactNode }) {
 }
 
 function WatchItemProps({ model }: { model: WatchItemConfig }) {
+  // buildNumberField/dropLocationField are parameter KEY NAMES, not values. Resolve the actual
+  // build through the API so this shows what the pipeline will run.
+  const [build, setBuild] = useState('');
+  const [drop, setDrop] = useState('');
+
+  useEffect(() => {
+    if (!model.tag) return;
+    let cancelled = false;
+    apiGet<{ parameters?: Record<string, string> }>(
+      `/api/watchlist/${encodeURIComponent(model.tag)}/parameters`)
+      .then(data => {
+        if (cancelled) return;
+        setBuild(data.parameters?.['_BuildNumber'] ?? '');
+        setDrop(data.parameters?.['_DropLocation'] ?? '');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBuild('');
+        setDrop('');
+      });
+    return () => { cancelled = true; };
+  }, [model.tag]);
+
   return (
     <Card>
       <PropRow label="Tag" value={model.tag} />
       <PropRow label="Path" value={model.path} />
       <PropRow label="Filter" value={model.filter} />
       <PropRow label="Enabled" value={model.isEnabled} />
+      <PropRow label="Build number" value={build} />
+      <PropRow label="Drop location" value={drop} />
       <PropRow label="Build # Field" value={model.buildNumberField} />
       <PropRow label="Drop Field" value={model.dropLocationField} />
       <PropRow label="Events" value={model.events.length} />

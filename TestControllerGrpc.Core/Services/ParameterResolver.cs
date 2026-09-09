@@ -191,6 +191,45 @@ public static partial class ParameterResolver
     }
 
     /// <summary>
+    /// Resolves every Initialize source declared by a WatchItem, honouring each node's Profile.
+    /// Always prefer this over calling <see cref="ParseParameterFile"/> directly: that is the CSV
+    /// parser, and pointing it at a JSON config turns whole lines into keys.
+    /// </summary>
+    public static void LoadForWatchItem(PipelineExecutionContext ctx, WatchItemConfig watchItem)
+    {
+        if (string.IsNullOrEmpty(ctx.WatchItemTag))
+            ctx.WatchItemTag = watchItem.Tag;
+
+        foreach (var init in CollectInitializeNodes(watchItem))
+        {
+            if (init.ParameterFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                LoadJsonConfig(ctx, init.ParameterFile, init.Profile, watchItem.Tag);
+            else
+                LoadParameterFile(ctx, init.ParameterFile);
+        }
+    }
+
+    /// <summary>Every Initialize node under a WatchItem, in declaration order, at any depth.</summary>
+    public static List<InitializeConfig> CollectInitializeNodes(WatchItemConfig watchItem)
+    {
+        var nodes = new List<InitializeConfig>();
+        foreach (var ev in watchItem.Events)
+            Walk(ev.Children, nodes);
+        return nodes;
+
+        static void Walk(List<IActionNode> children, List<InitializeConfig> into)
+        {
+            foreach (var child in children)
+            {
+                if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
+                    into.Add(init);
+                else if (child is ActionGroupConfig group)
+                    Walk(group.Children, into);
+            }
+        }
+    }
+
+    /// <summary>
     /// Replaces all [Token] placeholders in a string with resolved values.
     /// Unresolved tokens are left as-is.
     /// </summary>
