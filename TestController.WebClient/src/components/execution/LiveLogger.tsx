@@ -3,6 +3,7 @@ import { useRenderCount } from '../../hooks/useRenderCount';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pause, Play, Trash2 } from 'lucide-react';
 import { useExecutionStore } from '../../stores/executionStore';
+import { agentColor } from '../../lib/agentColors';
 
 export default function LiveLogger() {
   useRenderCount('LiveLogger');
@@ -12,6 +13,8 @@ export default function LiveLogger() {
   const clearLogs = useExecutionStore(s => s.clearLogs);
   const sessionFilter = useExecutionStore(s => s.logSessionFilter);
   const setSessionFilter = useExecutionStore(s => s.setLogSessionFilter);
+  const selectedAgent = useExecutionStore(s => s.selectedAgent);
+  const setSelectedAgent = useExecutionStore(s => s.setSelectedAgent);
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Derive unique session IDs for the filter bar
@@ -23,10 +26,25 @@ export default function LiveLogger() {
     return Array.from(ids);
   }, [logs]);
 
-  const filteredLogs = useMemo(() => {
+  // Agents that have produced output, in first-seen order, for the per-agent tabs.
+  const agentNames = useMemo(() => {
+    const names: string[] = [];
+    for (const entry of logs) {
+      if (entry.agent && !names.includes(entry.agent)) names.push(entry.agent);
+    }
+    return names;
+  }, [logs]);
+
+  const sessionLogs = useMemo(() => {
     if (!sessionFilter) return logs;
     return logs.filter(e => e.sessionId === sessionFilter || !e.sessionId);
   }, [logs, sessionFilter]);
+
+  // Filtered at render, never mutated, so hidden agents keep streaming into the store.
+  const filteredLogs = useMemo(() => {
+    if (!selectedAgent) return sessionLogs;
+    return sessionLogs.filter(e => e.agent === selectedAgent);
+  }, [sessionLogs, selectedAgent]);
 
   const virtualizer = useVirtualizer({
     count: filteredLogs.length,
@@ -84,11 +102,49 @@ export default function LiveLogger() {
         </div>
       )}
 
+      {/* Agent filter tabs - same selection the Sessions panel nodes drive */}
+      {agentNames.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          <button
+            className={`px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+              !selectedAgent ? 'bg-accent text-white' : 'bg-white/5 text-text-muted hover:bg-white/10'
+            }`}
+            onClick={() => setSelectedAgent('')}
+          >
+            All
+          </button>
+          {agentNames.map(a => (
+            <button
+              key={a}
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                selectedAgent === a ? 'bg-accent text-white' : 'bg-white/5 text-text-muted hover:bg-white/10'
+              }`}
+              onClick={() => setSelectedAgent(selectedAgent === a ? '' : a)}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedAgent === a ? 'bg-white' : agentColor(a).bg}`} />
+              {a}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selectedAgent && (
+        <div className="mb-2 text-[11px] text-accent bg-accent/10 border border-accent/30 rounded px-2.5 py-1.5">
+          Filtered to {selectedAgent} &mdash; showing {filteredLogs.length} of {sessionLogs.length} lines.
+        </div>
+      )}
+
       <div
         ref={parentRef}
         className="flex-1 overflow-auto bg-bg-panel rounded-lg border border-bdr p-2 font-mono text-xs leading-5"
       >
-        {filteredLogs.length === 0 && <p className="text-text-muted">No log entries yet. Trigger an execution to see live output.</p>}
+        {filteredLogs.length === 0 && (
+          <p className="text-text-muted">
+            {selectedAgent
+              ? `No lines from ${selectedAgent} yet.`
+              : 'No log entries yet. Trigger an execution to see live output.'}
+          </p>
+        )}
         {filteredLogs.length > 0 && (
           <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
             {virtualizer.getVirtualItems().map(virtualRow => {
@@ -128,7 +184,15 @@ export default function LiveLogger() {
                     </button>
                   )}
                   {entry.component && <span className="text-acc-blue/70 mr-1">[{entry.component}]</span>}
-                  {entry.agent && <span className="text-acc-mauve mr-1">[{entry.agent}]</span>}
+                  {entry.agent && (
+                    <button
+                      className={`${agentColor(entry.agent).text} mr-1 hover:underline`}
+                      title={`Filter to ${entry.agent}`}
+                      onClick={() => setSelectedAgent(selectedAgent === entry.agent ? '' : entry.agent!)}
+                    >
+                      [{entry.agent}]
+                    </button>
+                  )}
                   {entry.action && <span className="text-text-muted mr-1">{entry.action}:</span>}
                   {entry.message}
                   {entry.exception && (

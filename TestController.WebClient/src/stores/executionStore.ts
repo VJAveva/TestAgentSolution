@@ -9,6 +9,8 @@ interface ExecutionState {
   maxLogs: number;
   isLogPaused: boolean;
   logSessionFilter: string;
+  /** '' = all agents. Single source of truth shared by the Sessions panel nodes and the log tabs. */
+  selectedAgent: string;
   setStatus: (isExecuting: boolean, activeCount: number) => void;
   setSessions: (sessions: SessionInfo[]) => void;
   addLog: (entry: LogEntry) => void;
@@ -16,6 +18,7 @@ interface ExecutionState {
   clearLogs: () => void;
   togglePause: () => void;
   setLogSessionFilter: (sessionId: string) => void;
+  setSelectedAgent: (agent: string) => void;
 }
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
@@ -26,6 +29,7 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   maxLogs: 2000,
   isLogPaused: false,
   logSessionFilter: '',
+  selectedAgent: '',
   setStatus: (isExecuting, activeCount) => set({ isExecuting, activeCount }),
   setSessions: (sessions) => set({ sessions }),
   addLog: (entry) =>
@@ -45,4 +49,5 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   clearLogs: () => set({ logs: [] }),
   togglePause: () => set((s) => ({ isLogPaused: !s.isLogPaused })),
   setLogSessionFilter: (sessionId) => set({ logSessionFilter: sessionId }),
+  setSelectedAgent: (agent) => set({ selectedAgent: agent }),
 }));

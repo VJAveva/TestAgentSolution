@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useExecutionStore } from '../../stores/executionStore';
+import { useAgentStore } from '../../stores/agentStore';
 import { useExecution } from '../../hooks/useExecution';
+import { agentColor } from '../../lib/agentColors';
 import { logCatch } from '../../lib/logger';
 import { PlayCircle, XCircle, X, RefreshCw } from 'lucide-react';
 
@@ -8,7 +10,34 @@ export default function SessionList() {
   const isExecuting = useExecutionStore(s => s.isExecuting);
   const activeCount = useExecutionStore(s => s.activeCount);
   const sessions = useExecutionStore(s => s.sessions);
+  const logs = useExecutionStore(s => s.logs);
+  const selectedAgent = useExecutionStore(s => s.selectedAgent);
+  const setSelectedAgent = useExecutionStore(s => s.setSelectedAgent);
+  const fleetAgents = useAgentStore(s => s.agents);
   const { triggerAll, cancelAll, cancelSession, fetchSessions } = useExecution();
+
+  // Which agents have actually produced output, per session. Derived from the same live
+  // stream the log renders, so the panel and the log can never disagree.
+  const agentsBySession = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const entry of logs) {
+      if (!entry.sessionId || !entry.agent) continue;
+      const seen = map.get(entry.sessionId);
+      if (!seen) map.set(entry.sessionId, [entry.agent]);
+      else if (!seen.includes(entry.agent)) seen.push(entry.agent);
+    }
+    return map;
+  }, [logs]);
+
+  // Fetch once on mount and whenever a run starts or ends. The poll below only runs while we
+  // already believe a run is active, and only fetchSessions can set that flag - so on its own
+  // it can never start for a run this browser did not trigger.
+  useEffect(() => {
+    const refresh = () => fetchSessions().catch(logCatch('SessionList', 'fetchSessions'));
+    refresh();
+    window.addEventListener('execution-sessions-changed', refresh);
+    return () => window.removeEventListener('execution-sessions-changed', refresh);
+  }, [fetchSessions]);
 
   // Poll sessions every 2s while executing
   useEffect(() => {
@@ -65,6 +94,12 @@ export default function SessionList() {
               : s.state === 'Completed' ? 'bg-acc-green'
               : 'bg-acc-red';
 
+            const participating = agentsBySession.get(s.sessionId) ?? [];
+            const notScheduled = fleetAgents
+              .map(a => a.name)
+              .filter(n => !participating.some(p => p.toLowerCase() === n.toLowerCase()));
+            const sessionRunning = s.state === 'Running';
+
             return (
               <div key={s.sessionId} className="bg-bg-card rounded-lg p-2.5 border border-bdr">
                 {/* Header: tag + state + cancel */}
@@ -100,6 +135,41 @@ export default function SessionList() {
                   {s.failedActions > 0 && <span className="text-acc-red">{s.failedActions}F</span>}
                   <span className="ml-auto text-[9px]">[{s.sessionId.slice(0, 6)}]</span>
                 </div>
+
+                {/* Agent nodes, flat under the root pipeline */}
+                <div className="mt-2 pt-2 border-t border-bdr space-y-0.5">
+                  <AgentNode
+                    label="All agents"
+                    sub="Combined live log"
+                    running={sessionRunning}
+                    badge={sessionRunning ? `${participating.length} RUN` : 'DONE'}
+                    isSelected={selectedAgent === ''}
+                    onSelect={() => setSelectedAgent('')}
+                  />
+                  {participating.map(a => (
+                    <AgentNode
+                      key={a}
+                      label={a}
+                      sub={sessionRunning ? 'Streaming live' : 'Finished'}
+                      colorText={agentColor(a).text}
+                      running={sessionRunning}
+                      badge={sessionRunning ? 'RUNNING' : 'DONE'}
+                      isSelected={selectedAgent === a}
+                      onSelect={() => setSelectedAgent(a)}
+                    />
+                  ))}
+                  {notScheduled.map(a => (
+                    <AgentNode
+                      key={a}
+                      label={a}
+                      sub="Not scheduled this run"
+                      running={false}
+                      badge="IDLE"
+                      isSelected={selectedAgent === a}
+                      onSelect={() => setSelectedAgent(a)}
+                    />
+                  ))}
+                </div>
               </div>
             );
           })}
@@ -112,5 +182,37 @@ export default function SessionList() {
         </div>
       )}
     </div>
+  );
+}
+
+function AgentNode({ label, sub, colorText, running, badge, isSelected, onSelect }: {
+  label: string;
+  sub: string;
+  colorText?: string;
+  running: boolean;
+  badge: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors ${
+        isSelected ? 'bg-accent/15 border border-accent/40' : 'border border-transparent hover:bg-white/5'
+      }`}
+      onClick={onSelect}
+    >
+      <span className={`w-2 h-2 rounded-full shrink-0 ${running ? 'bg-acc-green' : 'bg-text-muted'}`} />
+      <span className="flex-1 min-w-0">
+        <span className={`block text-[11px] font-semibold font-mono truncate ${colorText ?? 'text-text-primary'}`}>
+          {label}
+        </span>
+        <span className="block text-[9px] text-text-muted truncate">{sub}</span>
+      </span>
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+        running ? 'bg-acc-green/15 text-acc-green' : 'bg-white/5 text-text-muted'
+      }`}>
+        {badge}
+      </span>
+    </button>
   );
 }

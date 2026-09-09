@@ -192,6 +192,9 @@ export function useSignalR(enabled = true): HubConnection | null {
         timestamp: new Date().toISOString(),
         severity: 'info',
       });
+      // The Sessions panel is REST-backed and only polls while it already believes a run is
+      // active, so without this it never learns about runs started elsewhere.
+      window.dispatchEvent(new CustomEvent('execution-sessions-changed'));
     });
 
     conn.on('ExecutionCompleted', (data: {
@@ -220,6 +223,7 @@ export function useSignalR(enabled = true): HubConnection | null {
           tag: `execution-${data.sessionId}`,
         });
       }
+      window.dispatchEvent(new CustomEvent('execution-sessions-changed'));
     });
 
     // Single-session cancel broadcasts ExecutionCancelled (not ExecutionCompleted)
@@ -235,6 +239,7 @@ export function useSignalR(enabled = true): HubConnection | null {
         timestamp: new Date().toISOString(),
         severity: 'warning',
       });
+      window.dispatchEvent(new CustomEvent('execution-sessions-changed'));
     });
 
     // Results updated: re-fetch builds list when new results are available
