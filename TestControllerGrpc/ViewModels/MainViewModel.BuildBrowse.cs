@@ -45,6 +45,7 @@ public sealed partial class MainViewModel
         // (ParseTriggerFileMetadata). Writing the selected build into them made the lookup miss forever.
 
         // Update per-pipeline build display
+        ActiveEditNode.SelectedBuildPath = selectedPath;
         ActiveEditNode.LastBuildNumber = folderName;
         ActiveEditNode.LastDropLocation = selectedPath;
         if (ActiveEditNode.ModelObject is WatchItemConfig wiModel)

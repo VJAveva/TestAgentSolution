@@ -2417,17 +2417,17 @@
                                         </Button>
 
                                         <Label Content="SELECTED BUILD" Style="{StaticResource Lbl}"
-                                               Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}" />
+                                               Visibility="{Binding SelectedBuildPath, Converter={StaticResource NonEmptyVis}}" />
                                         <TextBox Text="{Binding SelectedBuildPath, Mode=OneWay}"
                                                  Style="{StaticResource Fld}" IsReadOnly="True"
                                                  FontFamily="Consolas" FontSize="11"
                                                  Foreground="{DynamicResource AccGreen}"
-                                                 Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}"
+                                                 Visibility="{Binding SelectedBuildPath, Converter={StaticResource NonEmptyVis}}"
                                                  ToolTip="Full path to selected build" />
 
                                         <!-- Select Build & Trigger button -->
                                         <Button Margin="0,8,0,4" Padding="10,6" HorizontalAlignment="Left"
-                                                Visibility="{Binding SelectedBuildPath, Converter={StaticResource EmptyVis}}"
+                                                Visibility="{Binding SelectedBuildPath, Converter={StaticResource NonEmptyVis}}"
                                                 Command="{Binding DataContext.SelectBuildAndTriggerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 ToolTip="Write build info to Variables.txt and rename trigger file to start execution">
                                             <Button.Style>
