@@ -327,15 +327,20 @@ public class ExecutionController : ControllerBase
 
         // Build parameters (needed for agent variable resolution)
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var paramFile = WatchListHelpers.FindInitializeFile(watchItem);
-        if (paramFile != null && System.IO.File.Exists(paramFile))
+        var paramFiles = WatchListHelpers.FindInitializeFiles(watchItem);
+        foreach (var file in paramFiles)
         {
-            var entries = ParameterResolver.ParseParameterFile(paramFile);
-            foreach (var (key, value) in entries)
+            if (!System.IO.File.Exists(file))
+                continue;
+
+            foreach (var (key, value) in ParameterResolver.ParseParameterFile(file))
             {
-                parameters[key] = value;
+                // First declaration wins, so a single-file pipeline behaves exactly as before and
+                // additional files only contribute keys the earlier ones did not define.
+                if (!parameters.ContainsKey(key))
+                    parameters[key] = value;
                 if (key.StartsWith('_'))
-                    parameters[key[1..]] = value;
+                    parameters.TryAdd(key[1..], value);
             }
         }
 
@@ -344,15 +349,21 @@ public class ExecutionController : ControllerBase
         if (TriggerParameterValidator.Validate(request) is { } rejection)
             return BadRequest(ApiErrorFactory.BadRequest(rejection));
 
+        // Tracked separately from `parameters` so the write-back can overlay ONLY what the caller sent
+        // onto each file's own contents, instead of copying every file's parameters into every other file.
+        var callerOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         if (!string.IsNullOrEmpty(request?.BuildNumber))
         {
             parameters["_BuildNumber"] = request.BuildNumber;
             parameters["BuildNumber"] = request.BuildNumber;
+            callerOverrides["_BuildNumber"] = request.BuildNumber;
         }
         if (!string.IsNullOrEmpty(request?.DropLocation))
         {
             parameters["_DropLocation"] = request.DropLocation;
             parameters["DropLocation"] = request.DropLocation;
+            callerOverrides["_DropLocation"] = request.DropLocation;
         }
         if (request?.Parameters != null)
         {
@@ -360,7 +371,14 @@ public class ExecutionController : ControllerBase
             {
                 parameters[kvp.Key] = kvp.Value;
                 if (kvp.Key.StartsWith('_'))
+                {
                     parameters[kvp.Key[1..]] = kvp.Value;
+                    callerOverrides[kvp.Key] = kvp.Value;
+                }
+                else
+                {
+                    callerOverrides['_' + kvp.Key] = kvp.Value;
+                }
             }
         }
 
@@ -476,18 +494,39 @@ public class ExecutionController : ControllerBase
             session.LockedAgents = requiredAgents.ToArray();
         }
 
-        if (paramFile != null && parameters.Count > 0)
+        // Persist the caller's values to EVERY parameter file this pipeline initialises. Writing only the
+        // first left later stages (e.g. Sanity after Warm) running the previous build. Each file keeps its
+        // own contents; only the caller-supplied keys are overlaid. Missing paths are skipped rather than
+        // created, so a mistyped ParameterFile never silently becomes a real one.
+        if (callerOverrides.Count > 0)
         {
-            try
+            foreach (var file in paramFiles)
             {
-                var lines = parameters
-                    .Where(kvp => kvp.Key.StartsWith('_'))
-                    .Select(kvp => $"{kvp.Key},{kvp.Value}");
-                var tempFile = paramFile + ".tmp";
-                await System.IO.File.WriteAllLinesAsync(tempFile, lines);
-                System.IO.File.Move(tempFile, paramFile, overwrite: true);
+                if (!System.IO.File.Exists(file))
+                    continue;
+
+                try
+                {
+                    var own = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    var order = new List<string>();
+                    foreach (var (key, value) in ParameterResolver.ParseParameterFile(file))
+                    {
+                        if (own.TryAdd(key, value)) order.Add(key);
+                        else own[key] = value;
+                    }
+                    foreach (var (key, value) in callerOverrides)
+                    {
+                        if (own.TryAdd(key, value)) order.Add(key);
+                        else own[key] = value;
+                    }
+
+                    var lines = order.Where(k => k.StartsWith('_')).Select(k => $"{k},{own[k]}");
+                    var tempFile = file + ".tmp";
+                    await System.IO.File.WriteAllLinesAsync(tempFile, lines);
+                    System.IO.File.Move(tempFile, file, overwrite: true);
+                }
+                catch { /* best effort */ }
             }
-            catch { /* best effort */ }
         }
 
         var ctx = new PipelineExecutionContext

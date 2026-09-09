@@ -13,27 +13,34 @@ public static class WatchListHelpers
     /// Returns the resolved file path, or null if none found.
     /// </summary>
     public static string? FindInitializeFile(WatchItemConfig watchItem)
+        => FindInitializeFiles(watchItem).FirstOrDefault();
+
+    /// <summary>
+    /// Every distinct ParameterFile in a WatchItem's event tree, in declaration order.
+    /// A pipeline may initialise several files (e.g. Warm and Sanity stages); applying a build
+    /// number to only the first leaves the others on a stale build.
+    /// </summary>
+    public static IReadOnlyList<string> FindInitializeFiles(WatchItemConfig watchItem)
     {
+        var files = new List<string>();
         foreach (var ev in watchItem.Events)
-        {
-            var file = FindInitializeFileInChildren(ev.Children);
-            if (file != null) return file;
-        }
-        return null;
+            CollectInitializeFiles(ev.Children, files);
+        return files;
     }
 
-    private static string? FindInitializeFileInChildren(List<IActionNode> children)
+    private static void CollectInitializeFiles(List<IActionNode> children, List<string> into)
     {
         foreach (var child in children)
         {
             if (child is InitializeConfig init && !string.IsNullOrWhiteSpace(init.ParameterFile))
-                return init.ParameterFile;
-            if (child is ActionGroupConfig group)
             {
-                var file = FindInitializeFileInChildren(group.Children);
-                if (file != null) return file;
+                if (!into.Contains(init.ParameterFile, StringComparer.OrdinalIgnoreCase))
+                    into.Add(init.ParameterFile);
+            }
+            else if (child is ActionGroupConfig group)
+            {
+                CollectInitializeFiles(group.Children, into);
             }
         }
-        return null;
     }
 }
