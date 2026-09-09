@@ -40,8 +40,9 @@ public sealed partial class MainViewModel
         // Set UI fields
         if (!string.IsNullOrEmpty(parentPath))
             ActiveEditNode.BuildBasePath = parentPath + "\\";
-        ActiveEditNode.BuildNumberField = folderName;
-        ActiveEditNode.DropLocationField = selectedPath;
+
+        // BuildNumberField/DropLocationField are parameter KEY NAMES that FileWatcherManager looks up
+        // (ParseTriggerFileMetadata). Writing the selected build into them made the lookup miss forever.
 
         // Update per-pipeline build display
         ActiveEditNode.LastBuildNumber = folderName;
