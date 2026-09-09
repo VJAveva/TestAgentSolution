@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Ado;
 
@@ -114,14 +115,26 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
             {
                 var omiProject = string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject;
                 var live = await builds.GetRecentSourceBranchesAsync(omiProject, 200, ct);
+
+                // Blank entries are dropped first: a config of [""] is not the same as [], and an empty
+                // glob matches nothing (GlobUtil.IsMatch), which would silently reject every live branch.
+                var includePatterns = _options.BranchIncludePatterns
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .ToList();
+
                 // Only surface Release/*, prod/* live branches (Ado:BranchIncludePatterns) — hide feature/user branches.
-                branches.AddRange(_options.BranchIncludePatterns.Count == 0
+                branches.AddRange(includePatterns.Count == 0
                     ? live
-                    : live.Where(MatchesBranchInclude));
+                    : live.Where(b => MatchesBranchInclude(b, includePatterns)));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // best-effort: fall back to configured branches
+                // Best-effort: fall back to configured branches. Logged because an empty fallback
+                // (the default) makes an ADO credential failure look like "no branches exist".
+                (_services.GetService(typeof(IAppLogger)) as IAppLogger)?.Warn(
+                    "Ado",
+                    $"Branch list fell back to Ado:Branches ({_options.Branches.Count} configured) — " +
+                    $"live lookup failed: {ex.Message}");
             }
         }
         return branches
@@ -132,12 +145,12 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
     }
 
     // A live branch qualifies when it matches any Ado:BranchIncludePatterns glob (refs/heads/ prefix tolerated).
-    private bool MatchesBranchInclude(string branch)
+    private static bool MatchesBranchInclude(string branch, IReadOnlyList<string> patterns)
     {
         var normalized = branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
             ? branch["refs/heads/".Length..]
             : branch;
-        return _options.BranchIncludePatterns.Any(p => GlobUtil.IsMatch(normalized, p) || GlobUtil.IsMatch(branch, p));
+        return patterns.Any(p => GlobUtil.IsMatch(normalized, p) || GlobUtil.IsMatch(branch, p));
     }
 
     public async Task<RegressionHealth> CheckHealthAsync(CancellationToken ct)

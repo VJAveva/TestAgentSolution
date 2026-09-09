@@ -539,7 +539,16 @@ public sealed partial class RegressionViewModel : ObservableObject
 
             ApplyFilter();
             StatusMessage = $"Loaded {SubsystemCount} subsystem(s), {ChangeCount} change(s).";
-            _logger.Info("Regression", $"Loaded scope {SelectedScope} [{RangeText}]: {SubsystemCount} subsystems.");
+
+            // ApplyFilter overwrites SubsystemCount with the VISIBLE row count, so logging it alone
+            // makes "ADO returned nothing" indistinguishable from "the default filters hid everything".
+            _logger.Info("Regression",
+                $"Loaded scope {SelectedScope} [{RangeText}]: {SubsystemCount} of {_allRows.Count} subsystems shown, " +
+                $"{consolidated.Summary.ChangeCount} raw change(s). " +
+                $"Filters: HideAutomated={HideAutomatedChanges}, ShowAllChanges={ShowAllChanges}, " +
+                $"Runtime={ShowRuntime}, Config={ShowConfig}, " +
+                $"Component={(SelectedComponent is { DefinitionId: > 0 } c ? c.Name : "(all)")}, " +
+                $"Branch={(string.IsNullOrWhiteSpace(branch) ? "(all)" : branch)}.");
         }
         catch (Exception ex)
         {
