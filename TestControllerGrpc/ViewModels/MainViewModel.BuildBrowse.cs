@@ -53,11 +53,13 @@ public sealed partial class MainViewModel
             wiModel.LastDropLocation = selectedPath;
         }
 
-        // Find the Initialize node's parameter file under this WatchItem
-        string? paramFile = FindInitializeParameterFile(ActiveEditNode);
+        // Every Initialize file under this WatchItem. Updating only the first left later stages
+        // (e.g. Sanity after Warm) installing the previous build.
+        var paramFiles = FindInitializeParameterFiles(ActiveEditNode);
+        if (paramFiles.Count == 0)
+            AddLog("No Initialize node found under this WatchItem \u2014 Variables.txt not updated", LogSeverity.Warning);
 
-        // Update Variables.txt with _BuildNumber and _DropLocation
-        if (!string.IsNullOrEmpty(paramFile))
+        foreach (var paramFile in paramFiles)
         {
             try
             {
@@ -104,12 +106,8 @@ public sealed partial class MainViewModel
             }
             catch (Exception ex)
             {
-                AddLog($"Failed to update parameter file: {ex.Message}", LogSeverity.Error);
+                AddLog($"Failed to update parameter file '{paramFile}': {ex.Message}", LogSeverity.Error);
             }
-        }
-        else
-        {
-            AddLog("No Initialize node found under this WatchItem \u2014 Variables.txt not updated", LogSeverity.Warning);
         }
 
         AddLog($"Build selected: {folderName} at {selectedPath}");
@@ -145,17 +143,29 @@ public sealed partial class MainViewModel
     /// Recursively searches the subtree to find the first Initialize node's ParameterFile path.
     /// Works at any nesting depth (WatchItem ? Event ? ActionGroup ? � ? Initialize).
     /// </summary>
-    private static string? FindInitializeParameterFile(TreeNodeViewModel node)
+    /// <summary>
+    /// Every Initialize ParameterFile in the subtree, in declaration order, at any nesting depth
+    /// (WatchItem -> Event -> ActionGroup -> ... -> Initialize). A pipeline may initialise several
+    /// files; updating only the first leaves the later stages on the previous build.
+    /// </summary>
+    private static List<string> FindInitializeParameterFiles(TreeNodeViewModel node)
     {
-        if (node.NodeKind == NodeKinds.Initialize && !string.IsNullOrEmpty(node.ParameterFile))
-            return node.ParameterFile;
+        var files = new List<string>();
+        Collect(node, files);
+        return files;
 
-        foreach (var child in node.Children)
+        static void Collect(TreeNodeViewModel n, List<string> into)
         {
-            var result = FindInitializeParameterFile(child);
-            if (result != null) return result;
+            if (n.NodeKind == NodeKinds.Initialize
+                && !string.IsNullOrEmpty(n.ParameterFile)
+                && !into.Contains(n.ParameterFile, StringComparer.OrdinalIgnoreCase))
+            {
+                into.Add(n.ParameterFile);
+            }
+
+            foreach (var child in n.Children)
+                Collect(child, into);
         }
-        return null;
     }
 
     [RelayCommand]
@@ -171,14 +181,17 @@ public sealed partial class MainViewModel
         var buildNumberField = ActiveEditNode.BuildNumberField;
         var dropLocationField = ActiveEditNode.DropLocationField;
 
-        // Step 1: Find the Initialize node's parameter file
-        string? paramFile = FindInitializeParameterFile(ActiveEditNode);
+        // Step 1: every Initialize parameter file under this WatchItem
+        var paramFiles = FindInitializeParameterFiles(ActiveEditNode);
 
-        // Step 2: Write BuildNumber and DropLocation to parameter file
+        // Step 2: Write BuildNumber and DropLocation to every parameter file
         var bnKey = string.IsNullOrEmpty(buildNumberField) ? "_BuildNumber" : buildNumberField;
-        var dlKey = string.IsNullOrEmpty(dropLocationField) ? "DropLocation" : dropLocationField;
+        var dlKey = string.IsNullOrEmpty(dropLocationField) ? "_DropLocation" : dropLocationField;
 
-        if (!string.IsNullOrEmpty(paramFile) && File.Exists(paramFile))
+        if (paramFiles.Count == 0)
+            AddLog("No Initialize node found under this WatchItem \u2014 writing to trigger file only.", LogSeverity.Warning);
+
+        foreach (var paramFile in paramFiles.Where(File.Exists))
         {
             try
             {
@@ -214,12 +227,8 @@ public sealed partial class MainViewModel
             }
             catch (Exception ex)
             {
-                AddLog($"Failed to update parameter file: {ex.Message}", LogSeverity.Error);
+                AddLog($"Failed to update parameter file '{paramFile}': {ex.Message}", LogSeverity.Error);
             }
-        }
-        else
-        {
-            AddLog($"Parameter file not found: {paramFile ?? "(no Initialize node)"}. Writing to trigger file only.", LogSeverity.Warning);
         }
 
         // Step 3: Create/rename the trigger file to fire the WatchItem

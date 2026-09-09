@@ -39,7 +39,12 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
   const [canTrigger, setCanTrigger] = useState<CanTriggerResult | null>(null);
   const [checkingAgents, setCheckingAgents] = useState(false);
   const [error, setError] = useState('');
-  const [lockVersion, setLockVersion] = useState(0);
+  // undefined = pre-flight never succeeded. Sending 0 fails the server's optimistic check with a
+  // confusing "Lock state changed" instead of the real reason.
+  const [lockVersion, setLockVersion] = useState<number | undefined>(undefined);
+  const [loadWarning, setLoadWarning] = useState('');
+
+  const describe = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
   const refreshCanTrigger = () => {
     apiFetch<CanTriggerResult>(`/api/execution/can-trigger/${encodeURIComponent(watchItemTag)}`)
@@ -47,7 +52,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
         setCanTrigger(data);
         setLockVersion(data.lockVersion);
       })
-      .catch(() => {});
+      .catch(e => setLoadWarning(`Agent availability check failed: ${describe(e)}`));
   };
 
   // Subscribe to real-time lock changes while dialog is open
@@ -61,7 +66,10 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
   useEffect(() => {
     if (!isOpen) return;
     setError('');
+    setLoadWarning('');
     setCanTrigger(null);
+    setLockVersion(undefined);
+    setAvailableBuilds([]);
 
     // Pre-flight: check agent availability
     setCheckingAgents(true);
@@ -70,7 +78,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
         setCanTrigger(data);
         setLockVersion(data.lockVersion);
       })
-      .catch(() => {})
+      .catch(e => setLoadWarning(`Agent availability could not be checked, so conflicts are not shown: ${describe(e)}`))
       .finally(() => setCheckingAgents(false));
 
     // Load current parameters for this WatchItem
@@ -84,10 +92,12 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
         if (basePath) {
           apiGet<{ builds?: AvailableBuild[] }>(`/api/execution/available-builds?basePath=${encodeURIComponent(basePath)}`)
             .then((d) => setAvailableBuilds(d.builds || []))
-            .catch(() => {});
+            .catch(e => setLoadWarning(`Could not list builds under ${basePath}: ${describe(e)}`));
+        } else {
+          setLoadWarning('No build base path configured for this pipeline, so the build list is empty.');
         }
       })
-      .catch(() => {});
+      .catch(e => setLoadWarning(`Could not load current parameters: ${describe(e)}`));
   }, [isOpen, watchItemTag]);
 
   const handleTrigger = () => {
@@ -123,6 +133,11 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
 
         {/* Body */}
         <div className="px-5 py-4 space-y-4">
+          {loadWarning && (
+            <div className="rounded-lg p-3 border bg-amber-900/15 border-amber-800/40 text-[11px] text-amber-300">
+              {loadWarning}
+            </div>
+          )}
           {/* Agent availability check */}
           {checkingAgents && (
             <div className="text-text-muted text-xs animate-pulse">Checking agent availability�</div>

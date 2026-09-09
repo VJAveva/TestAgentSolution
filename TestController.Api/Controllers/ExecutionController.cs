@@ -668,21 +668,36 @@ public class ExecutionController : ControllerBase
         if (string.IsNullOrEmpty(basePath))
             return Ok(new { builds = Array.Empty<object>() });
 
-        if (!System.IO.Directory.Exists(basePath))
+        try
+        {
+            var builds = System.IO.Directory.GetDirectories(basePath)
+                .Select(d => new
+                {
+                    name = System.IO.Path.GetFileName(d),
+                    path = d,
+                    modified = System.IO.Directory.GetLastWriteTime(d),
+                })
+                .OrderByDescending(b => b.modified)
+                .Take(50)
+                .ToList();
+
+            return Ok(new { builds });
+        }
+        catch (System.IO.DirectoryNotFoundException)
+        {
             return NotFound(ApiErrorFactory.NotFound($"Path not found: {basePath}"));
-
-        var builds = System.IO.Directory.GetDirectories(basePath)
-            .Select(d => new
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.IO.IOException)
+        {
+            // Directory.Exists would report a UNC share the process identity cannot read as simply
+            // "not found", which sends people looking for a bad path instead of a bad identity.
+            return StatusCode(502, new
             {
-                name = System.IO.Path.GetFileName(d),
-                path = d,
-                modified = System.IO.Directory.GetLastWriteTime(d),
-            })
-            .OrderByDescending(b => b.modified)
-            .Take(50)
-            .ToList();
-
-        return Ok(new { builds });
+                error = $"Cannot read build path: {basePath}",
+                detail = ex.Message,
+                hint = "The server process identity may lack access to this share.",
+            });
+        }
     }
 
     // ?? Lock & availability endpoints ????????????????????????????????
