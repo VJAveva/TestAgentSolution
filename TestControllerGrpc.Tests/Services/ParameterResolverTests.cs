@@ -384,6 +384,55 @@ public class ParameterResolverTests : IDisposable
         Assert.Empty(ctx.Parameters);
     }
 
+    [Fact]
+    public void TryLoadJsonConfig_Should_ReturnFalse_When_FileIsNotValidJson()
+    {
+        var path = WriteTempFile("broken.json", "{ \"global\": { \"_A\": \"1\" } }\n_BuildNumber,APPENDED");
+
+        var ctx = new PipelineExecutionContext();
+        var ok = ParameterResolver.TryLoadJsonConfig(ctx, path, null, null);
+
+        Assert.False(ok);
+        Assert.Empty(ctx.Parameters);
+    }
+
+    [Fact]
+    public void FindUnresolvedTokens_Should_ReportToken_When_ContextHasNoValue()
+    {
+        var ctx = new PipelineExecutionContext();
+        ParameterResolver.SetParameter(ctx, "_Agent1", "warmgr", ParameterRank.ParameterFile);
+
+        var action = new ActionConfig
+        {
+            Command = "cmd /c revert.bat",
+            Parameters = "[_Agent1] [_Agent2]",
+        };
+
+        var missing = ParameterResolver.FindUnresolvedTokens(action, ctx);
+
+        Assert.Equal(["_Agent2"], missing);
+    }
+
+    [Fact]
+    public void FindUnresolvedTokens_Should_ReturnEmpty_When_EveryTokenResolves()
+    {
+        var ctx = new PipelineExecutionContext();
+        ParameterResolver.SetParameter(ctx, "_Agent1", "warmgr", ParameterRank.ParameterFile);
+
+        var action = new ActionConfig { Command = "run.bat", Parameters = "[_Agent1]" };
+
+        Assert.Empty(ParameterResolver.FindUnresolvedTokens(action, ctx));
+    }
+
+    [Fact]
+    public void FindUnresolvedTokens_Should_IgnoreNonExecutableFields_When_BodyHasBracketText()
+    {
+        var ctx = new PipelineExecutionContext();
+        var action = new ActionConfig { Command = "run.bat", Body = "[INFO] build finished" };
+
+        Assert.Empty(ParameterResolver.FindUnresolvedTokens(action, ctx));
+    }
+
     // ???????????????????????????????????????????????????????????????????
     // ResolveAction
     // ???????????????????????????????????????????????????????????????????

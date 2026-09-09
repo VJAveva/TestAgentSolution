@@ -94,8 +94,58 @@ public static partial class ParameterResolver
     /// <summary>
     /// Saves key-value pairs back to a parameter file in comma-delimited format.
     /// </summary>
+    /// <summary>
+    /// True when the path is a layered JSON config. Such a file must never be rewritten as flat
+    /// key,value lines - doing so discards global/profiles/pipelines and every other pipeline's
+    /// settings with it.
+    /// </summary>
+    public static bool IsLayeredConfig(string filePath) =>
+        !string.IsNullOrEmpty(filePath)
+        && filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Sets the build number and drop location inside a layered JSON config, leaving every other
+    /// key untouched. Targets pipelines[tag] when a tag is supplied, otherwise the global layer.
+    /// Returns false when the file is missing or unreadable.
+    /// </summary>
+    public static bool TryUpdateJsonBuild(
+        string filePath,
+        string? pipelineTag,
+        string buildNumber,
+        string dropLocation)
+    {
+        var config = ReadJsonConfig(filePath);
+        if (config is null) return false;
+
+        var target = string.IsNullOrWhiteSpace(pipelineTag)
+            ? config.Global
+            : config.Pipelines.TryGetValue(pipelineTag, out var pinned)
+                ? pinned
+                : config.Pipelines[pipelineTag] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        target["_BuildNumber"] = buildNumber;
+        target["_DropLocation"] = dropLocation;
+
+        var json = JsonSerializer.Serialize(config, WriteJsonOptions);
+        var tempPath = filePath + ".tmp";
+        File.WriteAllText(tempPath, json);
+        File.Move(tempPath, filePath, overwrite: true);
+        return true;
+    }
+
+    private static readonly JsonSerializerOptions WriteJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
     public static void SaveParameterFile(string filePath, IEnumerable<(string Key, string Value)> entries)
     {
+        if (IsLayeredConfig(filePath))
+        {
+            throw new InvalidOperationException(
+                $"'{Path.GetFileName(filePath)}' is a layered JSON config. Writing flat key,value lines would destroy it.");
+        }
+
         var lines = entries.Select(e => $"{e.Key},{e.Value}").ToList();
         var tempPath = filePath + ".tmp";
         File.WriteAllLines(tempPath, lines);
@@ -169,8 +219,21 @@ public static partial class ParameterResolver
         string? profile,
         string? pipelineTag)
     {
+        TryLoadJsonConfig(ctx, filePath, profile, pipelineTag);
+    }
+
+    /// <summary>
+    /// As <see cref="LoadJsonConfig"/>, but reports whether the file could actually be read. A
+    /// silent false here is what lets a run reach an agent with literal [Token] text.
+    /// </summary>
+    public static bool TryLoadJsonConfig(
+        PipelineExecutionContext ctx,
+        string filePath,
+        string? profile,
+        string? pipelineTag)
+    {
         var config = ReadJsonConfig(filePath);
-        if (config is null) return;
+        if (config is null) return false;
 
         foreach (var entry in config.Global)
             SetParameter(ctx, entry.Key, entry.Value, ParameterRank.Global);
@@ -188,6 +251,42 @@ public static partial class ParameterResolver
             foreach (var entry in pinned)
                 SetParameter(ctx, entry.Key, entry.Value, ParameterRank.PipelinePin);
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Token names referenced by an action that have no value in the context. Only the fields that
+    /// reach a shell or an agent are inspected, so descriptive text like [INFO] in an email body
+    /// is not reported. A non-empty result means a parameter source failed to load.
+    /// </summary>
+    public static List<string> FindUnresolvedTokens(ActionConfig action, PipelineExecutionContext ctx)
+    {
+        var missing = new List<string>();
+        ReadOnlySpan<string> executable =
+        [
+            action.Command,
+            action.Parameters,
+            action.AgentName,
+            action.CompletionCheckCommand,
+        ];
+
+        foreach (var field in executable)
+        {
+            if (string.IsNullOrEmpty(field)) continue;
+
+            foreach (Match match in TokenPattern.Matches(field))
+            {
+                var key = match.Groups[1].Value;
+                if (!ctx.Parameters.ContainsKey(key)
+                    && !missing.Contains(key, StringComparer.OrdinalIgnoreCase))
+                {
+                    missing.Add(key);
+                }
+            }
+        }
+
+        return missing;
     }
 
     /// <summary>

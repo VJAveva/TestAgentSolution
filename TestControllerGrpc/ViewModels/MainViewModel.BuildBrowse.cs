@@ -2,6 +2,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -64,6 +65,17 @@ public sealed partial class MainViewModel
         {
             try
             {
+                // A layered JSON config has no flat _BuildNumber line, so the scan below would miss
+                // it and APPEND CSV after the closing brace, leaving the file unparseable.
+                if (ParameterResolver.IsLayeredConfig(paramFile))
+                {
+                    if (ParameterResolver.TryUpdateJsonBuild(paramFile, null, folderName, selectedPath))
+                        AddLog($"Updated {paramFile}: _BuildNumber={folderName}, _DropLocation={selectedPath}");
+                    else
+                        AddLog($"Could not update layered config '{paramFile}'", LogSeverity.Error);
+                    continue;
+                }
+
                 // Create file if it doesn't exist
                 if (!File.Exists(paramFile))
                 {
@@ -196,6 +208,17 @@ public sealed partial class MainViewModel
         {
             try
             {
+                // Layered JSON has no flat key line to match, so the scan below would append CSV
+                // after the closing brace and make the file unparseable.
+                if (ParameterResolver.IsLayeredConfig(paramFile))
+                {
+                    if (ParameterResolver.TryUpdateJsonBuild(paramFile, null, folderName, selectedPath))
+                        AddLog($"Updated {paramFile}: _BuildNumber={folderName}, _DropLocation={selectedPath}");
+                    else
+                        AddLog($"Could not update layered config '{paramFile}'", LogSeverity.Error);
+                    continue;
+                }
+
                 var lines = File.ReadAllLines(paramFile).ToList();
                 bool bnFound = false, dlFound = false;
 

@@ -16,7 +16,7 @@ public sealed partial class MainViewModel
 
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
-            Filter = "Text Files|*.txt|All Files|*.*",
+            Filter = "Parameter Files|*.json;*.txt|JSON Config|*.json|Text Files|*.txt|All Files|*.*",
             Title = "Select Parameter File"
         };
 
@@ -33,7 +33,9 @@ public sealed partial class MainViewModel
         ActiveEditNode.ParameterFile = dlg.FileName;
         ActiveEditNode.ApplyToModel();
         ActiveEditNode.RefreshDisplayText();
-        LoadParameterFileEntries(dlg.FileName);
+        LoadParameterFileEntries(
+            dlg.FileName,
+            (ActiveEditNode.ModelObject as InitializeConfig)?.Profile ?? "");
         AddLog($"Parameter file selected: {dlg.FileName}");
     }
 

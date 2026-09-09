@@ -157,6 +157,15 @@ public sealed partial class MainViewModel
     {
         try
         {
+            // A layered JSON config has no flat _BuildNumber line, so the scan below would miss it
+            // and APPEND CSV after the closing brace, leaving the file unparseable.
+            if (ParameterResolver.IsLayeredConfig(filePath))
+            {
+                if (!ParameterResolver.TryUpdateJsonBuild(filePath, null, buildNumber, dropLocation))
+                    _appLogger.Warn("GlobalVars", $"Could not update layered config '{filePath}'.");
+                return;
+            }
+
             var dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);

@@ -523,10 +523,25 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         _sessionManager.BeginAction(session.SessionId, result);
         try
         {
-            var actionSuccess = await ExecuteActionAsync(action, ctx, ct);
+            // An unresolved token means a parameter source did not load. Running anyway sends the
+            // literal text (e.g. "[_Agent2]") to a shell, which fails far from the real cause.
+            var unresolved = ParameterResolver.FindUnresolvedTokens(action, ctx);
+            if (unresolved.Count > 0)
+            {
+                result.Outcome = ActionOutcome.Failed;
+                result.ErrorMessage =
+                    $"Unresolved parameter(s) {string.Join(", ", unresolved.Select(t => "[" + t + "]"))}"
+                    + " - the Initialize parameter source for this pipeline did not load.";
+                Log("Action", result.ErrorMessage);
+            }
+            else
+            {
+                var actionSuccess = await ExecuteActionAsync(action, ctx, ct);
+                result.Outcome = actionSuccess ? ActionOutcome.Success : ActionOutcome.Failed;
+            }
+
             sw.Stop();
             result.Duration = sw.Elapsed;
-            result.Outcome = actionSuccess ? ActionOutcome.Success : ActionOutcome.Failed;
         }
         catch (OperationCanceledException)
         {
@@ -561,9 +576,18 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         Log("Initialize", $"Loading parameters from: {path}");
 
         if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            ParameterResolver.LoadJsonConfig(ctx, path, init.Profile, ctx.WatchItemTag);
+        {
+            if (!ParameterResolver.TryLoadJsonConfig(ctx, path, init.Profile, ctx.WatchItemTag))
+            {
+                Log("Initialize",
+                    $"FAILED to read '{path}' - file missing or not valid JSON. Every [Token] it "
+                    + "supplies will be unresolved.");
+            }
+        }
         else
+        {
             ParameterResolver.LoadParameterFile(ctx, path);
+        }
 
         return true;
     }
