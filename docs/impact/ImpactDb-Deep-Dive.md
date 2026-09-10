@@ -69,8 +69,14 @@ Bugs, IMS and User Stories are **never indexed** — they enter as anchors inste
 
 | Document | Id | Text indexed |
 |---|---|---|
-| Test Case | `TC:<id>` | Title + flattened Steps + Tags |
+| Test Case | `TC:<id>` | Title + Description + flattened Steps + Tags |
 | Feature | `F:<id>` | Title + Description |
+
+Composition is defined once, in
+[`IndexTextComposer`](../../TestControllerGrpc.Core/Impact/IndexTextComposer.cs), and used by both the builder
+and the test fixtures — when those drift, a fixture measures a corpus that does not exist. **Description is
+included because test case titles are frequently a bare requirement id ("FR 12345")** carrying no matchable
+vocabulary; see `Algorithm-Schema.md` §2.
 
 **Enumeration** uses adaptive WIQL date windows because a flat WIQL query throws `VS402337` when it *matches*
 more than 20,000 rows (independent of `$top`). Windows start at 180 days, halve on overflow, double when

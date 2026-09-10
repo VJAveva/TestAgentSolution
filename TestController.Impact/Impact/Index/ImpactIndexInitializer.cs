@@ -12,14 +12,27 @@ public static class ImpactIndexInitializer
     /// <summary>Metadata key holding the schema version this index was built with.</summary>
     public const string SchemaVersionKey = "SchemaVersion";
 
+    /// <summary>The shape indexes had before versioning was introduced.</summary>
+    private const int OriginalSchemaVersion = 1;
+
     /// <summary>
     /// Bump whenever the index schema changes shape. <see cref="EnsureCreatedAsync"/> drops and recreates a
     /// database stamped with an older version, because EnsureCreated only creates missing tables — it never
     /// ALTERs, so a schema change would otherwise leave the existing index unreadable.
+    /// <para>
+    /// 2: test case documents now include System.Description. Incremental builds only revisit items ADO
+    /// reports as changed, so without a forced rebuild existing documents would never gain the new text.
+    /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>Ensures the schema exists, is current, and enables WAL journalling. Safe to call repeatedly.</summary>
+    /// <param name="rebuildOnSchemaChange">
+    /// Writers pass true and drop-and-recreate a stale index. Readers pass false and keep using it: an index
+    /// from an older version is out of date, not unreadable, and taking the reader down for the length of a
+    /// rebuild is worse than serving the previous quality. A genuinely incompatible schema still surfaces —
+    /// EF throws on the first query against a missing column.
+    /// </param>
     public static async Task EnsureCreatedAsync(
         ImpactIndexDbContext context, bool rebuildOnSchemaChange = true, CancellationToken ct = default)
     {
@@ -28,24 +41,18 @@ public static class ImpactIndexInitializer
         await context.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
 
         int? stored = await ReadSchemaVersionAsync(context, ct).ConfigureAwait(false);
-        if (stored is not null && stored != CurrentSchemaVersion)
-        {
-            if (!rebuildOnSchemaChange)
-            {
-                throw new InvalidOperationException(
-                    $"Impact index schema version {stored} does not match {CurrentSchemaVersion} and " +
-                    "ImpactMapping:Index:RebuildOnSchemaChange is disabled. Delete the index or enable the option.");
-            }
+        bool stale = stored != CurrentSchemaVersion
+            && (stored is not null || await HasDocumentsAsync(context, ct).ConfigureAwait(false));
 
+        if (stale && rebuildOnSchemaChange)
+        {
             await context.Database.EnsureDeletedAsync(ct).ConfigureAwait(false);
             await context.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+            await WriteSchemaVersionAsync(context, ct).ConfigureAwait(false);
         }
-
-        // A null stored version means either a fresh database or an index built before versioning existed.
-        // Both are stamped rather than dropped: the pre-versioning shape IS version 1, so dropping would
-        // force a multi-hour rebuild of a perfectly readable production index.
-        if (stored != CurrentSchemaVersion)
+        else if (!stale && stored != CurrentSchemaVersion)
         {
+            // Empty database: stamp it so the next reader knows what shape it is.
             await WriteSchemaVersionAsync(context, ct).ConfigureAwait(false);
         }
 
@@ -63,6 +70,9 @@ public static class ImpactIndexInitializer
 
         return row is not null && int.TryParse(row.Value, out int version) ? version : null;
     }
+
+    private static Task<bool> HasDocumentsAsync(ImpactIndexDbContext context, CancellationToken ct)
+        => context.Documents.AnyAsync(ct);
 
     private static async Task WriteSchemaVersionAsync(ImpactIndexDbContext context, CancellationToken ct)
     {

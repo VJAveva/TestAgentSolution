@@ -38,9 +38,9 @@ the learning store only ever sees selections, never outcomes.
 
 ## 2. R1 — Churn to impacted area
 
-### 2.1 Why the current input is unusable
+### 2.1 Why the previous input was unusable
 
-`RegressionImpactMatcher.ToImpactedArea` builds:
+`RegressionImpactMatcher.ToImpactedArea` used to build:
 
 ```csharp
 var churn = new ChurnMetrics(
@@ -48,8 +48,11 @@ var churn = new ChurnMetrics(
     CommitCount: row.Changes.Count, DistinctAuthorCount: 0, LastChangedUtc: last);
 ```
 
-Three of six metrics are hardcoded zero, and `RiskTier` is the literal `RiskTier.Medium`. `SubsystemRow.RiskTier`
-is a `string` carrying `build.Result`, so it cannot be mapped — it holds `"succeeded"`, not a risk level.
+Three of six metrics were hardcoded zero and `RiskTier` was the literal `RiskTier.Medium`, so two safety rules
+could never fire: the Critical early-exit veto in `AnchorEdgeProvider` and the High/Critical minimum-coverage
+gap in `CoverageGapDetector`. `SubsystemRow.RiskTier` is a `string` carrying `build.Result` — it holds
+`"succeeded"`, not a risk level, so it cannot be mapped. It is still the value rendered in the grid's "Risk"
+column; the engine's tier is computed separately by `IRegressionRiskScorer` and is not surfaced there yet.
 
 ### 2.2 Signals
 

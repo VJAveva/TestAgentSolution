@@ -295,6 +295,7 @@ public sealed class LlmRelevanceReranker : IRelevanceReranker
                 .Append("id=").Append(testCase.Item.Id)
                 .Append(" | title=").Append(testCase.Item.Title)
                 .Append(" | parentFeatureId=").Append(testCase.ParentFeatureId?.ToString() ?? "none")
+                .Append(" | description=").Append(Truncate(testCase.Description, 400))
                 .Append(" | steps=").Append(Truncate(testCase.StepsText, 400))
                 .Append('\n');
         }

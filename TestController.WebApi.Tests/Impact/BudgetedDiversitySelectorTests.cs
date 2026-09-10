@@ -90,6 +90,52 @@ public sealed class BudgetedDiversitySelectorTests
     }
 
     [Fact]
+    public void Select_Should_PromoteToRiskFloor_When_RiskWeightingEnabled()
+    {
+        // A Critical area must not ship two tests because the knapsack ran out of budget.
+        var options = new ImpactMappingOptions();
+        options.Risk.EnableRiskWeighting = true;
+        options.Risk.MinimumSelections[RiskTier.Critical] = 4;
+        var judgements = new Dictionary<int, RelevanceJudgement>
+        {
+            [101] = J(3), [102] = J(2), [103] = J(2), [104] = J(2), [105] = J(2),
+        };
+        var durations = new Dictionary<int, TimeSpan>
+        {
+            [101] = TimeSpan.FromMinutes(30), [102] = TimeSpan.FromMinutes(30), [103] = TimeSpan.FromMinutes(30),
+            [104] = TimeSpan.FromMinutes(30), [105] = TimeSpan.FromMinutes(30),
+        };
+
+        IReadOnlyList<MappedTestCase> result = Selector(options).Select(
+            Area(RiskTier.Critical), [],
+            [Tc(101, 900, 0.9), Tc(102, 901, 0.8), Tc(103, 902, 0.7), Tc(104, 903, 0.6), Tc(105, 904, 0.5)],
+            judgements, NoAnchors(), new Dictionary<int, double>(), durations, IndexSnapshot.Empty,
+            SelectionTier.Smoke, TimeSpan.FromMinutes(30), out _);
+
+        Assert.True(result.Count >= 4, $"expected the Critical floor of 4, got {result.Count}");
+    }
+
+    [Fact]
+    public void Select_Should_NotPromoteToRiskFloor_When_RiskWeightingDisabled()
+    {
+        var options = new ImpactMappingOptions();
+        options.Risk.EnableRiskWeighting = false;
+        options.Risk.MinimumSelections[RiskTier.Critical] = 4;
+        var judgements = new Dictionary<int, RelevanceJudgement> { [101] = J(3), [102] = J(2), [103] = J(2) };
+        var durations = new Dictionary<int, TimeSpan>
+        {
+            [101] = TimeSpan.FromMinutes(30), [102] = TimeSpan.FromMinutes(30), [103] = TimeSpan.FromMinutes(30),
+        };
+
+        IReadOnlyList<MappedTestCase> result = Selector(options).Select(
+            Area(RiskTier.Critical), [], [Tc(101, 900, 0.9), Tc(102, 901, 0.8), Tc(103, 902, 0.7)],
+            judgements, NoAnchors(), new Dictionary<int, double>(), durations, IndexSnapshot.Empty,
+            SelectionTier.Smoke, TimeSpan.FromMinutes(30), out _);
+
+        Assert.True(result.Count < 4, $"floor must not apply when the flag is off, got {result.Count}");
+    }
+
+    [Fact]
     public void Select_Should_RespectBudget()
     {
         var judgements = new Dictionary<int, RelevanceJudgement> { [101] = J(2, 0.7), [102] = J(2, 0.7), [103] = J(2, 0.7) };

@@ -112,6 +112,71 @@ public sealed class RetrievalIndexBuilderTests
         => new(factory, new FakeAdoWorkItemClient(TestCases, Features), embeddings,
             Options.Create(new ImpactMappingOptions()), new NoopAppLogger());
 
+    [Fact]
+    public async Task BuildAsync_Should_PurgeDocuments_When_WorkItemMovedToExcludedState()
+    {
+        // The state filter keeps new deletions out; only the purge removes what is already stored, and a
+        // document for a deleted test case is worse than a missing one because it gets recommended.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var factory = new SharedConnectionFactory(connection);
+
+        var options = new ImpactMappingOptions();
+        options.Ado.ExcludedStates = ["Removed"];
+        var ado = new FakeAdoWorkItemClient(TestCases, Features) { RemovedTestCaseIds = [101] };
+        var builder = new RetrievalIndexBuilder(
+            factory, ado, NullEmbeddingProvider.Instance, Options.Create(options), new NoopAppLogger());
+
+        await builder.BuildAsync(fullRebuild: true, progress: null, CancellationToken.None);
+
+        await using ImpactIndexDbContext ctx = factory.CreateDbContext();
+        Assert.DoesNotContain("TC:101", await ctx.Documents.Select(d => d.Id).ToListAsync());
+        Assert.Contains("TC:102", await ctx.Documents.Select(d => d.Id).ToListAsync());
+        Assert.DoesNotContain("TC:101", await ctx.DocumentTerms.Select(t => t.DocumentId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task BuildAsync_Should_NotPurge_When_NoExcludedStatesConfigured()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var factory = new SharedConnectionFactory(connection);
+
+        var options = new ImpactMappingOptions();
+        options.Ado.ExcludedStates = [];
+        var ado = new FakeAdoWorkItemClient(TestCases, Features) { RemovedTestCaseIds = [101] };
+        var builder = new RetrievalIndexBuilder(
+            factory, ado, NullEmbeddingProvider.Instance, Options.Create(options), new NoopAppLogger());
+
+        await builder.BuildAsync(fullRebuild: true, progress: null, CancellationToken.None);
+
+        await using ImpactIndexDbContext ctx = factory.CreateDbContext();
+        Assert.Equal(3, await ctx.Documents.CountAsync());
+    }
+
+    [Fact]
+    public async Task BuildAsync_Should_RecomputeCorpusStatistics_AfterPurge()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var factory = new SharedConnectionFactory(connection);
+
+        var options = new ImpactMappingOptions();
+        options.Ado.ExcludedStates = ["Removed"];
+        var ado = new FakeAdoWorkItemClient(TestCases, Features) { RemovedTestCaseIds = [101] };
+        var builder = new RetrievalIndexBuilder(
+            factory, ado, NullEmbeddingProvider.Instance, Options.Create(options), new NoopAppLogger());
+
+        await builder.BuildAsync(fullRebuild: true, progress: null, CancellationToken.None);
+
+        await using ImpactIndexDbContext ctx = factory.CreateDbContext();
+        List<string> remaining = await ctx.DocumentTerms.Select(t => t.Term).Distinct().ToListAsync();
+        List<string> stats = await ctx.CorpusStatistics.Select(c => c.Term).ToListAsync();
+
+        // A purged document must not leave its terms behind in the corpus statistics.
+        Assert.Empty(stats.Except(remaining));
+    }
+
     private sealed class SharedConnectionFactory : IDbContextFactory<ImpactIndexDbContext>
     {
         private readonly DbContextOptions<ImpactIndexDbContext> _options;
@@ -129,6 +194,23 @@ public sealed class RetrievalIndexBuilderTests
         IReadOnlyList<TestCaseCandidate> testCases, IReadOnlyList<FeatureCandidate> features,
         bool duplicateEveryItem = false) : IAdoWorkItemClient
     {
+        public IReadOnlyList<int> RemovedTestCaseIds { get; init; } = [];
+
+        public async IAsyncEnumerable<int> EnumerateIdsInStatesAsync(
+            string workItemType, IReadOnlyCollection<string> states, DateTimeOffset since,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            if (workItemType == "Test Case")
+            {
+                foreach (int id in RemovedTestCaseIds)
+                {
+                    yield return id;
+                }
+            }
+
+            await Task.CompletedTask;
+        }
+
         public async IAsyncEnumerable<AdoWorkItemRef> EnumerateChangedSinceAsync(
             string workItemType, DateTimeOffset since, int pageSize, [EnumeratorCancellation] CancellationToken ct)
         {

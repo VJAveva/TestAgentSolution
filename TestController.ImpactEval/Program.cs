@@ -52,11 +52,14 @@ internal static class Program
         Apply(args, "--w-feature", v => options.Selection.FeatureWeight = double.Parse(v, CultureInfo.InvariantCulture));
         Apply(args, "--w-grade", v => options.Selection.GradeWeight = double.Parse(v, CultureInfo.InvariantCulture));
         Apply(args, "--child-factor", v => options.Retrieval.ExpandedChildScoreFactor = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--bm25-b", v => options.Retrieval.Bm25B = double.Parse(v, CultureInfo.InvariantCulture));
+        bool frTitles = args.Contains("--fr-titles");
+        bool dropDescriptions = args.Contains("--drop-descriptions");
         Apply(args, "--max-per-feature", v => options.Selection.MaxTestCasesPerFeature = int.Parse(v, CultureInfo.InvariantCulture));
         Apply(args, "--max-total", v => options.Selection.MaxTestCasesTotal = int.Parse(v, CultureInfo.InvariantCulture));
         int dump = int.TryParse(GetOption(args, "--dump"), out int d) ? d : 0;
 
-        FixtureCorpus corpus = ImpactFixtures.BuildGalaxyDeploymentCorpus();
+        FixtureCorpus corpus = ImpactFixtures.BuildGalaxyDeploymentCorpus(frTitles, dropDescriptions);
         var embeddings = new FakeEmbeddingProvider();
         IRetrievalIndexStore store = await ImpactFixtures.BuildIndexStoreAsync(corpus, embeddings);
 
@@ -79,8 +82,8 @@ internal static class Program
         Console.WriteLine(
             $"config: minScore={options.Selection.MinFinalScore} mmrLambda={options.Selection.MmrLambda} " +
             $"wRetrieval={options.Selection.RetrievalWeight} wFeature={options.Selection.FeatureWeight} " +
-            $"wGrade={options.Selection.GradeWeight} " +
-            $"maxPerFeature={options.Selection.MaxTestCasesPerFeature} maxTotal={options.Selection.MaxTestCasesTotal}");
+            $"wGrade={options.Selection.GradeWeight} bm25B={options.Retrieval.Bm25B} " +
+            $"frTitles={frTitles} dropDescriptions={dropDescriptions}");
         PrintReport(report);
 
         if (dump > 0)

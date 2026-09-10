@@ -80,6 +80,10 @@ public sealed record AdoWorkItemRef(
     int Id, string WorkItemType, string Title, string? AreaPath, string? State, int Revision);
 
 /// <summary>A candidate Test Case with flattened steps and its parent feature.</summary>
+/// <param name="Description">
+/// System.Description, HTML stripped. Often the only functional prose on a test case: titles are commonly
+/// short requirement ids ("FR 12345") that carry no matchable vocabulary.
+/// </param>
 /// <param name="AutomatedTestName">
 /// Microsoft.VSTS.TCM.AutomatedTestName — the fully-qualified test method. This is the only join key
 /// from an ADO test case to something runnable; null for manual cases.
@@ -87,7 +91,8 @@ public sealed record AdoWorkItemRef(
 public sealed record TestCaseCandidate(
     AdoWorkItemRef Item, string? StepsText, string? AutomationStatus,
     int? ParentFeatureId, IReadOnlyList<string> Tags,
-    string? AutomatedTestName = null, string? AutomatedTestStorage = null);
+    string? AutomatedTestName = null, string? AutomatedTestStorage = null,
+    string? Description = null);
 
 /// <summary>A candidate Feature and how it was discovered.</summary>
 public sealed record FeatureCandidate(

@@ -132,14 +132,13 @@ public sealed class RetrievalIndexBuilder
 
     private static DocumentDraft DraftFrom(TestCaseCandidate testCase)
     {
-        string? tags = testCase.Tags is { Count: > 0 } ? string.Join(' ', testCase.Tags) : null;
-        string text = ComposeText(testCase.Item.Title, testCase.StepsText, tags);
+        string text = IndexTextComposer.ForTestCase(testCase);
         return new DocumentDraft($"{TestCasePrefix}{testCase.Item.Id}", IndexKind.TestCase, testCase.Item.Id, testCase.Item.Title, text, testCase.Item.Revision, 0);
     }
 
     private static DocumentDraft DraftFrom(FeatureCandidate feature)
     {
-        string text = ComposeText(feature.Item.Title, feature.Description);
+        string text = IndexTextComposer.ForFeature(feature);
         return new DocumentDraft($"{FeaturePrefix}{feature.Item.Id}", IndexKind.Feature, feature.Item.Id, feature.Item.Title, text, feature.Item.Revision, feature.ChildTestCaseCount);
     }
 

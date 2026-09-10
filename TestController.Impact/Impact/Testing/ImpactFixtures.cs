@@ -32,7 +32,13 @@ public sealed record FixtureCorpus(
 public static class ImpactFixtures
 {
     /// <summary>Builds the galaxy-deployment corpus and its populated ADO fake.</summary>
-    public static FixtureCorpus BuildGalaxyDeploymentCorpus()
+    /// <param name="requirementStyleTitles">
+    /// Titles test cases "FR &lt;id&gt;" and moves the descriptive text into Description, modelling corpora where
+    /// the title is a bare requirement id and carries no matchable vocabulary.
+    /// </param>
+    /// <param name="dropDescriptions">Discards descriptions, reproducing the behaviour before System.Description was indexed.</param>
+    public static FixtureCorpus BuildGalaxyDeploymentCorpus(
+        bool requirementStyleTitles = false, bool dropDescriptions = false)
     {
         var ado = new FakeAdoWorkItemClient();
         var children = new Dictionary<int, List<int>>();
@@ -56,8 +62,15 @@ public static class ImpactFixtures
 
         void AddTestCase(int id, string title, string steps, int? parent)
         {
+            // Requirement-style corpus: the title is a bare id, the steps are boilerplate procedure, and all
+            // the matchable functional prose lives in the description.
+            string effectiveTitle = requirementStyleTitles ? $"FR {id}" : title;
+            string effectiveSteps = requirementStyleTitles ? "Execute the documented procedure and record the result." : steps;
+            string? description = requirementStyleTitles && !dropDescriptions ? $"{title}. {steps}" : null;
+
             ado.TestCases[id] = new TestCaseCandidate(
-                new AdoWorkItemRef(id, "Test Case", title, "Proj\\Deploy", "Design", 1), steps, "Automated", parent, []);
+                new AdoWorkItemRef(id, "Test Case", effectiveTitle, "Proj\\Deploy", "Design", 1), effectiveSteps, "Automated", parent, [],
+                Description: description);
             if (parent is int p)
             {
                 (children.TryGetValue(p, out List<int>? list) ? list : children[p] = []).Add(id);
@@ -145,8 +158,8 @@ public static class ImpactFixtures
 
         var keywords = new ImpactMappingOptions.KeywordOptions();
         var documents = new List<(int Id, IndexKind Kind, string Text, int ChildCount)>();
-        documents.AddRange(corpus.Ado.Features.Values.Select(f => (f.Item.Id, IndexKind.Feature, $"{f.Item.Title} {f.Description}", f.ChildTestCaseCount)));
-        documents.AddRange(corpus.Ado.TestCases.Values.Select(t => (t.Item.Id, IndexKind.TestCase, $"{t.Item.Title} {t.StepsText}", 0)));
+        documents.AddRange(corpus.Ado.Features.Values.Select(f => (f.Item.Id, IndexKind.Feature, IndexTextComposer.ForFeature(f), f.ChildTestCaseCount)));
+        documents.AddRange(corpus.Ado.TestCases.Values.Select(t => (t.Item.Id, IndexKind.TestCase, IndexTextComposer.ForTestCase(t), 0)));
 
         Dictionary<int, IReadOnlyDictionary<string, int>> termsById =
             documents.ToDictionary(d => d.Id, d => Tokenizer.TokenizeWithCounts(d.Text, keywords));

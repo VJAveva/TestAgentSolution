@@ -37,10 +37,10 @@ public sealed class ImpactIndexSchemaVersionTests
     }
 
     [Fact]
-    public async Task EnsureCreated_Should_AdoptExistingIndex_When_VersionIsAbsent()
+    public async Task EnsureCreated_Should_RebuildPreVersioningIndex_When_DocumentTextChanged()
     {
-        // A pre-versioning production index must be stamped, never dropped — its shape IS version 1 and a
-        // rebuild is a multi-hour ADO crawl.
+        // An index built before versioning has documents composed without System.Description. Incremental
+        // builds only revisit items ADO reports as changed, so stale documents would never be refreshed.
         await using var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
         await using var ctx = new ImpactIndexDbContext(OptionsFor(connection));
@@ -51,24 +51,27 @@ public sealed class ImpactIndexSchemaVersionTests
 
         await ImpactIndexInitializer.EnsureCreatedAsync(ctx);
 
-        Assert.Equal(1, await ctx.Documents.CountAsync());
+        Assert.Equal(0, await ctx.Documents.CountAsync());
         Assert.Equal(
             ImpactIndexInitializer.CurrentSchemaVersion.ToString(),
             (await ctx.Metadata.SingleAsync(m => m.Key == ImpactIndexInitializer.SchemaVersionKey)).Value);
     }
 
     [Fact]
-    public async Task EnsureCreated_Should_Throw_When_VersionMismatchAndRebuildDisabled()
+    public async Task EnsureCreated_Should_KeepStaleIndex_When_CallerIsReader()
     {
+        // Readers must not be taken down for the length of a rebuild: a stale index is out of date, not
+        // unreadable, and the previous quality beats no impact analysis at all.
         await using var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
         await using var ctx = new ImpactIndexDbContext(OptionsFor(connection));
 
         await ctx.Database.EnsureCreatedAsync();
-        ctx.Metadata.Add(new IndexMetadata { Key = ImpactIndexInitializer.SchemaVersionKey, Value = "999" });
+        ctx.Documents.Add(Doc("TC:1"));
         await ctx.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ImpactIndexInitializer.EnsureCreatedAsync(ctx, rebuildOnSchemaChange: false));
+        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, rebuildOnSchemaChange: false);
+
+        Assert.Equal(1, await ctx.Documents.CountAsync());
     }
 }

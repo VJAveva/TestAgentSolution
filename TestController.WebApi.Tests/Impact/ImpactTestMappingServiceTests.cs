@@ -54,9 +54,9 @@ public sealed class ImpactTestMappingServiceTests
     {
         var ado = new FakeAdo();
         ado.Features[900] = new FeatureCandidate(new AdoWorkItemRef(900, "Feature", "Galaxy Deploy Engine", "Proj\\Deploy", "Active", 1), "desc", FeatureDiscoveryPath.None, [], 2);
-        ado.TestCases[101] = new TestCaseCandidate(new AdoWorkItemRef(101, "Test Case", "Galaxy deploy smoke", null, "Design", 1), "steps", "Automated", 900, []);
-        ado.TestCases[102] = new TestCaseCandidate(new AdoWorkItemRef(102, "Test Case", "Deploy rollback", null, "Design", 1), "steps", "Automated", 900, []);
-        ado.TestCases[103] = new TestCaseCandidate(new AdoWorkItemRef(103, "Test Case", "Galaxy child test", null, "Design", 1), "steps", "Automated", 900, []);
+        ado.TestCases[101] = new TestCaseCandidate(new AdoWorkItemRef(101, "Test Case", "Galaxy deploy smoke", null, "Design", 1), "steps", "Automated", 900, [], "Suite.GalaxyDeploySmoke");
+        ado.TestCases[102] = new TestCaseCandidate(new AdoWorkItemRef(102, "Test Case", "Deploy rollback", null, "Design", 1), "steps", "Automated", 900, [], "Suite.DeployRollback");
+        ado.TestCases[103] = new TestCaseCandidate(new AdoWorkItemRef(103, "Test Case", "Galaxy child test", null, "Design", 1), "steps", "Automated", 900, [], "Suite.GalaxyChild");
         ado.Children[900] = [101, 102, 103];
         return ado;
     }
@@ -85,6 +85,113 @@ public sealed class ImpactTestMappingServiceTests
 
         Assert.NotEmpty(result.MappedTestCases);
         Assert.All(result.MappedTestCases, m => Assert.NotEmpty(m.Provenance));
+    }
+
+    [Fact]
+    public async Task MapAsync_Should_WriteRunManifest_When_EmitEnabled()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), $"impact-manifest-{Guid.NewGuid():N}");
+        try
+        {
+            var options = new ImpactMappingOptions();
+            options.Selection.EmitRunManifest = true;
+            options.Selection.RunManifestFolder = folder;
+
+            var store = new FakeIndexStore(
+                Snapshot(IndexKind.Feature, (900, ["galaxy", "deploy", "engine"], [1f, 0f])),
+                Snapshot(IndexKind.TestCase, (101, ["galaxy", "deploy"], [1f, 0f]), (102, ["deploy"], [0f, 1f])));
+            ImpactTestMappingService service = Build(
+                new FakeAnchors(new AnchorResult([], 0, false)), store, AdoWithCorpus(), options);
+
+            ImpactMappingResult result = await service.MapAsync(
+                Area(), Payload(), SelectionTier.Targeted, CancellationToken.None);
+
+            Assert.Contains($"impact-run-{result.RunId:D}.json", Directory.GetFiles(folder).Select(Path.GetFileName));
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MapAsync_Should_NotWriteRunManifest_When_EmitDisabled()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), $"impact-manifest-{Guid.NewGuid():N}");
+        var options = new ImpactMappingOptions();
+        options.Selection.EmitRunManifest = false;
+        options.Selection.RunManifestFolder = folder;
+
+        var store = new FakeIndexStore(
+            Snapshot(IndexKind.Feature, (900, ["galaxy", "deploy", "engine"], [1f, 0f])),
+            Snapshot(IndexKind.TestCase, (101, ["galaxy", "deploy"], [1f, 0f])));
+        ImpactTestMappingService service = Build(
+            new FakeAnchors(new AnchorResult([], 0, false)), store, AdoWithCorpus(), options);
+
+        await service.MapAsync(Area(), Payload(), SelectionTier.Targeted, CancellationToken.None);
+
+        Assert.False(Directory.Exists(folder));
+    }
+
+    [Fact]
+    public async Task MapAsync_Should_DegradeWithWarning_When_ManifestFolderIsUnusable()
+    {
+        var options = new ImpactMappingOptions();
+        options.Selection.EmitRunManifest = true;
+        options.Selection.RunManifestFolder = "\0invalid";
+
+        var store = new FakeIndexStore(
+            Snapshot(IndexKind.Feature, (900, ["galaxy", "deploy", "engine"], [1f, 0f])),
+            Snapshot(IndexKind.TestCase, (101, ["galaxy", "deploy"], [1f, 0f])));
+        ImpactTestMappingService service = Build(
+            new FakeAnchors(new AnchorResult([], 0, false)), store, AdoWithCorpus(), options);
+
+        ImpactMappingResult result = await service.MapAsync(
+            Area(), Payload(), SelectionTier.Targeted, CancellationToken.None);
+
+        // A manifest failure must never fail the mapping run.
+        Assert.NotEmpty(result.MappedTestCases);
+        Assert.Contains(result.Warnings, w => w.Contains("Run manifest", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MapAsync_Should_WidenBudget_When_RiskWeightingEnabledForCriticalArea()
+    {
+        var options = new ImpactMappingOptions();
+        options.Risk.EnableRiskWeighting = true;
+        options.Risk.BudgetMultipliers[RiskTier.Critical] = 2.0;
+        options.Selection.TierBudgets[SelectionTier.Smoke] = TimeSpan.FromMinutes(10);
+
+        var store = new FakeIndexStore(
+            Snapshot(IndexKind.Feature, (900, ["galaxy", "deploy", "engine"], [1f, 0f])),
+            Snapshot(IndexKind.TestCase, (101, ["galaxy", "deploy"], [1f, 0f])));
+        ImpactTestMappingService service = Build(
+            new FakeAnchors(new AnchorResult([], 0, false)), store, AdoWithCorpus(), options);
+
+        ImpactMappingResult result = await service.MapAsync(
+            Area() with { RiskTier = RiskTier.Critical }, Payload(), SelectionTier.Smoke, CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromMinutes(20), result.Diagnostics.BudgetAllowed);
+    }
+
+    [Fact]
+    public async Task MapAsync_Should_UseConfiguredBudget_When_RiskWeightingDisabled()
+    {
+        var options = new ImpactMappingOptions();
+        options.Risk.EnableRiskWeighting = false;
+        options.Risk.BudgetMultipliers[RiskTier.Critical] = 2.0;
+        options.Selection.TierBudgets[SelectionTier.Smoke] = TimeSpan.FromMinutes(10);
+
+        var store = new FakeIndexStore(
+            Snapshot(IndexKind.Feature, (900, ["galaxy", "deploy", "engine"], [1f, 0f])),
+            Snapshot(IndexKind.TestCase, (101, ["galaxy", "deploy"], [1f, 0f])));
+        ImpactTestMappingService service = Build(
+            new FakeAnchors(new AnchorResult([], 0, false)), store, AdoWithCorpus(), options);
+
+        ImpactMappingResult result = await service.MapAsync(
+            Area() with { RiskTier = RiskTier.Critical }, Payload(), SelectionTier.Smoke, CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromMinutes(10), result.Diagnostics.BudgetAllowed);
     }
 
     [Fact]

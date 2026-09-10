@@ -72,6 +72,20 @@ prose to close the code-to-test vocabulary gap. Output: `KeywordGroup[]`, each w
 
 ### T2 — Retrieval
 
+**What a document is.** `IndexTextComposer` is the single definition, used by both production indexing and
+the fixtures:
+
+| Kind | Composed text |
+|---|---|
+| Test Case | Title + **Description** + flattened Steps + Tags |
+| Feature | Title + Description |
+
+> **Requirement-id titles.** Where test case titles are bare ids ("FR 12345") they carry no matchable
+> vocabulary, and `System.Description` is the only functional prose on the item. It was previously fetched for
+> Features and **not** for Test Cases, so such a corpus had almost nothing to match on. Measured on the
+> fixture's `--fr-titles` corpus: precision@10 **10 % → 60 %**, recall@25 **20 % → 100 %**, APFD
+> **0.017 → 0.585**. Indexing it requires a full rebuild, forced by `CurrentSchemaVersion = 2`.
+
 BM25 per term, over the **term-scoped** document set (only documents containing query terms are loaded):
 
 $$\text{score}(d) = \sum_{t \in q} \text{idf}(t) \cdot \frac{\text{tf}(t,d)\,(k_1+1)}{\text{tf}(t,d) + k_1\left(1-b+b\frac{|d|}{\text{avgdl}}\right)}$$
@@ -113,6 +127,9 @@ Truncated to `MaxCandidateTestCases` (400) by score, tie-broken on ascending wor
 `LlmRelevanceReranker` grades 0–3 with cited signals; cached 7 days; fails open to grade 2. A judgement with
 no cited signals is downgraded by `DowngradeWhenNoCitedSignals`. Absent judgement defaults to grade 2 at
 confidence 0.5. `PassThroughReranker` is used when no LLM is configured.
+
+The prompt carries id, title, parent feature, **description** and steps (each truncated to 400 chars). Without
+description, a requirement-id-titled candidate reaches the grader as little more than "FR 12345".
 
 ### T4 — Selection (`BudgetedDiversitySelector`)
 
@@ -156,6 +173,10 @@ selections, and High/Critical areas with fewer than 3 tests. `RunPlanWriter` emi
 
 | Option | Default | Effect |
 |---|---|---|
+| `Ado.ExcludedStates` | `["Removed","Closed"]` | WIQL `NOT IN` predicate at index time, **and** purges matching documents on the next build |
+| `Ado.LinkWalkMaxDepth` | 3 | hierarchy levels the anchor walk descends |
+| `Ado.IncludedAreaPaths` | `[]` | **declared but still ignored** — the corpus is not area-scoped |
+| `Index.RebuildOnSchemaChange` | true | writers drop and recreate an index stamped with an older `SchemaVersion` |
 | `Retrieval.Bm25K1` / `Bm25B` | 1.2 / 0.75 | term saturation / length normalisation |
 | `Retrieval.RrfK` | 60 | **lower ⇒ more separation between ranks** |
 | `Retrieval.ExpandedChildScoreFactor` | 0.85 | how strongly expansion candidates compete |
@@ -170,6 +191,9 @@ selections, and High/Critical areas with fewer than 3 tests. `RunPlanWriter` emi
 | `Selection.MmrLambda` | 0.70 | ↓ = more diversity; **no-op without embeddings** |
 | `Selection.MinFinalScore` | 0.15 | score floor |
 | `Selection.MaxTestCasesPerFeature` | 12 | per-feature cap |
+| `Selection.EmitRunManifest` | false | R3 — when true a mapping run can trigger a pipeline |
+| `Selection.RunManifestFolder` | — | watched folder the manifest is written to; required when emitting |
+| `Selection.MaxInlineFilterChars` | 6000 | beyond this only `[_TestListFile]` is emitted, not `[_TestFilter]` |
 | `Anchors.EarlyExitCoverageThreshold` | 0.80 | how readily T1–T3 are skipped |
 | `Risk.EnableRiskWeighting` | false | R2 budget + floor |
 
@@ -182,8 +206,12 @@ dotnet run --project TestController.ImpactEval -c Release -- replay --dump 20
 dotnet run --project TestController.ImpactEval -c Release -- replay --w-grade 0.35 --w-retrieval 0.55
 ```
 
-Flags: `--dump N`, `--min-score`, `--mmr-lambda`, `--w-retrieval`, `--w-feature`, `--w-grade`,
-`--child-factor`, `--max-per-feature`, `--max-total`, `--out <csv>`.
+Flags: `--dump N`, `--fr-titles`, `--drop-descriptions`, `--min-score`, `--mmr-lambda`, `--w-retrieval`,
+`--w-feature`, `--w-grade`, `--child-factor`, `--bm25-b`, `--max-per-feature`, `--max-total`, `--out <csv>`.
+
+`--fr-titles` rebuilds the corpus with bare requirement-id titles, boilerplate steps and the prose moved to
+the description — use it to check any retrieval change against that corpus shape, which behaves very
+differently from the default one.
 
 `--dump` prints rank, id, score, grade, feature and a ground-truth flag. **Always read the dump, not just the
 aggregate** — the defect above showed as precision@10 = 0 while safe recall stayed at 100 %.
@@ -200,5 +228,8 @@ aggregate** — the defect above showed as precision@10 = 0 while safe recall st
 - One synthetic case (`report.Cases = 1`) over the built-in fixture. It catches ranking inversions, not
   real-corpus behaviour.
 - Ground truth is the children of features 10, 11, 12, 20, 21; "failed" is the first two of those.
+- `--bm25-b` does not reach the in-memory fixture store, which fixes $k_1$ and $b$ at construction.
+- The fixture's `FakeRelevanceReranker` grades from the title, so under `--fr-titles` every candidate grades
+  1. The production reranker receives the description and does not share this blind spot.
 - **`compare` and `train` are stubs** — they print a description and exit. There is no paired A/B and no
   calibrator fitting. Sweep `replay` manually until they are built.

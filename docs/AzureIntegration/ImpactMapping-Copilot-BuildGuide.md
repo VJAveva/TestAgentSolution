@@ -1,5 +1,18 @@
 # Impacted Test Mapping — Copilot Build Guide
 
+> **HISTORICAL — do not treat as a reference.** This is the original P01→P30 construction script, preserved as
+> the record of how the engine was built. The option names, defaults and document composition below describe
+> the engine *as first specified* and have since diverged from the code.
+>
+> For current behaviour use:
+> - [`docs/impact/Algorithm-Schema.md`](../impact/Algorithm-Schema.md) — pipeline, formulas, every tunable
+> - [`docs/impact/ImpactDb-Deep-Dive.md`](../impact/ImpactDb-Deep-Dive.md) — index and operations
+> - [`docs/impact/Regression-Selection-Algorithm.md`](../impact/Regression-Selection-Algorithm.md) — R1–R3
+>
+> Known divergences: `MaxFeaturesPerGroupQuery`, `MaxTestCasesPerGroupQuery`, `TopFeaturesPerBranch` and
+> `UseWiqlPreFilter` were deleted; a `Risk` section and the `Selection` scoring weights were added; test case
+> documents now include `System.Description`.
+
 **Solution:** TestAgentSolution
 **Target project:** `TestControllerGrpc.Core` (shared engine consumed by both the WPF host and the WebApi host)
 **Runtime:** .NET 10, C# 13

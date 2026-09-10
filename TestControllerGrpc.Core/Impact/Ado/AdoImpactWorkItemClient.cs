@@ -20,7 +20,8 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
     private static readonly string[] TestCaseFields =
         ["System.Title", "System.WorkItemType", "System.State", "System.AreaPath", "System.Rev",
          "Microsoft.VSTS.TCM.Steps", "Microsoft.VSTS.TCM.AutomationStatus", "System.Tags", "System.Parent",
-         "Microsoft.VSTS.TCM.AutomatedTestName", "Microsoft.VSTS.TCM.AutomatedTestStorage"];
+         "Microsoft.VSTS.TCM.AutomatedTestName", "Microsoft.VSTS.TCM.AutomatedTestStorage",
+         "System.Description"];
     private static readonly string[] FeatureFields =
         ["System.Title", "System.WorkItemType", "System.State", "System.AreaPath", "System.Rev", "System.Description"];
     private static readonly string[] ChangeFields =
@@ -60,7 +61,8 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
             IntOrNull(d, "System.Parent"),
             SplitTags(Str(d, "System.Tags")),
             Str(d, "Microsoft.VSTS.TCM.AutomatedTestName"),
-            Str(d, "Microsoft.VSTS.TCM.AutomatedTestStorage"))).ToList();
+            Str(d, "Microsoft.VSTS.TCM.AutomatedTestStorage"),
+            StripHtml(Str(d, "System.Description")))).ToList();
     }
 
     public async Task<IReadOnlyList<FeatureCandidate>> GetFeaturesAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
