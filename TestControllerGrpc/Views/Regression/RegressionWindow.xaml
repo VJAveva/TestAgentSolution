@@ -1159,31 +1159,99 @@
                 <DataGridTemplateColumn Header="MANUAL SUITE" Width="1.4*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <ItemsControl ItemsSource="{Binding ManualSuites}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border CornerRadius="3" Padding="5,1" Margin="0,1,3,1"
-                                                Background="{DynamicResource BgInfoBrush}">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsLinked}" Value="False">
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderInfoBrush}" />
-                                                            <Setter Property="BorderThickness" Value="1" />
-                                                            <Setter Property="Background" Value="Transparent" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <TextBlock Text="{Binding SuiteId}" FontSize="9" FontFamily="{StaticResource Mono}"
-                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding VisibleManualSuites}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="3" Padding="5,1" Margin="0,1,3,1"
+                                                    Background="{DynamicResource BgInfoBrush}"
+                                                    ToolTip="{Binding Tooltip}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsLinked}" Value="False">
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource BorderInfoBrush}" />
+                                                                <Setter Property="BorderThickness" Value="1" />
+                                                                <Setter Property="Background" Value="Transparent" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid MaxWidth="220">
+                                                    <!-- Unlinked entries stay plain text: a hyperlink that cannot navigate is a lie. -->
+                                                    <TextBlock FontSize="9" TextTrimming="CharacterEllipsis"
+                                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                                               Visibility="{Binding IsLinked, Converter={StaticResource BoolToVis}}">
+                                                        <Hyperlink NavigateUri="{Binding Url, Converter={StaticResource StrToUri}}"
+                                                                   RequestNavigate="OnHyperlinkNavigate"
+                                                                   ToolTip="Open the test case in Azure DevOps">
+                                                            <Run Text="{Binding Display, Mode=OneWay}" />
+                                                        </Hyperlink>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Display, Mode=OneWay}" FontSize="9"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{DynamicResource TextSecondaryBrush}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsLinked}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                            Visibility="{Binding HasManualSuites, Converter={StaticResource BoolToVis}}">
+                                    <ToggleButton x:Name="ManualOverflowToggle" Style="{StaticResource LinkToggle}"
+                                                  Content="{Binding OverflowManualSuiteLabel}"
+                                                  ToolTip="Show the remaining manual test cases"
+                                                  Visibility="{Binding HasOverflowManualSuites, Converter={StaticResource BoolToVis}}" />
+                                    <Popup IsOpen="{Binding IsChecked, ElementName=ManualOverflowToggle, Mode=TwoWay}"
+                                           PlacementTarget="{Binding ElementName=ManualOverflowToggle}"
+                                           Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                                           HorizontalOffset="-4" VerticalOffset="2">
+                                        <Border Background="{DynamicResource BgPanelBrush}"
+                                                BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="1"
+                                                CornerRadius="4" Padding="8" MaxHeight="320" MaxWidth="420">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <ItemsControl ItemsSource="{Binding OverflowManualSuites}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"
+                                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                                       ToolTip="{Binding Tooltip}">
+                                                                <Run Text="{Binding SuiteId, Mode=OneWay}"
+                                                                     Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                                <Hyperlink NavigateUri="{Binding Url, Converter={StaticResource StrToUri}}"
+                                                                           RequestNavigate="OnHyperlinkNavigate"
+                                                                           ToolTip="Open the test case in Azure DevOps">
+                                                                    <Run Text="{Binding Display, Mode=OneWay}" />
+                                                                </Hyperlink>
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
                                         </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                    </Popup>
+                                    <Button Content="Copy" Cursor="Hand" FontSize="10.5" Padding="6,1"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{StaticResource RbViolet}"
+                                            Command="{Binding CopyManualSuitesCommand}"
+                                            ToolTip="Copy every manual test case (id, title, link) to the clipboard" />
+                                </StackPanel>
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

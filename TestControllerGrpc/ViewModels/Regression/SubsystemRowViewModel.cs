@@ -1,5 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Ado.Reporting;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Models;
@@ -117,6 +120,57 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
     public int AutomatedSuiteCount => Model.AutomatedSuites.Count;
     public int ManualSuiteCount => Model.ManualSuites.Count;
     public bool HasNoSuite => AutomatedSuiteCount == 0 && ManualSuiteCount == 0;
+
+    /// <summary>How many manual test cases render inline before the rest move behind the overflow chip.</summary>
+    private const int VisibleManualSuiteCap = 11;
+
+    private IReadOnlyList<ManualSuiteLink>? _manualSuiteLinks;
+
+    /// <summary>Manual test cases as titled Azure DevOps links — a bare work-item id is not a test case name.</summary>
+    public IReadOnlyList<ManualSuiteLink> ManualSuiteLinks =>
+        _manualSuiteLinks ??= Model.ManualSuites.Select(ToManualSuiteLink).ToList();
+
+    public IReadOnlyList<ManualSuiteLink> VisibleManualSuites =>
+        ManualSuiteLinks.Take(VisibleManualSuiteCap).ToList();
+
+    public IReadOnlyList<ManualSuiteLink> OverflowManualSuites =>
+        ManualSuiteLinks.Skip(VisibleManualSuiteCap).ToList();
+
+    public bool HasManualSuites => ManualSuiteLinks.Count > 0;
+    public bool HasOverflowManualSuites => ManualSuiteLinks.Count > VisibleManualSuiteCap;
+    public string OverflowManualSuiteLabel => $"+{ManualSuiteLinks.Count - VisibleManualSuiteCap} more";
+
+    private static ManualSuiteLink ToManualSuiteLink(RegressionSuiteRef suite)
+    {
+        bool hasTitle = !string.IsNullOrWhiteSpace(suite.Title);
+        return new ManualSuiteLink(
+            suite.SuiteId,
+            hasTitle ? suite.Title! : $"TC {suite.SuiteId}",
+            suite.Url,
+            hasTitle ? $"TC {suite.SuiteId} \u2014 {suite.Title}" : $"TC {suite.SuiteId} (no title resolved)",
+            suite.IsLinked && !string.IsNullOrWhiteSpace(suite.Url));
+    }
+
+    /// <summary>Every manual test case as id/title/url TSV, including those behind the overflow chip.</summary>
+    public string ManualSuitesClipboardText => string.Join(
+        Environment.NewLine,
+        ManualSuiteLinks.Select(l => $"{l.SuiteId}\t{l.Display}\t{l.Url}"));
+
+    [RelayCommand]
+    private void CopyManualSuites()
+    {
+        if (ManualSuiteLinks.Count == 0)
+            return;
+
+        try
+        {
+            Clipboard.SetText(ManualSuitesClipboardText);
+        }
+        catch (ExternalException)
+        {
+            // Another process holds the clipboard; losing a copy must not take the grid down.
+        }
+    }
 
     public string EstimateText => Model.IsEstimate
         ? $"~{Model.EstimatedMinutes:0} min (est.)"
@@ -281,6 +335,9 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
 
 /// <summary>A modified file plus its Azure DevOps web link (null when the repository URL is unknown).</summary>
 public sealed record ModifiedFileLink(string Path, string? Url);
+
+/// <summary>A manual test case rendered as a titled link. <paramref name="IsLinked"/> is false when there is no URL to open.</summary>
+public sealed record ManualSuiteLink(string SuiteId, string Display, string? Url, string Tooltip, bool IsLinked);
 
 /// <summary>A named group of work items (by type) for the category-wise detail display.</summary>
 public sealed record WorkItemGroup(string Label, IReadOnlyList<RegressionWorkItemRef> Items);
