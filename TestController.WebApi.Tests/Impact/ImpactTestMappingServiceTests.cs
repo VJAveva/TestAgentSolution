@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Core.Impact.Ado;
 using TestControllerGrpc.Core.Impact.Anchors;
+using TestControllerGrpc.Core.Impact.Execution;
 using TestControllerGrpc.Core.Impact.Features;
 using TestControllerGrpc.Core.Impact.Index;
 using TestControllerGrpc.Core.Impact.Learning;
@@ -69,7 +70,7 @@ public sealed class ImpactTestMappingServiceTests
             NullEmbeddingProvider.Instance, store, new HybridRetriever(opt, logger), new FeatureRanker(opt),
             new ParentFeatureResolver(ado, logger), new FeatureMerger(opt), new FanOutNormalizer(opt), ado,
             new PassThroughReranker(), new LinearScoreCalibrator(), new BudgetedDiversitySelector(opt),
-            new CoverageGapDetector(), new FakeOutcomes(), opt, logger);
+            new CoverageGapDetector(), new FakeOutcomes(), new RunPlanWriter(opt, logger), opt, logger);
     }
 
     [Fact]

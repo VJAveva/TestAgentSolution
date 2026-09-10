@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TestControllerGrpc.Ado;
 using TestControllerGrpc.Core.Impact;
+using TestControllerGrpc.Core.Impact.Risk;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -34,7 +35,8 @@ public class RegressionImpactMatcherTests
             new RelevanceJudgement(grade, 0.9, reason, ["signal"]), null, []);
 
     private static RegressionImpactMatcher Matcher(IImpactTestMappingService engine, string org = "AVEVA-VSTS") =>
-        new(engine, Options.Create(new AdoOptions { Organization = org }), new NoopAppLogger());
+        new(engine, new RegressionRiskScorer(Options.Create(new ImpactMappingOptions())),
+            Options.Create(new AdoOptions { Organization = org }), new NoopAppLogger());
 
     [Fact]
     public async Task MatchAsync_Should_ProjectEngineResults_When_TestCasesSelected()

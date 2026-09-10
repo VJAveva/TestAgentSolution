@@ -19,7 +19,8 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
         ["System.Title", "System.WorkItemType", "System.State", "System.AreaPath", "System.Rev"];
     private static readonly string[] TestCaseFields =
         ["System.Title", "System.WorkItemType", "System.State", "System.AreaPath", "System.Rev",
-         "Microsoft.VSTS.TCM.Steps", "Microsoft.VSTS.TCM.AutomationStatus", "System.Tags", "System.Parent"];
+         "Microsoft.VSTS.TCM.Steps", "Microsoft.VSTS.TCM.AutomationStatus", "System.Tags", "System.Parent",
+         "Microsoft.VSTS.TCM.AutomatedTestName", "Microsoft.VSTS.TCM.AutomatedTestStorage"];
     private static readonly string[] FeatureFields =
         ["System.Title", "System.WorkItemType", "System.State", "System.AreaPath", "System.Rev", "System.Description"];
     private static readonly string[] ChangeFields =
@@ -57,7 +58,9 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
             StepsFlattener.Flatten(Str(d, "Microsoft.VSTS.TCM.Steps")),
             Str(d, "Microsoft.VSTS.TCM.AutomationStatus"),
             IntOrNull(d, "System.Parent"),
-            SplitTags(Str(d, "System.Tags")))).ToList();
+            SplitTags(Str(d, "System.Tags")),
+            Str(d, "Microsoft.VSTS.TCM.AutomatedTestName"),
+            Str(d, "Microsoft.VSTS.TCM.AutomatedTestStorage"))).ToList();
     }
 
     public async Task<IReadOnlyList<FeatureCandidate>> GetFeaturesAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
@@ -100,20 +103,60 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
         if (featureIds.Count == 0)
             return ToReadOnly(result);
 
-        var relations = await QueryLinksAsync(featureIds, parentDirection: false, ct);
-        var targets = relations.Where(r => r.Target is not null).Select(r => r.Target!.Id).Distinct().ToList();
-        var testCases = (await HydrateDtosAsync(targets, RefFields, ct))
+        // Walks the hierarchy to Ado.LinkWalkMaxDepth. A Test Case is routinely a grandchild of the linked
+        // work item (Feature -> User Story -> Test Case); stopping at one level silently drops it, and these
+        // are weight-1.0 anchors that bypass the selection budget entirely.
+        int maxDepth = Math.Max(1, _options.Ado.LinkWalkMaxDepth);
+        var seen = new HashSet<int>(featureIds);
+        var frontier = featureIds.ToList();
+        var descendants = new Dictionary<int, HashSet<int>>();
+        var candidateTargets = new HashSet<int>();
+
+        for (int depth = 0; depth < maxDepth && frontier.Count > 0; depth++)
+        {
+            var relations = await QueryLinksAsync(frontier, parentDirection: false, ct);
+            var next = new List<int>();
+
+            foreach (var r in relations)
+            {
+                if (r.Source is null || r.Target is null) continue;
+
+                // Attribute the target to every root that reaches this source, so a grandchild is credited
+                // to the originally linked work item rather than to the intermediate node.
+                IEnumerable<int> roots = descendants
+                    .Where(kv => kv.Value.Contains(r.Source.Id))
+                    .Select(kv => kv.Key)
+                    .DefaultIfEmpty(r.Source.Id);
+
+                foreach (int root in roots)
+                {
+                    if (!descendants.TryGetValue(root, out var set)) { set = []; descendants[root] = set; }
+                    set.Add(r.Target.Id);
+                }
+
+                candidateTargets.Add(r.Target.Id);
+                if (seen.Add(r.Target.Id)) next.Add(r.Target.Id);
+            }
+
+            frontier = next;
+        }
+
+        if (candidateTargets.Count == 0)
+            return ToReadOnly(result);
+
+        var testCases = (await HydrateDtosAsync(candidateTargets.ToList(), RefFields, ct))
             .Where(d => IsType(d, "Test Case"))
             .Select(d => d.Id)
             .ToHashSet();
 
-        foreach (var r in relations)
+        foreach (int featureId in featureIds)
         {
-            if (r.Source is null || r.Target is null) continue;
-            if (!featureIds.Contains(r.Source.Id) || !testCases.Contains(r.Target.Id)) continue;
-            if (!result.TryGetValue(r.Source.Id, out var list)) { list = []; result[r.Source.Id] = list; }
-            list.Add(r.Target.Id);
+            if (!descendants.TryGetValue(featureId, out var reachable)) continue;
+
+            var list = reachable.Where(testCases.Contains).ToList();
+            if (list.Count > 0) result[featureId] = list;
         }
+
         return ToReadOnly(result);
     }
 
@@ -135,6 +178,52 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
         string workItemType, DateTimeOffset since, int pageSize, [EnumeratorCancellation] CancellationToken ct)
     {
         var type = WiqlEscaper.EscapeLiteral(workItemType);
+        var buffer = new List<int>(Math.Max(1, pageSize));
+
+        await foreach (var id in EnumerateWindowedIdsAsync(type, since, ExcludedStateClause(), ct))
+        {
+            buffer.Add(id);
+            if (buffer.Count < Math.Max(1, pageSize)) continue;
+
+            foreach (var dto in await HydrateDtosAsync(buffer, ChangeFields, ct))
+                yield return ToRef(dto);
+            buffer.Clear();
+        }
+
+        if (buffer.Count == 0) yield break;
+        foreach (var dto in await HydrateDtosAsync(buffer, ChangeFields, ct))
+            yield return ToRef(dto);
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<int> EnumerateIdsInStatesAsync(
+        string workItemType, IReadOnlyCollection<string> states, DateTimeOffset since,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (states.Count == 0) yield break;
+
+        var type = WiqlEscaper.EscapeLiteral(workItemType);
+        var clause = $"AND [System.State] IN ({StateList(states)}) ";
+        await foreach (var id in EnumerateWindowedIdsAsync(type, since, clause, ct))
+            yield return id;
+    }
+
+    private static string StateList(IEnumerable<string> states)
+        => string.Join(", ", states.Select(s => $"'{WiqlEscaper.EscapeLiteral(s)}'"));
+
+    // Excluding Removed/Closed at the source keeps deleted test cases out of the corpus entirely, so they can
+    // never be retrieved or recommended. Empty config means no filter, matching the previous behaviour.
+    private string ExcludedStateClause()
+    {
+        IReadOnlyList<string> states = _options.Ado.ExcludedStates;
+        return states is null || states.Count == 0
+            ? ""
+            : $"AND [System.State] NOT IN ({StateList(states)}) ";
+    }
+
+    private async IAsyncEnumerable<int> EnumerateWindowedIdsAsync(
+        string escapedType, DateTimeOffset since, string stateClause, [EnumeratorCancellation] CancellationToken ct)
+    {
         var floor = since < MinWiqlDate ? MinWiqlDate : since;
         var cursor = new DateTimeOffset(floor.UtcDateTime.Date, TimeSpan.Zero);
         var upper = new DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date, TimeSpan.Zero).AddDays(1);
@@ -149,7 +238,7 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
             IReadOnlyList<int> ids;
             try
             {
-                ids = await QueryWindowIdsAsync(type, cursor, end, ct);
+                ids = await QueryWindowIdsAsync(escapedType, cursor, end, stateClause, ct);
             }
             catch (AdoApiException ex) when (IsResultSizeExceeded(ex) && windowDays > MinWindowDays)
             {
@@ -158,12 +247,8 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
                 continue;
             }
 
-            foreach (var chunk in ids.Chunk(Math.Max(1, pageSize)))
-            {
-                ct.ThrowIfCancellationRequested();
-                foreach (var dto in await HydrateDtosAsync(chunk, ChangeFields, ct))
-                    yield return ToRef(dto);
-            }
+            foreach (var id in ids)
+                yield return id;
 
             cursor = end;
             // Grow the window when a span is sparse so empty history is skipped in a few queries.
@@ -173,13 +258,15 @@ public sealed class AdoImpactWorkItemClient : IAdoWorkItemClient
     }
 
     private async Task<IReadOnlyList<int>> QueryWindowIdsAsync(
-        string escapedType, DateTimeOffset startInclusive, DateTimeOffset endExclusive, CancellationToken ct)
+        string escapedType, DateTimeOffset startInclusive, DateTimeOffset endExclusive, string stateClause,
+        CancellationToken ct)
     {
         var from = startInclusive.ToUniversalTime().ToString("yyyy-MM-dd");
         var to = endExclusive.ToUniversalTime().ToString("yyyy-MM-dd");
         var wiql =
             $"SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = '{escapedType}' " +
             $"AND [System.ChangedDate] >= '{from}' AND [System.ChangedDate] < '{to}' " +
+            stateClause +
             $"ORDER BY [System.ChangedDate] ASC";
         return await QueryIdsAsync(wiql, WiqlRowCap, ct);
     }

@@ -195,8 +195,8 @@ Each resulting `ImpactedTestCaseMatch` now carries `LinkedWorkItems` — the Bug
 scope — surfaced as "Verifies:" in the web grid and as a **Linked Work Items** column on the *Impacted Test
 Cases* sheet of the churn workbook.
 
-> **Depth is one level.** `Ado.LinkWalkMaxDepth` exists in config but is **not implemented**. A test case
-> linked to a Task *underneath* a Bug is not found.
+> **Depth follows `Ado.LinkWalkMaxDepth`** (default 3). The walk is breadth-first and attributes a target to
+> every root that reaches it, so a test case linked to a Task *underneath* a Bug is credited to the Bug.
 
 ---
 
@@ -225,8 +225,7 @@ The health cache matters: `PRAGMA integrity_check` took **95 seconds** on a 1.29
 | Index empty/missing | Retrieval yields nothing | See §9 |
 | Component map absent | Falls back to `NullDeclaredMappingSource` | No — degrades cleanly |
 
-**Config declared but not implemented:** `Ado.LinkWalkMaxDepth`, `Ado.IncludedAreaPaths`,
-`Ado.ExcludedStates`, `Index.UseWiqlPreFilter`, `Retrieval.TopFeaturesPerBranch`.
+**Config declared but not implemented:** `Ado.IncludedAreaPaths`.
 
 ---
 
@@ -341,10 +340,11 @@ Deploying the web tier restarts IIS and **kills an in-flight rebuild**. Deploy f
 
 ## 12. Known gaps
 
-1. **Link walk is one level** — `LinkWalkMaxDepth` is ignored.
-2. **Suite id → runnable test** is unresolved; manual suites are advisory.
-3. **Declared mapping needs the index** — the component map holds prose and UC/US/FR tokens, never ADO ids,
+1. **Suite id → runnable test** is partly resolved — see `Regression-Selection-Algorithm.md` §4. Automated
+   cases now carry `AutomatedTestName`; manual suites remain advisory.
+2. **Declared mapping needs the index** — the component map holds prose and UC/US/FR tokens, never ADO ids,
    so declared edges resolve to nothing until the index is built.
-4. **No performance baseline test** for a 100k+ corpus.
-5. **stdout logging is uncapped** in the generated `web.config`
+3. **No performance baseline test** for a 100k+ corpus.
+4. **stdout logging is uncapped** in the generated `web.config`
    (`stdoutLogEnabled="true"`) — a 170 MB log was observed in production.
+5. **`Ado.IncludedAreaPaths` is ignored** — the corpus is not area-scoped.

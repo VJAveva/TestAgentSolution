@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Options;
 using TestControllerGrpc.Core.Impact.Ado;
 using TestControllerGrpc.Core.Impact.Anchors;
+using TestControllerGrpc.Core.Impact.Execution;
 using TestControllerGrpc.Core.Impact.Features;
 using TestControllerGrpc.Core.Impact.Index;
 using TestControllerGrpc.Core.Impact.Learning;
@@ -56,9 +57,11 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
     private readonly IBudgetedSelector _selector;
     private readonly ICoverageGapDetector _gapDetector;
     private readonly IOutcomeStore _outcomes;
+    private readonly IRunPlanWriter _runPlan;
     private readonly ImpactMappingOptions.RetrievalOptions _retrieval;
     private readonly ImpactMappingOptions.RerankOptions _rerank;
     private readonly ImpactMappingOptions.SelectionOptions _selection;
+    private readonly ImpactMappingOptions.RiskOptions _risk;
     private readonly ImpactMappingOptions.LearningOptions _learning;
     private readonly IAppLogger _logger;
 
@@ -69,7 +72,7 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
         IHybridRetriever retriever, IFeatureRanker featureRanker, IParentFeatureResolver parentResolver,
         IFeatureMerger merger, IFanOutNormalizer fanOut, IAdoWorkItemClient ado, IRelevanceReranker reranker,
         IScoreCalibrator calibrator, IBudgetedSelector selector, ICoverageGapDetector gapDetector,
-        IOutcomeStore outcomes, IOptions<ImpactMappingOptions> options, IAppLogger logger)
+        IOutcomeStore outcomes, IRunPlanWriter runPlan, IOptions<ImpactMappingOptions> options, IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         _anchors = anchors;
@@ -89,9 +92,11 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
         _selector = selector;
         _gapDetector = gapDetector;
         _outcomes = outcomes;
+        _runPlan = runPlan;
         _retrieval = options.Value.Retrieval;
         _rerank = options.Value.Rerank;
         _selection = options.Value.Selection;
+        _risk = options.Value.Risk;
         _learning = options.Value.Learning;
         _logger = logger;
     }
@@ -232,7 +237,7 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
 
         IReadOnlyList<MappedTestCase> selected = _selector.Select(
             area, normalized, calibrated, judgements, anchors, failureRates, durations,
-            testCaseSnapshot, tier, BudgetFor(tier), out SelectionDiagnostics diagnostics);
+            testCaseSnapshot, tier, BudgetFor(tier, area.RiskTier), out SelectionDiagnostics diagnostics);
         IReadOnlyList<CoverageGap> gaps = _gapDetector.Detect(area, selected, normalized);
 
         var result = new ImpactMappingResult(
@@ -241,6 +246,7 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
         // T5 — record for the learning loop.
         Report(progress, "T5:Record", 5, 6, "Recording outcome…");
         await RecordAsync(result, warnings, ct).ConfigureAwait(false);
+        await EmitRunPlanAsync(result, warnings, ct).ConfigureAwait(false);
 
         _logger.Info("ImpactMap",
             $"area={area.AreaId} tier={tier} selected={selected.Count} gaps={gaps.Count} warnings={warnings.Count} elapsed={stopwatch.Elapsed}");
@@ -273,12 +279,13 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
 
         IReadOnlyList<MappedTestCase> selected = _selector.Select(
             area, [], scored, judgements, anchors, failureRates, durations,
-            IndexSnapshot.Empty, tier, BudgetFor(tier), out SelectionDiagnostics diagnostics);
+            IndexSnapshot.Empty, tier, BudgetFor(tier, area.RiskTier), out SelectionDiagnostics diagnostics);
         IReadOnlyList<CoverageGap> gaps = _gapDetector.Detect(area, selected, []);
 
         var result = new ImpactMappingResult(
             area, [], [], selected, gaps, anchors, diagnostics, tier, EarlyExit: true, warnings, stopwatch.Elapsed, runId);
         await RecordAsync(result, warnings, ct).ConfigureAwait(false);
+        await EmitRunPlanAsync(result, warnings, ct).ConfigureAwait(false);
         return result;
     }
 
@@ -424,19 +431,47 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
     {
         var byId = new Dictionary<int, Scored<TestCaseCandidate>>(retrieved);
 
+        // Expansion candidates must land on the RETRIEVAL scale or they can never compete. A flat constant
+        // here put every test found via the back-reference branch below every direct lexical hit, however
+        // generic — which defeats the branch that exists to find tests under title-mismatched features.
+        double maxRetrieval = retrieved.Count > 0 ? retrieved.Values.Max(c => c.Score) : 0;
+        double maxFeature = features.Count > 0 ? features.Max(f => f.Score) : 0;
+        double inherited = _retrieval.ExpandedChildScoreFactor;
+
+        double ScoreForParent(double parentScore)
+        {
+            if (maxFeature <= 0) return maxRetrieval * inherited;
+            double strength = Math.Clamp(parentScore / maxFeature, 0, 1);
+            return maxRetrieval > 0 ? maxRetrieval * strength * inherited : strength * inherited;
+        }
+
         int[] featureIds = features.Select(f => f.Value.Item.Id).Where(id => id >= 0).Distinct().ToArray();
         if (featureIds.Length > 0)
         {
+            Dictionary<int, double> featureScoreById = features
+                .GroupBy(f => f.Value.Item.Id)
+                .ToDictionary(g => g.Key, g => g.Max(x => x.Score));
+
             try
             {
                 IReadOnlyDictionary<int, IReadOnlyList<int>> childMap = await _ado.GetChildTestCasesAsync(featureIds, ct).ConfigureAwait(false);
-                int[] childIds = childMap.Values.SelectMany(x => x).Distinct().Where(id => !byId.ContainsKey(id)).ToArray();
+                Dictionary<int, double> scoreByChild = [];
+                foreach ((int featureId, IReadOnlyList<int> children) in childMap)
+                {
+                    double score = ScoreForParent(featureScoreById.GetValueOrDefault(featureId));
+                    foreach (int childId in children)
+                    {
+                        scoreByChild[childId] = Math.Max(scoreByChild.GetValueOrDefault(childId), score);
+                    }
+                }
+
+                int[] childIds = scoreByChild.Keys.Where(id => !byId.ContainsKey(id)).ToArray();
                 if (childIds.Length > 0)
                 {
                     IReadOnlyList<TestCaseCandidate> childTestCases = await _ado.GetTestCasesAsync(childIds, ct).ConfigureAwait(false);
                     foreach (TestCaseCandidate tc in childTestCases)
                     {
-                        byId.TryAdd(tc.Item.Id, new Scored<TestCaseCandidate>(tc, 0.1, []));
+                        byId.TryAdd(tc.Item.Id, new Scored<TestCaseCandidate>(tc, scoreByChild.GetValueOrDefault(tc.Item.Id), []));
                     }
                 }
             }
@@ -446,9 +481,10 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
             }
         }
 
+        double orphanScore = maxRetrieval * _retrieval.OrphanScoreFactor;
         foreach (TestCaseCandidate orphan in orphans)
         {
-            byId.TryAdd(orphan.Item.Id, new Scored<TestCaseCandidate>(orphan, 0.05, []));
+            byId.TryAdd(orphan.Item.Id, new Scored<TestCaseCandidate>(orphan, orphanScore, []));
         }
 
         return byId.Values
@@ -576,6 +612,27 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
         }
     }
 
+    /// <summary>
+    /// Writes the run manifest that lets a WatchItem pipeline execute this selection (R3). Off by default:
+    /// enabling it means a mapping run can trigger a pipeline, so it must be turned on deliberately.
+    /// </summary>
+    private async Task EmitRunPlanAsync(ImpactMappingResult result, List<string> warnings, CancellationToken ct)
+    {
+        if (!_selection.EmitRunManifest || string.IsNullOrWhiteSpace(_selection.RunManifestFolder))
+        {
+            return;
+        }
+
+        try
+        {
+            await _runPlan.WriteAsync(result, _selection.RunManifestFolder, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AddWarning(warnings, $"Run manifest not written: {ex.Message}");
+        }
+    }
+
     private static HydeQuery FallbackHyde(ImpactedArea area, ChangeDocument changeDoc)
     {
         IReadOnlyList<string> titles = changeDoc.ChangedLiterals.Count > 0
@@ -587,8 +644,21 @@ public sealed class ImpactTestMappingService : IImpactTestMappingService
         return new HydeQuery(summary, titles, string.Join(' ', changeDoc.ChangedLiterals), []);
     }
 
-    private TimeSpan BudgetFor(SelectionTier tier)
-        => _selection.TierBudgets.TryGetValue(tier, out TimeSpan budget) ? budget : TimeSpan.MaxValue;
+    private TimeSpan BudgetFor(SelectionTier tier, RiskTier risk)
+    {
+        TimeSpan budget = _selection.TierBudgets.TryGetValue(tier, out TimeSpan configured)
+            ? configured
+            : TimeSpan.MaxValue;
+
+        // Full is TimeSpan.MaxValue; scaling it overflows and it is already unbounded.
+        if (!_risk.EnableRiskWeighting || budget == TimeSpan.MaxValue)
+        {
+            return budget;
+        }
+
+        double multiplier = _risk.BudgetMultipliers.TryGetValue(risk, out double m) ? m : 1.0;
+        return multiplier <= 0 ? budget : budget * multiplier;
+    }
 
     private static void Report(
         IProgress<ImpactMappingProgress>? progress, string stage, int index, int total, string message, ImpactMappingResult? result = null)

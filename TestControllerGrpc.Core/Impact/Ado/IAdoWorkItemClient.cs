@@ -29,4 +29,12 @@ public interface IAdoWorkItemClient
     /// <summary>Streams work items of a type changed on/after <paramref name="since"/>, oldest first (drives incremental indexing).</summary>
     IAsyncEnumerable<AdoWorkItemRef> EnumerateChangedSinceAsync(string workItemType, DateTimeOffset since,
         int pageSize, CancellationToken ct);
+
+    /// <summary>
+    /// Streams ids of work items now in one of <paramref name="states"/> and changed on/after
+    /// <paramref name="since"/>. Drives the purge of documents whose work item was Removed or Closed after
+    /// it was indexed. Defaults to empty so offline and fake clients need no change.
+    /// </summary>
+    IAsyncEnumerable<int> EnumerateIdsInStatesAsync(string workItemType, IReadOnlyCollection<string> states,
+        DateTimeOffset since, CancellationToken ct) => AsyncEnumerable.Empty<int>();
 }

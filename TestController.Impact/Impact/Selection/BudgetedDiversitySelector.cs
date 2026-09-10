@@ -32,15 +32,11 @@ public interface IBudgetedSelector
 /// </summary>
 public sealed class BudgetedDiversitySelector : IBudgetedSelector
 {
-    private const double RetrievalWeight = 0.45;
-    private const double FeatureWeight = 0.25;
-    private const double GradeWeight = 0.20;
-    private const double FailureWeight = 0.10;
-    private const double AutomationBonus = 0.05;
     private const double DefaultDurationSeconds = 60;
 
     private readonly ImpactMappingOptions.SelectionOptions _selection;
     private readonly ImpactMappingOptions.RerankOptions _rerank;
+    private readonly ImpactMappingOptions.RiskOptions _risk;
 
     /// <summary>Creates the selector from impact-mapping options.</summary>
     public BudgetedDiversitySelector(IOptions<ImpactMappingOptions> options)
@@ -48,6 +44,7 @@ public sealed class BudgetedDiversitySelector : IBudgetedSelector
         ArgumentNullException.ThrowIfNull(options);
         _selection = options.Value.Selection;
         _rerank = options.Value.Rerank;
+        _risk = options.Value.Risk;
     }
 
     /// <inheritdoc />
@@ -122,7 +119,15 @@ public sealed class BudgetedDiversitySelector : IBudgetedSelector
             }
         }
 
-        // Step 6-7: confidence + provenance, ordered by final score.
+        // Step 6: risk floor — a Critical area must not ship 2 tests because the knapsack ran out of budget.
+        PromoteToRiskFloor(area, diverse, selected, selectedIds);
+
+        // Step 7: score floor, applied last so it can never strip a safety-net or risk-floor selection.
+        int droppedByScore = selected.RemoveAll(w =>
+            w.FinalScore < _selection.MinFinalScore && !mandatory.Contains(w.TestCase.Item.Id));
+        selectedIds.IntersectWith(selected.Select(w => w.TestCase.Item.Id));
+
+        // Step 8-9: confidence + provenance, ordered by final score.
         List<MappedTestCase> mapped = selected
             .OrderByDescending(w => w.FinalScore)
             .ThenBy(w => w.TestCase.Item.Id)
@@ -138,7 +143,7 @@ public sealed class BudgetedDiversitySelector : IBudgetedSelector
             budget,
             TimeSpan.FromSeconds(selected.Sum(w => Cost(w, durations, medianDuration))),
             droppedByBudget.Count(w => !selectedIds.Contains(w.TestCase.Item.Id)),
-            droppedByGrade,
+            droppedByGrade + droppedByScore,
             droppedByDiversity,
             marginal is null ? null : ToMappedTestCase(marginal, area, anchors, features, featureScores));
 
@@ -162,11 +167,11 @@ public sealed class BudgetedDiversitySelector : IBudgetedSelector
         bool automated = string.Equals(testCase.AutomationStatus, "Automated", StringComparison.OrdinalIgnoreCase);
 
         double finalScore =
-            (RetrievalWeight * retrievalNorm)
-            + (FeatureWeight * featureNorm)
-            + (GradeWeight * gradeTerm)
-            + (FailureWeight * failureRate)
-            + (automated ? AutomationBonus : 0);
+            (_selection.RetrievalWeight * retrievalNorm)
+            + (_selection.FeatureWeight * featureNorm)
+            + (_selection.GradeWeight * gradeTerm)
+            + (_selection.FailureWeight * failureRate)
+            + (automated ? _selection.AutomationBonus : 0);
 
         return new Working(testCase, featureId, finalScore, judgement, failureRate);
     }
@@ -243,6 +248,30 @@ public sealed class BudgetedDiversitySelector : IBudgetedSelector
         }
 
         return max;
+    }
+
+    private void PromoteToRiskFloor(
+        ImpactedArea area, List<Working> pool, List<Working> selected, HashSet<int> selectedIds)
+    {
+        if (!_risk.EnableRiskWeighting
+            || !_risk.MinimumSelections.TryGetValue(area.RiskTier, out int floor)
+            || selected.Count >= floor)
+        {
+            return;
+        }
+
+        foreach (Working w in pool.OrderByDescending(w => w.FinalScore).ThenBy(w => w.TestCase.Item.Id))
+        {
+            if (selected.Count >= floor)
+            {
+                break;
+            }
+
+            if (selectedIds.Add(w.TestCase.Item.Id))
+            {
+                selected.Add(w);
+            }
+        }
     }
 
     private HashSet<int> SafetyNet(List<Working> all, AnchorResult anchors, IReadOnlyList<Scored<FeatureCandidate>> features)

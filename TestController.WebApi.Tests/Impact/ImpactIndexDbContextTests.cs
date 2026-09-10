@@ -61,7 +61,10 @@ public sealed class ImpactIndexDbContextTests
 
             Assert.Equal(1, await ctx.CorpusStatistics.CountAsync());
             Assert.Equal(2, (await ctx.DocumentTerms.SingleAsync()).TermFrequency);
-            Assert.Equal("1", (await ctx.Metadata.SingleAsync()).Value);
+            Assert.Equal("1", (await ctx.Metadata.SingleAsync(m => m.Key == "DocumentCount")).Value);
+            Assert.Equal(
+                ImpactIndexInitializer.CurrentSchemaVersion.ToString(),
+                (await ctx.Metadata.SingleAsync(m => m.Key == ImpactIndexInitializer.SchemaVersionKey)).Value);
         }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using TestControllerGrpc.Ado.Reporting.Llm;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Core.Impact.Anchors;
+using TestControllerGrpc.Core.Impact.Execution;
 using TestControllerGrpc.Core.Impact.Features;
 using TestControllerGrpc.Core.Impact.Index;
 using TestControllerGrpc.Core.Impact.Learning;
@@ -27,7 +28,7 @@ public sealed class ImpactFixturesTests
             new KeywordExtractor(opt), embeddings, store, new HybridRetriever(opt, logger), new FeatureRanker(opt),
             new ParentFeatureResolver(ado, logger), new FeatureMerger(opt), new FanOutNormalizer(opt), ado,
             new FakeRelevanceReranker(), new LinearScoreCalibrator(), new BudgetedDiversitySelector(opt),
-            new CoverageGapDetector(), new FakeOutcomeStore(), opt, logger);
+            new CoverageGapDetector(), new FakeOutcomeStore(), new RunPlanWriter(opt, logger), opt, logger);
     }
 
     [Fact]
@@ -42,6 +43,28 @@ public sealed class ImpactFixturesTests
 
         var featureIds = result.SelectedFeatures.Select(f => f.Value.Item.Id).ToHashSet();
         Assert.All(corpus.TitleMismatchedFeatureIds, id => Assert.Contains(id, featureIds));
+    }
+
+    [Fact]
+    public async Task MapAsync_Should_RankExpandedTestCases_AboveGenericLexicalHits()
+    {
+        // Regression guard: expansion candidates once got a flat score of 0.1, which put every test found via
+        // the back-reference branch below every direct lexical hit however generic. The fixture's top ranks
+        // filled with boilerplate "Deploy Feature N regression" and precision@10 was zero.
+        FixtureCorpus corpus = ImpactFixtures.BuildGalaxyDeploymentCorpus();
+        var embeddings = new FakeEmbeddingProvider();
+        IRetrievalIndexStore store = await ImpactFixtures.BuildIndexStoreAsync(corpus, embeddings);
+
+        ImpactMappingResult result = await Build(corpus.Ado, store, embeddings)
+            .MapAsync(corpus.Area, corpus.Payload, SelectionTier.Targeted, CancellationToken.None);
+
+        HashSet<int> groundTruth = new[] { 10, 11, 12, 20, 21 }
+            .SelectMany(f => corpus.Ado.ChildrenByFeature.GetValueOrDefault(f, []))
+            .ToHashSet();
+
+        int inTop10 = result.MappedTestCases.Take(10).Count(m => groundTruth.Contains(m.TestCase.Item.Id));
+
+        Assert.Equal(10, inTop10);
     }
 
     [Fact]

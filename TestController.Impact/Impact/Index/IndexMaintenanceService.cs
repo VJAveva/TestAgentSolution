@@ -89,7 +89,7 @@ public sealed class IndexMaintenanceService : BackgroundService
     private async Task<bool> IsStaleAsync(CancellationToken ct)
     {
         await using ImpactIndexDbContext ctx = await _contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, ct).ConfigureAwait(false);
+        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, _options.Index.RebuildOnSchemaChange, ct).ConfigureAwait(false);
 
         IndexMetadata? built = await ctx.Metadata
             .FirstOrDefaultAsync(m => m.Key == "BuiltUtc", ct)

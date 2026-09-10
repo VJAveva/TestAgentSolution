@@ -95,7 +95,8 @@ public static class ImpactMappingEndpoints
         IDbContextFactory<ImpactIndexDbContext> contextFactory, CancellationToken ct)
     {
         await using ImpactIndexDbContext ctx = await contextFactory.CreateDbContextAsync(ct);
-        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, ct);
+        // Status is a read; it must not drop the index as a side effect of being polled.
+        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, rebuildOnSchemaChange: false, ct);
 
         Dictionary<string, string> metadata = await ctx.Metadata.ToDictionaryAsync(m => m.Key, m => m.Value, ct);
         int documentCount = await ctx.Documents.CountAsync(ct);

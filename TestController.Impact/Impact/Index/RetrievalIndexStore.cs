@@ -72,7 +72,8 @@ public sealed class RetrievalIndexStore : IRetrievalIndexStore
         }
 
         await using ImpactIndexDbContext ctx = await _contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, ct).ConfigureAwait(false);
+        // Readers never drop the index (single-writer invariant); a version mismatch throws instead.
+        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, rebuildOnSchemaChange: false, ct).ConfigureAwait(false);
 
         Dictionary<string, string> metadata = await ctx.Metadata
             .ToDictionaryAsync(m => m.Key, m => m.Value, ct)

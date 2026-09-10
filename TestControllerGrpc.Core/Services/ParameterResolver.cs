@@ -384,6 +384,14 @@ public static partial class ParameterResolver
     {
         if (!File.Exists(triggerFilePath)) return;
 
+        // A .json trigger must never reach ParseParameterFile: the CSV parser turns whole JSON
+        // lines into key names, which is how a secret once ended up inside a key.
+        if (IsLayeredConfig(triggerFilePath))
+        {
+            LoadJsonTrigger(ctx, triggerFilePath);
+            return;
+        }
+
         try
         {
             foreach (var (key, value) in ParseParameterFile(triggerFilePath))
@@ -392,6 +400,27 @@ public static partial class ParameterResolver
         catch (IOException)
         {
             // Trigger file may still be locked by writer — acceptable to skip silently
+        }
+    }
+
+    /// <summary>
+    /// Applies a layered JSON trigger. Every layer lands at <see cref="ParameterRank.TriggerFile"/>
+    /// because the whole file describes this one run, unlike a config where the layers rank apart.
+    /// Profiles are not applied: profile is an Initialize-node attribute and is unknown here.
+    /// </summary>
+    private static void LoadJsonTrigger(PipelineExecutionContext ctx, string filePath)
+    {
+        var config = ReadJsonConfig(filePath);
+        if (config is null) return;
+
+        foreach (var entry in config.Global)
+            SetParameter(ctx, entry.Key, entry.Value, ParameterRank.TriggerFile);
+
+        if (!string.IsNullOrEmpty(ctx.WatchItemTag)
+            && config.Pipelines.TryGetValue(ctx.WatchItemTag, out var pinned))
+        {
+            foreach (var entry in pinned)
+                SetParameter(ctx, entry.Key, entry.Value, ParameterRank.TriggerFile);
         }
     }
 }

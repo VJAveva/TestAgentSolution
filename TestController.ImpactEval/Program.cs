@@ -5,6 +5,7 @@ using TestControllerGrpc.Ado.Reporting.Llm;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Core.Impact.Anchors;
 using TestControllerGrpc.Core.Impact.Eval;
+using TestControllerGrpc.Core.Impact.Execution;
 using TestControllerGrpc.Core.Impact.Features;
 using TestControllerGrpc.Core.Impact.Index;
 using TestControllerGrpc.Core.Impact.Learning;
@@ -32,25 +33,37 @@ internal static class Program
         string verb = args.Length > 0 ? args[0].ToLowerInvariant() : "help";
         return verb switch
         {
-            "replay" => await ReplayAsync(GetOption(args, "--out")),
+            "replay" => await ReplayAsync(args),
             "compare" => Explain("compare produces a paired per-area delta table between two configs (config-a/config-b)."),
             "train" => Explain("train fits an isotonic or ranker calibrator from the outcome store's training pairs (P19/P20)."),
             _ => Usage(),
         };
     }
 
-    private static async Task<int> ReplayAsync(string? outCsv)
+    // Ground truth for the fixture: every test under the features a human would pick for a galaxy change.
+    private static readonly int[] GroundTruthFeatures = [10, 11, 12, 20, 21];
+
+    private static async Task<int> ReplayAsync(string[] args)
     {
+        var options = new ImpactMappingOptions();
+        Apply(args, "--min-score", v => options.Selection.MinFinalScore = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--mmr-lambda", v => options.Selection.MmrLambda = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--w-retrieval", v => options.Selection.RetrievalWeight = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--w-feature", v => options.Selection.FeatureWeight = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--w-grade", v => options.Selection.GradeWeight = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--child-factor", v => options.Retrieval.ExpandedChildScoreFactor = double.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--max-per-feature", v => options.Selection.MaxTestCasesPerFeature = int.Parse(v, CultureInfo.InvariantCulture));
+        Apply(args, "--max-total", v => options.Selection.MaxTestCasesTotal = int.Parse(v, CultureInfo.InvariantCulture));
+        int dump = int.TryParse(GetOption(args, "--dump"), out int d) ? d : 0;
+
         FixtureCorpus corpus = ImpactFixtures.BuildGalaxyDeploymentCorpus();
         var embeddings = new FakeEmbeddingProvider();
         IRetrievalIndexStore store = await ImpactFixtures.BuildIndexStoreAsync(corpus, embeddings);
 
-        ImpactMappingResult result = await BuildService(corpus.Ado, store, embeddings)
+        ImpactMappingResult result = await BuildService(corpus.Ado, store, embeddings, options)
             .MapAsync(corpus.Area, corpus.Payload, SelectionTier.Targeted, CancellationToken.None);
 
-        // Synthetic ground truth for the demo: the tests under the features a human would pick for a galaxy change.
-        int[] groundTruthFeatures = [10, 11, 12, 20, 21];
-        List<int> groundTruth = groundTruthFeatures
+        List<int> groundTruth = GroundTruthFeatures
             .SelectMany(f => corpus.Ado.ChildrenByFeature.GetValueOrDefault(f, []))
             .ToList();
         IReadOnlyList<int> produced = result.MappedTestCases.Select(m => m.TestCase.Item.Id).ToList();
@@ -63,7 +76,19 @@ internal static class Program
             result.EarlyExit);
 
         EvalReport report = EvalMetrics.Aggregate([evalCase], RecallKs);
+        Console.WriteLine(
+            $"config: minScore={options.Selection.MinFinalScore} mmrLambda={options.Selection.MmrLambda} " +
+            $"wRetrieval={options.Selection.RetrievalWeight} wFeature={options.Selection.FeatureWeight} " +
+            $"wGrade={options.Selection.GradeWeight} " +
+            $"maxPerFeature={options.Selection.MaxTestCasesPerFeature} maxTotal={options.Selection.MaxTestCasesTotal}");
         PrintReport(report);
+
+        if (dump > 0)
+        {
+            PrintRanking(result, groundTruth, dump);
+        }
+
+        string? outCsv = GetOption(args, "--out");
         if (!string.IsNullOrWhiteSpace(outCsv))
         {
             await File.WriteAllTextAsync(outCsv, ToCsv(report));
@@ -72,6 +97,33 @@ internal static class Program
 
         return 0;
     }
+
+    private static void Apply(string[] args, string name, Action<string> set)
+    {
+        string? raw = GetOption(args, name);
+        if (!string.IsNullOrWhiteSpace(raw)) set(raw);
+    }
+
+    // The ranked head is where a selector fails visibly: recall@10 can be zero while recall@50 is perfect.
+    private static void PrintRanking(ImpactMappingResult result, IReadOnlyCollection<int> groundTruth, int count)
+    {
+        var truth = groundTruth.ToHashSet();
+        Console.WriteLine();
+        Console.WriteLine($"  rank  id      score   grade  feature  gt  title");
+        foreach ((MappedTestCase m, int i) in result.MappedTestCases.Take(count).Select((m, i) => (m, i)))
+        {
+            string gt = truth.Contains(m.TestCase.Item.Id) ? "YES" : "   ";
+            Console.WriteLine(
+                $"  {i + 1,4}  {m.TestCase.Item.Id,-6}  {m.FinalScore,6:F3}  {m.Judgement?.Grade,5}  " +
+                $"{m.FeatureId,7}  {gt}  {Truncate(m.TestCase.Item.Title, 44)}");
+        }
+
+        int inHead = result.MappedTestCases.Take(count).Count(m => truth.Contains(m.TestCase.Item.Id));
+        Console.WriteLine($"  ground truth in head: {inHead}/{count}  (total selected {result.MappedTestCases.Count})");
+    }
+
+    private static string Truncate(string value, int max)
+        => value.Length <= max ? value : value[..(max - 1)] + "…";
 
     private static void PrintReport(EvalReport report)
     {
@@ -114,22 +166,25 @@ internal static class Program
     private static int Usage()
     {
         Console.WriteLine("TestController.ImpactEval — impact mapping evaluation harness");
-        Console.WriteLine("  replay  [--out <csv>]     replay the built-in fixture corpus and report metrics");
+        Console.WriteLine("  replay  [--out <csv>] [--dump <n>]     replay the fixture corpus and report metrics");
+        Console.WriteLine("          [--min-score <d>] [--mmr-lambda <d>] [--max-per-feature <n>] [--max-total <n>]");
         Console.WriteLine("  compare                   paired per-area delta between two configurations");
         Console.WriteLine("  train                     fit a calibrator from the outcome store");
         return 0;
     }
 
-    private static ImpactTestMappingService BuildService(FakeAdoWorkItemClient ado, IRetrievalIndexStore store, IEmbeddingProvider embeddings)
+    private static ImpactTestMappingService BuildService(
+        FakeAdoWorkItemClient ado, IRetrievalIndexStore store, IEmbeddingProvider embeddings,
+        ImpactMappingOptions settings)
     {
-        IOptions<ImpactMappingOptions> options = Options.Create(new ImpactMappingOptions());
+        IOptions<ImpactMappingOptions> options = Options.Create(settings);
         var logger = new ConsoleAppLogger();
         return new ImpactTestMappingService(
             new NoAnchors(), new ChangeDocumentBuilder(options), new FallbackHyde(), new KeywordExtractor(options),
             embeddings, store, new HybridRetriever(options, logger), new FeatureRanker(options),
             new ParentFeatureResolver(ado, logger), new FeatureMerger(options), new FanOutNormalizer(options), ado,
             new FakeRelevanceReranker(), new LinearScoreCalibrator(), new BudgetedDiversitySelector(options),
-            new CoverageGapDetector(), new NoOutcomes(), options, logger);
+            new CoverageGapDetector(), new NoOutcomes(), new RunPlanWriter(options, logger), options, logger);
     }
 
     private sealed class NoAnchors : IAnchorEdgeProvider

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WatchList Tree - Role Combinations</title>
+<style>
+  :root{
+    --bg:#0e1420; --panel:#131b2b; --panel2:#0b1220; --border:#233048; --border-soft:#1b2740;
+    --ink:#e8edf5; --ink-soft:#93a1b8; --ink-faint:#5f6f89;
+    --accent:#3b82f6; --accent-soft:#16233d;
+    --run:#22c55e; --run-soft:#0f2a1c; --run-bd:#1c5238;
+    --lock:#eab308; --lock-soft:#2a2410; --lock-bd:#5c4d12;
+    --admin:#a855f7; --admin-soft:#241432; --admin-bd:#4a2a6b;
+    --danger:#ef4444;
+    --disabled:#3a4864;
+    --seq:#3b82f6; --par:#eab308; --cmd:#64748b; --evt:#a855f7; --ref:#22c55e; --init:#06b6d4;
+    --mono:'SF Mono','Cascadia Code','Consolas',monospace;
+    --sans:'Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--sans);background:#070b12;color:var(--ink);font-size:13px;padding:18px;}
+  h1.page{font-size:18px;margin-bottom:3px;}
+  p.sub{color:var(--ink-soft);margin-bottom:16px;font-size:12.5px;}
+  p.sub b{color:var(--lock);font-family:var(--mono);}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start;}
+  .role{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+
+  .role-head{padding:11px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;}
+  .role-head.admin{background:var(--admin-soft);}
+  .role-head.mgr{background:var(--accent-soft);}
+  .role-head.eng{background:var(--run-soft);}
+  .avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:12px;}
+  .avatar.admin{background:var(--admin);} .avatar.mgr{background:var(--accent);} .avatar.eng{background:var(--run);}
+  .who{flex:1;} .who .name{font-weight:700;font-size:13px;} .who .rl{font-size:10.5px;color:var(--ink-soft);}
+  .rolechip{font-size:9px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:9px;color:#fff;}
+  .rolechip.admin{background:var(--admin);} .rolechip.mgr{background:var(--accent);} .rolechip.eng{background:var(--run);}
+
+  /* toolbar */
+  .toolbar{display:flex;gap:5px;padding:8px 10px;border-bottom:1px solid var(--border-soft);background:var(--panel2);}
+  .tbtn{font-size:10.5px;padding:4px 9px;border-radius:5px;border:1px solid var(--border);background:var(--panel);color:var(--ink-soft);display:inline-flex;gap:4px;align-items:center;}
+  .tbtn.primary{color:var(--accent);border-color:#274a7d;}
+  .tbtn.danger{color:var(--danger);border-color:#5c2626;}
+  .statusbar{display:flex;gap:11px;padding:6px 12px;border-bottom:1px solid var(--border-soft);font-size:10px;color:var(--ink-faint);background:var(--panel2);flex-wrap:wrap;}
+  .statusbar .s{display:inline-flex;gap:4px;align-items:center;}
+  .sd{width:7px;height:7px;border-radius:50%;}
+  .showing{margin-left:auto;color:var(--ink-faint);}
+
+  /* tree */
+  .tree{padding:8px 6px 12px;font-size:12px;}
+  .grp{color:var(--ink-soft);font-weight:600;padding:7px 8px 5px;display:flex;align-items:center;gap:6px;}
+  .grp .ct{margin-left:auto;font-size:10px;color:var(--ink-faint);}
+
+  .row{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:5px;position:relative;white-space:nowrap;overflow:hidden;}
+  .row:hover{background:#182338;}
+  .indent{display:inline-block;}
+  .caret{color:var(--ink-faint);width:10px;flex-shrink:0;font-size:9px;}
+  .tdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .tdot.run{background:var(--run);box-shadow:0 0 0 3px var(--run-soft);}
+  .tdot.lock{background:var(--lock);}
+  .tdot.idle{background:var(--ink-faint);}
+  .ic{width:13px;text-align:center;flex-shrink:0;color:var(--ink-soft);font-size:11px;}
+  .nm{flex-shrink:1;overflow:hidden;text-overflow:ellipsis;}
+  .kind{font-family:var(--mono);font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:4px;flex-shrink:0;}
+  .k-seq{background:#10203b;color:var(--seq);}
+  .k-par{background:#2a2410;color:var(--par);}
+  .k-cmd{background:#1a2130;color:var(--cmd);}
+  .k-evt{background:#241432;color:var(--evt);}
+  .k-ref{background:#0f2a1c;color:var(--ref);}
+  .k-init{background:#06283a;color:var(--init);}
+  .runs{margin-left:auto;font-size:9.5px;color:var(--ink-faint);flex-shrink:0;padding-left:8px;}
+
+  /* row states */
+  .row.running{background:var(--run-soft);}
+  .row.running .nm{color:#7ff0a8;font-weight:600;}
+  .row.locked-row{background:var(--lock-soft);}
+  .row.locked-row .nm{color:#f0d67a;}
+  .row.noaccess .nm{color:var(--disabled);}
+  .row.noaccess .ic{color:var(--disabled);}
+
+  /* the pill on the root */
+  .assign{font-size:8.5px;font-weight:700;padding:2px 7px;border-radius:9px;flex-shrink:0;}
+  .assign.you{background:var(--run-soft);color:var(--run);border:1px solid var(--run-bd);}
+  .assign.run-badge{background:var(--run);color:#062611;}
+  .assign.lock-badge{background:var(--lock);color:#241f04;}
+  .assign.noacc{background:#1a2337;color:var(--ink-faint);}
+
+  .rootbtn{font-size:9.5px;font-weight:600;padding:3px 10px;border-radius:5px;flex-shrink:0;}
+  .rootbtn.trigger{background:var(--accent);color:#fff;}
+  .rootbtn.trigger-dis{background:#1a2337;color:var(--disabled);border:1px solid var(--border);}
+  .rootbtn.override{background:var(--admin);color:#fff;}
+  .rootbtn.cancel{background:transparent;color:var(--danger);border:1px solid #5c2626;}
+
+  .lockline{font-size:10px;color:var(--lock);padding:3px 8px 3px 34px;display:flex;align-items:center;gap:6px;}
+  .miniav{width:15px;height:15px;border-radius:50%;color:#fff;font-size:8.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;}
+  .miniav.admin{background:var(--admin);} .miniav.mgr{background:var(--accent);} .miniav.eng{background:var(--run);}
+  .noaccline{font-size:10px;color:var(--ink-faint);padding:2px 8px 2px 34px;font-style:italic;}
+
+  /* legend + matrix */
+  .legend{margin-top:16px;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:13px 15px;}
+  .legend h3{font-size:12px;margin-bottom:9px;}
+  .lgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px 22px;}
+  .lg{display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:var(--ink-soft);}
+  .lg .t{flex-shrink:0;font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:8px;}
+
+  .combos{margin-top:14px;background:var(--panel);border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+  .combos h3{font-size:12px;padding:12px 15px;border-bottom:1px solid var(--border);}
+  table{width:100%;border-collapse:collapse;font-size:11px;}
+  th,td{text-align:left;padding:7px 12px;border-bottom:1px solid var(--border-soft);}
+  th{background:var(--panel2);color:var(--ink-faint);font-size:9.5px;letter-spacing:.03em;}
+  td.st{font-weight:600;color:var(--ink);}
+  .cr{color:var(--run);} .cl{color:var(--lock);} .ca{color:var(--admin);} .cn{color:var(--ink-faint);}
+  .note{margin-top:12px;font-size:11.5px;color:var(--ink-soft);background:var(--accent-soft);border:1px solid #274a7d;border-radius:8px;padding:10px 13px;}
+</style>
+</head>
+<body>
+
+<h1 class="page">WatchList Tree - Role Combinations</h1>
+<p class="sub">Same instant, three logins. Admin <b>VinodJavvadi</b> is running the pipeline <b>Revert 9 Nodes - Install SP2023R2SP2</b>. This is what each role's tree shows - note how it must lock for Ravi and Leela.</p>
+
+<div class="grid">
+
+  <!-- ================= ADMIN ================= -->
+  <div class="role">
+    <div class="role-head admin">
+      <div class="avatar admin">V</div>
+      <div class="who"><div class="name">VinodJavvadi</div><div class="rl">Administrator</div></div>
+      <span class="rolechip admin">ADMIN</span>
+    </div>
+    <div class="toolbar">
+      <span class="tbtn primary">&#9654; Trigger</span>
+      <span class="tbtn danger">&#10005; Cancel</span>
+      <span class="tbtn">&#8681; Import</span>
+      <span class="tbtn">&#8679; Export</span>
+      <span class="tbtn">&#8635; Refresh</span>
+    </div>
+    <div class="statusbar">
+      <span class="s"><span class="sd" style="background:var(--run)"></span>Triggerable</span>
+      <span class="s"><span class="sd" style="background:var(--ink-faint)"></span>View only</span>
+      <span class="s"><span class="sd" style="background:var(--disabled)"></span>Disabled</span>
+      <span class="s"><span class="sd" style="background:var(--lock)"></span>Locked</span>
+      <span class="showing">Showing 1 of 1 pipelines</span>
+    </div>
+    <div class="tree">
+      <div class="grp">&#9662; Test Plans (1 item)<span class="ct">1 item</span></div>
+
+      <!-- ROOT running by self (admin) -->
+      <div class="row running">
+        <span class="caret">&#9662;</span><span class="tdot run"></span><span class="ic">&#9655;</span>
+        <span class="nm">Revert 9 Nodes - Install SP2023R2SP2</span>
+        <span class="assign run-badge">RUNNING &middot; YOU</span>
+        <span class="rootbtn cancel">&#10005; Cancel</span>
+      </div>
+      <div class="lockline" style="color:var(--run)"><span class="miniav admin">V</span>Your run &middot; build <span style="font-family:var(--mono)">SP2023R2SP2</span> &middot; 04:12 elapsed</div>
+
+      <!-- children -->
+      <div class="row"><span class="indent" style="width:24px"></span><span class="caret">&#9662;</span><span class="ic">&#9889;</span><span class="nm">Renamed</span><span class="kind k-evt">EVT</span></div>
+      <div class="row"><span class="indent" style="width:40px"></span><span class="caret">&#9662;</span><span class="ic">&#8942;</span><span class="nm">Revert All Nine Nodes and Install SP2023R2SP2</span><span class="kind k-seq">SEQ</span><span class="runs">4 items</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret">&#9662;</span><span class="ic">&#8942;</span><span class="nm">PHASE 1 - Revert All Nine Nodes</span><span class="kind k-par">PAR</span><span class="runs">2 items</span></div>
+      <div class="row"><span class="indent" style="width:72px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">Revert WARM Pool (4 nodes)</span><span class="kind k-seq">SEQ</span><span class="runs">2 items</span></div>
+      <div class="row"><span class="indent" style="width:72px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">Revert Sanity Pool (5 nodes)</span><span class="kind k-seq">SEQ</span><span class="runs">2 items</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret"></span><span class="ic">&#9655;</span><span class="nm">Settle 4 minutes after revert</span><span class="kind k-cmd">CMD</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret">&#9662;</span><span class="ic">&#8942;</span><span class="nm">PHASE 3 - Prepare and Install SP2023R2SP2</span><span class="kind k-par">PAR</span><span class="runs">2 items</span></div>
+      <div class="row"><span class="indent" style="width:72px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">WARM Pool - Prep and Install</span><span class="kind k-seq">SEQ</span><span class="runs">4 items</span></div>
+      <div class="row"><span class="indent" style="width:72px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">Sanity Pool - Prep and Install</span><span class="kind k-seq">SEQ</span><span class="runs">4 items</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret"></span><span class="ic">&#9655;</span><span class="nm">Sending Email</span><span class="kind k-cmd">CMD</span></div>
+
+      <div class="grp" style="margin-top:6px">&#9662; Library (2)<span class="ct">2 items</span></div>
+      <div class="row"><span class="indent" style="width:16px"></span><span class="caret">&#9656;</span><span class="ic">&#128196;</span><span class="nm">Template: RevertWarmAgents</span></div>
+      <div class="row"><span class="indent" style="width:16px"></span><span class="caret">&#9656;</span><span class="ic">&#128196;</span><span class="nm">Template: RevertSanityAgents</span></div>
+    </div>
+  </div>
+
+  <!-- ================= MANAGER (RAVI) ================= -->
+  <div class="role">
+    <div class="role-head mgr">
+      <div class="avatar mgr">R</div>
+      <div class="who"><div class="name">ravivenula</div><div class="rl">Senior Manager</div></div>
+      <span class="rolechip mgr">MANAGER</span>
+    </div>
+    <div class="toolbar">
+      <span class="tbtn" style="color:var(--disabled)">&#9654; Trigger</span>
+      <span class="tbtn" style="color:var(--disabled)">&#10005; Cancel</span>
+      <span class="tbtn">&#8681; Import</span>
+      <span class="tbtn">&#8679; Export</span>
+      <span class="tbtn">&#8635; Refresh</span>
+    </div>
+    <div class="statusbar">
+      <span class="s"><span class="sd" style="background:var(--run)"></span>Triggerable</span>
+      <span class="s"><span class="sd" style="background:var(--ink-faint)"></span>View only</span>
+      <span class="s"><span class="sd" style="background:var(--disabled)"></span>Disabled</span>
+      <span class="s"><span class="sd" style="background:var(--lock)"></span>Locked</span>
+      <span class="showing">Showing 1 of 1 pipelines</span>
+    </div>
+    <div class="tree">
+      <div class="grp">&#9662; Test Plans (1 item)<span class="ct">1 item</span></div>
+
+      <!-- ROOT locked by admin -->
+      <div class="row locked-row">
+        <span class="caret">&#9662;</span><span class="tdot lock"></span><span class="ic">&#128274;</span>
+        <span class="nm">Revert 9 Nodes - Install SP2023R2SP2</span>
+        <span class="assign lock-badge">LOCKED</span>
+        <span class="rootbtn trigger-dis">&#9654; Trigger</span>
+      </div>
+      <div class="lockline"><span class="miniav admin">V</span>In use by <b>VinodJavvadi</b> &middot; 04:12 &middot; Trigger disabled</div>
+
+      <!-- children still visible (read-only) -->
+      <div class="row"><span class="indent" style="width:24px"></span><span class="caret">&#9662;</span><span class="ic">&#9889;</span><span class="nm">Renamed</span><span class="kind k-evt">EVT</span></div>
+      <div class="row"><span class="indent" style="width:40px"></span><span class="caret">&#9662;</span><span class="ic">&#8942;</span><span class="nm">Revert All Nine Nodes and Install SP2023R2SP2</span><span class="kind k-seq">SEQ</span><span class="runs">4 items</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">PHASE 1 - Revert All Nine Nodes</span><span class="kind k-par">PAR</span><span class="runs">2 items</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret"></span><span class="ic">&#9655;</span><span class="nm">Settle 4 minutes after revert</span><span class="kind k-cmd">CMD</span></div>
+      <div class="row"><span class="indent" style="width:56px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">PHASE 3 - Prepare and Install SP2023R2SP2</span><span class="kind k-par">PAR</span><span class="runs">2 items</span></div>
+
+      <div class="grp" style="margin-top:6px">&#9662; Library (2)<span class="ct">2 items</span></div>
+      <div class="row"><span class="indent" style="width:16px"></span><span class="caret">&#9656;</span><span class="ic">&#128196;</span><span class="nm">Template: RevertWarmAgents</span></div>
+      <div class="row"><span class="indent" style="width:16px"></span><span class="caret">&#9656;</span><span class="ic">&#128196;</span><span class="nm">Template: RevertSanityAgents</span></div>
+    </div>
+  </div>
+
+  <!-- ================= ENGINEER (LEELA) ================= -->
+  <div class="role">
+    <div class="role-head eng">
+      <div class="avatar eng">L</div>
+      <div class="who"><div class="name">leelap</div><div class="rl">Engineer</div></div>
+      <span class="rolechip eng">ENGINEER</span>
+    </div>
+    <div class="toolbar">
+      <span class="tbtn" style="color:var(--disabled)">&#9654; Trigger</span>
+      <span class="tbtn" style="color:var(--disabled)">&#10005; Cancel</span>
+      <span class="tbtn">&#8681; Import</span>
+      <span class="tbtn">&#8679; Export</span>
+      <span class="tbtn">&#8635; Refresh</span>
+    </div>
+    <div class="statusbar">
+      <span class="s"><span class="sd" style="background:var(--run)"></span>Triggerable</span>
+      <span class="s"><span class="sd" style="background:var(--ink-faint)"></span>View only</span>
+      <span class="s"><span class="sd" style="background:var(--disabled)"></span>Disabled</span>
+      <span class="s"><span class="sd" style="background:var(--lock)"></span>Locked</span>
+      <span class="showing">Showing 1 of 1 pipelines</span>
+    </div>
+    <div class="tree">
+      <div class="grp">&#9662; Test Plans (1 item)<span class="ct">1 item</span></div>
+
+      <!-- ROOT locked by admin (same as Ravi - Leela has access but it's in use) -->
+      <div class="row locked-row">
+        <span class="caret">&#9662;</span><span class="tdot lock"></span><span class="ic">&#128274;</span>
+        <span class="nm">Revert 9 Nodes - Install SP2023R2SP2</span>
+        <span class="assign lock-badge">LOCKED</span>
+        <span class="rootbtn trigger-dis">&#9654; Trigger</span>
+      </div>
+      <div class="lockline"><span class="miniav admin">V</span>In use by <b>VinodJavvadi</b> &middot; 04:12 &middot; Trigger disabled</div>
+
+      <div class="row"><span class="indent" style="width:24px"></span><span class="caret">&#9662;</span><span class="ic">&#9889;</span><span class="nm">Renamed</span><span class="kind k-evt">EVT</span></div>
+      <div class="row"><span class="indent" style="width:40px"></span><span class="caret">&#9656;</span><span class="ic">&#8942;</span><span class="nm">Revert All Nine Nodes and Install SP2023R2SP2</span><span class="kind k-seq">SEQ</span><span class="runs">4 items</span></div>
+      <div class="row"><span class="indent" style="width:40px"></span><span class="caret"></span><span class="ic">&#9655;</span><span class="nm">Sending Email</span><span class="kind k-cmd">CMD</span></div>
+
+      <div class="noaccline">&#128683; Other pipelines not granted to you are hidden</div>
+
+      <div class="grp" style="margin-top:6px">&#9662; Library (2)<span class="ct">2 items</span></div>
+      <div class="row"><span class="indent" style="width:16px"></span><span class="caret">&#9656;</span><span class="ic">&#128196;</span><span class="nm">Template: RevertWarmAgents</span></div>
+      <div class="row"><span class="indent" style="width:16px"></span><span class="caret">&#9656;</span><span class="ic">&#128196;</span><span class="nm">Template: RevertSanityAgents</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>The bug you are seeing:</b> right now, while Admin runs, Ravi and Leela still show a live <b>Trigger</b> button (not locked). The middle + right columns above show the CORRECT target: the root node flips to <b>LOCKED</b> with "In use by VinodJavvadi" and Trigger disabled, live via SignalR. Admin (left) additionally would see an <b>Override</b> button if someone ELSE held the lock.
+</div>
+
+<!-- legend -->
+<div class="legend">
+  <h3>Tree node states (per role)</h3>
+  <div class="lgrid">
+    <div class="lg"><span class="t" style="background:var(--run-soft);color:var(--run)">RUNNING &middot; YOU</span><span>Your own active run. Cancel + watch live log. Others see this same node as LOCKED.</span></div>
+    <div class="lg"><span class="t" style="background:var(--lock-soft);color:var(--lock)">LOCKED</span><span>Another user is running it. Owner name + elapsed shown. Trigger disabled (Admin gets Override).</span></div>
+    <div class="lg"><span class="t" style="background:#1a2337;color:var(--run)">TRIGGERABLE</span><span>Granted to you and free. Trigger enabled.</span></div>
+    <div class="lg"><span class="t" style="background:#1a2337;color:var(--ink-faint)">HIDDEN / NO ACCESS</span><span>Not granted. Hidden for non-admins; Admin sees every pipeline.</span></div>
+  </div>
+</div>
+
+<!-- matrix -->
+<div class="combos">
+  <h3>All combinations - one pipeline, every role x every state</h3>
+  <table>
+    <thead><tr><th>Pipeline state</th><th>Admin (Vinod)</th><th>Manager w/ access (Ravi)</th><th>Engineer w/ access (Leela)</th><th>User without access</th></tr></thead>
+    <tbody>
+      <tr><td class="st">Idle &amp; free</td><td class="cr">Trigger (any build)</td><td class="cr">Trigger (pick build)</td><td class="cr">Trigger (pick build)</td><td class="cn">Hidden</td></tr>
+      <tr><td class="st">You are running it</td><td class="cr">Cancel + live log</td><td class="cr">Cancel + live log</td><td class="cr">Cancel + live log</td><td class="cn">Hidden</td></tr>
+      <tr><td class="st">Locked by another</td><td class="ca">&#9889; Override + Watch</td><td class="cl">LOCKED, Trigger disabled + Watch</td><td class="cl">LOCKED, Trigger disabled + Watch</td><td class="cn">Hidden</td></tr>
+      <tr><td class="st">Disabled pipeline</td><td class="cn">Shown disabled</td><td class="cn">Shown disabled</td><td class="cn">Shown disabled</td><td class="cn">Hidden</td></tr>
+      <tr><td class="st">Build = global default</td><td class="cr">Shown; can edit global</td><td class="cr">Default; pick per-run</td><td class="cr">Default; pick per-run</td><td class="cn">&mdash;</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

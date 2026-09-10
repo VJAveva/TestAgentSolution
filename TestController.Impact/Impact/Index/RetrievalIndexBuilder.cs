@@ -25,6 +25,8 @@ public sealed class RetrievalIndexBuilder
 {
     private const string WorkItemTypeFeature = "Feature";
     private const string WorkItemTypeTestCase = "Test Case";
+    private const string TestCasePrefix = "TC:";
+    private const string FeaturePrefix = "F:";
 
     private const string MetaDocumentCount = "DocumentCount";
     private const string MetaAverageLength = "AverageDocumentLength";
@@ -65,7 +67,7 @@ public sealed class RetrievalIndexBuilder
         DateTimeOffset startedAt = DateTimeOffset.UtcNow;
 
         await using ImpactIndexDbContext ctx = await _contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, ct).ConfigureAwait(false);
+        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, _options.Index.RebuildOnSchemaChange, ct).ConfigureAwait(false);
 
         DateTimeOffset since = fullRebuild
             ? DateTimeOffset.MinValue
@@ -97,11 +99,12 @@ public sealed class RetrievalIndexBuilder
         }
 
         Report(progress, "Index:Statistics", 2, 3, "Recomputing corpus statistics…");
+        int purged = await PurgeExcludedStatesAsync(ctx, since, ct).ConfigureAwait(false);
         await RecomputeCorpusStatisticsAsync(ctx, startedAt, ct).ConfigureAwait(false);
 
         TimeSpan elapsed = DateTimeOffset.UtcNow - startedAt;
         _logger.Info("ImpactIndex",
-            $"Index build complete: indexed={indexed}, skipped={skipped}, features={featureRefs.Count}, testCases={testCaseRefs.Count}, elapsed={elapsed}.");
+            $"Index build complete: indexed={indexed}, skipped={skipped}, purged={purged}, features={featureRefs.Count}, testCases={testCaseRefs.Count}, elapsed={elapsed}.");
         Report(progress, "Index:Done", 3, 3, $"Indexed {indexed}, skipped {skipped}.");
 
         return new IndexBuildResult(indexed, skipped, featureRefs.Count, testCaseRefs.Count, elapsed);
@@ -131,13 +134,13 @@ public sealed class RetrievalIndexBuilder
     {
         string? tags = testCase.Tags is { Count: > 0 } ? string.Join(' ', testCase.Tags) : null;
         string text = ComposeText(testCase.Item.Title, testCase.StepsText, tags);
-        return new DocumentDraft($"TC:{testCase.Item.Id}", IndexKind.TestCase, testCase.Item.Id, testCase.Item.Title, text, testCase.Item.Revision, 0);
+        return new DocumentDraft($"{TestCasePrefix}{testCase.Item.Id}", IndexKind.TestCase, testCase.Item.Id, testCase.Item.Title, text, testCase.Item.Revision, 0);
     }
 
     private static DocumentDraft DraftFrom(FeatureCandidate feature)
     {
         string text = ComposeText(feature.Item.Title, feature.Description);
-        return new DocumentDraft($"F:{feature.Item.Id}", IndexKind.Feature, feature.Item.Id, feature.Item.Title, text, feature.Item.Revision, feature.ChildTestCaseCount);
+        return new DocumentDraft($"{FeaturePrefix}{feature.Item.Id}", IndexKind.Feature, feature.Item.Id, feature.Item.Title, text, feature.Item.Revision, feature.ChildTestCaseCount);
     }
 
     private static string ComposeText(params string?[] parts)
@@ -276,6 +279,54 @@ public sealed class RetrievalIndexBuilder
         }
 
         return all;
+    }
+
+    /// <summary>
+    /// Deletes documents whose work item has since moved into <c>Ado.ExcludedStates</c>. The state filter on
+    /// the indexing query stops new ones arriving but cannot remove what is already stored, and a document
+    /// for a deleted test case is worse than a missing one — it gets recommended. Scoped to items changed
+    /// since the watermark, so an incremental build purges the delta and a full rebuild purges everything.
+    /// </summary>
+    private async Task<int> PurgeExcludedStatesAsync(ImpactIndexDbContext ctx, DateTimeOffset since, CancellationToken ct)
+    {
+        IReadOnlyList<string> states = _options.Ado.ExcludedStates;
+        if (states is null || states.Count == 0)
+        {
+            return 0;
+        }
+
+        var docIds = new List<string>();
+        foreach ((string type, string prefix) in new[]
+        {
+            (WorkItemTypeTestCase, TestCasePrefix),
+            (WorkItemTypeFeature, FeaturePrefix),
+        })
+        {
+            await foreach (int id in _ado.EnumerateIdsInStatesAsync(type, states, since, ct).ConfigureAwait(false))
+            {
+                docIds.Add(prefix + id.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+
+        if (docIds.Count == 0)
+        {
+            return 0;
+        }
+
+        int deleted = 0;
+        foreach (string[] batch in docIds.Chunk(BatchSize))
+        {
+            await ctx.DocumentTerms.Where(t => batch.Contains(t.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            await ctx.DocumentVectors.Where(v => batch.Contains(v.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            deleted += await ctx.Documents.Where(d => batch.Contains(d.Id)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        }
+
+        if (deleted > 0)
+        {
+            _logger.Info("ImpactIndex", $"Purged {deleted} document(s) in excluded state(s): {string.Join(", ", states)}.");
+        }
+
+        return deleted;
     }
 
     private async Task RecomputeCorpusStatisticsAsync(ImpactIndexDbContext ctx, DateTimeOffset indexedThrough, CancellationToken ct)

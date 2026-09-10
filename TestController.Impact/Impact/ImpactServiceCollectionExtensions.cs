@@ -7,6 +7,7 @@ using TestControllerGrpc.Ado;
 using TestControllerGrpc.Ado.Reporting.Llm;
 using TestControllerGrpc.Core.Impact.Ado;
 using TestControllerGrpc.Core.Impact.Anchors;
+using TestControllerGrpc.Core.Impact.Execution;
 using TestControllerGrpc.Core.Impact.Features;
 using TestControllerGrpc.Core.Impact.Index;
 using TestControllerGrpc.Core.Impact.Learning;
@@ -14,6 +15,7 @@ using TestControllerGrpc.Core.Impact.Query;
 using TestControllerGrpc.Core.Impact.Ranking;
 using TestControllerGrpc.Core.Impact.Rerank;
 using TestControllerGrpc.Core.Impact.Retrieval;
+using TestControllerGrpc.Core.Impact.Risk;
 using TestControllerGrpc.Core.Impact.Selection;
 using TestControllerGrpc.Services;
 
@@ -155,6 +157,8 @@ public static class ImpactServiceCollectionExtensions
         services.TryAddSingleton<IAnchorEdgeProvider, AnchorEdgeProvider>();
         services.TryAddSingleton<IBudgetedSelector, BudgetedDiversitySelector>();
         services.TryAddSingleton<ICoverageGapDetector, CoverageGapDetector>();
+        services.TryAddSingleton<IRegressionRiskScorer, RegressionRiskScorer>();
+        services.TryAddSingleton<IRunPlanWriter, RunPlanWriter>();
 
         // Orchestrator.
         services.TryAddSingleton<IImpactTestMappingService, ImpactTestMappingService>();

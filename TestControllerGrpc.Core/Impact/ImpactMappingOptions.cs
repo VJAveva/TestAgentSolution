@@ -26,6 +26,7 @@ public sealed class ImpactMappingOptions
     public AnchorOptions Anchors { get; set; } = new();
     public RerankOptions Rerank { get; set; } = new();
     public SelectionOptions Selection { get; set; } = new();
+    public RiskOptions Risk { get; set; } = new();
     public LearningOptions Learning { get; set; } = new();
 
     /// <summary>Returns a list of configuration problems (empty when valid). Never throws.</summary>
@@ -50,7 +51,11 @@ public sealed class ImpactMappingOptions
         Positive(Retrieval.MaxCandidateTestCases, "Retrieval.MaxCandidateTestCases");
         Positive(Selection.MaxTestCasesTotal, "Selection.MaxTestCasesTotal");
         Positive(Selection.MaxTestCasesPerFeature, "Selection.MaxTestCasesPerFeature");
+        Positive(Selection.MaxInlineFilterChars, "Selection.MaxInlineFilterChars");
         Positive(Anchors.MinAnchorsForEarlyExit, "Anchors.MinAnchorsForEarlyExit");
+
+        if (Selection.EmitRunManifest && string.IsNullOrWhiteSpace(Selection.RunManifestFolder))
+            problems.Add("Selection.RunManifestFolder is required when Selection.EmitRunManifest is true.");
 
         if (Retrieval.RrfK <= 0)
             problems.Add("Retrieval.RrfK must be greater than 0.");
@@ -62,6 +67,20 @@ public sealed class ImpactMappingOptions
             problems.Add("Selection.MmrLambda must be within [0, 1].");
         if (Selection.TierBudgets is null || Selection.TierBudgets.Count == 0)
             problems.Add("Selection.TierBudgets must not be empty.");
+
+        Positive(Risk.ChurnReferenceFiles, "Risk.ChurnReferenceFiles");
+        Positive(Risk.ChurnReferenceChanges, "Risk.ChurnReferenceChanges");
+        if (Risk.DefectSaturation <= 0)
+            problems.Add("Risk.DefectSaturation must be greater than 0.");
+        if (Risk.RecencyHalfLifeDays <= 0)
+            problems.Add("Risk.RecencyHalfLifeDays must be greater than 0.");
+        if (Risk.HighThreshold > Risk.CriticalThreshold)
+            problems.Add("Risk.HighThreshold must be <= Risk.CriticalThreshold.");
+
+        double weightSum = Risk.ChurnWeight + Risk.DefectWeight + Risk.BuildFailureWeight
+            + Risk.RecencyWeight + Risk.UncertaintyWeight;
+        if (Math.Abs(weightSum - 1.0) > 0.001)
+            problems.Add($"Risk weights must sum to 1.0 (found {weightSum:0.###}).");
 
         return problems;
     }
@@ -83,12 +102,15 @@ public sealed class ImpactMappingOptions
     /// <summary>Azure DevOps query and hydration limits.</summary>
     public sealed class AdoOptions
     {
-        public int MaxFeaturesPerGroupQuery { get; set; } = 100;
-        public int MaxTestCasesPerGroupQuery { get; set; } = 200;
         public int BatchSize { get; set; } = 200;
         public IReadOnlyList<string> IncludedAreaPaths { get; set; } = [];
+
+        /// <summary>States excluded from the corpus. Applied as a WIQL NOT IN predicate at index time, and
+        /// purged from the existing index on the next build.</summary>
         public IReadOnlyList<string> ExcludedStates { get; set; } = ["Removed", "Closed"];
         public int MaxRetries { get; set; } = 4;
+
+        /// <summary>How many hierarchy levels the linked-work-item anchor walk descends.</summary>
         public int LinkWalkMaxDepth { get; set; } = 3;
     }
 
@@ -103,10 +125,11 @@ public sealed class ImpactMappingOptions
         /// </summary>
         public string DatabasePath { get; set; } = "impact-index.db";
         public TimeSpan MaxAge { get; set; } = TimeSpan.FromHours(30);
-        public bool UseWiqlPreFilter { get; set; }
         public string EmbeddingModel { get; set; } = "text-embedding-3-small";
         public int EmbeddingBatchSize { get; set; } = 64;
         public int IncrementalPageSize { get; set; } = 200;
+
+        /// <summary>Drop and recreate the index when its stamped schema version is not the current one.</summary>
         public bool RebuildOnSchemaChange { get; set; } = true;
 
         /// <summary>Azure OpenAI resource endpoint for embeddings. Empty → semantic retrieval is disabled
@@ -130,13 +153,19 @@ public sealed class ImpactMappingOptions
         public double SemanticWeight { get; set; } = 1.0;
         public int TopTestCasesPerGroup { get; set; } = 25;
         public int TopFeaturesPerGroup { get; set; } = 10;
-        public int TopFeaturesPerBranch { get; set; } = 20;
         public int MaxFeaturesAfterMerge { get; set; } = 30;
         public int MaxCandidateTestCases { get; set; } = 400;
         public double CorroborationBonus { get; set; } = 0.15;
         public double FanOutPenaltyFloor { get; set; } = 0.35;
         public double FanOutPenaltyCeiling { get; set; } = 1.30;
         public double HubWarningMultiple { get; set; } = 5.0;
+
+        /// <summary>Share of the retrieval scale a test inherits from its parent feature when it was found by
+        /// feature expansion rather than by a direct lexical hit.</summary>
+        public double ExpandedChildScoreFactor { get; set; } = 0.85;
+
+        /// <summary>Share of the retrieval scale given to a test case with no resolvable parent feature.</summary>
+        public double OrphanScoreFactor { get; set; } = 0.30;
     }
 
     /// <summary>Tier-0 anchor and early-exit thresholds.</summary>
@@ -172,14 +201,81 @@ public sealed class ImpactMappingOptions
     public sealed class SelectionOptions
     {
         public double MmrLambda { get; set; } = 0.70;
+
+        // T4 candidate score = Retrieval*r + Feature*f + Grade*g + Failure*h + Automation bonus.
+        // Feature weight is the dangerous one: it credits a test for its PARENT's title matching, which
+        // outranks a test whose own text matches when the parent is title-mismatched.
+        public double RetrievalWeight { get; set; } = 0.45;
+        public double FeatureWeight { get; set; } = 0.25;
+        public double GradeWeight { get; set; } = 0.20;
+        public double FailureWeight { get; set; } = 0.10;
+        public double AutomationBonus { get; set; } = 0.05;
         public int MaxTestCasesPerFeature { get; set; } = 12;
         public int MaxTestCasesTotal { get; set; } = 150;
         public double MinFinalScore { get; set; } = 0.15;
+
+        /// <summary>When false the engine never writes a run manifest, so it can never trigger a pipeline (R3).</summary>
+        public bool EmitRunManifest { get; set; }
+
+        /// <summary>Folder the run manifest is written to. Must be a folder a WatchItem watches.</summary>
+        public string? RunManifestFolder { get; set; }
+
+        /// <summary>Longest inline [_TestFilter] to emit; beyond this only [_TestListFile] is usable.</summary>
+        public int MaxInlineFilterChars { get; set; } = 6000;
         public Dictionary<SelectionTier, TimeSpan> TierBudgets { get; set; } = new()
         {
             [SelectionTier.Smoke] = TimeSpan.FromMinutes(15),
             [SelectionTier.Targeted] = TimeSpan.FromMinutes(90),
             [SelectionTier.Full] = TimeSpan.MaxValue,
+        };
+    }
+
+    /// <summary>
+    /// Regression risk scoring (R1) and the risk-aware selection tuning it drives (R2).
+    /// See docs/impact/Regression-Selection-Algorithm.md §2-3.
+    /// </summary>
+    public sealed class RiskOptions
+    {
+        /// <summary>When false the scored tier is computed and logged but never consumed by selection (phase 1).</summary>
+        public bool EnableRiskWeighting { get; set; }
+
+        public double ChurnWeight { get; set; } = 0.30;
+        public double DefectWeight { get; set; } = 0.25;
+        public double BuildFailureWeight { get; set; } = 0.20;
+        public double RecencyWeight { get; set; } = 0.15;
+        public double UncertaintyWeight { get; set; } = 0.10;
+
+        /// <summary>Files-touched value that saturates the churn term.</summary>
+        public int ChurnReferenceFiles { get; set; } = 40;
+
+        /// <summary>Change-count value that saturates the churn term.</summary>
+        public int ChurnReferenceChanges { get; set; } = 10;
+
+        /// <summary>Weighted defect count at which the defect term reaches 1.0.</summary>
+        public double DefectSaturation { get; set; } = 4;
+
+        /// <summary>Half-life of the recency decay, in days.</summary>
+        public double RecencyHalfLifeDays { get; set; } = 7;
+
+        public double CriticalThreshold { get; set; } = 0.70;
+        public double HighThreshold { get; set; } = 0.45;
+
+        /// <summary>Budget scaling per tier. Never applied to SelectionTier.Full (TimeSpan.MaxValue).</summary>
+        public Dictionary<RiskTier, double> BudgetMultipliers { get; set; } = new()
+        {
+            [RiskTier.Critical] = 1.50,
+            [RiskTier.High] = 1.25,
+            [RiskTier.Medium] = 1.00,
+            [RiskTier.Unmapped] = 1.00,
+        };
+
+        /// <summary>Floor on selected test cases per tier, enforced after the budget knapsack.</summary>
+        public Dictionary<RiskTier, int> MinimumSelections { get; set; } = new()
+        {
+            [RiskTier.Critical] = 8,
+            [RiskTier.High] = 5,
+            [RiskTier.Medium] = 3,
+            [RiskTier.Unmapped] = 3,
         };
     }
 

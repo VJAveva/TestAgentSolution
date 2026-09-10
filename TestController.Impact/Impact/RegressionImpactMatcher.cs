@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using TestControllerGrpc.Ado;
+using TestControllerGrpc.Core.Impact.Risk;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -19,14 +20,20 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
     private const SelectionTier Tier = SelectionTier.Targeted;
 
     private readonly IImpactTestMappingService _engine;
+    private readonly IRegressionRiskScorer _riskScorer;
     private readonly string _organization;
     private readonly IAppLogger _logger;
 
     /// <summary>Creates the matcher over the impact engine and the ADO organization (for Test Case deep links).</summary>
-    public RegressionImpactMatcher(IImpactTestMappingService engine, IOptions<AdoOptions> adoOptions, IAppLogger logger)
+    public RegressionImpactMatcher(
+        IImpactTestMappingService engine,
+        IRegressionRiskScorer riskScorer,
+        IOptions<AdoOptions> adoOptions,
+        IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(adoOptions);
         _engine = engine;
+        _riskScorer = riskScorer;
         _organization = adoOptions.Value.Organization ?? "";
         _logger = logger;
     }
@@ -97,12 +104,14 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
         return perRow.SelectMany(x => x).ToList();
     }
 
-    private static ImpactedArea ToImpactedArea(SubsystemRow row)
+    private ImpactedArea ToImpactedArea(SubsystemRow row)
     {
-        DateTimeOffset last = row.Changes.Count > 0 ? row.Changes.Max(c => c.ObservedUtc) : DateTimeOffset.UnixEpoch;
-        var churn = new ChurnMetrics(
-            LinesAdded: 0, LinesDeleted: 0, FilesTouched: row.TotalFilesModified,
-            CommitCount: row.Changes.Count, DistinctAuthorCount: 0, LastChangedUtc: last);
+        RegressionRiskAssessment risk = _riskScorer.Score(row, DateTimeOffset.UtcNow);
+
+        _logger.Info(
+            "ImpactRisk",
+            $"'{row.Component}' risk {risk.Score:0.###} => {risk.Tier} " +
+            $"({string.Join(", ", risk.Components.Select(c => $"{c.Name}={c.Raw:0.##}"))})");
 
         return new ImpactedArea(
             AreaId: row.Component,
@@ -111,8 +120,8 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
             Vob: null,
             ChangedPaths: row.FilesModified,
             DeclaredRegressionAreas: row.RegressionAreas ?? [],
-            RiskTier: RiskTier.Medium,
-            Churn: churn);
+            RiskTier: risk.Tier,
+            Churn: risk.Churn);
     }
 
     private static ChangePayload ToChangePayload(SubsystemRow row)

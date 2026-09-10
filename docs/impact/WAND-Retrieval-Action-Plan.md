@@ -1,9 +1,39 @@
 # WAND Dynamic Pruning — Action Plan
 
-Status: **REVIEW COMPLETE — BLOCKED PENDING DECISIONS.** No code changed.
+Status: **NOT PROCEEDING (2026-09-10).** Superseded by the decision recorded in §0. The verification log and
+conflicts C1–C6 below remain accurate and are retained as the record; C3's schema-versioning finding was
+extracted and implemented separately.
 
-Per ground rule 1 every claim below was read from source. Per ground rule 3, six conflicts between the
-requirements and the code are reported rather than resolved. Phase 1 must not start until C1–C4 are decided.
+---
+
+## 0. Decision: do not implement
+
+Rejected on cost/benefit after re-verifying the premises.
+
+**The optimisation target is already gone.** C4 correctly notes the 18.5 s is snapshot *load*, not scoring.
+What C4 missed is that `RetrievalIndexStore.GetSnapshotAsync` no longer loads the corpus at all — it calls
+`LoadTermScopedDocumentsAsync`, carrying this comment:
+
+> `// Only the query terms' frequencies are ever read: Bm25Scorer resolves IDF per query term and nothing`
+> `// else consults the table. Loading all 145k corpus rows per call was pure waste.`
+
+So `IndexSnapshot._documents` is *already* the union of the query's posting lists, and `SearchBm25`'s
+"iterate every document" loop iterates exactly the set a WAND cursor would iterate. The remaining win is
+skipping *within* that union — on an operation measured at **~220 ms**, against a ~18.5 s cold load that
+happens **once per process** (`KindCache` is a Singleton keyed on `BuiltUtc`).
+
+**The cost is disproportionate.** Phases 2–4 require a surrogate integer key (C2), a binary postings format,
+a cursor refactor touching five consumers (C4), and a forced multi-hour ADO re-crawl in production (C3) — to
+address roughly 1 % of the wall clock on a path users hit once per restart.
+
+**Revisit if, and only if,** warm BM25 latency becomes user-visible (say >2 s at p95), or the corpus grows
+past ~1 M documents such that a single term's posting list stops fitting comfortably in memory. Re-measure
+before reopening; do not reopen on the 18.5 s figure, which this decision has already accounted for.
+
+**Extracted and shipped:** C3's finding. `ImpactIndexInitializer` now stamps and checks a `SchemaVersion`
+metadata key, `Index.RebuildOnSchemaChange` is read rather than dead, writers drop-and-recreate on mismatch
+and readers throw. An index with no stamped version is adopted, not dropped, so the existing production
+index survives. That was the genuinely dangerous finding in this document and it is now closed.
 
 ---
 

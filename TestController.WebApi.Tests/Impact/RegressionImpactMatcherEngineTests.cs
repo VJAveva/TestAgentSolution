@@ -4,6 +4,7 @@ using TestControllerGrpc.Ado;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Core.Impact.Ado;
 using TestControllerGrpc.Core.Impact.Anchors;
+using TestControllerGrpc.Core.Impact.Execution;
 using TestControllerGrpc.Core.Impact.Features;
 using TestControllerGrpc.Core.Impact.Index;
 using TestControllerGrpc.Core.Impact.Learning;
@@ -11,6 +12,7 @@ using TestControllerGrpc.Core.Impact.Query;
 using TestControllerGrpc.Core.Impact.Ranking;
 using TestControllerGrpc.Core.Impact.Rerank;
 using TestControllerGrpc.Core.Impact.Retrieval;
+using TestControllerGrpc.Core.Impact.Risk;
 using TestControllerGrpc.Core.Impact.Selection;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
@@ -42,7 +44,8 @@ public sealed class RegressionImpactMatcherEngineTests
             RegressionAreas: regressionAreas);
 
     private static RegressionImpactMatcher Matcher(IImpactTestMappingService engine) =>
-        new(engine, Options.Create(new AdoOptions { Organization = "AVEVA-VSTS" }), new NoopAppLogger());
+        new(engine, new RegressionRiskScorer(Options.Create(new ImpactMappingOptions())),
+            Options.Create(new AdoOptions { Organization = "AVEVA-VSTS" }), new NoopAppLogger());
 
     [Fact]
     public async Task MatchAsync_Should_RetrieveMatches_When_IndexIsPopulated()
@@ -165,7 +168,7 @@ public sealed class RegressionImpactMatcherEngineTests
             NullEmbeddingProvider.Instance, store, new HybridRetriever(opt, logger), new FeatureRanker(opt),
             new ParentFeatureResolver(ado, logger), new FeatureMerger(opt), new FanOutNormalizer(opt), ado,
             new PassThroughReranker(), new LinearScoreCalibrator(), new BudgetedDiversitySelector(opt),
-            new CoverageGapDetector(), new FakeOutcomes(), opt, logger);
+            new CoverageGapDetector(), new FakeOutcomes(), new RunPlanWriter(opt, logger), opt, logger);
     }
 
     private static FakeAdo AdoWithCorpus()

@@ -57,6 +57,39 @@ public sealed class BudgetedDiversitySelectorTests
     }
 
     [Fact]
+    public void Select_Should_DropBelowMinFinalScore()
+    {
+        var options = new ImpactMappingOptions();
+        options.Selection.MinFinalScore = 0.5;
+        var judgements = new Dictionary<int, RelevanceJudgement> { [101] = J(3), [102] = J(1, 0.1) };
+
+        IReadOnlyList<MappedTestCase> result = Selector(options).Select(
+            Area(), [], [Tc(101, 900, 1.0), Tc(102, 901, 0.01)], judgements, NoAnchors(),
+            new Dictionary<int, double>(), new Dictionary<int, TimeSpan>(), IndexSnapshot.Empty,
+            SelectionTier.Full, TimeSpan.MaxValue, out _);
+
+        Assert.Contains(result, m => m.TestCase.Item.Id == 101);
+        Assert.DoesNotContain(result, m => m.TestCase.Item.Id == 102);
+    }
+
+    [Fact]
+    public void Select_Should_KeepAnchorBelowMinFinalScore()
+    {
+        // The score floor runs last precisely so it cannot strip a mandatory safety-net selection.
+        var options = new ImpactMappingOptions();
+        options.Selection.MinFinalScore = 0.9;
+        var judgements = new Dictionary<int, RelevanceJudgement> { [101] = J(1, 0.1) };
+        var anchors = new AnchorResult([new AnchorEdge(101, 900, AnchorSource.LinkedWorkItem, 1.0, "linked")], 1.0, false);
+
+        IReadOnlyList<MappedTestCase> result = Selector(options).Select(
+            Area(), [], [Tc(101, 900, 0.01)], judgements, anchors,
+            new Dictionary<int, double>(), new Dictionary<int, TimeSpan>(), IndexSnapshot.Empty,
+            SelectionTier.Full, TimeSpan.MaxValue, out _);
+
+        Assert.Equal(101, Assert.Single(result).TestCase.Item.Id);
+    }
+
+    [Fact]
     public void Select_Should_RespectBudget()
     {
         var judgements = new Dictionary<int, RelevanceJudgement> { [101] = J(2, 0.7), [102] = J(2, 0.7), [103] = J(2, 0.7) };
