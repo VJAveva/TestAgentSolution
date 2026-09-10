@@ -98,6 +98,19 @@ public sealed class AdoOptions
     /// </summary>
     public string? SecretEnvVarName { get; set; }
 
+    /// <summary>
+    /// Entra app (client) id of the SPA registration used by the WebClient for delegated ADO sign-in.
+    /// Must be a separate registration from <see cref="ClientId"/> unless that one also has a SPA redirect URI.
+    /// Empty disables the web sign-in affordance.
+    /// </summary>
+    public string? WebClientId { get; set; }
+
+    /// <summary>
+    /// Refuse a delegated web-user ADO token on a plaintext connection. Leave true unless the site is behind
+    /// TLS termination that this process cannot see; setting it false sends an org-wide credential in the clear.
+    /// </summary>
+    public bool RequireSecureUserToken { get; set; } = true;
+
     /// <summary>Entra resource id for Azure DevOps (public constant, ADR-04).</summary>
     public const string AdoResourceId = "499b84ac-1321-427f-aa17-267ca6975798";
 

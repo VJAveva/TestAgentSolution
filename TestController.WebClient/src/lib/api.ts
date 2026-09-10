@@ -1,5 +1,6 @@
 import { getUserId } from './userIdentity';
 import { countRest } from './uiPerf';
+import { getAdoToken } from './adoAuth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -37,6 +38,14 @@ export async function apiFetch<T>(
     const token = sessionStorage.getItem('auth_token');
     if (token) {
       autoHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Delegated ADO access: forward the signed-in user's own Entra token so the server can query Azure DevOps
+    // as them. Null unless the user has signed in via the Regression view, in which case the server falls back
+    // to its own configured credential.
+    const adoToken = await getAdoToken();
+    if (adoToken) {
+      autoHeaders['X-Ado-Token'] = adoToken;
     }
 
     const response = await fetch(url, {

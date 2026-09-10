@@ -188,6 +188,26 @@ public class ImpactController : ControllerBase
     public async Task<ActionResult<RegressionHealth>> GetHealth(CancellationToken ct)
         => Ok(await _catalog.CheckHealthAsync(ct));
 
+    /// <summary>
+    /// GET /api/impact/ado-auth-config — public Entra parameters the WebClient needs to sign the user in for
+    /// delegated ADO access. Contains no secrets; <c>secureTransport</c> tells the UI whether sending a token
+    /// over this connection would be safe.
+    /// </summary>
+    [HttpGet("ado-auth-config")]
+    public ActionResult<object> GetAdoAuthConfig(
+        [FromServices] Microsoft.Extensions.Options.IOptions<TestControllerGrpc.Ado.AdoOptions> options)
+    {
+        var ado = options.Value;
+        return Ok(new
+        {
+            enabled = ado.Enabled && !string.IsNullOrWhiteSpace(ado.WebClientId),
+            tenantId = string.IsNullOrWhiteSpace(ado.TenantId) ? "organizations" : ado.TenantId,
+            clientId = ado.WebClientId ?? string.Empty,
+            scope = $"{TestControllerGrpc.Ado.AdoOptions.AdoResourceId}/.default",
+            secureTransport = Request.IsHttps,
+        });
+    }
+
     /// <summary>GET /api/impact/summary?from&amp;to&amp;branch — computed AI summary of the scope.</summary>
     [HttpGet("summary")]
     [RequirePermission(Permission.CodeChurn_View)]

@@ -22,6 +22,7 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
     private readonly ComponentChangeCollector _componentCollector;
     private readonly AdoOptions _options;
     private readonly IAppLogger _logger;
+    private readonly IAdoUserTokenAccessor? _userToken;
 
     private readonly ConcurrentDictionary<string, RegressionSuiteEdit> _suiteEdits = new();
     private DateTimeOffset? _lastSyncUtc;
@@ -42,7 +43,8 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         SpBuildImpactCollector spCollector,
         ComponentChangeCollector componentCollector,
         Microsoft.Extensions.Options.IOptions<AdoOptions> options,
-        IAppLogger logger)
+        IAppLogger logger,
+        IAdoUserTokenAccessor? userToken = null)
     {
         _builds = builds;
         _git = git;
@@ -53,6 +55,7 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         _componentCollector = componentCollector;
         _options = options.Value;
         _logger = logger;
+        _userToken = userToken;
     }
 
     public async Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
@@ -103,7 +106,10 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
     {
         // Memoize a single (from,to,branch) fetch for ~60s so GetConsolidated + GetScope don't double-scan ADO.
-        var key = $"{_options.CollectionMode}|{branch}|{(from?.ToString("o") ?? "latest")}|{(to?.ToString("o") ?? "latest")}";
+        // The credential is part of the key: delegated web users see different ADO data from each other and from
+        // the host credential, so sharing one memo across them would serve another user's results.
+        var credential = _userToken?.CredentialFingerprint ?? "host";
+        var key = $"{credential}|{_options.CollectionMode}|{branch}|{(from?.ToString("o") ?? "latest")}|{(to?.ToString("o") ?? "latest")}";
         await _fetchGate.WaitAsync(ct);
         try
         {

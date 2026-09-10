@@ -93,15 +93,19 @@ public static class AdoServiceCollectionExtensions
         if (!enabled)
             return services;
 
+        services.TryAddSingleton<IAdoUserTokenAccessor, AsyncLocalAdoUserTokenAccessor>();
         services.TryAddSingleton<IAdoTokenProvider>(sp =>
         {
-            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AdoOptions>>().Value;
-            return opts.AuthMode switch
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AdoOptions>>();
+            IAdoTokenProvider configured = options.Value.AuthMode switch
             {
-                AdoAuthMode.ServicePrincipal => new ServicePrincipalTokenProvider(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AdoOptions>>()),
+                AdoAuthMode.ServicePrincipal => new ServicePrincipalTokenProvider(options),
                 AdoAuthMode.Interactive => sp.GetRequiredService<InteractiveTokenProvider>(),
-                _ => new PatTokenProvider(sp.GetRequiredService<IAdoCredentialStore>(), sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AdoOptions>>()),
+                _ => new PatTokenProvider(sp.GetRequiredService<IAdoCredentialStore>(), options),
             };
+
+            // A delegated web-user token wins for the duration of a request; everything else keeps the host credential.
+            return new AmbientAdoTokenProvider(sp.GetRequiredService<IAdoUserTokenAccessor>(), configured);
         });
         services.TryAddSingleton<IAdoCredentialStore, EnvironmentAdoCredentialStore>();
 

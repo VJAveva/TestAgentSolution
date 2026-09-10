@@ -4,6 +4,7 @@ import { AlertTriangle, RotateCw, ChevronRight, ChevronDown, Download, Mail, Bra
 import { useRegression } from '../../hooks/useRegression';
 import { useRegressionStore } from '../../stores/regressionStore';
 import type { RegressionBuildRef, RegressionCategoryKind, RegressionScopeKind, SubsystemRow, ImpactedComponentAnalysis } from '../../types/api';
+import { AdoSignInChip } from './AdoSignInChip';
 import {
   applyFilters,
   changeKindLabel,
@@ -440,6 +441,7 @@ export default function RegressionView() {
           <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-acc-green' : 'bg-acc-amber'}`} />
           {connection?.enabled ? 'ADO' : 'Mock data'}
         </button>
+        <AdoSignInChip onSignedIn={() => reload(from, to, branch)} />
         {lastLoadedAt && <span className="text-[11px] text-text-muted font-mono shrink-0 hidden xl:inline">updated {lastLoadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
         <button onClick={() => reload(from, to, branch)} title="Refresh" className="inline-flex items-center justify-center h-7 w-7 rounded border border-bdr text-text-secondary hover:bg-bg-surface hover:text-text-primary shrink-0"><RotateCw size={13} /></button>
         <Divider />

@@ -332,6 +332,10 @@ if (!validationResult.IsValid && !app.Environment.IsDevelopment())
 
 app.UseCors();
 app.UseMultiIdentitySecurity();
+
+// Delegated ADO access: adopt the caller's own Entra token for this request when the WebClient supplies one.
+app.UseMiddleware<TestController.Api.Security.AdoUserTokenMiddleware>();
+
 if (rateLimitOptions.Enabled)
 {
     app.UseRateLimiter();
