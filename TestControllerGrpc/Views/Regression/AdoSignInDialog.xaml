@@ -92,11 +92,11 @@
                         <Button Content="Rebuild now" Command="{Binding RebuildIndexCommand}"
                                 Padding="12,5" Margin="0,0,8,0" Cursor="Hand" />
                         <Button Content="Cancel" Command="{Binding CancelRebuildCommand}" Padding="12,5" Cursor="Hand"
-                                Visibility="{Binding IsRebuilding, Converter={StaticResource BoolToVis}}" />
+                                Visibility="{Binding Rebuild.IsRebuilding, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                     <ProgressBar Height="3" IsIndeterminate="True" BorderThickness="0" Margin="0,10,0,0"
-                                 Visibility="{Binding IsRebuilding, Converter={StaticResource BoolToVis}}" />
-                    <TextBlock Text="{Binding RebuildStatusText}" FontSize="11" TextWrapping="Wrap"
+                                 Visibility="{Binding Rebuild.IsRebuilding, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding Rebuild.StatusText}" FontSize="11" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
@@ -105,8 +105,7 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
                 <Button Content="Sign out" Command="{Binding SignOutCommand}" Padding="14,6" Margin="0,0,8,0" Cursor="Hand"
                         Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVis}}" />
-                <Button Content="Close" Click="OnClose" Padding="14,6" Cursor="Hand" IsCancel="True"
-                        IsEnabled="{Binding CanCloseDialog}" />
+                <Button Content="Close" Click="OnClose" Padding="14,6" Cursor="Hand" IsCancel="True" />
             </StackPanel>
         </StackPanel>
     </Border>

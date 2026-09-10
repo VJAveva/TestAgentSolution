@@ -269,6 +269,8 @@ public partial class App : Application
                 // maintenance, so at most one writer touches the SQLite file.
                 TestControllerGrpc.Core.Impact.ImpactServiceCollectionExtensions.AddImpactMapping(
                     services, ctx.Configuration, TestControllerGrpc.Core.Impact.ImpactHostRole.Reader);
+                services.AddSingleton<TestControllerGrpc.Services.IImpactIndexRebuildService,
+                    TestControllerGrpc.Services.ImpactIndexRebuildService>();
                 services.AddSingleton<TestControllerGrpc.ViewModels.Regression.ImpactMappingViewModel>();
                 services.AddTransient<TestControllerGrpc.Views.Regression.ImpactMappingView>();
             })
