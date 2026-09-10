@@ -28,6 +28,10 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
     /// <summary>Path to the test results root (for TRX parsing).</summary>
     public string ResultsRoot => Path.Combine(TempDir, "Results");
 
+    /// <summary>Impact index/learning roots. Kept under TempDir so a test run can never touch %ProgramData%.</summary>
+    public string ImpactIndexRoot => Path.Combine(TempDir, "ImpactIndex");
+    public string ImpactLearningRoot => Path.Combine(TempDir, "Learning");
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Ensure directories exist
@@ -60,8 +64,24 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
         // builder's own configuration and still overrides appsettings.json.
         builder.UseSetting("ControllerProxyUrl", string.Empty);
 
+        // The writer host treats a schema-version mismatch as a reason to DROP the index. Left at its default
+        // the test host resolves %ProgramData%\TestAgentSolution\ImpactIndex and deletes the developer's real
+        // (multi-GB) index. Redirect both roots into TempDir so that is impossible.
+        builder.UseSetting("ImpactMapping:IndexRoot", ImpactIndexRoot);
+        builder.UseSetting("ImpactMapping:LearningRoot", ImpactLearningRoot);
+
         builder.ConfigureServices(services =>
         {
+            // Index maintenance is a background writer that calls ADO and rewrites the index on a timer.
+            // Nothing in these tests asserts on it, and letting it run makes every suite depend on network
+            // and on-disk state.
+            foreach (var descriptor in services
+                .Where(d => d.ImplementationType == typeof(TestControllerGrpc.Core.Impact.Index.IndexMaintenanceService))
+                .ToList())
+            {
+                services.Remove(descriptor);
+            }
+
             // Remove ALL authentication-related registrations from the production pipeline.
             // AddNegotiate() registers handlers that require Kestrel's IConnectionItemsFeature,
             // which is unavailable in TestServer.
