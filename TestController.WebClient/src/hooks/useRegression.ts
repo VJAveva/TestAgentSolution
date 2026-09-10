@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, apiErrorMessage } from '../lib/api';
 import { getUserId } from '../lib/userIdentity';
 import { useRegressionStore } from '../stores/regressionStore';
 import type {
@@ -74,7 +74,7 @@ export function useRegression() {
         setSummary(summary);
         setIndexHealth(health);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load regression data');
+        setError(apiErrorMessage(err, 'Failed to load regression data'));
       } finally {
         setLoading(false);
       }
@@ -163,7 +163,7 @@ export function useRegression() {
         const range = `?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}&${filterQuery(filter)}`;
         setSummary(await apiFetch<ChurnSummary>(`/api/impact/ai-summary${range}`));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'AI summary failed');
+        setError(apiErrorMessage(err, 'AI summary failed'));
       } finally {
         setAiLoading(false);
       }

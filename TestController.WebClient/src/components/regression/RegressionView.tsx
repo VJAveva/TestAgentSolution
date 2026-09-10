@@ -415,7 +415,7 @@ export default function RegressionView() {
     ? connection.enabled
       ? `ADO ON · ${connection.organization}/${connection.omiProject} · ${connection.mode} · ${connection.credentialSource}${connection.credentialConfigured ? '' : ' · NO CREDENTIAL'}`
       : 'ADO OFF · mock/empty data'
-    : '—';
+    : 'Connection status unavailable — /api/impact/connection did not respond';
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-bg">
@@ -439,7 +439,7 @@ export default function RegressionView() {
         <button title={connectionTitle}
           className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full border text-[11px] shrink-0 ${connected ? 'border-acc-green/40 text-acc-green bg-acc-green/10' : 'border-acc-amber/40 text-acc-amber bg-acc-amber/10'}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-acc-green' : 'bg-acc-amber'}`} />
-          {connection?.enabled ? 'ADO' : 'Mock data'}
+          {connection ? (connection.enabled ? 'ADO' : 'Mock data') : 'ADO unreachable'}
         </button>
         <AdoSignInChip onSignedIn={() => reload(from, to, branch)} />
         {lastLoadedAt && <span className="text-[11px] text-text-muted font-mono shrink-0 hidden xl:inline">updated {lastLoadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}

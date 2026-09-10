@@ -5,6 +5,24 @@ import { getAdoToken } from './adoAuth';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 /**
+ * Readable message for anything thrown by apiFetch.
+ *
+ * apiFetch rejects with a plain object, not an Error, so `err instanceof Error` is always false and callers
+ * that relied on it silently discarded the server's explanation (e.g. "ADO auth failed (401)") in favour of a
+ * generic string. Prefer detail, then error, then the correlation id so a failure is always traceable.
+ */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    const e = err as { detail?: string; error?: string; status?: number; correlationId?: string };
+    const text = e.detail || e.error;
+    if (text) return e.status ? `${text} (HTTP ${e.status})` : text;
+    if (e.correlationId) return `${fallback} [${e.correlationId}]`;
+  }
+  return fallback;
+}
+
+/**
  * Fetch wrapper with correlation ID tracking and structured error handling.
  *
  * Features:
