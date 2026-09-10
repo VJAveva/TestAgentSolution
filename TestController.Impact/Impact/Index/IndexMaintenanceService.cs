@@ -86,10 +86,14 @@ public sealed class IndexMaintenanceService : BackgroundService
         }
     }
 
-    private async Task<bool> IsStaleAsync(CancellationToken ct)
+    /// <summary>True when the index has never been built or is older than <c>Index.MaxAge</c>. Read-only.</summary>
+    internal async Task<bool> IsStaleAsync(CancellationToken ct)
     {
         await using ImpactIndexDbContext ctx = await _contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, _options.Index.RebuildOnSchemaChange, ct).ConfigureAwait(false);
+
+        // A staleness check must never drop the index: dropping is BuildAsync's job, which repopulates in the
+        // same pass. Letting the check do it leaves an empty index behind whenever the rebuild then fails.
+        await ImpactIndexInitializer.EnsureCreatedAsync(ctx, rebuildOnSchemaChange: false, ct).ConfigureAwait(false);
 
         IndexMetadata? built = await ctx.Metadata
             .FirstOrDefaultAsync(m => m.Key == "BuiltUtc", ct)
