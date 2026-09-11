@@ -65,4 +65,10 @@ public sealed class AmbientAdoTokenProvider : IAdoTokenProvider
         _accessor.Token is { Length: > 0 }
             ? "Delegated web user (Entra)"
             : _fallback.Describe();
+
+    public string AuthFailureHint(int statusCode) =>
+        _accessor.Token is { Length: > 0 }
+            ? "The signed-in web user's delegated token was rejected by Azure DevOps - they may lack access to " +
+              "this organisation, or the token expired mid-request. Sign out and back in on the CodeChurn tab."
+            : _fallback.AuthFailureHint(statusCode);
 }

@@ -94,9 +94,10 @@ public sealed class AdoClient
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 var body = await response.Content.ReadAsStringAsync(ct);
+                var status = (int)response.StatusCode;
                 throw new AdoApiException(
-                    $"[{correlationId}] ADO auth failed ({(int)response.StatusCode}). Credential: {_tokenProvider.Describe()}. " +
-                    "Check the service principal is added as an ADO org user, or the PAT hasn't expired. " + body,
+                    $"[{correlationId}] ADO auth failed ({status}). Credential: {_tokenProvider.Describe()}. " +
+                    _tokenProvider.AuthFailureHint(status) + " " + body,
                     response.StatusCode);
             }
 

@@ -36,6 +36,19 @@ public sealed class PatTokenProvider : IAdoTokenProvider
     }
 
     public string Describe() => "PAT (Basic auth)";
+
+    public string AuthFailureHint(int statusCode)
+    {
+        var envVar = _options.SecretEnvVarName ?? "ADO_PAT";
+        return statusCode == 401
+            ? $"The PAT in the '{envVar}' environment variable was rejected (expired, revoked, or issued for a " +
+              $"different organisation). Verify it by hand with GET https://dev.azure.com/{_options.Organization}" +
+              "/_apis/projects - do NOT use _apis/profile/profiles/me, which returns 401 for a valid PAT that " +
+              "lacks the Profile scope. Under IIS the value must be set at MACHINE scope and requires a full " +
+              "'iisreset': an app-pool recycle inherits the stale environment block from WAS and keeps failing."
+            : $"The PAT in the '{envVar}' environment variable authenticated but is not authorised - check the " +
+              "project permissions for its owner, or an Entra Conditional Access policy blocking PAT auth.";
+    }
 }
 
 /// <summary>
