@@ -111,6 +111,13 @@ public sealed class AdoOptions
     /// </summary>
     public bool RequireSecureUserToken { get; set; } = true;
 
+    /// <summary>
+    /// Serve Code Churn reads from the co-located WPF controller rather than this host's own credential.
+    /// For deployments where the controller is signed in interactively but the web tier has no usable ADO
+    /// credential. Makes Code Churn depend on the controller running, so it is opt-in.
+    /// </summary>
+    public bool ForwardImpactToController { get; set; }
+
     /// <summary>Entra resource id for Azure DevOps (public constant, ADR-04).</summary>
     public const string AdoResourceId = "499b84ac-1321-427f-aa17-267ca6975798";
 

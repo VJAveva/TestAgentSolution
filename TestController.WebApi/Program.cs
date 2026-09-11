@@ -399,6 +399,12 @@ if (app.Services.GetRequiredService<ControllerProxyService>().IsConfigured)
     app.UseMiddleware<ControllerExecutionForwardingMiddleware>();
 }
 
+// Code Churn reads run on the controller when this host has no usable ADO credential (Ado:ForwardImpactToController).
+if (builder.Configuration.GetValue<bool>("Ado:ForwardImpactToController"))
+{
+    app.UseMiddleware<ImpactForwardingMiddleware>();
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {

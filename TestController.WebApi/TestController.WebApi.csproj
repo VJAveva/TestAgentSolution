@@ -35,6 +35,10 @@
     <Folder Include="Hubs\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestController.WebApi.Tests" />
+  </ItemGroup>
+
   <!-- The impact databases are deliberately NOT packaged. They are resolved at runtime through
        IImpactIndexPathProvider (default %ProgramData%\TestAgentSolution\ImpactIndex) and are host-local
        state, not deliverables: the index is a regenerable cache that reached 1.29 GB, and the outcome
