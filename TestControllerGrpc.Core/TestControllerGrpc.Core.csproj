@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TestController.WebApi.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Protobuf Include="Protos\test_agent.proto" GrpcServices="Both" />
     <Protobuf Include="Protos\auth.proto" GrpcServices="Both" />
   </ItemGroup>

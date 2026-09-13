@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using TestControllerGrpc.Services;
 
@@ -97,7 +98,7 @@ public sealed class AdoClient
                 var status = (int)response.StatusCode;
                 throw new AdoApiException(
                     $"[{correlationId}] ADO auth failed ({status}). Credential: {_tokenProvider.Describe()}. " +
-                    _tokenProvider.AuthFailureHint(status) + " " + body,
+                    _tokenProvider.AuthFailureHint(status) + " " + SummarizeErrorBody(body),
                     response.StatusCode);
             }
 
@@ -106,7 +107,7 @@ public sealed class AdoClient
                 if (attempt == MaxRetries)
                 {
                     var body = await response.Content.ReadAsStringAsync(ct);
-                    throw new AdoApiException($"[{correlationId}] ADO returned {(int)response.StatusCode} after {MaxRetries} attempts. {body}", response.StatusCode);
+                    throw new AdoApiException($"[{correlationId}] ADO returned {(int)response.StatusCode} after {MaxRetries} attempts. {SummarizeErrorBody(body)}", response.StatusCode);
                 }
                 await Task.Delay(BackoffFor(attempt, response.Headers.RetryAfter), ct);
                 continue;
@@ -115,7 +116,7 @@ public sealed class AdoClient
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(ct);
-                throw new AdoApiException($"[{correlationId}] ADO call failed ({(int)response.StatusCode}): {body}", response.StatusCode);
+                throw new AdoApiException($"[{correlationId}] ADO call failed ({(int)response.StatusCode}): {SummarizeErrorBody(body)}", response.StatusCode);
             }
 
             var result = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
@@ -139,12 +140,44 @@ public sealed class AdoClient
         if (!response.IsSuccessStatusCode)
         {
             var respBody = await response.Content.ReadAsStringAsync(ct);
-            throw new AdoApiException($"[{correlationId}] ADO POST failed ({(int)response.StatusCode}): {respBody}", response.StatusCode);
+            throw new AdoApiException($"[{correlationId}] ADO POST failed ({(int)response.StatusCode}): {SummarizeErrorBody(respBody)}", response.StatusCode);
         }
 
         var result = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
         return result ?? throw new AdoApiException($"[{correlationId}] ADO returned an empty body.");
     }
+
+    /// <summary>
+    /// Condenses an ADO error body to one readable line. A policy or sign-in block answers with a full HTML page
+    /// carrying an inline base64 image, which otherwise floods the log, the health endpoint and the UI banner.
+    /// The page title holds the actionable part (e.g. "VS403463: The conditional access policy ... has failed").
+    /// </summary>
+    internal static string SummarizeErrorBody(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return string.Empty;
+
+        if (body.TrimStart().StartsWith('<'))
+        {
+            var title = Regex.Match(body, "<title[^>]*>(.*?)</title>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+            if (title.Success)
+            {
+                var text = Collapse(WebUtility.HtmlDecode(title.Groups[1].Value));
+                if (text.Length > 0)
+                    return Truncate(text, 300);
+            }
+            return "(ADO returned an HTML page instead of JSON - the request was answered by a sign-in or policy page.)";
+        }
+
+        return Truncate(Collapse(body), 500);
+    }
+
+    private static string Collapse(string value) =>
+        Regex.Replace(value, @"\s+", " ", RegexOptions.None, TimeSpan.FromSeconds(1)).Trim();
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max] + "...";
 
     private static TimeSpan BackoffFor(int attempt, System.Net.Http.Headers.RetryConditionHeaderValue? retryAfter)
     {

@@ -245,8 +245,18 @@ Write-Check '/api/impact/health reachable' ($r.HealthStatus -eq 200) "HTTP $($r.
 if ($r.HealthBody) {
     $h = $r.HealthBody | ConvertFrom-Json
     Write-Check '  adoReachable' ([bool]$h.adoReachable) "credentialSource=$($h.credentialSource) componentCount=$($h.componentCount)"
-    if ($h.probeError) { Write-Host "         probeError: $($h.probeError)" -ForegroundColor Yellow }
-    if (-not $h.adoReachable) { $problems.Add("The web tier cannot reach ADO: $($h.probeError)") }
+    if ($h.probeError) {
+        # A policy block answers with a full HTML page; show only the first readable line.
+        $pe = ($h.probeError -replace '\s+', ' ').Trim()
+        if ($pe -match 'VS\d{6}[^<]*') { $pe = $Matches[0].Trim() }
+        elseif ($pe.Length -gt 300) { $pe = $pe.Substring(0, 300) + '...' }
+        Write-Host "         probeError: $pe" -ForegroundColor Yellow
+        if ($h.probeError -match 'VS403463|conditional access') {
+            $problems.Add('Entra Conditional Access is blocking this credential (VS403463). A PAT cannot satisfy a CA policy, so reissuing one will NOT help. Use interactive sign-in on the controller (set Ado:ForwardImpactToController=true), switch to ServicePrincipal auth, or have an Entra admin exclude the identity.')
+        } else {
+            $problems.Add("The web tier cannot reach ADO: $pe")
+        }
+    }
     Write-Host '         NOTE: credentialConfigured only means the env var is non-empty.'
     Write-Host '               It reports true for a dead token. Trust adoReachable instead.'
 }
