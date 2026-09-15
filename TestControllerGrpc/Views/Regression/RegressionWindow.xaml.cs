@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Navigation;
 using Microsoft.Extensions.DependencyInjection;
+using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Regression;
 
 namespace TestControllerGrpc.Views.Regression;
@@ -16,7 +17,12 @@ public partial class RegressionWindow : Window
     {
         InitializeComponent();
         DataContext = vm;
+        // Bound straight to the singleton job so the strip keeps reporting after the sign-in dialog closes.
+        IndexRebuildStrip.DataContext = App.Services.GetRequiredService<IImpactIndexRebuildService>();
     }
+
+    private void OnCancelRebuildClick(object sender, RoutedEventArgs e) =>
+        App.Services.GetRequiredService<IImpactIndexRebuildService>().Cancel();
 
     // Opens the AVEVA / Microsoft interactive sign-in dialog, then reloads live data if signed in.
     private void OnSignInClick(object sender, RoutedEventArgs e)

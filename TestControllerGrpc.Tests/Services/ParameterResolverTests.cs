@@ -396,6 +396,31 @@ public class ParameterResolverTests : IDisposable
         Assert.Empty(ctx.Parameters);
     }
 
+    // Guards the defect that failed a live run twice: a layered JSON config read by the CSV parser
+    // yields whole lines as key names, so every real token comes back unresolved.
+    [Fact]
+    public void ParseParameterFile_Should_NotProduceUsableKeys_When_PointedAtLayeredJson()
+    {
+        var path = WriteTempFile("config.json", LayeredJson);
+
+        var entries = ParameterResolver.ParseParameterFile(path);
+
+        Assert.DoesNotContain(entries, e => e.Key is "_BuildNumber" or "_OrgName");
+    }
+
+    [Fact]
+    public void LoadJsonConfig_Should_ResolveEveryGlobalKey_When_ConfigIsLayered()
+    {
+        var path = WriteTempFile("config.json", LayeredJson);
+        var ctx = new PipelineExecutionContext { WatchItemTag = "Pipe B" };
+
+        ParameterResolver.LoadJsonConfig(ctx, path, profile: "Warm", pipelineTag: ctx.WatchItemTag);
+
+        Assert.Equal("AppServerPool2", ctx.Parameters["_OrgName"]);
+        Assert.Equal("warmgr", ctx.Parameters["_Agent1"]);
+        Assert.Equal("GLOBAL", ctx.Parameters["_BuildNumber"]);
+    }
+
     [Fact]
     public void FindUnresolvedTokens_Should_ReportToken_When_ContextHasNoValue()
     {

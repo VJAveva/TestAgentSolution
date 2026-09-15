@@ -314,6 +314,7 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
                 m.TestCaseId, m.TestCaseTitle, m.TestCaseUrl,
                 m.ParentFeatureId > 0 ? $"#{m.ParentFeatureId}" : "does not exist",
                 m.MatchType, $"{m.ConfidencePercent}%", m.MatchReason, m.Description));
+        RefreshVisibleMatches();
 
         // No ADO matches (empty/uninitialized index) — always surface the offline change summary + recommended tests.
         if (TestMatches.Count == 0)
@@ -330,6 +331,43 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
         IsMatchesLoading = false;
         OnPropertyChanged(nameof(HasTestMatches));
         OnPropertyChanged(nameof(HasRecommendedTests));
+    }
+
+    // A component can match dozens of test cases. Showing them all turns the row-expand into a scrolling
+    // marathon, so only the highest-ranked few are rendered until the user asks for the rest.
+    private const int CollapsedMatchCount = 5;
+
+    /// <summary>The slice of <see cref="TestMatches"/> actually rendered — top N until the user expands.</summary>
+    public ObservableCollection<ImpactedTestCaseRow> VisibleTestMatches { get; } = new();
+
+    [ObservableProperty] private bool _areMatchesExpanded = true;
+
+    [ObservableProperty] private bool _showAllMatches;
+
+    public string TestMatchesHeader => $"Impacted test cases ({TestMatches.Count})";
+
+    public string MatchesChevron => AreMatchesExpanded ? "  \u25B4" : "  \u25BE";
+
+    public bool HasMoreMatches => TestMatches.Count > CollapsedMatchCount;
+
+    public string MoreMatchesText =>
+        ShowAllMatches ? "Show top 5" : $"Show all {TestMatches.Count}";
+
+    partial void OnShowAllMatchesChanged(bool value) => RefreshVisibleMatches();
+
+    partial void OnAreMatchesExpandedChanged(bool value) => OnPropertyChanged(nameof(MatchesChevron));
+
+    private void RefreshVisibleMatches()
+    {
+        VisibleTestMatches.Clear();
+        IEnumerable<ImpactedTestCaseRow> slice =
+            ShowAllMatches ? TestMatches : TestMatches.Take(CollapsedMatchCount);
+        foreach (var row in slice)
+            VisibleTestMatches.Add(row);
+
+        OnPropertyChanged(nameof(TestMatchesHeader));
+        OnPropertyChanged(nameof(HasMoreMatches));
+        OnPropertyChanged(nameof(MoreMatchesText));
     }
 }
 

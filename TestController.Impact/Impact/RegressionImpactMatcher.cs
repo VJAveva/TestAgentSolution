@@ -166,14 +166,26 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
             ImpactedArea: area,
             TestCaseId: m.TestCase.Item.Id,
             TestCaseTitle: m.TestCase.Item.Title,
-            Description: TrimSteps(m.TestCase.StepsText),
+            Description: DescribeTestCase(m.TestCase),
             TestCaseUrl: url,
             ParentFeatureId: m.FeatureId,
             MatchType: matchType,
             ConfidencePercent: pct,
-            MatchReason: m.Judgement?.Reason ?? "",
+            MatchReason: HumanReason(m.Judgement?.Reason),
             LinkedWorkItems: linkedByTestCase.GetValueOrDefault(m.TestCase.Item.Id));
     }
+
+    // System.Description is the functional prose a tester reads; titles are often bare requirement ids
+    // ("FR 12345"). Steps are the fallback for cases that carry no description.
+    private static string? DescribeTestCase(TestCaseCandidate testCase) =>
+        TrimProse(testCase.Description) ?? TrimProse(testCase.StepsText);
+
+    // "anchor edge" is the engine's internal grading token for a Tier-0 match; shown verbatim it tells the
+    // reader nothing. Every other reason is already natural language from the reranker.
+    private static string HumanReason(string? reason) =>
+        string.Equals(reason, "anchor edge", StringComparison.OrdinalIgnoreCase)
+            ? "Directly linked to a work item changed in this build"
+            : reason ?? "";
 
     // AnchorEdge carries the linked work-item id in FeatureId; the row already carries that work item's type,
     // title and URL, so the join gives each test case the Bug/IMS/Story that put it in scope.
@@ -207,11 +219,11 @@ public sealed class RegressionImpactMatcher : IRegressionImpactMatcher
         return m.Judgement?.Confidence ?? 0.0;
     }
 
-    private static string? TrimSteps(string? steps)
+    private static string? TrimProse(string? text)
     {
-        if (string.IsNullOrWhiteSpace(steps))
+        if (string.IsNullOrWhiteSpace(text))
             return null;
-        string collapsed = steps.Trim();
+        string collapsed = text.Trim();
         return collapsed.Length <= MaxStepsChars ? collapsed : collapsed[..MaxStepsChars] + "\u2026";
     }
 }

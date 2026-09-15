@@ -19,6 +19,8 @@ import type { FilterState } from './helpers';
 const ALL_BRANCHES = '(all branches)';
 const ALL_COMPONENTS = '(all components)';
 const COL_SPAN = 13;
+// A component can match dozens of test cases; show the highest-ranked few until the user asks for the rest.
+const COLLAPSED_MATCHES = 5;
 
 function categoryBadgeClass(cat: RegressionCategoryKind): string {
   switch (cat) {
@@ -740,6 +742,8 @@ function RowDetail({ row }: { row: SubsystemRow }) {
   const [analysis, setAnalysis] = useState<ImpactedComponentAnalysis | null>(null);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
+  const [matchesOpen, setMatchesOpen] = useState(true);
+  const [showAllMatches, setShowAllMatches] = useState(false);
 
   // Lazily analyze this component's changes when the row expands (engine matches + offline fallback).
   useEffect(() => {
@@ -775,8 +779,26 @@ function RowDetail({ row }: { row: SubsystemRow }) {
 
       {/* Impacted test cases (impact-mapping engine) with an offline change-analysis fallback */}
       <div>
-        <div className="font-semibold text-text-secondary mb-1">
-          🎯 Impacted test cases for {row.component}{analysis && analysis.matches.length > 0 ? ` (${analysis.matches.length})` : ''}
+        <div className="flex items-center gap-2 mb-1">
+          <button
+            type="button"
+            onClick={() => setMatchesOpen((v) => !v)}
+            className="font-semibold text-text-secondary hover:text-text-primary"
+            title="Collapse or expand this section"
+          >
+            🎯 Impacted test cases for {row.component}
+            {analysis && analysis.matches.length > 0 ? ` (${analysis.matches.length})` : ''}
+            <span className="ml-1 text-text-muted">{matchesOpen ? '▴' : '▾'}</span>
+          </button>
+          {matchesOpen && analysis && analysis.matches.length > COLLAPSED_MATCHES && (
+            <button
+              type="button"
+              onClick={() => setShowAllMatches((v) => !v)}
+              className="ml-auto text-[11px] text-accent hover:underline shrink-0"
+            >
+              {showAllMatches ? `Show top ${COLLAPSED_MATCHES}` : `Show all ${analysis.matches.length}`}
+            </button>
+          )}
         </div>
         {matchesLoading && <div className="text-text-muted font-mono">Analyzing changes…</div>}
         {matchesError && <div className="text-acc-red">{matchesError}</div>}
@@ -785,9 +807,9 @@ function RowDetail({ row }: { row: SubsystemRow }) {
             Indexed matches unavailable. The offline change analysis below is still valid. {analysis.indexHealthMessage}
           </div>
         )}
-        {analysis && analysis.matches.length > 0 && (
+        {matchesOpen && analysis && analysis.matches.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            {analysis.matches.map((m) => (
+            {(showAllMatches ? analysis.matches : analysis.matches.slice(0, COLLAPSED_MATCHES)).map((m) => (
               <div key={m.testCaseId} className="rounded border border-bdr bg-bg-panel/40 px-2.5 py-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   {m.testCaseUrl
@@ -799,9 +821,8 @@ function RowDetail({ row }: { row: SubsystemRow }) {
                     <span className="px-1.5 py-0.5 rounded bg-acc-green/15 text-acc-green text-[10px] font-mono">{m.confidencePercent}%</span>
                   </span>
                 </div>
-                <div className="text-[11px] text-text-muted mt-0.5">
-                  Parent feature: {m.parentFeatureId > 0 ? `#${m.parentFeatureId}` : 'does not exist'}
-                </div>
+                {/* What the test actually verifies leads; the match reason is provenance, not content. */}
+                {m.description && <div className="text-text-primary mt-1 leading-relaxed line-clamp-3">{m.description}</div>}
                 {m.linkedWorkItems && m.linkedWorkItems.length > 0 && (
                   <div className="text-[11px] mt-0.5 flex flex-wrap items-center gap-1">
                     <span className="text-text-muted">Verifies:</span>
@@ -812,8 +833,10 @@ function RowDetail({ row }: { row: SubsystemRow }) {
                     ))}
                   </div>
                 )}
-                {m.matchReason && <div className="text-text-secondary mt-0.5 leading-relaxed">{m.matchReason}</div>}
-                {m.description && <div className="text-text-muted mt-0.5 leading-relaxed italic line-clamp-3">{m.description}</div>}
+                <div className="text-[11px] text-text-muted mt-0.5">
+                  Parent feature: {m.parentFeatureId > 0 ? `#${m.parentFeatureId}` : 'does not exist'}
+                  {m.matchReason ? <span className="italic"> · {m.matchReason}</span> : null}
+                </div>
               </div>
             ))}
           </div>

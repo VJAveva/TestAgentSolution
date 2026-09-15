@@ -264,9 +264,11 @@ public class ChurnReportTests
         using var wb = new XLWorkbook(new MemoryStream(bytes));
         Assert.True(wb.TryGetWorksheet("Impacted Test Cases", out var ws));
         Assert.Equal("Impacted Area", ws.Cell(4, 1).GetString());
-        Assert.Equal("Match Reason", ws.Cell(4, 7).GetString());
+        Assert.Equal("Description", ws.Cell(4, 4).GetString());
+        Assert.Equal("Match Reason", ws.Cell(4, 9).GetString());
         Assert.Contains("BootStrap.TC24", ws.Cell(5, 3).GetString());
-        Assert.Equal("does not exist", ws.Cell(5, 4).GetString());
+        Assert.Equal("steps", ws.Cell(5, 4).GetString());
+        Assert.Equal("does not exist", ws.Cell(5, 6).GetString());
         Assert.True(ws.Cell(5, 2).HasHyperlink); // TC id deep link
     }
 

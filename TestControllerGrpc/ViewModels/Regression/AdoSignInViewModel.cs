@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -19,6 +20,7 @@ public sealed partial class AdoSignInViewModel : ObservableObject
         _auth = auth;
         _logger = logger;
         Rebuild = rebuild;
+        Rebuild.PropertyChanged += OnRebuildChanged;
         RefreshState();
     }
 
@@ -41,7 +43,21 @@ public sealed partial class AdoSignInViewModel : ObservableObject
     /// <summary>Raised after a successful sign-in so the caller can reload live data.</summary>
     public event EventHandler? SignedIn;
 
-    private bool CanInteract => !IsBusy;
+    /// <summary>Raised when a rebuild starts so the host can dismiss this modal dialog and stop blocking the app.</summary>
+    public event EventHandler? RebuildStarted;
+
+    // Signing out mid-rebuild revokes the delegated token the build is running on, so it would die with a 401.
+    private bool CanInteract => !IsBusy && !Rebuild.IsRebuilding;
+
+    private void OnRebuildChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(IImpactIndexRebuildService.IsRebuilding))
+            return;
+        SignInCommand.NotifyCanExecuteChanged();
+        SignOutCommand.NotifyCanExecuteChanged();
+        RebuildIndexCommand.NotifyCanExecuteChanged();
+        CancelRebuildCommand.NotifyCanExecuteChanged();
+    }
 
     private void RefreshState()
     {
@@ -94,7 +110,7 @@ public sealed partial class AdoSignInViewModel : ObservableObject
         }
     }
 
-    private bool CanRebuildIndex => IsSignedIn && !IsBusy;
+    private bool CanRebuildIndex => IsSignedIn && !IsBusy && !Rebuild.IsRebuilding;
 
     /// <summary>
     /// Full index rebuild driven by the signed-in user's delegated token. This is the recovery path for when
@@ -102,8 +118,14 @@ public sealed partial class AdoSignInViewModel : ObservableObject
     /// so it must be run ON the host that serves the index.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRebuildIndex))]
-    private void RebuildIndex() => Rebuild.Start();
+    private void RebuildIndex()
+    {
+        Rebuild.Start();
+        RebuildStarted?.Invoke(this, EventArgs.Empty);
+    }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCancelRebuild))]
     private void CancelRebuild() => Rebuild.Cancel();
+
+    private bool CanCancelRebuild => Rebuild.IsRebuilding;
 }

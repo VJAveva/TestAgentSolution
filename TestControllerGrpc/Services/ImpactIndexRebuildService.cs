@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -11,7 +12,7 @@ namespace TestControllerGrpc.Services;
 /// Owns the interactive index rebuild. Singleton, so the build survives the sign-in dialog closing and the
 /// UI never has to block on it — the recovery path for when the writer host's own ADO credential is unusable.
 /// </summary>
-public interface IImpactIndexRebuildService
+public interface IImpactIndexRebuildService : INotifyPropertyChanged
 {
     bool IsRebuilding { get; }
     string StatusText { get; }
@@ -26,6 +27,7 @@ public sealed partial class ImpactIndexRebuildService : ObservableObject, IImpac
 {
     private readonly RetrievalIndexBuilder _builder;
     private readonly IAppLogger _logger;
+    private readonly object _gate = new();
     private CancellationTokenSource? _cts;
 
     public ImpactIndexRebuildService(RetrievalIndexBuilder builder, IAppLogger logger)
@@ -39,24 +41,35 @@ public sealed partial class ImpactIndexRebuildService : ObservableObject, IImpac
 
     public void Start()
     {
-        if (IsRebuilding)
-            return;
+        CancellationTokenSource cts;
+        lock (_gate)
+        {
+            if (_cts is not null)
+                return;
+            cts = _cts = new CancellationTokenSource();
+        }
 
-        _cts = new CancellationTokenSource();
         IsRebuilding = true;
         StatusText = "Starting full rebuild\u2026 this can take a long time.";
 
-        // Started from the UI thread so continuations marshal back for binding; the build itself is off-thread.
-        _ = RunAsync(new Progress<ImpactMappingProgress>(p => StatusText = p.Message));
+        // Constructed on the UI thread so progress callbacks marshal back for binding; Task.Run keeps
+        // BuildAsync's synchronous prologue (DbContext create, schema check) off the UI thread entirely.
+        var progress = new Progress<ImpactMappingProgress>(p => StatusText = p.Message);
+        _ = Task.Run(() => RunAsync(cts, progress));
     }
 
-    public void Cancel() => _cts?.Cancel();
+    public void Cancel()
+    {
+        // Cancel races RunAsync's cleanup; the gate plus the null-out stop us cancelling a disposed source.
+        lock (_gate)
+            _cts?.Cancel();
+    }
 
-    private async Task RunAsync(IProgress<ImpactMappingProgress> progress)
+    private async Task RunAsync(CancellationTokenSource cts, IProgress<ImpactMappingProgress> progress)
     {
         try
         {
-            IndexBuildResult result = await _builder.BuildAsync(fullRebuild: true, progress, _cts!.Token);
+            IndexBuildResult result = await _builder.BuildAsync(fullRebuild: true, progress, cts.Token);
             StatusText =
                 $"Rebuilt in {result.Elapsed:hh\\:mm\\:ss} \u00b7 {result.DocumentsIndexed} indexed, " +
                 $"{result.DocumentsSkipped} skipped ({result.TestCasesSeen} test cases, {result.FeaturesSeen} features).";
@@ -74,9 +87,12 @@ public sealed partial class ImpactIndexRebuildService : ObservableObject, IImpac
         }
         finally
         {
+            lock (_gate)
+            {
+                _cts = null;
+                cts.Dispose();
+            }
             IsRebuilding = false;
-            _cts?.Dispose();
-            _cts = null;
         }
     }
 }

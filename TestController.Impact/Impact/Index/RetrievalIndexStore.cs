@@ -75,6 +75,12 @@ public sealed class RetrievalIndexStore : IRetrievalIndexStore
         // Readers never drop the index (single-writer invariant); a version mismatch throws instead.
         await ImpactIndexInitializer.EnsureCreatedAsync(ctx, rebuildOnSchemaChange: false, ct).ConfigureAwait(false);
 
+        // A snapshot is assembled from several queries (metadata, frequencies, documents, postings). Without a
+        // transaction the writer can commit between them and the caller gets metadata from one generation of
+        // the index and postings from another. One read transaction pins all of them to a single WAL snapshot;
+        // it is never committed because nothing is written. Started after EnsureCreated so DDL/PRAGMA stay out.
+        await using var tx = await ctx.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
         Dictionary<string, string> metadata = await ctx.Metadata
             .ToDictionaryAsync(m => m.Key, m => m.Value, ct)
             .ConfigureAwait(false);

@@ -384,6 +384,25 @@
             </DockPanel>
         </Border>
 
+        <!-- Impact index rebuild: non-modal so a job this long never blocks the rest of the app. -->
+        <Border x:Name="IndexRebuildStrip" DockPanel.Dock="Top"
+                Visibility="{Binding IsRebuilding, Converter={StaticResource BoolToVis}}"
+                Background="{DynamicResource BgSecondaryBrush}"
+                BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="0,0,0,1" Padding="12,5">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Cancel" Click="OnCancelRebuildClick"
+                        Padding="10,2" Margin="8,0,0,0" Cursor="Hand" />
+                <TextBlock DockPanel.Dock="Left" Text="Rebuilding impact index" VerticalAlignment="Center"
+                           FontSize="11" FontWeight="SemiBold" Margin="0,0,10,0"
+                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                <ProgressBar DockPanel.Dock="Left" Width="90" Height="3" IsIndeterminate="True"
+                             BorderThickness="0" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+            </DockPanel>
+        </Border>
+
         <!-- ── Ribbon (redesign RibbonRedesign-CodeChurn-Mockup.html): Scope · Range · Filter · View · Act · Report ── -->
         <Border DockPanel.Dock="Top" Background="{StaticResource RbBg}"
                 BorderBrush="{StaticResource RbSep}" BorderThickness="0,0,0,1" Padding="6,7,6,4">
@@ -854,14 +873,31 @@
                                 </TextBlock>
                             </Border>
 
-                            <!-- Impacted test cases (impact-mapping engine), lazily loaded on first expand -->
-                            <TextBlock Text="&#x1F3AF; Impacted test cases" FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,4,0,3" />
+                            <!-- Impacted test cases (impact-mapping engine), lazily loaded on first expand.
+                                 Collapsible + capped: a component can match dozens, and an uncapped list buries
+                                 everything below it under a long scroll. -->
+                            <DockPanel Margin="0,4,0,3">
+                                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource LinkToggle}"
+                                              IsChecked="{Binding ShowAllMatches, Mode=TwoWay}"
+                                              Content="{Binding MoreMatchesText}"
+                                              Visibility="{Binding HasMoreMatches, Converter={StaticResource BoolToVis}}"
+                                              ToolTip="Show every matched test case, or just the highest-ranked few" />
+                                <ToggleButton HorizontalAlignment="Left" Style="{StaticResource LinkToggle}" Padding="0"
+                                              IsChecked="{Binding AreMatchesExpanded, Mode=TwoWay}"
+                                              ToolTip="Collapse or expand this section">
+                                    <TextBlock FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextSecondaryBrush}">
+                                        <Run Text="&#x1F3AF; " />
+                                        <Run Text="{Binding TestMatchesHeader, Mode=OneWay}" />
+                                        <Run Text="{Binding MatchesChevron, Mode=OneWay}" />
+                                    </TextBlock>
+                                </ToggleButton>
+                            </DockPanel>
                             <TextBlock Text="{Binding MatchesStatus}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,0,4"
                                        Visibility="{Binding MatchesStatus, Converter={StaticResource EmptyToCollapsed}}" />
-                            <ItemsControl ItemsSource="{Binding TestMatches}" Margin="0,0,0,4"
-                                          Visibility="{Binding HasTestMatches, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl ItemsSource="{Binding VisibleTestMatches}" Margin="0,0,0,4"
+                                          Visibility="{Binding AreMatchesExpanded, Converter={StaticResource BoolToVis}}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="Transparent" CornerRadius="4" Padding="8,5" Margin="0,0,0,4"
@@ -875,7 +911,13 @@
                                                     </Hyperlink>
                                                     <Run Text="  " /><Run Text="{Binding Title, Mode=OneWay}" FontWeight="SemiBold" />
                                                 </TextBlock>
-                                                <TextBlock FontSize="10.5" Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap">
+                                                <!-- What the test actually verifies: the reason a tester can act on. -->
+                                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="11"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,3,0,0"
+                                                           MaxHeight="54" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Description}"
+                                                           Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <TextBlock FontSize="10.5" Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,3,0,0" TextWrapping="Wrap">
                                                     <Run Text="Parent feature: " />
                                                     <Run Text="{Binding ParentFeatureText, Mode=OneWay}" />
                                                     <Run Text="   &#x00B7;   " />
@@ -883,10 +925,9 @@
                                                     <Run Text="   &#x00B7;   " />
                                                     <Run Text="{Binding ConfidenceText, Mode=OneWay}" FontWeight="SemiBold"
                                                          Foreground="{DynamicResource BorderSuccessBrush}" />
+                                                    <Run Text="   &#x00B7;   " />
+                                                    <Run Text="{Binding MatchReason, Mode=OneWay}" FontStyle="Italic" />
                                                 </TextBlock>
-                                                <TextBlock Text="{Binding MatchReason}" TextWrapping="Wrap" FontSize="11"
-                                                           Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0"
-                                                           Visibility="{Binding MatchReason, Converter={StaticResource EmptyToCollapsed}}" />
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>

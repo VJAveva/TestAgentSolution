@@ -1134,8 +1134,12 @@ public sealed partial class MainViewModel
 
         if (root == null) return parameters;
 
-        // Use a temporary context to leverage the existing ParameterResolver
-        var tempCtx = new PipelineExecutionContext();
+        // The tag selects the pipelines[tag] layer of a layered JSON config; without it a pinned
+        // build silently never matches and the pin looks like dead config.
+        var tempCtx = new PipelineExecutionContext
+        {
+            WatchItemTag = (root.ModelObject as WatchItemConfig)?.Tag ?? "",
+        };
         GatherInitializeParams(root, tempCtx);
 
         if (tempCtx.Parameters.Count > 0)
@@ -1159,7 +1163,17 @@ public sealed partial class MainViewModel
             var path = ParameterResolver.Resolve(init.ParameterFile, ctx);
             try
             {
-                ParameterResolver.LoadParameterFile(ctx, path);
+                // Layered loader for .json, CSV parser only for .txt. Pointing the CSV parser at a
+                // JSON config makes whole lines into key names, so every [Token] comes back unresolved.
+                if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!ParameterResolver.TryLoadJsonConfig(ctx, path, init.Profile, ctx.WatchItemTag))
+                        AddLog($"Failed to pre-load parameters from {path}: file missing or not valid JSON", LogSeverity.Warning);
+                }
+                else
+                {
+                    ParameterResolver.LoadParameterFile(ctx, path);
+                }
             }
             catch (Exception ex)
             {

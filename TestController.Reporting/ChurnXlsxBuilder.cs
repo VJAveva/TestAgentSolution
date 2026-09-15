@@ -67,19 +67,19 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
             // can hold only one hyperlink, so the per-item links live on the "Work Items" sheet.
             var groups = GroupWorkItems(r);
             var wiCell = ws.Cell(row, 7);
-            wiCell.Value = groups.Count == 0
+            SetText(wiCell, groups.Count == 0
                 ? ""
                 : string.Join("\n\n", groups.Select(g =>
                     $"{g.Heading}\n{new string('-', g.Heading.Length)}\n" +
-                    string.Join("\n", g.Items.Select(WorkItemLabel))));
+                    string.Join("\n", g.Items.Select(WorkItemLabel)))));
             Link(wiCell, firstWiUrl);
             var wiLines = groups.Sum(g => g.Items.Count + 3);
 
             // Modified source files only (.h/.cpp/.cs), full paths, one per line.
-            ws.Cell(row, 8).Value = sourceFiles.Count > 0 ? string.Join("\n", sourceFiles) : "";
+            SetText(ws.Cell(row, 8), sourceFiles.Count > 0 ? string.Join("\n", sourceFiles) : "");
 
-            ws.Cell(row, 9).Value = Join(r.RegressionAreas);
-            ws.Cell(row, 10).Value = Join(r.UseCases);
+            SetText(ws.Cell(row, 9), Join(r.RegressionAreas));
+            SetText(ws.Cell(row, 10), Join(r.UseCases));
 
             // Build status: latest OK build number, linked, with its result underneath.
             var statusCell = ws.Cell(row, 11);
@@ -95,8 +95,8 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
             }
 
             var manualCell = ws.Cell(row, 12);
-            manualCell.Value = string.Join("\n", r.ManualSuites.Select(s =>
-                string.IsNullOrWhiteSpace(s.Title) ? $"Test Case {s.SuiteId}" : $"Test Case {s.SuiteId} - {s.Title}"));
+            SetText(manualCell, string.Join("\n", r.ManualSuites.Select(s =>
+                string.IsNullOrWhiteSpace(s.Title) ? $"Test Case {s.SuiteId}" : $"Test Case {s.SuiteId} - {s.Title}")));
             Link(manualCell, r.ManualSuites.Select(s => s.Url).FirstOrDefault(u => !string.IsNullOrEmpty(u)));
 
             // Size the row so every wrapped line is visible (capped to avoid oversized rows).
@@ -193,8 +193,8 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
 
         var headers = new[]
         {
-            "Impacted Area", "TC ID", "TC Title", "Parent Feature ID", "Match Type", "Confidence", "Match Reason",
-            "Linked Work Items",
+            "Impacted Area", "TC ID", "TC Title", "Description", "Verifies", "Parent Feature ID",
+            "Match Type", "Confidence", "Match Reason",
         };
         const int headerRow = 4;
         for (var c = 0; c < headers.Length; c++)
@@ -215,24 +215,25 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
             idCell.Value = m.TestCaseId;
             if (!string.IsNullOrEmpty(m.TestCaseUrl)) idCell.SetHyperlink(new XLHyperlink(m.TestCaseUrl));
 
-            ws.Cell(row, 3).Value = m.TestCaseTitle;
-            ws.Cell(row, 4).Value = m.ParentFeatureId > 0 ? m.ParentFeatureId.ToString() : "does not exist";
-            ws.Cell(row, 5).Value = m.MatchType;
+            SetText(ws.Cell(row, 3), m.TestCaseTitle);
 
-            var confCell = ws.Cell(row, 6);
+            // What the test verifies leads the sheet; the match reason is provenance, so it sits at the end.
+            SetText(ws.Cell(row, 4), m.Description);
+
+            // In the reviewer's vocabulary: the Bug/IMS/Story that put this test case in scope.
+            var linkedCell = ws.Cell(row, 5);
+            IReadOnlyList<RegressionWorkItemRef> linked = m.LinkedWorkItems ?? [];
+            SetText(linkedCell, string.Join("\n", linked.Select(WorkItemLabel)));
+            Link(linkedCell, linked.Select(w => w.Url).FirstOrDefault(u => !string.IsNullOrEmpty(u)));
+
+            ws.Cell(row, 6).Value = m.ParentFeatureId > 0 ? m.ParentFeatureId.ToString() : "does not exist";
+            ws.Cell(row, 7).Value = m.MatchType;
+
+            var confCell = ws.Cell(row, 8);
             confCell.Value = m.ConfidencePercent / 100.0;
             confCell.Style.NumberFormat.Format = "0%";
 
-            var reasonCell = ws.Cell(row, 7);
-            reasonCell.Value = m.MatchReason;
-            reasonCell.Style.Alignment.WrapText = true;
-            reasonCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-
-            // Why this test case is in scope, in the reviewer's vocabulary: the Bug/IMS/Story it verifies.
-            var linkedCell = ws.Cell(row, 8);
-            IReadOnlyList<RegressionWorkItemRef> linked = m.LinkedWorkItems ?? [];
-            linkedCell.Value = string.Join("\n", linked.Select(WorkItemLabel));
-            Link(linkedCell, linked.Select(w => w.Url).FirstOrDefault(u => !string.IsNullOrEmpty(u)));
+            SetText(ws.Cell(row, 9), m.MatchReason);
 
             row++;
         }
@@ -247,7 +248,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         ws.Range(headerRow, 1, Math.Max(headerRow, row - 1), headers.Length).SetAutoFilter();
         ws.SheetView.FreezeRows(headerRow);
 
-        double[] widths = [34, 10, 52, 16, 12, 12, 70, 40];
+        double[] widths = [34, 10, 52, 70, 40, 16, 12, 12, 34];
         for (var c = 0; c < widths.Length; c++)
             ws.Column(c + 1).Width = widths[c];
     }
@@ -275,7 +276,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
                     var idCell = ws.Cell(row, 4);
                     idCell.Value = w.Id;
                     Link(idCell, w.Url);
-                    ws.Cell(row, 5).Value = w.Title;
+                    SetText(ws.Cell(row, 5), w.Title);
                     row++;
                 }
 
@@ -306,7 +307,7 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
                 var linkCell = ws.Cell(row, 4);
                 linkCell.Value = string.IsNullOrEmpty(ch.Url) ? "" : "open";
                 Link(linkCell, ch.Url);
-                ws.Cell(row, 5).Value = ch.Summary;
+                SetText(ws.Cell(row, 5), ch.Summary);
                 row++;
             }
 
@@ -382,6 +383,18 @@ public sealed class ChurnXlsxBuilder : IChurnXlsxBuilder
         string.IsNullOrWhiteSpace(workItem.Title)
             ? $"{kind} {workItem.Id}"
             : $"{kind} {workItem.Id} - {workItem.Title}";
+
+    /// <summary>Writes text into a cell, clipping it to Excel's hard per-cell limit (ClosedXML throws above it).</summary>
+    private static void SetText(IXLCell cell, string? value)
+    {
+        const int maxCellTextLength = 32767;
+        const string truncationSuffix = "\n… (truncated)";
+
+        var text = value ?? "";
+        cell.Value = text.Length <= maxCellTextLength
+            ? text
+            : string.Concat(text.AsSpan(0, maxCellTextLength - truncationSuffix.Length), truncationSuffix);
+    }
 
     // Excel allows one hyperlink per cell — style it blue/underlined so multi-line cells read as links.
     private static void Link(IXLCell cell, string? url)

@@ -185,11 +185,7 @@ public sealed class RetrievalIndexBuilder
 
         IReadOnlyList<float[]> vectors = await EmbedBatchedAsync(pending.Select(p => p.Draft.Text).ToArray(), ct).ConfigureAwait(false);
 
-        // Clear prior rows for the documents being re-indexed before inserting the fresh version.
         string[] reindexIds = pending.Select(p => p.Draft.Id).ToArray();
-        await ctx.DocumentTerms.Where(t => reindexIds.Contains(t.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
-        await ctx.DocumentVectors.Where(v => reindexIds.Contains(v.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
-        await ctx.Documents.Where(d => reindexIds.Contains(d.Id)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
         var termRows = new List<(string DocumentId, string Term, int TermFrequency)>();
@@ -228,10 +224,23 @@ public sealed class RetrievalIndexBuilder
             }
         }
 
-        await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
-        // Term postings outnumber documents ~20:1; insert them with chunked multi-row statements instead of
-        // per-row change-tracked entities — turning tens of thousands of INSERTs into a few hundred.
-        await BulkInsertTermsAsync(ctx, termRows, ct).ConfigureAwait(false);
+        // Clearing the prior rows and writing the fresh version must be ONE unit: WAL gives readers a
+        // snapshot, so a concurrent query then sees either the old document or the new one, never a
+        // document whose terms have been deleted but not yet re-inserted. It also rolls a failed batch back
+        // instead of leaving the index half-written.
+        await using (var tx = await ctx.Database.BeginTransactionAsync(ct).ConfigureAwait(false))
+        {
+            await ctx.DocumentTerms.Where(t => reindexIds.Contains(t.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            await ctx.DocumentVectors.Where(v => reindexIds.Contains(v.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            await ctx.Documents.Where(d => reindexIds.Contains(d.Id)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+
+            await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
+            // Term postings outnumber documents ~20:1; insert them with chunked multi-row statements instead of
+            // per-row change-tracked entities — turning tens of thousands of INSERTs into a few hundred.
+            await BulkInsertTermsAsync(ctx, termRows, ct).ConfigureAwait(false);
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+        }
+
         ctx.ChangeTracker.Clear(); // bound memory across batches
         // Yield between batches so a full first-time build never starves request handling on the host.
         await Task.Delay(BatchPauseMilliseconds, ct).ConfigureAwait(false);
@@ -315,9 +324,12 @@ public sealed class RetrievalIndexBuilder
         int deleted = 0;
         foreach (string[] batch in docIds.Chunk(BatchSize))
         {
+            // One unit per batch so a reader never catches a document whose terms are gone but whose row remains.
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             await ctx.DocumentTerms.Where(t => batch.Contains(t.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
             await ctx.DocumentVectors.Where(v => batch.Contains(v.DocumentId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
             deleted += await ctx.Documents.Where(d => batch.Contains(d.Id)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            await tx.CommitAsync(ct).ConfigureAwait(false);
         }
 
         if (deleted > 0)
@@ -330,20 +342,26 @@ public sealed class RetrievalIndexBuilder
 
     private async Task RecomputeCorpusStatisticsAsync(ImpactIndexDbContext ctx, DateTimeOffset indexedThrough, CancellationToken ct)
     {
-        await ctx.CorpusStatistics.ExecuteDeleteAsync(ct).ConfigureAwait(false);
-
+        // Aggregate first, outside the write, so the transaction below stays as short as possible.
         var frequencies = await ctx.DocumentTerms
             .GroupBy(t => t.Term)
             .Select(g => new { Term = g.Key, DocumentFrequency = g.Count() })
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        ctx.CorpusStatistics.AddRange(
-            frequencies.Select(f => new CorpusStatistic { Term = f.Term, DocumentFrequency = f.DocumentFrequency }));
 
         int documentCount = await ctx.Documents.CountAsync(ct).ConfigureAwait(false);
         double averageLength = documentCount == 0
             ? 0
             : await ctx.Documents.AverageAsync(d => (double)d.Length, ct).ConfigureAwait(false);
+
+        // The delete-all and the re-insert MUST commit together. Split apart, a reader that lands in the gap
+        // sees an empty CorpusStatistics table, every IDF collapses to the same value, and BM25 ranking is
+        // silently wrong for the whole rebuild — no error, just bad results.
+        await using var tx = await ctx.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        await ctx.CorpusStatistics.ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        ctx.CorpusStatistics.AddRange(
+            frequencies.Select(f => new CorpusStatistic { Term = f.Term, DocumentFrequency = f.DocumentFrequency }));
 
         await UpsertMetaAsync(ctx, MetaDocumentCount, documentCount.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
         await UpsertMetaAsync(ctx, MetaAverageLength, averageLength.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
@@ -353,6 +371,7 @@ public sealed class RetrievalIndexBuilder
         await UpsertMetaAsync(ctx, MetaIndexedThroughUtc, indexedThrough.ToString("O", CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
 
         await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
     }
 
     private static async Task UpsertMetaAsync(ImpactIndexDbContext ctx, string key, string value, CancellationToken ct)
