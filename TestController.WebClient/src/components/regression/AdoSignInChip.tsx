@@ -12,10 +12,12 @@ export function AdoSignInChip({ onSignedIn }: { onSignedIn: () => void }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    initAdoAuth().then((cfg) => {
-      setConfig(cfg);
-      setAccount(adoSignedInAs());
-    });
+    initAdoAuth()
+      .then((cfg) => {
+        setConfig(cfg);
+        setAccount(adoSignedInAs());
+      })
+      .catch(() => setConfig(null));
   }, []);
 
   if (!config?.enabled) return null;

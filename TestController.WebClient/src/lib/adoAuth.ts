@@ -43,6 +43,10 @@ export async function initAdoAuth(): Promise<AdoAuthConfig | null> {
 
   if (!config?.enabled || !config.clientId) return config;
 
+  // MSAL needs crypto.subtle for PKCE, which browsers expose only in a secure context. Constructing it
+  // over plain HTTP throws crypto_nonexistent, so stop here and let the UI show its "HTTPS only" state.
+  if (!config.secureTransport || !window.isSecureContext || !window.crypto?.subtle) return config;
+
   const options: Configuration = {
     auth: {
       clientId: config.clientId,
@@ -53,9 +57,14 @@ export async function initAdoAuth(): Promise<AdoAuthConfig | null> {
     cache: { cacheLocation: 'sessionStorage' },
   };
 
-  msal = new PublicClientApplication(options);
-  await msal.initialize();
-  await msal.handleRedirectPromise().catch(() => undefined);
+  try {
+    msal = new PublicClientApplication(options);
+    await msal.initialize();
+    await msal.handleRedirectPromise().catch(() => undefined);
+  } catch {
+    // Delegated sign-in is optional; the API falls back to the host credential.
+    msal = null;
+  }
   return config;
 }
 
