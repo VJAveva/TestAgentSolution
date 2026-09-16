@@ -412,7 +412,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected async Task<bool> ExecuteChildrenTrackedAsync(
         List<IActionNode> children, ExecutionMode mode, bool parentFailAndContinue,
-        PipelineExecutionContext ctx, ExecutionSession session, CancellationToken ct)
+        PipelineExecutionContext ctx, ExecutionSession session, CancellationToken ct,
+        string groupPath = "")
     {
         if (mode == ExecutionMode.Parallel)
         {
@@ -421,7 +422,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var tasks = children.Select(async child =>
             {
                 await gate.WaitAsync(ct);
-                try { return await ExecuteNodeTrackedAsync(child, ctx, session, ct); }
+                try { return await ExecuteNodeTrackedAsync(child, ctx, session, ct, groupPath); }
                 finally { gate.Release(); }
             }).ToList();
             var results = await Task.WhenAll(tasks);
@@ -431,7 +432,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         foreach (var child in children)
         {
             ct.ThrowIfCancellationRequested();
-            var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct);
+            var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct, groupPath);
             if (!success && !parentFailAndContinue)
             {
                 Log("Pipeline", "Stopping � FailAndContinue=false");
@@ -443,7 +444,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected async Task<bool> ExecuteNodeTrackedAsync(
         IActionNode node, PipelineExecutionContext ctx,
-        ExecutionSession session, CancellationToken ct)
+        ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
         OnNodeProgress(node, "Running");
         bool success;
@@ -452,9 +453,9 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             success = node switch
             {
                 InitializeConfig init   => ExecuteInitialize(init, ctx),
-                RefConfig refNode       => await ExecuteRefTrackedAsync(refNode, ctx, session, ct),
-                ActionGroupConfig group => await ExecuteGroupTrackedAsync(group, ctx, session, ct),
-                ActionConfig action     => await ExecuteActionTrackedAsync(action, ctx, session, ct),
+                RefConfig refNode       => await ExecuteRefTrackedAsync(refNode, ctx, session, ct, groupPath),
+                ActionGroupConfig group => await ExecuteGroupTrackedAsync(group, ctx, session, ct, groupPath),
+                ActionConfig action     => await ExecuteActionTrackedAsync(action, ctx, session, ct, groupPath),
                 _                       => true,
             };
         }
@@ -476,7 +477,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected async Task<bool> ExecuteRefTrackedAsync(
         RefConfig refNode, PipelineExecutionContext ctx,
-        ExecutionSession session, CancellationToken ct)
+        ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
@@ -486,18 +487,22 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
         Log("Ref", $"Expanding template: {refNode.TemplateID}");
         return await ExecuteChildrenTrackedAsync(
-            template.Children, ExecutionMode.Sequential, true, ctx, session, ct);
+            template.Children, ExecutionMode.Sequential, true, ctx, session, ct, groupPath);
     }
 
     protected async Task<bool> ExecuteGroupTrackedAsync(
         ActionGroupConfig group, PipelineExecutionContext ctx,
-        ExecutionSession session, CancellationToken ct)
+        ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
         Log("ActionGroup",
             $"[{group.Tag}] Mode={group.ExecutionType}, FailAndContinue={group.FailAndContinue}");
 
+        var childPath = string.IsNullOrEmpty(groupPath)
+            ? group.Tag
+            : groupPath + ActionExecutionResult.GroupSeparator + group.Tag;
+
         var success = await ExecuteChildrenTrackedAsync(
-            group.Children, group.ExecutionType, group.FailAndContinue, ctx, session, ct);
+            group.Children, group.ExecutionType, group.FailAndContinue, ctx, session, ct, childPath);
 
         Log("ActionGroup", $"[{group.Tag}] {(success ? "? Completed" : "? Failed")}");
         return success || group.FailAndContinue;
@@ -505,7 +510,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     protected async Task<bool> ExecuteActionTrackedAsync(
         ActionConfig action, PipelineExecutionContext ctx,
-        ExecutionSession session, CancellationToken ct)
+        ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
         var result = new ActionExecutionResult
         {
@@ -513,6 +518,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             ActionType = action.Type.ToString(),
             AgentName = action.AgentName,
             Command = action.Command,
+            GroupPath = groupPath,
             OriginalNode = action,
             StartedUtc = DateTime.UtcNow
         };

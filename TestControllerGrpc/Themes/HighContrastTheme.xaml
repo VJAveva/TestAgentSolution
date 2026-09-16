@@ -190,6 +190,14 @@
     <SolidColorBrush x:Key="StatusWarningFg" Color="#FFFFFF00" />
     <SolidColorBrush x:Key="StatusIdleBg"    Color="#FF1A1A1A" />
     <SolidColorBrush x:Key="StatusIdleFg"    Color="#FF666666" />
+
+    <!-- Agent fleet card states, kept on the pure-hue HC palette so each state stays separable. -->
+    <SolidColorBrush x:Key="StatusRebootBg"      Color="#FF330033" />
+    <SolidColorBrush x:Key="StatusRebootFg"      Color="#FFFF66FF" />
+    <SolidColorBrush x:Key="StatusMaintenanceBg" Color="#FF333300" />
+    <SolidColorBrush x:Key="StatusMaintenanceFg" Color="#FFFFFF00" />
+    <SolidColorBrush x:Key="StatusDrainingBg"    Color="#FF1A1A1A" />
+    <SolidColorBrush x:Key="StatusDrainingFg"    Color="#FFAAAAAA" />
     <SolidColorBrush x:Key="DashboardBg"     Color="#FF000000" />
     <SolidColorBrush x:Key="CardBg"          Color="#FF1A1A1A" />
     <SolidColorBrush x:Key="CardBorder"      Color="#FFFFFFFF" />

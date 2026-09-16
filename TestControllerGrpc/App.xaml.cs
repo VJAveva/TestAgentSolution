@@ -151,6 +151,9 @@ public partial class App : Application
                 // Phase 8: Automatic notification dispatcher
                 services.AddHostedService<NotificationDispatcher>();
 
+                // One summary email per completed full pipeline (BuildResults:SendConsolidatedEmail).
+                services.AddHostedService<ConsolidatedRunMailer>();
+
                 // P2-4: Fleet alerting (agent-down + run-overrun)
                 services.AddHostedService<FleetAlertDispatcher>();
 

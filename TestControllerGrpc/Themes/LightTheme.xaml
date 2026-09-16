@@ -190,6 +190,15 @@
     <SolidColorBrush x:Key="StatusWarningFg" Color="#FFD97706" />
     <SolidColorBrush x:Key="StatusIdleBg"    Color="#FFF3F4F6" />
     <SolidColorBrush x:Key="StatusIdleFg"    Color="#FF9CA3AF" />
+
+    <!-- Agent fleet card states. Tints are ~20-25% (not the 10% used elsewhere) because these cards must
+         stay legible against a white panel; foregrounds are the deep variants for text contrast. -->
+    <SolidColorBrush x:Key="StatusRebootBg"      Color="#3A9333EA" />
+    <SolidColorBrush x:Key="StatusRebootFg"      Color="#FF7E22CE" />
+    <SolidColorBrush x:Key="StatusMaintenanceBg" Color="#33EA580C" />
+    <SolidColorBrush x:Key="StatusMaintenanceFg" Color="#FFC2410C" />
+    <SolidColorBrush x:Key="StatusDrainingBg"    Color="#2E64748B" />
+    <SolidColorBrush x:Key="StatusDrainingFg"    Color="#FF475569" />
     <SolidColorBrush x:Key="DashboardBg"     Color="#FFF8FAFC" />
     <SolidColorBrush x:Key="CardBg"          Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="CardBorder"      Color="#FFE5E7EB" />

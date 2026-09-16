@@ -43,8 +43,8 @@
                                 Command="{Binding Updates.RebootAllReadyCommand}"
                                 IsEnabled="{Binding Updates.CanRebootAllReady}"
                                 ToolTip="Queues a reboot for every node reporting Reboot required that is not draining."
-                                Background="#1AF0B070" Foreground="#FFF0B070"
-                                BorderBrush="#44F0B070" BorderThickness="1"/>
+                                Background="{DynamicResource StatusRebootBg}" Foreground="{DynamicResource StatusRebootFg}"
+                                BorderBrush="{DynamicResource StatusRebootFg}" BorderThickness="1"/>
                         <WrapPanel>
                             <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
                                     Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
@@ -55,15 +55,15 @@
                                 </StackPanel>
                             </Border>
                             <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1">
+                                    Background="{DynamicResource StatusRebootBg}" BorderBrush="{DynamicResource StatusRebootFg}" BorderThickness="1">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Updates.RebootRequiredCount}" FontSize="16" FontWeight="SemiBold"
-                                               Foreground="#FFF0B070"/>
+                                               Foreground="{DynamicResource StatusRebootFg}"/>
                                     <TextBlock Text="reboot required" FontSize="9" Foreground="{DynamicResource TextS}"/>
                                 </StackPanel>
                             </Border>
                             <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="#1A4D9CF5" BorderBrush="#444D9CF5" BorderThickness="1">
+                                    Background="{DynamicResource StatusRunningBg}" BorderBrush="{DynamicResource StatusRunningFg}" BorderThickness="1">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Updates.PendingCount}" FontSize="16" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Accent}"/>
@@ -98,7 +98,7 @@
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsStale}" Value="True">
-                                                <Setter Property="Foreground" Value="#FFF0B070"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource StatusMaintenanceFg}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -135,7 +135,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:MaintenanceOpVM}">
                         <Border Margin="0,0,0,8" Padding="12" CornerRadius="6"
-                                Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1">
+                                Background="{DynamicResource StatusMaintenanceBg}" BorderBrush="{DynamicResource StatusMaintenanceFg}" BorderThickness="1">
                             <StackPanel>
                                 <DockPanel>
                                     <TextBlock DockPanel.Dock="Right" Text="{Binding Elapsed}" FontSize="11"
@@ -145,7 +145,7 @@
                                         <Run Text=" · "/>
                                         <Run Text="{Binding KindText, Mode=OneWay}"/>
                                         <Run Text=" · "/>
-                                        <Run Text="{Binding StateText, Mode=OneWay}" Foreground="#FFF0B070"/>
+                                        <Run Text="{Binding StateText, Mode=OneWay}" Foreground="{DynamicResource StatusMaintenanceFg}"/>
                                     </TextBlock>
                                 </DockPanel>
 
@@ -154,7 +154,7 @@
 
                                 <ProgressBar Height="4" Minimum="0" Maximum="100"
                                              Value="{Binding ProgressPercent, Mode=OneWay}"
-                                             Foreground="#FFF0B070" Background="{DynamicResource Bdr}" BorderThickness="0"/>
+                                             Foreground="{DynamicResource StatusMaintenanceFg}" Background="{DynamicResource Bdr}" BorderThickness="0"/>
                                 <TextBlock Margin="0,3,0,0" FontSize="10" Foreground="{DynamicResource TextS}">
                                     <Run Text="Step"/><Run Text="{Binding StepNumber, Mode=OneWay}"/>
                                     <Run Text="of"/><Run Text="{Binding StepCount, Mode=OneWay}"/>

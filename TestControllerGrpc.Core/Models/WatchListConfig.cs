@@ -412,6 +412,34 @@ public sealed class ExecutionSession
     public int SucceededCount => _actionResults.Count(r => r.Outcome == ActionOutcome.Success);
     public int FailedCount => _actionResults.Count(r => r.IsRetryable);
 
+    /// <summary>
+    /// Skipped is a third state, so <see cref="SucceededCount"/> + <see cref="FailedCount"/> does NOT equal
+    /// <see cref="TotalActions"/>. Reports that assume it do silently under-report.
+    /// </summary>
+    public int SkippedCount => _actionResults.Count(r => r.Outcome == ActionOutcome.Skipped);
+
+    /// <summary>
+    /// Elapsed wall time. Actions run in parallel, so summing their durations overstates this badly.
+    /// </summary>
+    public TimeSpan WallTime => (CompletedUtc ?? DateTime.UtcNow) - StartedUtc;
+
+    /// <summary>
+    /// True for a whole-pipeline run. Group, single-action and template runs reuse the same session type but
+    /// prefix <see cref="EventType"/>, so reporting can tell a full run from a one-off without a new flag.
+    /// </summary>
+    public bool IsFullPipelineRun =>
+        !EventType.StartsWith("Action:", StringComparison.OrdinalIgnoreCase)
+        && !EventType.StartsWith("Group:", StringComparison.OrdinalIgnoreCase)
+        && !EventType.StartsWith("Template:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Distinct ActionGroup phases in first-execution order — the report's dynamic columns.</summary>
+    public IReadOnlyList<string> GroupPhases => _actionResults
+        .Where(r => r.TopGroup.Length > 0)
+        .OrderBy(r => r.Sequence)
+        .Select(r => r.TopGroup)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
     public string SummaryText => State switch
     {
         SessionState.Running => $"Running… ({SucceededCount}/{TotalActions} done)",
@@ -491,6 +519,27 @@ public sealed class ActionExecutionResult
     public string ActionType { get; init; } = "";
     public string? AgentName { get; init; }
     public string Command { get; init; } = "";
+
+    /// <summary>
+    /// Ancestor ActionGroup tags, outermost first, joined by <see cref="GroupSeparator"/>. Stamped during
+    /// dispatch because the WatchList tree has no parent pointers, so it cannot be recovered afterwards.
+    /// Empty for an action that sits directly under an Event.
+    /// </summary>
+    public string GroupPath { get; init; } = "";
+
+    public const string GroupSeparator = " / ";
+
+    /// <summary>Outermost ActionGroup tag — the pipeline "phase" reports group by.</summary>
+    public string TopGroup
+    {
+        get
+        {
+            if (GroupPath.Length == 0) return "";
+            var i = GroupPath.IndexOf(GroupSeparator, StringComparison.Ordinal);
+            return i < 0 ? GroupPath : GroupPath[..i];
+        }
+    }
+
     public ActionOutcome Outcome { get; set; } = ActionOutcome.Unknown;
     public int? ExitCode { get; set; }
     public TimeSpan Duration { get; set; }
@@ -551,12 +600,42 @@ public static class WatchListConstants
 public sealed class AgentSessionSummary
 {
     public string AgentName { get; set; } = "";
-    public string Status => Actions.Any(a => a.Outcome == ActionOutcome.Failed) ? "Failed"
-        : Actions.All(a => a.Outcome == ActionOutcome.Success) && Actions.Count > 0 ? "Success"
+
+    /// <summary>
+    /// Skipped is not a failure and must not hold an agent at "Executing" forever; Terminated/TimedOut are
+    /// failures even though they are not <see cref="ActionOutcome.Failed"/>.
+    /// </summary>
+    public string Status => Actions.Any(a => a.IsRetryable) ? "Failed"
+        : Actions.Count > 0 && Actions.All(a => a.Outcome is ActionOutcome.Success or ActionOutcome.Skipped) ? "Success"
         : "Executing";
+
     public System.Collections.Concurrent.ConcurrentBag<ActionExecutionResult> Actions { get; set; } = new();
     public int CompletedCount => Actions.Count(a => a.Outcome != ActionOutcome.Unknown);
     public int TotalCount => Actions.Count;
+
+    /// <summary>Deterministic execution order. <see cref="Actions"/> is a bag and has no enumeration order.</summary>
+    public IReadOnlyList<ActionExecutionResult> OrderedActions =>
+        Actions.OrderBy(a => a.Sequence).ToList();
+
+    public int SucceededCount => Actions.Count(a => a.Outcome == ActionOutcome.Success);
+    public int FailedCount => Actions.Count(a => a.IsRetryable);
+    public int SkippedCount => Actions.Count(a => a.Outcome == ActionOutcome.Skipped);
+
+    /// <summary>
+    /// Last finish minus first start. Summing action durations overstates this whenever an agent's actions
+    /// overlap, which is the normal case inside a parallel ActionGroup.
+    /// </summary>
+    public TimeSpan WallTime
+    {
+        get
+        {
+            var ordered = OrderedActions;
+            if (ordered.Count == 0) return TimeSpan.Zero;
+            var start = ordered.Min(a => a.StartedUtc);
+            var end = ordered.Max(a => a.StartedUtc + a.Duration);
+            return end > start ? end - start : TimeSpan.Zero;
+        }
+    }
 }
 
 /// <summary>

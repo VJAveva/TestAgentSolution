@@ -21,7 +21,7 @@
                                     Background="{DynamicResource AccRed}" VerticalAlignment="Center"
                                     Visibility="{Binding Updates.HasUnread, Converter={StaticResource BoolVis}}">
                                 <TextBlock Text="{Binding Updates.UnreadCount}" FontSize="9" FontWeight="Bold"
-                                           HorizontalAlignment="Center" Foreground="#FF1E1E2E"/>
+                                           HorizontalAlignment="Center" Foreground="{DynamicResource TreeBadgeFg}"/>
                             </Border>
                         </StackPanel>
                     </ToggleButton>
@@ -106,7 +106,7 @@
                         <Run Text=" offline"/>
                     </TextBlock>
                     <TextBlock VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0"
-                               Foreground="#FFF0B070"
+                               Foreground="{DynamicResource StatusMaintenanceFg}"
                                Visibility="{Binding HasReverting, Converter={StaticResource BoolVis}}">
                         <Run Text="·"/>
                         <Run Text="{Binding RevertingCount, Mode=OneWay}" FontWeight="SemiBold"/>
@@ -131,13 +131,13 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:UpdateBannerVM}">
                     <Border CornerRadius="4" Padding="10,6" Margin="0,0,0,4"
-                            Background="#1A4D9CF5" BorderBrush="#444D9CF5" BorderThickness="1">
+                            Background="{DynamicResource StatusRunningBg}" BorderBrush="{DynamicResource StatusRunningFg}" BorderThickness="1">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsWarning}" Value="True">
-                                        <Setter Property="Background" Value="#1AF0B070"/>
-                                        <Setter Property="BorderBrush" Value="#44F0B070"/>
+                                        <Setter Property="Background" Value="{DynamicResource StatusRebootBg}"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource StatusRebootFg}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -350,8 +350,8 @@
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </Trigger>
                                                             <DataTrigger Binding="{Binding IsUnderMaintenance}" Value="True">
-                                                                <Setter Property="Background" Value="#33F0B070"/>
-                                                                <Setter Property="BorderBrush" Value="#FFF0B070"/>
+                                                                <Setter Property="Background" Value="{DynamicResource StatusMaintenanceBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusMaintenanceFg}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding IsQuarantined}" Value="True">
@@ -359,15 +359,18 @@
                                                                 <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
-                                                            <!-- R17: reboot-required uses the amber card; draining gets its own grey-blue -->
-                                                            <DataTrigger Binding="{Binding IsRebootRequired}" Value="True">
-                                                                <Setter Property="Background" Value="#33F0B070"/>
-                                                                <Setter Property="BorderBrush" Value="#FFF0B070"/>
+                                                            <DataTrigger Binding="{Binding IsDraining}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource StatusDrainingBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusDrainingFg}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
-                                                            <DataTrigger Binding="{Binding IsDraining}" Value="True">
-                                                                <Setter Property="Background" Value="#2A3A4C"/>
-                                                                <Setter Property="BorderBrush" Value="#FF7B92AD"/>
+                                                            <!-- R17: must stay AFTER IsDraining. The update policy drains a node BECAUSE a reboot
+                                                                 is pending, so an earlier trigger here would always be overridden by the drain
+                                                                 colour and the actionable state would never be shown. -->
+                                                            <DataTrigger Binding="{Binding IsRebootRequired}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource StatusRebootBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusRebootFg}"/>
+                                                                <Setter Property="BorderThickness" Value="2"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
@@ -430,13 +433,13 @@
                                                                 VerticalAlignment="Center"
                                                                 ToolTip="{Binding UpdateTooltip}"
                                                                 Visibility="{Binding HasUpdateBadge, Converter={StaticResource BoolVis}}"
-                                                                Background="#1A4D9CF5" BorderBrush="#444D9CF5" BorderThickness="0.5">
+                                                                Background="{DynamicResource StatusRunningBg}" BorderBrush="{DynamicResource StatusRunningFg}" BorderThickness="0.5">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding IsRebootRequired}" Value="True">
-                                                                            <Setter Property="Background" Value="#1AF0B070"/>
-                                                                            <Setter Property="BorderBrush" Value="#44F0B070"/>
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusRebootBg}"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource StatusRebootFg}"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -485,12 +488,12 @@
                                                     <StackPanel Grid.Row="1" Margin="12,2,0,0" VerticalAlignment="Bottom"
                                                                 Visibility="{Binding IsUnderMaintenance, Converter={StaticResource BoolVis}}">
                                                         <TextBlock Text="{Binding MaintenanceLine}" FontSize="8"
-                                                                   FontFamily="Consolas" Foreground="#FFF0B070"
+                                                                   FontFamily="Consolas" Foreground="{DynamicResource StatusMaintenanceFg}"
                                                                    TextTrimming="CharacterEllipsis"/>
                                                         <ProgressBar Height="3" Margin="0,2,0,0" Minimum="0" Maximum="100"
                                                                      Value="{Binding MaintenanceProgressPercent, Mode=OneWay}"
                                                                      Background="Transparent" BorderThickness="0"
-                                                                     Foreground="#FFF0B070"/>
+                                                                     Foreground="{DynamicResource StatusMaintenanceFg}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
