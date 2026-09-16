@@ -1,3 +1,10 @@
+// SINGLE SOURCE OF TRUTH for the controller<->agent contract.
+// Do NOT copy this file into other projects. TestAgentGrpc and TestAgentDisplay link to THIS file
+// via <Protobuf Include="..\TestControllerGrpc.Core\Protos\test_agent.proto" Link="Protos\test_agent.proto" />.
+// TestControllerGrpc needs no link at all — it gets the generated types from the Core project reference.
+// Editing a copy elsewhere causes runtime serialization failures that compile cleanly.
+// If you need it in another project, add a <Protobuf> link — never a copy.
+
 syntax = "proto3";
 
 option csharp_namespace = "TestAgentGrpc";
