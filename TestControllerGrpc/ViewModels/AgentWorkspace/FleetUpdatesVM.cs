@@ -22,6 +22,11 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     private readonly Dispatcher _uiDispatcher;
     private bool _disposed;
 
+    // Posture events arrive per node. At 50 agents on a 5-minute registry poll that is ~600 rebuilds/hour,
+    // and each one re-scans every agent, so bursts are coalesced the same way FleetVM does. Notifications are
+    // deliberately NOT debounced: that path is O(notifications), so delaying it would add latency for no gain.
+    private readonly DispatcherTimer _rowsDebounce;
+
     /// <summary>One banner per severity, never per node (R15).</summary>
     public ObservableCollection<UpdateBannerVM> Banners { get; } = new();
 
@@ -29,6 +34,19 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
 
     /// <summary>One row per registered agent, including nodes with nothing to report (R19).</summary>
     public ObservableCollection<NodeUpdateRowVM> Rows { get; } = new();
+
+    /// <summary>What the Maintenance grid binds to: <see cref="Rows"/> narrowed by <see cref="RowFilter"/>.</summary>
+    public ObservableCollection<NodeUpdateRowVM> FilteredRows { get; } = new();
+
+    public IReadOnlyList<UpdateFilterOption> RowFilters { get; } = UpdateFilterOption.All;
+
+    [ObservableProperty] private UpdateRowFilter _rowFilter = UpdateRowFilter.All;
+
+    partial void OnRowFilterChanged(UpdateRowFilter value) => ApplyRowFilter();
+
+    public string FilterSummary => FilteredRows.Count == Rows.Count
+        ? $"{Rows.Count} agent(s)"
+        : $"{FilteredRows.Count} of {Rows.Count} agent(s)";
 
     [ObservableProperty] private int _reportingCount;
     [ObservableProperty] private int _rebootRequiredCount;
@@ -68,10 +86,29 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         if (_store is not null) _store.Changed += OnStatusChanged;
         if (_notifications is not null) _notifications.NotificationsChanged += OnNotificationsChanged;
 
+        _rowsDebounce = new DispatcherTimer(DispatcherPriority.Background, uiDispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        _rowsDebounce.Tick += (_, _) =>
+        {
+            _rowsDebounce.Stop();
+            if (_disposed) return;
+            RebuildRows();
+            RebuildBanners();
+        };
+
         Refresh();
     }
 
-    private void OnStatusChanged(object? sender, NodeUpdateStatusChanged e) => _uiDispatcher.InvokeAsync(Refresh);
+    /// <summary>Coalesces a burst into one rebuild. Restarting the timer means only the last event does work.</summary>
+    private void OnStatusChanged(object? sender, NodeUpdateStatusChanged e) =>
+        _uiDispatcher.InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            _rowsDebounce.Stop();
+            _rowsDebounce.Start();
+        });
 
     private void OnNotificationsChanged(object? sender, EventArgs e) => _uiDispatcher.InvokeAsync(RefreshNotifications);
 
@@ -90,24 +127,66 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
 
         var statuses = _store.GetAll().ToDictionary(s => s.NodeId, StringComparer.OrdinalIgnoreCase);
         var staleAfter = TimeSpan.FromTicks((_policy?.Current.RegistryPollInterval ?? TimeSpan.FromMinutes(5)).Ticks * 2);
+        var registered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var built = new List<NodeUpdateRowVM>();
 
-        foreach (var node in _dispatcher.RegisteredAgents.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+        foreach (var node in _dispatcher.RegisteredAgents)
         {
             statuses.TryGetValue(node, out var status);
-            Rows.Add(new NodeUpdateRowVM(node, status, staleAfter));
+            registered.Add(node);
+            built.Add(new NodeUpdateRowVM(node, status, staleAfter));
         }
 
-        // A node that reported but is no longer registered still matters to the operator.
-        foreach (var orphan in statuses.Values.Where(s => Rows.All(r => !string.Equals(r.AgentName, s.NodeId, StringComparison.OrdinalIgnoreCase))))
-            Rows.Add(new NodeUpdateRowVM(orphan.NodeId, orphan, staleAfter));
+        // A node that reported but is no longer registered still matters to the operator. Membership is a set
+        // lookup, not a scan of Rows per orphan.
+        foreach (var orphan in statuses.Values.Where(s => !registered.Contains(s.NodeId)))
+            built.Add(new NodeUpdateRowVM(orphan.NodeId, orphan, staleAfter));
+
+        // Actionable first: at 50 rows the operator should not have to hunt for the node needing a reboot.
+        foreach (var row in built
+            .OrderBy(Severity)
+            .ThenBy(r => r.AgentName, StringComparer.OrdinalIgnoreCase))
+        {
+            Rows.Add(row);
+        }
 
         ReportingCount = Rows.Count(r => r.HasReported);
         RebootRequiredCount = Rows.Count(r => r.State == WindowsUpdateState.RebootRequired);
         PendingCount = Rows.Count(r => r.State == WindowsUpdateState.UpdatePending);
         FailedCount = _notifications?.Notifications.Count(n => n.Kind == MaintenanceEventKind.UpdateFailed) ?? 0;
 
+        ApplyRowFilter();
         RowsChanged?.Invoke();
     }
+
+    private void ApplyRowFilter()
+    {
+        FilteredRows.Clear();
+        foreach (var row in Rows.Where(Matches))
+            FilteredRows.Add(row);
+        OnPropertyChanged(nameof(FilterSummary));
+    }
+
+    private bool Matches(NodeUpdateRowVM row) => RowFilter switch
+    {
+        UpdateRowFilter.NeedsAttention => row.HasBadge || row.IsStale,
+        UpdateRowFilter.RebootRequired => row.State == WindowsUpdateState.RebootRequired,
+        UpdateRowFilter.UpdatesPending => row.State == WindowsUpdateState.UpdatePending,
+        UpdateRowFilter.Stale => row.IsStale,
+        _ => true,
+    };
+
+    // Reboot-required is the only state with an action attached, so it leads; never-reported nodes rank above
+    // healthy ones because silence is a problem, not an all-clear.
+    private static int Severity(NodeUpdateRowVM row) => row.State switch
+    {
+        WindowsUpdateState.RebootRequired => 0,
+        WindowsUpdateState.UpdateInstalling => 1,
+        WindowsUpdateState.UpdatePending => 2,
+        WindowsUpdateState.Unknown => 3,
+        WindowsUpdateState.Suppressed => 4,
+        _ => 5,
+    };
 
     private void RebuildBanners()
     {
@@ -118,17 +197,26 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
             Banners.Add(new UpdateBannerVM(
                 IsWarning: true,
                 Title: rebooting.Count == 1 ? "1 agent needs a reboot" : $"{rebooting.Count} agents need a reboot",
-                Detail: $"{string.Join(", ", rebooting)} — no new work will be sent to them once their current run finishes."));
+                Detail: $"{NameList(rebooting)} \u2014 no new work will be sent to them once their current run finishes."));
 
         var pending = Rows.Where(r => r.State == WindowsUpdateState.UpdatePending).Select(r => r.AgentName).ToList();
         if (pending.Count > 0)
             Banners.Add(new UpdateBannerVM(
                 IsWarning: false,
                 Title: pending.Count == 1 ? "1 agent has pending updates" : $"{pending.Count} agents have pending updates",
-                Detail: $"{string.Join(", ", pending)} — they still accept work."));
+                Detail: $"{NameList(pending)} \u2014 they still accept work."));
 
         OnPropertyChanged(nameof(HasBanners));
     }
+
+    // A banner names the affected agents, but at fleet scale the full list is an unreadable wall; the count is
+    // already in the title, so the detail only needs enough names to recognise the group.
+    private const int MaxNamesInBanner = 6;
+
+    private static string NameList(IReadOnlyList<string> names) =>
+        names.Count <= MaxNamesInBanner
+            ? string.Join(", ", names)
+            : $"{string.Join(", ", names.Take(MaxNamesInBanner))} and {names.Count - MaxNamesInBanner} more";
 
     private void RefreshNotifications()
     {
@@ -143,7 +231,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         foreach (var n in _notifications.Notifications)
             Notifications.Add(new FleetNotificationVM(n));
 
-        UnreadCount = Notifications.Count(n => !n.Acknowledged);
+        UnreadCount = Notifications.Count(n => !n.IsMuted);
         FailedCount = _notifications.Notifications.Count(n => n.Kind == MaintenanceEventKind.UpdateFailed);
         OnPropertyChanged(nameof(HasNotifications));
     }
@@ -205,6 +293,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _rowsDebounce.Stop();
         if (_store is not null) _store.Changed -= OnStatusChanged;
         if (_notifications is not null) _notifications.NotificationsChanged -= OnNotificationsChanged;
     }
@@ -212,6 +301,22 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
 
 /// <summary>One severity banner in the fleet banner stack (R15).</summary>
 public sealed record UpdateBannerVM(bool IsWarning, string Title, string Detail);
+
+/// <summary>Status filter for the Maintenance-tab updates grid.</summary>
+public enum UpdateRowFilter { All, NeedsAttention, RebootRequired, UpdatesPending, Stale }
+
+/// <summary>Filter choice plus its label, so the combo needs no enum-to-text converter.</summary>
+public sealed record UpdateFilterOption(UpdateRowFilter Value, string Label)
+{
+    public static IReadOnlyList<UpdateFilterOption> All { get; } =
+    [
+        new(UpdateRowFilter.All, "All agents"),
+        new(UpdateRowFilter.NeedsAttention, "Needs attention"),
+        new(UpdateRowFilter.RebootRequired, "Reboot required"),
+        new(UpdateRowFilter.UpdatesPending, "Updates pending"),
+        new(UpdateRowFilter.Stale, "Not reporting"),
+    ];
+}
 
 /// <summary>One entry in the notification flyout (R16).</summary>
 public sealed class FleetNotificationVM
@@ -223,6 +328,7 @@ public sealed class FleetNotificationVM
         Title = n.Title;
         Description = n.Description;
         Acknowledged = n.Acknowledged;
+        IsMuted = n.IsMutedAt(DateTimeOffset.UtcNow);
         Kind = n.Kind;
         SourceText = UpdateDisplay.SourceText(n.Source);
         RelativeTime = UpdateDisplay.Relative(n.DetectedUtc);
@@ -233,6 +339,11 @@ public sealed class FleetNotificationVM
     public string Title { get; }
     public string Description { get; }
     public bool Acknowledged { get; }
+
+    /// <summary>Acknowledged, or inside an unexpired snooze. Snapshotted at construction, so the badge
+    /// picks up a lapsed snooze on the next notification refresh rather than the instant it expires.</summary>
+    public bool IsMuted { get; }
+
     public MaintenanceEventKind Kind { get; }
     public string SourceText { get; }
     public string RelativeTime { get; }
@@ -294,7 +405,6 @@ public sealed class NodeUpdateRowVM
         _ => "",
     };
 }
-
 internal static class UpdateDisplay
 {
     public static string StateText(WindowsUpdateState state, bool hasReported) => state switch

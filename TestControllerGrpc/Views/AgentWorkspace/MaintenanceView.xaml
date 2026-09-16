@@ -81,7 +81,22 @@
                         </WrapPanel>
                     </DockPanel>
 
-                    <DataGrid ItemsSource="{Binding Updates.Rows}" MaxHeight="200"
+                    <!-- At 50+ nodes the grid is unreadable unbounded: filter first, and show enough rows to work with. -->
+                    <DockPanel Margin="0,0,0,4">
+                        <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="10"
+                                   Foreground="{DynamicResource TextS}"
+                                   Text="{Binding Updates.FilterSummary}"/>
+                        <TextBlock VerticalAlignment="Center" FontSize="10" Margin="0,0,6,0"
+                                   Foreground="{DynamicResource TextS}" Text="Show"/>
+                        <ComboBox Width="150" HorizontalAlignment="Left" FontSize="10"
+                                  ItemsSource="{Binding Updates.RowFilters}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding Updates.RowFilter, Mode=TwoWay}"
+                                  ToolTip="Narrow the grid to the agents that need action"/>
+                    </DockPanel>
+
+                    <DataGrid ItemsSource="{Binding Updates.FilteredRows}" MaxHeight="420"
                               AutoGenerateColumns="False" IsReadOnly="True"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                               Background="Transparent" BorderThickness="0" FontSize="10"

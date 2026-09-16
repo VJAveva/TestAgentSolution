@@ -185,8 +185,9 @@ public class MaintenanceController : ControllerBase
     {
         if (_notifications is null) return MaintenanceUnavailable();
 
+        var now = DateTimeOffset.UtcNow;
         var open = _notifications.Notifications
-            .Where(n => string.Equals(n.NodeId, nodeId, StringComparison.OrdinalIgnoreCase) && !n.Acknowledged)
+            .Where(n => string.Equals(n.NodeId, nodeId, StringComparison.OrdinalIgnoreCase) && !n.IsMutedAt(now))
             .ToList();
         foreach (var note in open)
             _notifications.Acknowledge(note.Id);
@@ -258,6 +259,8 @@ public class MaintenanceController : ControllerBase
             SuppressionWindow = Seconds(req.SuppressionWindowSeconds, current.SuppressionWindow),
             CoalescingWindow = Seconds(req.CoalescingWindowSeconds, current.CoalescingWindow),
             MaxConcurrentReboots = req.MaxConcurrentReboots is > 0 ? req.MaxConcurrentReboots.Value : current.MaxConcurrentReboots,
+            // Not on the request DTO yet; carried forward so a policy save cannot silently reset it.
+            MaxConcurrentRefreshes = current.MaxConcurrentRefreshes,
         };
 
         _policy.Update(updated);

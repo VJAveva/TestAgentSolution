@@ -21,7 +21,12 @@ public enum MaintenanceState
     Quarantined,
 }
 
-/// <summary>The eight phases of a revert operation, in execution order. UI phase chips render this directly.</summary>
+/// <summary>
+/// Phases of a maintenance operation, in execution order. UI phase chips render this directly.
+/// The first eight are the revert sequence; the remainder extend it for a golden-image refresh, which reuses
+/// Precheck/Quarantine/SnapshotRevert/PowerOn/PingWait/AgentWait/Verify and adds its own steps.
+/// APPEND ONLY — this enum is persisted in the operation history.
+/// </summary>
 public enum RevertPhase
 {
     Precheck,
@@ -32,6 +37,18 @@ public enum RevertPhase
     AgentWait,
     PostPrep,
     Verify,
+
+    /// <summary>Online search for applicable updates (the detector's cached search is not enough).</summary>
+    SearchUpdates,
+    InstallUpdates,
+    /// <summary>Reboot after installing, then wait for the node to come back.</summary>
+    RebootWait,
+    /// <summary>Power off so the new baseline is captured from a quiescent disk.</summary>
+    PowerOff,
+    /// <summary>The irreversible step: replace the golden-image snapshot.</summary>
+    ReplaceBaseline,
+    /// <summary>Power back on and confirm the node returns to rotation.</summary>
+    FinalPowerOn,
 }
 
 /// <summary>Lifecycle state of a maintenance operation row.</summary>
@@ -54,13 +71,19 @@ public enum MaintenanceTriggerSource
     WebApi,
 }
 
-/// <summary>The kind of maintenance an operation performs.</summary>
+/// <summary>The kind of maintenance an operation performs. APPEND ONLY — persisted in the history table.</summary>
 public enum MaintenanceKind
 {
     Revert,
     Reboot,
     Prep,
     InstallBuild,
+
+    /// <summary>Install pending Windows updates on a node, without touching its snapshot.</summary>
+    InstallUpdates,
+
+    /// <summary>Revert to baseline, patch, verify, then replace the baseline snapshot.</summary>
+    GoldenImageRefresh,
 }
 
 /// <summary>Which stream a captured script output line came from.</summary>

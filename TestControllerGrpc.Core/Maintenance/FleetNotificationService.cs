@@ -46,8 +46,11 @@ public sealed class FleetNotificationService : IFleetNotificationService
             NotificationsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Mutes a node's open notifications for <paramref name="duration"/>. A non-positive duration
+    /// un-snoozes immediately; snoozing does NOT acknowledge, so the entry returns when the window lapses.</summary>
     public void Snooze(string nodeId, TimeSpan duration)
     {
+        var until = DateTimeOffset.UtcNow + duration;
         var changed = false;
         lock (_gate)
         {
@@ -55,7 +58,7 @@ public sealed class FleetNotificationService : IFleetNotificationService
             {
                 if (string.Equals(_notifications[i].NodeId, nodeId, StringComparison.OrdinalIgnoreCase) && !_notifications[i].Acknowledged)
                 {
-                    _notifications[i] = _notifications[i] with { Acknowledged = true };
+                    _notifications[i] = _notifications[i] with { SnoozedUntilUtc = until };
                     changed = true;
                 }
             }

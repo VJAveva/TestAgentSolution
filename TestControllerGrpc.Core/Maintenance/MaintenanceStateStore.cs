@@ -10,6 +10,8 @@ namespace TestControllerGrpc.Core.Maintenance;
 public sealed class MaintenanceStateStore : IMaintenanceStateStore
 {
     private readonly ConcurrentDictionary<string, MaintenanceState> _states = new(StringComparer.OrdinalIgnoreCase);
+    // Serialises writers only; Get stays lock-free because the dispatch gate reads it on every dispatch.
+    private readonly object _writeGate = new();
 
     public event EventHandler<NodeMaintenanceStateChanged>? Changed;
 
@@ -18,15 +20,23 @@ public sealed class MaintenanceStateStore : IMaintenanceStateStore
 
     public void Set(string nodeId, MaintenanceState state)
     {
-        var previous = Get(nodeId);
+        MaintenanceState previous;
 
-        if (state == MaintenanceState.None)
-            _states.TryRemove(nodeId, out _);
-        else
-            _states[nodeId] = state;
+        // Read-modify-write must be atomic: this is the authority the dispatch gate consults, so racing
+        // writers could otherwise both observe the old state and both act on it.
+        lock (_writeGate)
+        {
+            previous = Get(nodeId);
+            if (previous == state) return;
 
-        if (previous != state)
-            Changed?.Invoke(this, new NodeMaintenanceStateChanged(nodeId, previous, state));
+            if (state == MaintenanceState.None)
+                _states.TryRemove(nodeId, out _);
+            else
+                _states[nodeId] = state;
+        }
+
+        // Raised outside the lock — handlers re-enter the store (the coordinator writes state from Changed).
+        Changed?.Invoke(this, new NodeMaintenanceStateChanged(nodeId, previous, state));
     }
 
     public IReadOnlyDictionary<string, MaintenanceState> Snapshot()

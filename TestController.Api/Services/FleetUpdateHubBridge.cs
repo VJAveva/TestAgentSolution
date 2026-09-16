@@ -92,6 +92,8 @@ public static class FleetUpdateDto
         source = n.Source.ToString(),
         detectedUtc = n.DetectedUtc,
         acknowledged = n.Acknowledged,
+        snoozedUntilUtc = n.SnoozedUntilUtc,
+        isMuted = n.IsMutedAt(DateTimeOffset.UtcNow),
         isSuppressed = n.IsSuppressed,
     };
 

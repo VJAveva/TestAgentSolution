@@ -22,8 +22,11 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
     private readonly IAppLogger _logger;
 
     private readonly ConcurrentDictionary<string, RunningOperation> _active = new(StringComparer.OrdinalIgnoreCase);
-    // Reboots beyond MaxConcurrentReboots wait here rather than being rejected (spec Prompt 17).
-    private readonly ConcurrentQueue<string> _rebootQueue = new();
+    // Work over its kind's cap waits here rather than being rejected (spec Prompt 17). Queues are per-kind so a
+    // saturated refresh queue cannot head-of-line block a reboot that has a free slot.
+    private readonly ConcurrentDictionary<MaintenanceKind, ConcurrentQueue<string>> _queues = new();
+    // Serialises the count-then-start decision; without it two callers can both read "under cap" and both start.
+    private readonly object _startGate = new();
 
     public event EventHandler<MaintenanceProgress>? ProgressChanged;
     public event EventHandler<MaintenanceOperation>? OperationCompleted;
@@ -102,7 +105,7 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
             throw new MaintenanceInProgressException(request.NodeId, existing);
         }
 
-        StartRunning(request.NodeId, running);
+        EnqueueOrStart(request.NodeId, running);
         return Task.FromResult(operation.Id);
     }
 
@@ -133,21 +136,41 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
             throw new MaintenanceInProgressException(request.NodeId, existing);
         }
 
-        // Over the concurrency cap the operation stays Queued and waits its turn — never rejected.
-        if (RunningRebootCount() >= Math.Max(1, _policy.Current.MaxConcurrentReboots))
-        {
-            _rebootQueue.Enqueue(request.NodeId);
-            _logger.Info(LogCategory,
-                $"Reboot for '{request.NodeId}' queued behind the {_policy.Current.MaxConcurrentReboots}-reboot limit.");
-            return Task.FromResult(operation.Id);
-        }
-
-        StartRunning(request.NodeId, running);
+        EnqueueOrStart(request.NodeId, running);
         return Task.FromResult(operation.Id);
     }
 
-    private int RunningRebootCount()
-        => _active.Values.Count(r => r.Started && r.Operation.Kind == MaintenanceKind.Reboot);
+    /// <summary>Cap for a kind, or <see cref="int.MaxValue"/> when the kind is not throttled.</summary>
+    private int CapFor(MaintenanceKind kind) => kind switch
+    {
+        MaintenanceKind.Reboot => Math.Max(1, _policy.Current.MaxConcurrentReboots),
+        MaintenanceKind.GoldenImageRefresh => Math.Max(1, _policy.Current.MaxConcurrentRefreshes),
+        _ => int.MaxValue,
+    };
+
+    private int RunningCount(MaintenanceKind kind)
+        => _active.Values.Count(r => r.Started && r.Operation.Kind == kind);
+
+    private ConcurrentQueue<string> QueueFor(MaintenanceKind kind)
+        => _queues.GetOrAdd(kind, _ => new ConcurrentQueue<string>());
+
+    // Over the concurrency cap the operation stays Queued and waits its turn — never rejected.
+    private void EnqueueOrStart(string nodeId, RunningOperation running)
+    {
+        var kind = running.Operation.Kind;
+        lock (_startGate)
+        {
+            var cap = CapFor(kind);
+            if (RunningCount(kind) >= cap)
+            {
+                QueueFor(kind).Enqueue(nodeId);
+                _logger.Info(LogCategory, $"{kind} for '{nodeId}' queued behind the {cap}-operation limit.");
+                return;
+            }
+
+            StartRunning(nodeId, running);
+        }
+    }
 
     private void StartRunning(string nodeId, RunningOperation running)
     {
@@ -156,13 +179,26 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
     }
 
     // Called once a slot frees up. Skips entries whose node is no longer waiting (cancelled or already gone).
-    private void PumpRebootQueue()
+    private void PumpQueues()
     {
-        var max = Math.Max(1, _policy.Current.MaxConcurrentReboots);
-        while (RunningRebootCount() < max && _rebootQueue.TryDequeue(out var nodeId))
+        lock (_startGate)
         {
-            if (_active.TryGetValue(nodeId, out var waiting) && !waiting.Started && waiting.Execute is not null)
-                StartRunning(nodeId, waiting);
+            foreach (var kind in _queues.Keys)
+            {
+                var cap = CapFor(kind);
+                var queue = QueueFor(kind);
+                // Counted once per kind, not per iteration: RunningCount enumerates _active.Values, which
+                // snapshots the dictionary into a new array on every call.
+                var running = RunningCount(kind);
+                while (running < cap && queue.TryDequeue(out var nodeId))
+                {
+                    if (_active.TryGetValue(nodeId, out var waiting) && !waiting.Started && waiting.Execute is not null)
+                    {
+                        StartRunning(nodeId, waiting);
+                        running++;
+                    }
+                }
+            }
         }
     }
 
@@ -197,7 +233,7 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
         {
             _active.TryRemove(nodeId, out _);
             running.Cancellation.Dispose();
-            PumpRebootQueue();
+            PumpQueues();
         }
 
         // Raised after the node is out of the active map, so a completion handler can immediately re-queue it.
@@ -241,10 +277,10 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
 
         public CancellationTokenSource Cancellation { get; }
 
-        /// <summary>False while the operation sits behind the reboot concurrency cap.</summary>
+        /// <summary>False while the operation sits behind its kind's concurrency cap.</summary>
         public bool Started { get; set; }
 
-        /// <summary>Deferred body, so a queued reboot can be launched later without re-capturing the request.</summary>
+        /// <summary>Deferred body, so a queued operation can be launched later without re-capturing the request.</summary>
         public Func<MaintenanceOperation, IProgress<MaintenanceProgress>, CancellationToken, Task<MaintenanceOperation>>? Execute { get; init; }
 
         public MaintenanceOperation Operation => Volatile.Read(ref _operation);
@@ -255,11 +291,16 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
             Volatile.Write(ref _operation, current with { Phase = progress.Phase, State = MaintenanceOperationState.Running });
         }
     }
+}
 
-    private sealed class SyncProgress<T> : IProgress<T>
-    {
-        private readonly Action<T> _handler;
-        public SyncProgress(Action<T> handler) => _handler = handler;
-        public void Report(T value) => _handler(value);
-    }
+/// <summary>
+/// Invokes the handler on the reporting thread. <see cref="Progress{T}"/> posts to the captured
+/// synchronization context, which defers — and for script output that means lines arrive after the run has
+/// already been judged.
+/// </summary>
+internal sealed class SyncProgress<T> : IProgress<T>
+{
+    private readonly Action<T> _handler;
+    public SyncProgress(Action<T> handler) => _handler = handler;
+    public void Report(T value) => _handler(value);
 }

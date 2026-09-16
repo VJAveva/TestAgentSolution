@@ -34,7 +34,11 @@ public sealed class NodeReadinessProbe : INodeReadinessProbe
         using var ping = new Ping();
         var consecutive = 0;
 
-        while (stopwatch.Elapsed < options.Timeout)
+        // The ping budget starts AFTER the boot delay. Sharing one stopwatch meant a BootDelay >= Timeout
+        // burned the entire budget before the first probe and reported "no replies" without ever pinging.
+        var pingDeadline = stopwatch.Elapsed + options.Timeout;
+
+        while (stopwatch.Elapsed < pingDeadline)
         {
             if (cancellationToken.IsCancellationRequested)
                 return new ReadinessResult(false, stopwatch.Elapsed, "Cancelled while waiting for ping replies.");
@@ -88,13 +92,14 @@ public sealed class NodeReadinessProbe : INodeReadinessProbe
                 if (await _dispatcher.PingAsync(nodeId, cancellationToken).ConfigureAwait(false))
                     return new ReadinessResult(true, stopwatch.Elapsed, null);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 return new ReadinessResult(false, stopwatch.Elapsed, "Cancelled while waiting for the agent to reconnect.");
             }
             catch
             {
-                // Agent not answering yet (channel down, boot in progress); keep polling.
+                // Not answering yet (channel down, boot in progress) — including a gRPC deadline, which surfaces
+                // as OperationCanceledException and must NOT be mistaken for the operator cancelling.
             }
 
             try

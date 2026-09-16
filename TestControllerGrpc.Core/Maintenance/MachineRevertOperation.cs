@@ -323,49 +323,49 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
         RevertPhase.Verify => 8,
         _ => 0,
     };
+}
 
-    /// <summary>Thread-safe accumulator for one operation's script output; flushed to <see cref="MaintenanceOperation.LogPath"/>.</summary>
-    private sealed class OperationLog : IProgress<ScriptOutputLine>, IDisposable
+/// <summary>Thread-safe accumulator for one operation's script output; flushed to <see cref="MaintenanceOperation.LogPath"/>.</summary>
+internal sealed class OperationLog : IProgress<ScriptOutputLine>, IDisposable
+{
+    private readonly string? _path;
+    private readonly object _gate = new();
+    private readonly List<string> _lines = [];
+
+    public OperationLog(string? path) => _path = path;
+
+    public void Report(ScriptOutputLine line)
     {
-        private readonly string? _path;
-        private readonly object _gate = new();
-        private readonly List<string> _lines = [];
+        lock (_gate)
+            _lines.Add($"{line.TimestampUtc:o} [{line.Stream}] {line.Text}");
+    }
 
-        public OperationLog(string? path) => _path = path;
+    public void Note(string note)
+    {
+        lock (_gate)
+            _lines.Add($"{DateTimeOffset.UtcNow:o} [Note] {note}");
+    }
 
-        public void Report(ScriptOutputLine line)
+    public void Dispose()
+    {
+        if (string.IsNullOrWhiteSpace(_path))
+            return;
+
+        try
         {
+            var dir = Path.GetDirectoryName(_path);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            string[] snapshot;
             lock (_gate)
-                _lines.Add($"{line.TimestampUtc:o} [{line.Stream}] {line.Text}");
+                snapshot = _lines.ToArray();
+
+            File.WriteAllLines(_path, snapshot);
         }
-
-        public void Note(string note)
+        catch
         {
-            lock (_gate)
-                _lines.Add($"{DateTimeOffset.UtcNow:o} [Note] {note}");
-        }
-
-        public void Dispose()
-        {
-            if (string.IsNullOrWhiteSpace(_path))
-                return;
-
-            try
-            {
-                var dir = Path.GetDirectoryName(_path);
-                if (!string.IsNullOrEmpty(dir))
-                    Directory.CreateDirectory(dir);
-
-                string[] snapshot;
-                lock (_gate)
-                    snapshot = _lines.ToArray();
-
-                File.WriteAllLines(_path, snapshot);
-            }
-            catch
-            {
-                // Operation logs are best-effort; never fail a revert because a log could not be written.
-            }
+            // Operation logs are best-effort; never fail a revert because a log could not be written.
         }
     }
 }

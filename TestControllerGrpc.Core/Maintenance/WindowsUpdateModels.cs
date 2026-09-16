@@ -76,6 +76,10 @@ public sealed record UpdatePolicy
     public TimeSpan CoalescingWindow { get; init; } = TimeSpan.FromSeconds(30);
     public int MaxConcurrentReboots { get; init; } = 1;
 
+    /// <summary>Golden-image refreshes running at once. Each one holds a PowerCLI session for the whole
+    /// revert-patch-snapshot cycle, so this is a hypervisor budget, not just a fleet-availability one.</summary>
+    public int MaxConcurrentRefreshes { get; init; } = 1;
+
     /// <summary>True when <paramref name="at"/> falls inside the configured window (or no window is set).
     /// A window whose end is before its start wraps past midnight.</summary>
     public bool IsWithinAutoRebootWindow(DateTimeOffset at)
@@ -101,6 +105,13 @@ public sealed record FleetNotification
     public MaintenanceEventSource Source { get; init; }
     public DateTimeOffset DetectedUtc { get; init; } = DateTimeOffset.UtcNow;
     public bool Acknowledged { get; init; }
+
+    /// <summary>Set by a timed snooze. Unlike <see cref="Acknowledged"/> this lapses, so the entry re-surfaces.</summary>
+    public DateTimeOffset? SnoozedUntilUtc { get; init; }
+
+    /// <summary>True when the entry should not count as unread: acknowledged outright, or still inside a snooze.</summary>
+    public bool IsMutedAt(DateTimeOffset now)
+        => Acknowledged || (SnoozedUntilUtc is { } until && now < until);
 
     /// <summary>True when raised inside the post-revert suppression window (shown but not alarmed).</summary>
     public bool IsSuppressed { get; init; }

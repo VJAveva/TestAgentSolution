@@ -57,10 +57,14 @@ public partial class FleetVM : ObservableObject, IDisposable
     {
         if (Updates is null) return;
 
+        // Indexed once: a FirstOrDefault per card made this O(cards x rows).
+        var byName = new Dictionary<string, NodeUpdateRowVM>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in Updates.Rows)
+            byName[row.AgentName] = row;
+
         foreach (var card in Cards)
         {
-            var row = Updates.Rows.FirstOrDefault(
-                r => string.Equals(r.AgentName, card.AgentName, StringComparison.OrdinalIgnoreCase));
+            byName.TryGetValue(card.AgentName, out var row);
 
             card.HasUpdateBadge = row?.HasBadge ?? false;
             card.IsRebootRequired = row?.IsRebootRequired ?? false;
@@ -73,6 +77,7 @@ public partial class FleetVM : ObservableObject, IDisposable
     private readonly DispatcherTimer _healthTimer;
     private readonly DispatcherTimer _elapsedTimer;
     private bool _isProbing;
+    private bool _isActive = true;
 
     /// <summary>Debounce timer: coalesces rapid event bursts into a single Refresh.</summary>
     private readonly DispatcherTimer _refreshDebounce;
@@ -136,6 +141,33 @@ public partial class FleetVM : ObservableObject, IDisposable
         Refresh();
     }
 
+    /// <summary>
+    /// Probe cadence, scaled so the sustained gRPC rate stays roughly flat as the fleet grows: 9 agents keep
+    /// the original 5 s, 50 agents move to 25 s. Capped so a large fleet still notices a recovery promptly.
+    /// </summary>
+    internal static TimeSpan ProbeIntervalFor(int agentCount) =>
+        TimeSpan.FromSeconds(Math.Clamp(agentCount / 2.0, 5, 30));
+
+    /// <summary>
+    /// Suspends the health probe while the Fleet tab is hidden. The probe only feeds card health, so polling
+    /// every agent behind an invisible tab is pure cost; re-activating probes immediately to refresh staleness.
+    /// </summary>
+    public void SetActive(bool isActive)
+    {
+        if (_disposed || _isActive == isActive) return;
+        _isActive = isActive;
+
+        if (isActive)
+        {
+            _healthTimer.Start();
+            _ = ProbeHealthAsync();
+        }
+        else
+        {
+            _healthTimer.Stop();
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -165,7 +197,7 @@ public partial class FleetVM : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Probes all registered agents every 5 seconds.
+    /// Probes all registered agents on the cadence from <see cref="ProbeIntervalFor"/>.
     /// Updates health state so Fleet cards reflect actual status after power cycles.
     /// Skips agents currently executing (locked) to avoid unnecessary gRPC calls.
     /// </summary>
@@ -177,6 +209,11 @@ public partial class FleetVM : ObservableObject, IDisposable
         try
         {
             var agents = _dispatcher.RegisteredAgents.ToList();
+
+            // Retuned per cycle so the cadence tracks a fleet that grows or shrinks at runtime.
+            var interval = ProbeIntervalFor(agents.Count);
+            if (_healthTimer.Interval != interval) _healthTimer.Interval = interval;
+
             var allLocks = _lockManager.GetAllLocks();
             bool changed = false;
 

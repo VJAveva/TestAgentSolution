@@ -48,6 +48,10 @@ public partial class AgentWorkspaceVM : ObservableObject, IDisposable
         Updates.ReviewRequested += () => CurrentMode = AgentWorkspaceMode.Maintenance;
     }
 
+    // The fleet health probe only feeds the Fleet cards, so it is suspended while another tab is showing.
+    partial void OnCurrentModeChanged(AgentWorkspaceMode value) =>
+        Fleet.SetActive(value == AgentWorkspaceMode.Fleet);
+
     private void OnFleetAgentSelected(string agentName)
     {
         Monitor.LoadAgent(agentName);
