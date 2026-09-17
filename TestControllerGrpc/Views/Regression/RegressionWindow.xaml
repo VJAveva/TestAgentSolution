@@ -340,6 +340,26 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Same look as LinkToggle, but click-driven. Used where a two-way IsChecked binding has to
+             survive DataGrid row-detail virtualization, which it does not do reliably. -->
+        <Style x:Key="LinkAction" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource RbViolet}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
@@ -877,21 +897,21 @@
                                  Collapsible + capped: a component can match dozens, and an uncapped list buries
                                  everything below it under a long scroll. -->
                             <DockPanel Margin="0,4,0,3">
-                                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource LinkToggle}"
-                                              IsChecked="{Binding ShowAllMatches, Mode=TwoWay}"
-                                              Content="{Binding MoreMatchesText}"
-                                              Visibility="{Binding HasMoreMatches, Converter={StaticResource BoolToVis}}"
-                                              ToolTip="Show every matched test case, or just the highest-ranked few" />
-                                <ToggleButton HorizontalAlignment="Left" Style="{StaticResource LinkToggle}" Padding="0"
-                                              IsChecked="{Binding AreMatchesExpanded, Mode=TwoWay}"
-                                              ToolTip="Collapse or expand this section">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource LinkAction}"
+                                        Command="{Binding ToggleShowAllMatchesCommand}"
+                                        Content="{Binding MoreMatchesText}"
+                                        Visibility="{Binding HasMoreMatches, Converter={StaticResource BoolToVis}}"
+                                        ToolTip="Show every matched test case, or just the highest-ranked few" />
+                                <Button HorizontalAlignment="Left" Style="{StaticResource LinkAction}" Padding="0"
+                                        Command="{Binding ToggleMatchesExpandedCommand}"
+                                        ToolTip="Collapse or expand this section">
                                     <TextBlock FontSize="11" FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextSecondaryBrush}">
                                         <Run Text="&#x1F3AF; " />
                                         <Run Text="{Binding TestMatchesHeader, Mode=OneWay}" />
                                         <Run Text="{Binding MatchesChevron, Mode=OneWay}" />
                                     </TextBlock>
-                                </ToggleButton>
+                                </Button>
                             </DockPanel>
                             <TextBlock Text="{Binding MatchesStatus}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,0,4"

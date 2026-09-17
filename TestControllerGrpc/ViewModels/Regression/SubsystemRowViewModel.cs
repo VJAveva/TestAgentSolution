@@ -357,6 +357,15 @@ public sealed partial class SubsystemRowViewModel : ObservableObject
 
     partial void OnAreMatchesExpandedChanged(bool value) => OnPropertyChanged(nameof(MatchesChevron));
 
+    // Driven by commands rather than a ToggleButton's IsChecked: a two-way binding has to write back
+    // through a recycled container inside the virtualized DataGrid row details, which does not reliably
+    // reach the row's view model. A command invocation does.
+    [RelayCommand]
+    private void ToggleMatchesExpanded() => AreMatchesExpanded = !AreMatchesExpanded;
+
+    [RelayCommand]
+    private void ToggleShowAllMatches() => ShowAllMatches = !ShowAllMatches;
+
     private void RefreshVisibleMatches()
     {
         VisibleTestMatches.Clear();

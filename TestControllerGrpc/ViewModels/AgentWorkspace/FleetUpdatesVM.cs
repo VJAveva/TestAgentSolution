@@ -30,6 +30,9 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     /// <summary>One banner per severity, never per node (R15).</summary>
     public ObservableCollection<UpdateBannerVM> Banners { get; } = new();
 
+    // Kind -> the agent-set signature that was dismissed for it.
+    private readonly Dictionary<UpdateBannerKind, string> _dismissedBanners = new();
+
     public ObservableCollection<FleetNotificationVM> Notifications { get; } = new();
 
     /// <summary>One row per registered agent, including nodes with nothing to report (R19).</summary>
@@ -193,19 +196,44 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         Banners.Clear();
 
         var rebooting = Rows.Where(r => r.State == WindowsUpdateState.RebootRequired).Select(r => r.AgentName).ToList();
-        if (rebooting.Count > 0)
-            Banners.Add(new UpdateBannerVM(
-                IsWarning: true,
-                Title: rebooting.Count == 1 ? "1 agent needs a reboot" : $"{rebooting.Count} agents need a reboot",
-                Detail: $"{NameList(rebooting)} \u2014 no new work will be sent to them once their current run finishes."));
+        AddBanner(UpdateBannerKind.RebootRequired, rebooting, isWarning: true,
+            title: rebooting.Count == 1 ? "1 agent needs a reboot" : $"{rebooting.Count} agents need a reboot",
+            detail: $"{NameList(rebooting)} \u2014 no new work will be sent to them once their current run finishes.");
 
         var pending = Rows.Where(r => r.State == WindowsUpdateState.UpdatePending).Select(r => r.AgentName).ToList();
-        if (pending.Count > 0)
-            Banners.Add(new UpdateBannerVM(
-                IsWarning: false,
-                Title: pending.Count == 1 ? "1 agent has pending updates" : $"{pending.Count} agents have pending updates",
-                Detail: $"{NameList(pending)} \u2014 they still accept work."));
+        AddBanner(UpdateBannerKind.UpdatesPending, pending, isWarning: false,
+            title: pending.Count == 1 ? "1 agent has pending updates" : $"{pending.Count} agents have pending updates",
+            detail: $"{NameList(pending)} \u2014 they still accept work.");
 
+        OnPropertyChanged(nameof(HasBanners));
+    }
+
+    // Dismissal is remembered against the affected-agent SET, not just the banner kind: clearing
+    // "4 agents need a reboot" must not also hide a later "5 agents need a reboot" - that is new information.
+    private void AddBanner(UpdateBannerKind kind, IReadOnlyList<string> nodes, bool isWarning, string title, string detail)
+    {
+        if (nodes.Count == 0)
+        {
+            _dismissedBanners.Remove(kind);   // condition cleared; if it recurs it is news again
+            return;
+        }
+
+        var signature = string.Join(",", nodes.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        if (_dismissedBanners.TryGetValue(kind, out var dismissed) && dismissed == signature)
+            return;
+
+        Banners.Add(new UpdateBannerVM(isWarning, title, detail, kind, signature));
+    }
+
+    /// <summary>Clears one banner until the set of affected agents changes.</summary>
+    [RelayCommand]
+    private void DismissBanner(UpdateBannerVM? banner)
+    {
+        if (banner is null)
+            return;
+
+        _dismissedBanners[banner.Kind] = banner.Signature;
+        Banners.Remove(banner);
         OnPropertyChanged(nameof(HasBanners));
     }
 
@@ -299,8 +327,20 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     }
 }
 
+/// <summary>Which condition a banner reports, used to scope dismissal.</summary>
+public enum UpdateBannerKind
+{
+    RebootRequired,
+    UpdatesPending,
+}
+
 /// <summary>One severity banner in the fleet banner stack (R15).</summary>
-public sealed record UpdateBannerVM(bool IsWarning, string Title, string Detail);
+public sealed record UpdateBannerVM(
+    bool IsWarning,
+    string Title,
+    string Detail,
+    UpdateBannerKind Kind = UpdateBannerKind.RebootRequired,
+    string Signature = "");
 
 /// <summary>Status filter for the Maintenance-tab updates grid.</summary>
 public enum UpdateRowFilter { All, NeedsAttention, RebootRequired, UpdatesPending, Stale }

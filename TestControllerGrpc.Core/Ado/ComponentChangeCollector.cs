@@ -480,9 +480,11 @@ public sealed class ComponentChangeCollector
 
         var testCases = await _workItems.GetByIdsAsync(ids, ct);
         var byId = testCases.ToDictionary(w => w.Id);
+        // WorkItemWebUrl, never the DTO's url: the REST url opens as raw XML in a browser instead of the
+        // work item in edit mode. The web url depends only on the id, so both branches build it the same way.
         return ids.Select(id => byId.TryGetValue(id, out var testCase)
-                ? new RegressionSuiteRef(id.ToString(), true, testCase.Url, RegressionEvidenceKind.Observed, testCase.Title)
-                : new RegressionSuiteRef(id.ToString(), true, relationUrls.FirstOrDefault(url => url!.EndsWith('/' + id.ToString(), StringComparison.Ordinal))!, RegressionEvidenceKind.Observed, $"Test Case {id}"))
+                ? new RegressionSuiteRef(id.ToString(), true, WorkItemWebUrl(id), RegressionEvidenceKind.Observed, testCase.Title)
+                : new RegressionSuiteRef(id.ToString(), true, WorkItemWebUrl(id), RegressionEvidenceKind.Observed, $"Test Case {id}"))
             .ToList();
     }
 

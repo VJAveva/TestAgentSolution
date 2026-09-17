@@ -143,6 +143,14 @@
                             </Style>
                         </Border.Style>
                         <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="6,1" FontSize="11"
+                                    Margin="6,0,0,0" Cursor="Hand" VerticalAlignment="Center"
+                                    Background="Transparent" Foreground="{DynamicResource TextS}"
+                                    BorderThickness="0"
+                                    ToolTip="Dismiss. Returns if the affected agents change."
+                                    Command="{Binding DataContext.Updates.DismissBannerCommand,
+                                              RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"/>
                             <Button DockPanel.Dock="Right" Content="Review" Padding="10,3" FontSize="10"
                                     Cursor="Hand" VerticalAlignment="Center"
                                     Background="Transparent" Foreground="{DynamicResource TextP}"

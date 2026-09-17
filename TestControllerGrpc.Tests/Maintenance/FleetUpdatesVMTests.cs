@@ -94,6 +94,72 @@ public class FleetUpdatesVMTests
         Assert.Contains("they still accept work", vm.Banners[1].Detail);
     }
 
+    // ── Dismissal: a banner must clear, stay cleared through refreshes, and come back when the
+    //    situation actually changes. Suppressing a CHANGED condition would hide real news.
+
+    [Fact]
+    public void DismissBanner_Should_RemoveOnlyThatBanner_When_Invoked()
+    {
+        var store = new NodeUpdateStatusStore();
+        store.Apply(Event(NodeA, MaintenanceEventKind.RebootRequired, rebootRequired: true));
+        store.Apply(Event(NodeB, MaintenanceEventKind.UpdatePending, pending: 3));
+        var vm = Build(store, null, NodeA, NodeB);
+
+        vm.DismissBannerCommand.Execute(vm.Banners[0]);
+
+        var remaining = Assert.Single(vm.Banners);
+        Assert.False(remaining.IsWarning);   // the pending banner survives
+    }
+
+    [Fact]
+    public void DismissBanner_Should_StayDismissed_When_TheSameAgentsStillReport()
+    {
+        var store = new NodeUpdateStatusStore();
+        store.Apply(Event(NodeA, MaintenanceEventKind.RebootRequired, rebootRequired: true));
+        var vm = Build(store, null, NodeA);
+
+        vm.DismissBannerCommand.Execute(vm.Banners[0]);
+        Assert.Empty(vm.Banners);
+
+        // Same node reports the same posture again - a rebuild must not resurrect the banner.
+        // Refresh is the synchronous rebuild path; the event path is debounced by 250ms and a unit
+        // test cannot advance that timer, so asserting after Drain() would pass for the wrong reason.
+        store.Apply(Event(NodeA, MaintenanceEventKind.RebootRequired, rebootRequired: true));
+        vm.RefreshCommand.Execute(null);
+
+        Assert.Empty(vm.Banners);
+    }
+
+    [Fact]
+    public void DismissBanner_Should_Reappear_When_AnotherAgentJoinsTheCondition()
+    {
+        var store = new NodeUpdateStatusStore();
+        store.Apply(Event(NodeA, MaintenanceEventKind.RebootRequired, rebootRequired: true));
+        var vm = Build(store, null, NodeA, NodeB);
+
+        vm.DismissBannerCommand.Execute(vm.Banners[0]);
+        Assert.Empty(vm.Banners);
+
+        // A second agent now needs a reboot: the affected set changed, so this is new information.
+        store.Apply(Event(NodeB, MaintenanceEventKind.RebootRequired, rebootRequired: true));
+        vm.RefreshCommand.Execute(null);
+
+        var banner = Assert.Single(vm.Banners);
+        Assert.Equal("2 agents need a reboot", banner.Title);
+    }
+
+    [Fact]
+    public void DismissBanner_Should_Ignore_When_ParameterIsNull()
+    {
+        var store = new NodeUpdateStatusStore();
+        store.Apply(Event(NodeA, MaintenanceEventKind.RebootRequired, rebootRequired: true));
+        var vm = Build(store, null, NodeA);
+
+        vm.DismissBannerCommand.Execute(null);
+
+        Assert.Single(vm.Banners);
+    }
+
     [Fact]
     public void Banners_Should_BeEmpty_When_AllNodesUpToDate()
     {
