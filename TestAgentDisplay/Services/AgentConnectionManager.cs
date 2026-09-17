@@ -18,7 +18,12 @@ namespace TestAgentDisplay.Services;
 /// </summary>
 public sealed class AgentConnectionManager : IDisposable
 {
+    private const string LogCategory = "Agent";
+
     private readonly ConcurrentDictionary<string, AgentConnection> _connections = new();
+    private readonly IDisplayLog _log;
+
+    public AgentConnectionManager(IDisplayLog log) => _log = log;
 
     public event Action<string, ExecutionEvent>? EventReceived;
     public event Action<string, bool>? ConnectionStateChanged;
@@ -30,15 +35,17 @@ public sealed class AgentConnectionManager : IDisposable
     public bool IsExecuting(string address) =>
         _connections.TryGetValue(address, out var c) && c.IsExecuting;
 
-    public async Task ConnectAsync(string address, CancellationToken ct = default)
+    public Task ConnectAsync(string address, CancellationToken ct = default)
     {
-        if (_connections.ContainsKey(address)) return;
+        if (_connections.ContainsKey(address)) return Task.CompletedTask;
 
         var conn = new AgentConnection(address, this);
         _connections[address] = conn;
         ConnectionStateChanged?.Invoke(address, false);
 
+        _log.Info(LogCategory, $"Connecting to {address}");
         conn.Start(ct);
+        return Task.CompletedTask;
     }
 
     public void Disconnect(string address)
@@ -46,6 +53,7 @@ public sealed class AgentConnectionManager : IDisposable
         if (_connections.TryRemove(address, out var conn))
         {
             conn.Dispose();
+            _log.Info(LogCategory, $"Disconnected {address}");
             ConnectionStateChanged?.Invoke(address, false);
         }
     }
@@ -62,7 +70,11 @@ public sealed class AgentConnectionManager : IDisposable
         {
             return await conn.Client.GetAgentSnapshotAsync(new Empty(), cancellationToken: ct);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _log.Error(LogCategory, $"GetAgentSnapshot failed for {address}", ex);
+            return null;
+        }
     }
 
     public async Task<ExecutionHistoryReply?> GetHistoryAsync(string address, int max = 50, CancellationToken ct = default)
@@ -73,7 +85,11 @@ public sealed class AgentConnectionManager : IDisposable
             return await conn.Client.GetExecutionHistoryAsync(
                 new ExecutionHistoryRequest { MaxResults = max }, cancellationToken: ct);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _log.Error(LogCategory, $"GetExecutionHistory failed for {address}", ex);
+            return null;
+        }
     }
 
     public async Task<RunCommandReply?> RunCommandAsync(string address, string command, string arguments, CancellationToken ct = default)
@@ -85,12 +101,17 @@ public sealed class AgentConnectionManager : IDisposable
             // if the agent is unreachable or the gRPC channel is stuck.
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(30));
+            _log.Info(LogCategory, $"RunCommand on {address}: {command} {arguments}");
             return await conn.Client.RunCommandAsync(new RunCommandRequest
             {
                 Command = command, Arguments = arguments
             }, cancellationToken: cts.Token);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _log.Error(LogCategory, $"RunCommand failed on {address}: {command}", ex);
+            return null;
+        }
     }
 
     public async Task<AuditLogReply?> GetAuditLogAsync(string address, string? fromDate = null, string? toDate = null,
@@ -107,7 +128,11 @@ public sealed class AgentConnectionManager : IDisposable
                 MaxEntries = maxEntries,
             }, cancellationToken: ct);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _log.Error(LogCategory, $"GetAuditLog failed for {address}", ex);
+            return null;
+        }
     }
 
     public async Task<ConnectionHealthReply?> GetConnectionHealthAsync(string address, CancellationToken ct = default)
@@ -117,14 +142,25 @@ public sealed class AgentConnectionManager : IDisposable
         {
             return await conn.Client.GetConnectionHealthAsync(new ConnectionHealthRequest(), cancellationToken: ct);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _log.Error(LogCategory, $"GetConnectionHealth failed for {address}", ex);
+            return null;
+        }
     }
 
     public async Task TerminateAsync(string address, CancellationToken ct = default)
     {
         if (!_connections.TryGetValue(address, out var conn)) return;
-        try { await conn.Client.TerminateExecutionAsync(new Empty(), cancellationToken: ct); }
-        catch { }
+        try
+        {
+            _log.Warn(LogCategory, $"TerminateExecution requested on {address}");
+            await conn.Client.TerminateExecutionAsync(new Empty(), cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            _log.Error(LogCategory, $"TerminateExecution failed on {address}", ex);
+        }
     }
 
     internal void OnEvent(string address, ExecutionEvent evt) =>
@@ -132,6 +168,12 @@ public sealed class AgentConnectionManager : IDisposable
 
     internal void OnConnectionChanged(string address, bool connected) =>
         ConnectionStateChanged?.Invoke(address, connected);
+
+    internal void LogStreamFailure(string address, int attempt, int delayMs, Exception? ex) =>
+        _log.Warn(LogCategory, $"Event stream to {address} dropped (attempt {attempt}); retrying in {delayMs / 1000.0:F1}s. {ex?.Message}");
+
+    internal void LogStreamConnected(string address) =>
+        _log.Info(LogCategory, $"Event stream connected to {address}");
 
     public IEnumerable<string> ConnectedAddresses => _connections.Keys;
 
@@ -220,6 +262,7 @@ public sealed class AgentConnectionManager : IDisposable
                     IsConnected = true;
                     consecutiveFailures = 0; // Reset on successful connection
                     _owner.OnConnectionChanged(_address, true);
+                    _owner.LogStreamConnected(_address);
 
                     await foreach (var evt in call.ResponseStream.ReadAllAsync(ct))
                     {
@@ -235,16 +278,18 @@ public sealed class AgentConnectionManager : IDisposable
                     _owner.OnConnectionChanged(_address, false);
                     consecutiveFailures++;
                     var delay = ComputeJitteredBackoff(consecutiveFailures);
+                    _owner.LogStreamFailure(_address, consecutiveFailures, delay, ex);
                     try { await Task.Delay(delay, ct); } catch { break; }
                 }
                 catch (OperationCanceledException) { break; }
-                catch
+                catch (Exception ex)
                 {
                     IsConnected = false;
                     IsExecuting = false;
                     _owner.OnConnectionChanged(_address, false);
                     consecutiveFailures++;
                     var delay = ComputeJitteredBackoff(consecutiveFailures);
+                    _owner.LogStreamFailure(_address, consecutiveFailures, delay, ex);
                     try { await Task.Delay(delay, ct); } catch { break; }
                 }
             }

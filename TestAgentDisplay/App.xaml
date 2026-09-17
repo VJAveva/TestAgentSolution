@@ -20,6 +20,23 @@
         <SolidColorBrush x:Key="TextPrimaryBrush"  Color="{StaticResource TextPrimary}" />
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}" />
 
+        <!-- Semantic palette. View models name a MEANING via ThemeBrushes and never a colour,
+             so re-theming the app is an edit to this block alone. -->
+        <SolidColorBrush x:Key="AgentStateReadyBrush"          Color="#FF00C9A7" />
+        <SolidColorBrush x:Key="AgentStateRunningBrush"        Color="#FF42A5F5" />
+        <SolidColorBrush x:Key="AgentStateInactiveBrush"       Color="#FF78909C" />
+        <SolidColorBrush x:Key="AgentStateOfflineBrush"        Color="#FF78909C" />
+        <SolidColorBrush x:Key="AgentStateUpdatePendingBrush"  Color="#FFFFB74D" />
+        <SolidColorBrush x:Key="AgentStateRebootRequiredBrush" Color="#FFCE93D8" />
+
+        <SolidColorBrush x:Key="OutputStdoutBrush"    Color="#FFE0E0E0" />
+        <SolidColorBrush x:Key="OutputMutedBrush"     Color="#FF90A4AE" />
+        <SolidColorBrush x:Key="OutputCommandBrush"   Color="#FF64B5F6" />
+        <SolidColorBrush x:Key="OutputWarnBrush"      Color="#FFFFA726" />
+        <SolidColorBrush x:Key="OutputSuccessBrush"   Color="#FF66BB6A" />
+        <SolidColorBrush x:Key="OutputErrorBrush"     Color="#FFEF5350" />
+        <SolidColorBrush x:Key="OutputSeparatorBrush" Color="#FF444444" />
+
         <Style TargetType="Button" x:Key="PrimaryButton">
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
             <Setter Property="Foreground" Value="#FF1A1A2E" />

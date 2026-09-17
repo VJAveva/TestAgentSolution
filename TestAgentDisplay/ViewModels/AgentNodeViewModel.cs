@@ -1,9 +1,31 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using TestAgentDisplay.Services;
 using TestAgentGrpc;
 
 namespace TestAgentDisplay.ViewModels;
+
+/// <summary>What the agent is doing, independent of how it is coloured.</summary>
+public enum AgentDisplayState
+{
+    Offline,
+    Ready,
+    Running,
+    Inactive,
+}
+
+/// <summary>Meaning of an output line, so the view decides the colour.</summary>
+public enum OutputLineKind
+{
+    Stdout,
+    Muted,
+    Command,
+    Warn,
+    Success,
+    Error,
+    Separator,
+}
 
 /// <summary>
 /// ViewModel for a single agent node — live state, output, metrics, history.
@@ -14,6 +36,7 @@ public sealed partial class AgentNodeViewModel : ObservableObject
     [ObservableProperty] private string _address = "";
     [ObservableProperty] private string _displayName = "";
     [ObservableProperty] private string _stateText = "Offline";
+    [ObservableProperty] private AgentDisplayState _stateKind = AgentDisplayState.Offline;
     [ObservableProperty] private string _activity = "—";
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private string _currentCommand = "";
@@ -27,6 +50,13 @@ public sealed partial class AgentNodeViewModel : ObservableObject
     [ObservableProperty] private Brush _stateBrush = Brushes.Gray;
     [ObservableProperty] private string _snapshotAge = "";
     [ObservableProperty] private bool _isSnapshotStale;
+
+    // Windows Update posture (EVENT_WINDOWS_UPDATE, agent-reported level state).
+    [ObservableProperty] private bool _hasUpdatePosture;
+    [ObservableProperty] private bool _rebootRequired;
+    [ObservableProperty] private int _pendingUpdateCount;
+    [ObservableProperty] private string _updateSummary = "";
+    [ObservableProperty] private string _updateCheckedAt = "";
 
     public ObservableCollection<OutputLine> OutputLines { get; } = new();
     public ObservableCollection<ExecutionHistoryItem> History { get; } = new();
@@ -44,55 +74,55 @@ public sealed partial class AgentNodeViewModel : ObservableObject
             case ExecutionEventType.EventQueued:
                 CurrentExecutionId = evt.ExecutionId;
                 Activity = $"Queued: {evt.Detail}";
-                AddOutput($"⏳ [{evt.ExecutionId}] {evt.Detail}", "#90A4AE");
+                AddOutput($"⏳ [{evt.ExecutionId}] {evt.Detail}", OutputLineKind.Muted);
                 break;
 
             case ExecutionEventType.EventStarted:
                 CurrentCommand = $"{evt.Command} {evt.Arguments}";
                 Activity = $"Executing: {evt.Command}";
-                SetState("Running", "#00C9A7");
-                AddOutput($"🚀 [{evt.ExecutionId}] {evt.Command} {evt.Arguments}", "#64B5F6");
+                SetState("Running", AgentDisplayState.Running);
+                AddOutput($"🚀 [{evt.ExecutionId}] {evt.Command} {evt.Arguments}", OutputLineKind.Command);
                 break;
 
             case ExecutionEventType.EventStdoutLine:
-                AddOutput($"   {evt.OutputLine}", "#E0E0E0");
+                AddOutput($"   {evt.OutputLine}", OutputLineKind.Stdout);
                 break;
 
             case ExecutionEventType.EventStderrLine:
-                AddOutput($"⚠  {evt.OutputLine}", "#FFA726");
+                AddOutput($"⚠  {evt.OutputLine}", OutputLineKind.Warn);
                 break;
 
             case ExecutionEventType.EventCompleted:
-                var exitColor = evt.ExitCode == 0 ? "#66BB6A" : "#EF5350";
-                AddOutput($"✅ [{evt.ExecutionId}] Exit code {evt.ExitCode}", exitColor);
-                AddOutput("", "#444444");
+                var exitKind = evt.ExitCode == 0 ? OutputLineKind.Success : OutputLineKind.Error;
+                AddOutput($"✅ [{evt.ExecutionId}] Exit code {evt.ExitCode}", exitKind);
+                AddOutput("", OutputLineKind.Separator);
                 Activity = $"Completed (exit {evt.ExitCode})";
                 CompletedCount++;
                 // DISPLAY-002: Clear stale command on completion
                 CurrentCommand = "";
                 CurrentExecutionId = "";
-                SetState("Ready", "#00C9A7");
+                SetState("Ready", AgentDisplayState.Ready);
                 break;
 
             case ExecutionEventType.EventFailed:
-                AddOutput($"❌ [{evt.ExecutionId}] {evt.ErrorMessage}", "#EF5350");
-                AddOutput("", "#444444");
+                AddOutput($"❌ [{evt.ExecutionId}] {evt.ErrorMessage}", OutputLineKind.Error);
+                AddOutput("", OutputLineKind.Separator);
                 Activity = $"Failed: {evt.ErrorMessage}";
                 FailedCount++;
                 // DISPLAY-002: Clear stale command on failure
                 CurrentCommand = "";
                 CurrentExecutionId = "";
-                SetState("Ready", "#00C9A7");
+                SetState("Ready", AgentDisplayState.Ready);
                 break;
 
             case ExecutionEventType.EventTerminated:
-                AddOutput($"🛑 [{evt.ExecutionId}] {evt.Detail}", "#EF5350");
+                AddOutput($"🛑 [{evt.ExecutionId}] {evt.Detail}", OutputLineKind.Error);
                 Activity = "Terminated";
                 FailedCount++;
                 // DISPLAY-002: Clear stale command on termination
                 CurrentCommand = "";
                 CurrentExecutionId = "";
-                SetState("Ready", "#00C9A7");
+                SetState("Ready", AgentDisplayState.Ready);
                 break;
 
             case ExecutionEventType.EventStateChanged:
@@ -117,7 +147,43 @@ public sealed partial class AgentNodeViewModel : ObservableObject
             case ExecutionEventType.EventProgress:
                 Activity = $"Progress: {evt.ProgressPct:F0}% — {evt.Detail}";
                 break;
+            case ExecutionEventType.EventWindowsUpdate:
+                ApplyUpdatePosture(evt);
+                break;
         }
+    }
+
+    /// <summary>
+    /// EVENT_WINDOWS_UPDATE carries the agent's complete update posture as JSON in Detail.
+    /// A payload we cannot parse is surfaced as a warning line rather than dropped silently.
+    /// </summary>
+    private void ApplyUpdatePosture(ExecutionEvent evt)
+    {
+        if (!WindowsUpdateSnapshot.TryParse(evt.Detail, out var posture))
+        {
+            AddOutput("\u26a0  Windows Update posture received but could not be parsed.", OutputLineKind.Warn);
+            return;
+        }
+
+        HasUpdatePosture = true;
+        RebootRequired = posture.RebootRequired;
+        PendingUpdateCount = posture.PendingCount;
+        UpdateSummary = posture.Summarize();
+
+        var detected = posture.DetectedUtc == default
+            ? evt.Timestamp?.ToDateTime() ?? DateTime.UtcNow
+            : posture.DetectedUtc.UtcDateTime;
+        UpdateCheckedAt = detected.ToLocalTime().ToString("HH:mm:ss dd-MMM");
+
+        var kind = posture.RebootRequired ? OutputLineKind.Warn : OutputLineKind.Muted;
+        AddOutput($"\U0001f6e1  Windows Update: {UpdateSummary}", kind);
+
+        foreach (var item in posture.Items.Where(i => !string.IsNullOrWhiteSpace(i.KbId)).Take(10))
+        {
+            var failed = item.Result.Equals("Failed", StringComparison.OrdinalIgnoreCase);
+            var suffix = failed && !string.IsNullOrWhiteSpace(item.ResultCode) ? $" ({item.ResultCode})" : "";
+            AddOutput($"     {item.KbId} {item.Result}{suffix} {item.Title}".TrimEnd(),
+                failed ? OutputLineKind.Error : OutputLineKind.Muted);        }
     }
 
     public void SetConnected(bool connected)
@@ -125,7 +191,7 @@ public sealed partial class AgentNodeViewModel : ObservableObject
         IsConnected = connected;
         if (!connected)
         {
-            SetState("Offline", "#78909C");
+            SetState("Offline", AgentDisplayState.Offline);
             Activity = "Disconnected";
             // DISPLAY-002: Clear command on disconnect to avoid stale display
             CurrentCommand = "";
@@ -218,7 +284,10 @@ public sealed partial class AgentNodeViewModel : ObservableObject
         var cmd = command.Trim().Trim('"').ToLowerInvariant();
         var args = arguments.ToLowerInvariant();
         var ext = "";
-        try { ext = System.IO.Path.GetExtension(cmd); } catch { }
+        // GetExtension only throws on invalid path characters; a malformed command must not
+        // stop us classifying the rest of the history row.
+        try { ext = System.IO.Path.GetExtension(cmd); }
+        catch (ArgumentException) { ext = ""; }
 
         if (cmd.Contains("build") || args.Contains("build")) return "Build";
         if (cmd.Contains("deploy") || args.Contains("deploy")) return "Deploy";
@@ -238,21 +307,32 @@ public sealed partial class AgentNodeViewModel : ObservableObject
     {
         switch (state)
         {
-            case AgentState.Ready:    SetState("Ready", "#00C9A7"); break;
-            case AgentState.Running:  SetState("Running", "#42A5F5"); break;
-            case AgentState.Inactive: SetState("Inactive", "#78909C"); break;
+            case AgentState.Ready:    SetState("Ready", AgentDisplayState.Ready); break;
+            case AgentState.Running:  SetState("Running", AgentDisplayState.Running); break;
+            case AgentState.Inactive: SetState("Inactive", AgentDisplayState.Inactive); break;
         }
     }
 
-    private void SetState(string text, string hex)
+    private void SetState(string text, AgentDisplayState kind)
     {
         StateText = text;
-        StateBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        StateKind = kind;
+
+        // Reboot-required outranks the run state: an agent that is Ready but needs a reboot
+        // must not look identical to a healthy one.
+        var key = kind switch
+        {
+            AgentDisplayState.Ready    => RebootRequired ? ThemeBrushes.AgentRebootRequired : ThemeBrushes.AgentReady,
+            AgentDisplayState.Running  => ThemeBrushes.AgentRunning,
+            AgentDisplayState.Inactive => ThemeBrushes.AgentInactive,
+            _                          => ThemeBrushes.AgentOffline,
+        };
+        StateBrush = ThemeBrushes.Resolve(key, Brushes.Gray);
     }
 
-    private void AddOutput(string text, string colorHex)
+    private void AddOutput(string text, OutputLineKind kind)
     {
-        OutputLines.Add(new OutputLine(text, colorHex));
+        OutputLines.Add(new OutputLine(text, kind));
         while (OutputLines.Count > MaxOutputLines)
             OutputLines.RemoveAt(0);
     }
@@ -261,14 +341,26 @@ public sealed partial class AgentNodeViewModel : ObservableObject
 public sealed class OutputLine
 {
     public string Text { get; }
+    public OutputLineKind Kind { get; }
     public Brush Foreground { get; }
 
-    public OutputLine(string text, string colorHex)
+    public OutputLine(string text, OutputLineKind kind)
     {
         Text = text;
-        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorHex));
-        Foreground.Freeze(); // Thread-safe for WPF cross-thread binding
+        Kind = kind;
+        Foreground = ThemeBrushes.Resolve(KeyFor(kind), Brushes.Gainsboro);
     }
+
+    private static string KeyFor(OutputLineKind kind) => kind switch
+    {
+        OutputLineKind.Muted     => ThemeBrushes.OutputMuted,
+        OutputLineKind.Command   => ThemeBrushes.OutputCommand,
+        OutputLineKind.Warn      => ThemeBrushes.OutputWarn,
+        OutputLineKind.Success   => ThemeBrushes.OutputSuccess,
+        OutputLineKind.Error     => ThemeBrushes.OutputError,
+        OutputLineKind.Separator => ThemeBrushes.OutputSeparator,
+        _                    => ThemeBrushes.OutputStdout,
+    };
 }
 
 public sealed class ExecutionHistoryItem

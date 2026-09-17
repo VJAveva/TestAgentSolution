@@ -14,10 +14,13 @@ public partial class App : Application
         base.OnStartup(e);
 
         var sc = new ServiceCollection();
+        sc.AddSingleton<IDisplayLog, DisplayLog>();
         sc.AddSingleton<AgentConnectionManager>();
         sc.AddSingleton<AuditTimelineViewModel>();
         sc.AddSingleton<MainViewModel>();
         Services = sc.BuildServiceProvider();
+
+        Services.GetRequiredService<IDisplayLog>().Info("App", "TestAgentDisplay started.");
     }
 
     protected override void OnExit(ExitEventArgs e)

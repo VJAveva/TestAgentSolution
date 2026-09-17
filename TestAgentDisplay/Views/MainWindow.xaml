@@ -196,6 +196,23 @@
                                     <Run Text="Execution ID: " />
                                     <Run Text="{Binding CurrentExecutionId, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
                                 </TextBlock>
+                                <TextBlock FontSize="10" Margin="20,2,0,0"
+                                           Visibility="{Binding HasUpdatePosture, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource OutputMutedBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding RebootRequired}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource AgentStateRebootRequiredBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                    <Run Text="Windows Update: " />
+                                    <Run Text="{Binding UpdateSummary, Mode=OneWay}" FontWeight="SemiBold" />
+                                    <Run Text="  checked " />
+                                    <Run Text="{Binding UpdateCheckedAt, Mode=OneWay}" />
+                                </TextBlock>
                             </StackPanel>
                             <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="16,0"
                                        FontSize="11" Foreground="{StaticResource TextSecondaryBrush}">
