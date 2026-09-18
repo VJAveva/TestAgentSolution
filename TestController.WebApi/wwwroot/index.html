@@ -14,7 +14,9 @@
           var raw = localStorage.getItem('theme-storage');
           if (raw) { choice = (JSON.parse(raw).state || {}).theme || 'system'; }
           var resolved = choice === 'system'
-            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            ? (window.matchMedia('(prefers-contrast: more)').matches
+                ? 'hc'
+                : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
             : choice;
           document.documentElement.dataset.theme = resolved;
         } catch (e) {
@@ -22,8 +24,8 @@
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-IkT39X4s.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-EKaQGuwv.css">
+    <script type="module" crossorigin src="/assets/index-CgrXsTpY.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-tgSO7K4M.css">
   </head>
   <body class="bg-bg text-text-primary">
     <div id="root"></div>
