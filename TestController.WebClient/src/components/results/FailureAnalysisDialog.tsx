@@ -37,8 +37,8 @@ export default function FailureAnalysisDialog({ testName, onClose, onViewLog }: 
   const latestFailedStep = report?.signatures?.[0]?.failedStepIndex;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-bg-panel rounded-lg border border-bdr w-[900px] max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-bg-panel rounded-lg border border-bdr w-full max-w-[900px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-bdr">
           <div>
             <h2 className="text-lg font-bold text-text-primary">Failure Pattern Analysis</h2>

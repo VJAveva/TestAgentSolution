@@ -1,4 +1,4 @@
-<UserControl x:Class="TestControllerGrpc.Views.Panels.ExecutionHistoryPanel"
+﻿<UserControl x:Class="TestControllerGrpc.Views.Panels.ExecutionHistoryPanel"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -12,16 +12,16 @@
         <Border Grid.Row="0" Padding="6,4" Background="{DynamicResource BgPanel}">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="⟳" FontSize="12" Padding="6,2" Margin="4,0,0,0"
+                    <Button Content="⟳" FontSize="{StaticResource FontSize11}" Padding="6,2" Margin="4,0,0,0"
                             Background="Transparent" BorderThickness="0" Cursor="Hand"
                             Foreground="{DynamicResource TextS}"
-                            Command="{Binding RefreshSessionsCommand}" ToolTip="Refresh history" />
-                    <Button Content="✕" FontSize="10" Padding="6,2" Margin="2,0,0,0"
+                            Command="{Binding RefreshSessionsCommand}" AutomationProperties.Name="Refresh history" ToolTip="Refresh history" />
+                    <Button Content="✕" FontSize="{StaticResource FontSize9}" Padding="6,2" Margin="2,0,0,0"
                             Background="Transparent" BorderThickness="0" Cursor="Hand"
                             Foreground="{DynamicResource TextS}"
-                            Command="{Binding ClearLiveLogCommand}" ToolTip="Clear live log" />
+                            Command="{Binding ClearLiveLogCommand}" AutomationProperties.Name="Clear live log" ToolTip="Clear live log" />
                 </StackPanel>
-                <TextBlock Text="Execution History" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="Execution History" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextP}" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
@@ -40,7 +40,7 @@
             <DockPanel Grid.Row="0">
                 <Border DockPanel.Dock="Top" Padding="6,3"
                         Background="{DynamicResource BgHeaderBrush}">
-                    <TextBlock Text="Sessions" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock Text="Sessions" FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}"/>
                 </Border>
                 <DataGrid ItemsSource="{Binding Sessions}"
@@ -51,7 +51,7 @@
                       Foreground="{DynamicResource TextDefaultBrush}"
                       RowBackground="Transparent"
                       AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
-                      FontSize="12" FontFamily="Consolas"
+                      FontSize="{StaticResource FontSize11}" FontFamily="Consolas"
                       SelectionMode="Single">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="" Binding="{Binding StateIcon}" Width="20"/>
@@ -72,7 +72,7 @@
             <DockPanel Grid.Row="2">
                 <Border DockPanel.Dock="Top" Padding="6,3"
                         Background="{DynamicResource BgHeaderBrush}">
-                    <TextBlock Text="Action Details" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock Text="Action Details" FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}"/>
                 </Border>
                 <DataGrid ItemsSource="{Binding SessionActions}"
@@ -82,7 +82,7 @@
                       Foreground="{DynamicResource TextDefaultBrush}"
                       RowBackground="Transparent"
                       AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
-                      FontSize="12" FontFamily="Consolas">
+                      FontSize="{StaticResource FontSize11}" FontFamily="Consolas">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="" Binding="{Binding OutcomeIcon}" Width="20"/>
                     <DataGridTextColumn Header="Action" Binding="{Binding ActionTag}" Width="*"/>
@@ -102,7 +102,7 @@
             <DockPanel Grid.Row="4">
                 <Border DockPanel.Dock="Top" Padding="6,2"
                         Background="{DynamicResource BgHeaderBrush}">
-                    <TextBlock Text="Live Feed" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock Text="Live Feed" FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}"/>
                 </Border>
                 <DataGrid ItemsSource="{Binding LiveActions}"
@@ -111,7 +111,7 @@
                           Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource TextDefaultBrush}"
                           RowBackground="Transparent"
-                          FontSize="11.5" FontFamily="Consolas">
+                          FontSize="{StaticResource FontSize11}" FontFamily="Consolas">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="" Binding="{Binding StatusIcon}" Width="18"/>
                         <DataGridTextColumn Header="Time" Binding="{Binding TimeDisplay}" Width="75"/>

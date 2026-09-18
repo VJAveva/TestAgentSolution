@@ -28,7 +28,7 @@
 
     <!-- Text -->
     <SolidColorBrush x:Key="TextP"     Color="#FFCDD6F4" />
-    <SolidColorBrush x:Key="TextS"     Color="#FF9399B2" />
+    <SolidColorBrush x:Key="TextS"     Color="#FF959BB4" />
     <SolidColorBrush x:Key="Bdr"       Color="#FF585B70" />
 
     <!-- Controls -->
@@ -48,7 +48,7 @@
     <SolidColorBrush x:Key="AccentBtnBg"    Color="#3389B4FA" />
     <SolidColorBrush x:Key="GreenBtnBg"     Color="#33A6E3A1" />
     <SolidColorBrush x:Key="BlueBtnBg"      Color="#333B82F6" />
-    <SolidColorBrush x:Key="AccBlue"        Color="#FF3B82F6" />
+    <SolidColorBrush x:Key="AccBlue"        Color="#FF629BF8" />
     <SolidColorBrush x:Key="DangerBtnBg"    Color="#33F38BA8" />
     <SolidColorBrush x:Key="MauveBtnBg"     Color="#33CBA6F7" />
     <SolidColorBrush x:Key="YellowBtnBg"    Color="#33F9E2AF" />
@@ -189,11 +189,11 @@
 
     <!-- Dashboard legacy tokens (theme-aware) -->
     <SolidColorBrush x:Key="StatusRunningBg" Color="#FF1A3A5C" />
-    <SolidColorBrush x:Key="StatusRunningFg" Color="#FF4D9CF5" />
+    <SolidColorBrush x:Key="StatusRunningFg" Color="#FF5FA6F6" />
     <SolidColorBrush x:Key="StatusSuccessBg" Color="#FF1A3D2A" />
     <SolidColorBrush x:Key="StatusSuccessFg" Color="#FF22C55E" />
     <SolidColorBrush x:Key="StatusFailedBg"  Color="#FF3D1A1A" />
-    <SolidColorBrush x:Key="StatusFailedFg"  Color="#FFEF4444" />
+    <SolidColorBrush x:Key="StatusFailedFg"  Color="#FFF15757" />
     <SolidColorBrush x:Key="StatusWarningBg" Color="#FF3D2E0A" />
     <SolidColorBrush x:Key="StatusWarningFg" Color="#FFF59E0B" />
     <SolidColorBrush x:Key="StatusIdleBg"    Color="#FF1E2130" />
@@ -206,7 +206,7 @@
     <SolidColorBrush x:Key="StatusMaintenanceBg" Color="#FF3D2E0A" />
     <SolidColorBrush x:Key="StatusMaintenanceFg" Color="#FFFAB387" />
     <SolidColorBrush x:Key="StatusDrainingBg"    Color="#FF2A3A4C" />
-    <SolidColorBrush x:Key="StatusDrainingFg"    Color="#FF7B92AD" />
+    <SolidColorBrush x:Key="StatusDrainingFg"    Color="#FF91A4BB" />
     <SolidColorBrush x:Key="DashboardBg"     Color="#FF0F1119" />
     <SolidColorBrush x:Key="CardBg"          Color="#FF171B27" />
     <SolidColorBrush x:Key="CardBorder"      Color="#FF2A2F45" />
@@ -234,7 +234,7 @@
     <SolidColorBrush x:Key="BgSuccessBrush"      Color="#333DDC84" />
     <SolidColorBrush x:Key="BgDangerBrush"       Color="#33FF5C6C" />
     <SolidColorBrush x:Key="BgWarningBrush"      Color="#33E0B341" />
-    <SolidColorBrush x:Key="TextTertiaryBrush"   Color="#6B7280" />
+    <SolidColorBrush x:Key="TextTertiaryBrush"   Color="#FF979CA6" />
     <SolidColorBrush x:Key="TextInfoBrush"       Color="#4A9EFF" />
     <SolidColorBrush x:Key="TextSuccessBrush"    Color="#3DDC84" />
     <SolidColorBrush x:Key="TextDangerBrush"     Color="#FF5C6C" />
@@ -243,5 +243,32 @@
         <GradientStop Color="#1A2236" Offset="0" />
         <GradientStop Color="#0F1119" Offset="1" />
     </LinearGradientBrush>
+
+    <!-- Elevation. Darker and deeper than the light theme: a shadow has to out-contrast a dark canvas. -->
+    <DropShadowEffect x:Key="ShadowCard" Color="#000000" BlurRadius="8" ShadowDepth="2"
+                      Direction="270" Opacity="0.30" RenderingBias="Quality" />
+    <DropShadowEffect x:Key="ShadowDialog" Color="#000000" BlurRadius="40" ShadowDepth="12"
+                      Direction="270" Opacity="0.50" RenderingBias="Quality" />
+
+    <!-- Execution dashboard palette. These values are the ones fixed by WebClient_Enhancement_Spec.md;
+         they live here rather than in ExecutionDashboardStyles.xaml so the view follows the theme. -->
+    <SolidColorBrush x:Key="BgCanvas"          Color="#111418" />
+    <SolidColorBrush x:Key="DashBgCard"        Color="#1A1F26" />
+    <SolidColorBrush x:Key="BgCardElevated"    Color="#222831" />
+    <SolidColorBrush x:Key="BgChip"            Color="#2A313C" />
+    <SolidColorBrush x:Key="BorderSubtle"      Color="#2D343F" />
+    <SolidColorBrush x:Key="BorderStrong"      Color="#3A4250" />
+    <SolidColorBrush x:Key="SpecTextPrimary"   Color="#E6E9EE" />
+    <SolidColorBrush x:Key="SpecTextSecondary" Color="#9098A4" />
+    <SolidColorBrush x:Key="SpecTextMuted"     Color="#6B7280" />
+    <SolidColorBrush x:Key="AccentBlue"        Color="#4A9EFF" />
+    <SolidColorBrush x:Key="AccentGreen"       Color="#3DDC84" />
+    <SolidColorBrush x:Key="AccentRed"         Color="#FF5C6C" />
+    <SolidColorBrush x:Key="AccentYellow"      Color="#E0B341" />
+    <SolidColorBrush x:Key="AccentPurple"      Color="#B57BFF" />
+    <SolidColorBrush x:Key="ChipDoneBg"        Color="#333DDC84" />
+    <SolidColorBrush x:Key="ChipRunningBg"     Color="#334A9EFF" />
+    <SolidColorBrush x:Key="ChipFailedBg"      Color="#33FF5C6C" />
+    <SolidColorBrush x:Key="ChipPendingBg"     Color="#222A313C" />
 
 </ResourceDictionary>

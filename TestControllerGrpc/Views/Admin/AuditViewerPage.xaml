@@ -1,4 +1,4 @@
-<UserControl x:Class="TestControllerGrpc.Views.Admin.AuditViewerPage"
+﻿<UserControl x:Class="TestControllerGrpc.Views.Admin.AuditViewerPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
@@ -42,30 +42,30 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <TextBlock Grid.Row="0" Text="Audit Log Viewer" FontSize="18" FontWeight="SemiBold"
+        <TextBlock Grid.Row="0" Text="Audit Log Viewer" FontSize="{StaticResource FontSize20}" FontWeight="SemiBold"
                    Foreground="{DynamicResource TextP}" Margin="0,0,0,12"/>
 
         <!-- Filter bar -->
         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
                 <TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <DatePicker SelectedDate="{Binding FromDate}" Width="130"/>
+                <DatePicker SelectedDate="{Binding FromDate}" Width="130" AutomationProperties.Name="From" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
                 <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <DatePicker SelectedDate="{Binding ToDate}" Width="130"/>
+                <DatePicker SelectedDate="{Binding ToDate}" Width="130" AutomationProperties.Name="To" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
                 <TextBlock Text="User:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <TextBox Text="{Binding UserIdFilter, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                <TextBox Text="{Binding UserIdFilter, UpdateSourceTrigger=PropertyChanged}" Width="120" AutomationProperties.Name="User" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
                 <TextBlock Text="Action:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <TextBox Text="{Binding ActionFilter, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+                <TextBox Text="{Binding ActionFilter, UpdateSourceTrigger=PropertyChanged}" Width="130" AutomationProperties.Name="Action" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
                 <TextBlock Text="Decision:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <ComboBox SelectedItem="{Binding DecisionFilter}" Width="90">
+                <ComboBox SelectedItem="{Binding DecisionFilter}" Width="90" AutomationProperties.Name="Decision" >
                     <sys:String>All</sys:String>
                     <sys:String>Allowed</sys:String>
                     <sys:String>Denied</sys:String>
@@ -73,7 +73,7 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
                 <TextBlock Text="Resource:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <TextBox Text="{Binding ResourceFilter, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                <TextBox Text="{Binding ResourceFilter, UpdateSourceTrigger=PropertyChanged}" Width="120" AutomationProperties.Name="Resource" />
             </StackPanel>
             <Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,4,4" Padding="12,4"/>
             <Button Content="Clear" Command="{Binding ClearFiltersCommand}" Margin="0,0,4,4" Padding="8,4"/>

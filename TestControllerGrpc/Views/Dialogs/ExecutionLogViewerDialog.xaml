@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.Dialogs.ExecutionLogViewerDialog"
+﻿<Window x:Class="TestControllerGrpc.Views.Dialogs.ExecutionLogViewerDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Execution Log Viewer"
@@ -49,36 +49,36 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="Execution Log Viewer" FontSize="18" FontWeight="Bold"/>
-            <TextBlock Text="{Binding TestCaseName}" FontSize="12" Foreground="{DynamicResource TextS}" Margin="0,2,0,0"/>
+            <TextBlock Text="Execution Log Viewer" FontSize="{StaticResource FontSize20}" FontWeight="Bold"/>
+            <TextBlock Text="{Binding TestCaseName}" FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextS}" Margin="0,2,0,0"/>
         </StackPanel>
 
         <!-- Context strip -->
-        <Border Grid.Row="1" Background="{DynamicResource BgPanel}" CornerRadius="6" Padding="12,8" Margin="0,0,0,10">
+        <Border Grid.Row="1" Style="{DynamicResource PanelBorder}" Padding="12,8" Margin="0,0,0,10">
             <UniformGrid Rows="1" Columns="6">
                 <StackPanel>
-                    <TextBlock Text="BUILD" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
+                    <TextBlock Text="BUILD" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
                     <TextBlock Text="{Binding BuildName}" FontWeight="SemiBold"/>
                 </StackPanel>
                 <StackPanel>
-                    <TextBlock Text="AGENT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
+                    <TextBlock Text="AGENT" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
                     <TextBlock Text="{Binding Agent}" FontWeight="SemiBold"/>
                 </StackPanel>
                 <StackPanel>
-                    <TextBlock Text="OUTCOME" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
+                    <TextBlock Text="OUTCOME" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
                     <TextBlock Text="{Binding Outcome}" FontWeight="SemiBold"
                                Foreground="{Binding OutcomeBrush}"/>
                 </StackPanel>
                 <StackPanel>
-                    <TextBlock Text="DURATION" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
+                    <TextBlock Text="DURATION" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
                     <TextBlock Text="{Binding Duration}" FontWeight="SemiBold"/>
                 </StackPanel>
                 <StackPanel>
-                    <TextBlock Text="STARTED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
-                    <TextBlock Text="{Binding StartTime}" FontSize="11"/>
+                    <TextBlock Text="STARTED" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
+                    <TextBlock Text="{Binding StartTime}" FontSize="{StaticResource FontSize10}"/>
                 </StackPanel>
                 <StackPanel>
-                    <TextBlock Text="FAILED STEP" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
+                    <TextBlock Text="FAILED STEP" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"/>
                     <TextBlock Text="{Binding FailedStepDisplay}" FontWeight="SemiBold"
                                Foreground="{DynamicResource AccRed}"/>
                 </StackPanel>
@@ -99,7 +99,7 @@
         <TextBox Grid.Row="3" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                  Background="{DynamicResource BgPanel}" Foreground="{DynamicResource TextP}" BorderBrush="{DynamicResource Bdr}"
                  Padding="8,5" Margin="0,0,0,8"
-                 ToolTip="Filter merged log lines by text"/>
+                 ToolTip="Filter merged log lines by text" AutomationProperties.Name="Filter log" />
 
         <!-- Merged log -->
         <Border Grid.Row="4" MinHeight="260" Background="{DynamicResource BgCard}" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource Bdr}">
@@ -113,7 +113,7 @@
                         <GridViewColumn Header="Time" Width="110">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding TimeText}" FontFamily="Consolas" FontSize="13"
+                                    <TextBlock Text="{Binding TimeText}" FontFamily="Consolas" FontSize="{StaticResource FontSize12}"
                                                Foreground="{DynamicResource TextS}"/>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
@@ -123,7 +123,7 @@
                                 <DataTemplate>
                                     <Border Background="{Binding SourceBrush}" CornerRadius="3"
                                             Padding="6,1" HorizontalAlignment="Left">
-                                        <TextBlock Text="{Binding Source}" FontSize="11" FontWeight="Bold"
+                                        <TextBlock Text="{Binding Source}" FontSize="{StaticResource FontSize10}" FontWeight="Bold"
                                                    Foreground="White"/>
                                     </Border>
                                 </DataTemplate>
@@ -132,7 +132,7 @@
                         <GridViewColumn Header="Severity" Width="70">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Severity}" FontSize="13"
+                                    <TextBlock Text="{Binding Severity}" FontSize="{StaticResource FontSize12}"
                                                Foreground="{Binding SeverityBrush}"/>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
@@ -140,7 +140,7 @@
                         <GridViewColumn Header="Message" Width="800">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Message}" FontFamily="Consolas" FontSize="13"
+                                    <TextBlock Text="{Binding Message}" FontFamily="Consolas" FontSize="{StaticResource FontSize12}"
                                                TextWrapping="Wrap"/>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
@@ -155,18 +155,18 @@
                 CornerRadius="6" Padding="12" Margin="0,10,0,10"
                 Visibility="{Binding ErrorBlockVisibility}">
             <StackPanel>
-                <TextBlock Text="ERROR" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccRed}"/>
+                <TextBlock Text="ERROR" FontSize="{StaticResource FontSize10}" FontWeight="Bold" Foreground="{DynamicResource AccRed}"/>
                 <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" Margin="0,4,0,0"
-                           FontFamily="Consolas" FontSize="11"/>
+                           FontFamily="Consolas" FontSize="{StaticResource FontSize10}"/>
                 <TextBlock Text="{Binding StackTrace}" TextWrapping="Wrap" Margin="0,8,0,0"
-                           FontFamily="Consolas" FontSize="10" Foreground="{DynamicResource TextS}"/>
+                           FontFamily="Consolas" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
             </StackPanel>
         </Border>
 
         <!-- Footer buttons -->
         <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
             <TextBlock Text="{Binding TimelineCountText}" VerticalAlignment="Center"
-                       Margin="0,0,12,0" Foreground="{DynamicResource TextS}" FontSize="11"/>
+                       Margin="0,0,12,0" Foreground="{DynamicResource TextS}" FontSize="{StaticResource FontSize10}"/>
             <Button Content="Copy" Click="OnCopyClick"/>
             <Button Content="Close" Click="OnCloseClick"/>
         </StackPanel>

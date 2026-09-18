@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.Login.LoginPage"
+﻿<Window x:Class="TestControllerGrpc.Views.Login.LoginPage"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.Login"
@@ -20,51 +20,51 @@
             <!-- Brand mark -->
             <Border Width="48" Height="48" CornerRadius="24" Margin="0,0,0,12"
                     Background="#1A74ACEA" HorizontalAlignment="Center">
-                <TextBlock Text="🛡" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock Text="🛡" FontSize="{StaticResource FontSize20}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
 
-            <TextBlock Text="Test Controller" FontSize="18" FontWeight="SemiBold"
+            <TextBlock Text="Test Controller" FontSize="{StaticResource FontSize20}" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center"/>
-            <TextBlock Text="Sign in to continue" FontSize="11"
+            <TextBlock Text="Sign in to continue" FontSize="{StaticResource FontSize10}"
                        Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" Margin="0,4,0,24"/>
 
             <!-- Username -->
-            <TextBlock Text="Username" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
+            <TextBlock Text="Username" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
             <TextBox x:Name="UsernameBox" Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
-                     Padding="8,6" FontSize="13" Margin="0,0,0,12"
-                     IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}"/>
+                     Padding="8,6" FontSize="{StaticResource FontSize12}" Margin="0,0,0,12"
+                     IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}" AutomationProperties.Name="Username" />
 
             <!-- Password -->
-            <TextBlock Text="Password" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
+            <TextBlock Text="Password" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
             <Grid Margin="0,0,0,12">
-                <PasswordBox x:Name="PasswordBox" Padding="8,6" FontSize="13"
-                             IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}"/>
-                <TextBox x:Name="PasswordTextBox" Padding="8,6" FontSize="13"
+                <PasswordBox x:Name="PasswordBox" Padding="8,6" FontSize="{StaticResource FontSize12}"
+                             IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}" AutomationProperties.Name="Password" />
+                <TextBox x:Name="PasswordTextBox" Padding="8,6" FontSize="{StaticResource FontSize12}"
                          Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
                          IsEnabled="{Binding IsLoading, Converter={StaticResource InvertBoolConverter}}"
-                         Visibility="Collapsed"/>
-                <Button x:Name="TogglePasswordBtn" Content="👁" FontSize="12"
+                         Visibility="Collapsed" AutomationProperties.Name="Password" />
+                <Button x:Name="TogglePasswordBtn" Content="👁" FontSize="{StaticResource FontSize11}"
                         HorizontalAlignment="Right" VerticalAlignment="Center"
                         Margin="0,0,6,0" Padding="4,2" Background="Transparent"
                         BorderThickness="0" Cursor="Hand"
-                        Click="TogglePasswordVisibility_Click" Focusable="False"/>
+                        Click="TogglePasswordVisibility_Click" Focusable="False" AutomationProperties.Name="Show password" />
             </Grid>
 
             <!-- Error message -->
-            <TextBlock Text="{Binding ErrorMessage}" FontSize="11" Foreground="#F87171"
+            <TextBlock Text="{Binding ErrorMessage}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource LogErrorBrush}"
                        Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisConverter}}"
                        Margin="0,0,0,8" TextWrapping="Wrap"/>
 
             <!-- Sign In button -->
             <Button Content="{Binding IsLoading, Converter={StaticResource BoolToSignInTextConverter}}"
                     Command="{Binding SignInCommand}"
-                    Padding="8,10" FontSize="13" FontWeight="Medium"
-                    Background="#74ACEA" Foreground="White"
+                    Padding="8,10" FontSize="{StaticResource FontSize12}" FontWeight="Medium"
+                    Background="{DynamicResource CRunBrush}" Foreground="White"
                     HorizontalAlignment="Stretch" Margin="0,4,0,0"/>
 
             <!-- Hint -->
             <TextBlock Text="Administrator, Senior Manager, or Engineer"
-                       FontSize="9" Foreground="{DynamicResource TextSecondary}"
+                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextSecondary}"
                        HorizontalAlignment="Center" Margin="0,16,0,0"/>
         </StackPanel>
     </Grid>

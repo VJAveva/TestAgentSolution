@@ -84,7 +84,7 @@ export default function AppShell() {
     <div className="flex flex-col h-screen bg-bg">
       {/* Top navigation */}
       <header className="flex items-center bg-bg-ribbon border-b border-bdr px-4 h-11 shrink-0">
-        <span className="text-accent font-bold text-sm tracking-wide mr-8">TestController</span>
+        <span className="text-accent font-bold text-sm tracking-wide mr-4 lg:mr-8">TestController</span>
         <nav className="flex gap-1">
           {tabs.map(t => {
             const isDenied = denied[t.id] === true;
@@ -93,15 +93,17 @@ export default function AppShell() {
                 key={t.id}
                 onClick={() => !isDenied && navigate(t.id)}
                 disabled={isDenied}
-                title={isDenied ? 'Requires Administrator or Sr Manager' : undefined}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors
+                title={isDenied ? 'Requires Administrator or Sr Manager' : t.label}
+                aria-label={t.label}
+                className={`flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded text-xs font-medium transition-colors
                   ${isDenied
                     ? 'text-text-secondary/40 cursor-not-allowed'
                     : activeTab === t.id
                       ? 'bg-white/10 text-accent'
                       : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'}`}
               >
-                {t.icon}{t.label}
+                {/* Labels drop below lg; aria-label keeps the icon-only button named. */}
+                {t.icon}<span className="hidden lg:inline">{t.label}</span>
               </button>
             );
           })}

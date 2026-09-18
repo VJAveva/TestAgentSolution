@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.Dialogs.GlobalVariablesEditorWindow"
+﻿<Window x:Class="TestControllerGrpc.Views.Dialogs.GlobalVariablesEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Global Variables — Set Build for All Pipelines"
@@ -10,7 +10,7 @@
         <Style x:Key="GvBtn" TargetType="Button">
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="4,0"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize11}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
             <Setter Property="Background" Value="{DynamicResource BtnBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
@@ -63,21 +63,21 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Drop Location:" Foreground="{DynamicResource TextS}"
-                           VerticalAlignment="Center" Margin="0,0,8,4" FontSize="12"/>
+                           VerticalAlignment="Center" Margin="0,0,8,4" FontSize="{StaticResource FontSize11}"/>
                 <TextBox x:Name="DropLocationBox" Grid.Row="0" Grid.Column="1" 
                          Text="{Binding DropLocation, UpdateSourceTrigger=PropertyChanged}"
                          Foreground="{DynamicResource TextP}" Background="{DynamicResource BgPanel}"
-                         BorderBrush="{DynamicResource Bdr}" Padding="6,4" Margin="0,0,8,4" FontSize="12"
-                         ToolTip="Network path to the build drop folder"/>
+                         BorderBrush="{DynamicResource Bdr}" Padding="6,4" Margin="0,0,8,4" FontSize="{StaticResource FontSize11}"
+                         ToolTip="Network path to the build drop folder" AutomationProperties.Name="Drop Location" />
                 <Button Grid.Row="0" Grid.Column="2" Content="📂 Browse" Style="{StaticResource GvBtn}"
                         Click="BrowseDropLocation_Click" Margin="0,0,0,4"
                         ToolTip="Browse to select a build folder from the drop location"/>
 
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Build Number:" Foreground="{DynamicResource TextS}"
-                           VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12"/>
+                           VerticalAlignment="Center" Margin="0,0,8,0" FontSize="{StaticResource FontSize11}"/>
                 <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
                            Text="{Binding BuildNumber}" Foreground="{DynamicResource AccGreen}"
-                           VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"/>
+                           VerticalAlignment="Center" FontSize="{StaticResource FontSize12}" FontWeight="SemiBold"/>
             </Grid>
         </Border>
 
@@ -99,12 +99,12 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="Variables File:" Foreground="{DynamicResource TextS}"
-                           VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11"/>
+                           VerticalAlignment="Center" Margin="0,0,8,0" FontSize="{StaticResource FontSize10}"/>
                 <TextBlock Grid.Column="1" Text="{Binding FilePath}" Foreground="{DynamicResource TextP}"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="11"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="{StaticResource FontSize10}"
                            ToolTip="{Binding FilePath}"/>
                 <Button Grid.Column="2" Content="Browse…" Style="{StaticResource GvBtn}"
-                        Click="BrowseFile_Click" FontSize="11"/>
+                        Click="BrowseFile_Click" FontSize="{StaticResource FontSize10}"/>
             </Grid>
         </Border>
 
@@ -123,7 +123,7 @@
                         <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
                         <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
                         <Setter Property="Padding" Value="8,4"/>
-                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
                         <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
                         <Setter Property="BorderThickness" Value="0,0,0,1"/>
                     </Style>
@@ -195,7 +195,7 @@
                 <Button Grid.Column="0" Content="＋ Add" Style="{StaticResource GvBtn}" Click="Add_Click"/>
                 <Button Grid.Column="1" Content="－ Remove" Style="{StaticResource GvBtn}" Click="Remove_Click"/>
                 <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="{DynamicResource TextS}"
-                           VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="11"/>
+                           VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="{StaticResource FontSize10}"/>
             </Grid>
         </Border>
 

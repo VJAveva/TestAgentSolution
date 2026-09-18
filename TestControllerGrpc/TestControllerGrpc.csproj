@@ -9,6 +9,7 @@
     <RootNamespace>TestControllerGrpc</RootNamespace>
     <AssemblyName>TestControllerGrpc</AssemblyName>
     <ApplicationIcon>Assets\testcontroller.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

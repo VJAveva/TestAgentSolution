@@ -16,7 +16,7 @@
     <SolidColorBrush x:Key="Accent"    Color="#FF00FFFF" />
     <SolidColorBrush x:Key="AccGreen"  Color="#FF00FF00" />
     <SolidColorBrush x:Key="AccPeach"  Color="#FFFFAA00" />
-    <SolidColorBrush x:Key="AccRed"    Color="#FFFF0000" />
+    <SolidColorBrush x:Key="AccRed"    Color="#FFFF1F1F" />
     <SolidColorBrush x:Key="AccMauve"  Color="#FFFF00FF" />
     <SolidColorBrush x:Key="AccYellow" Color="#FFFFFF00" />
 
@@ -160,6 +160,10 @@
     <SolidColorBrush x:Key="PillEmlBg"          Color="#FF333300" />
     <SolidColorBrush x:Key="PillInitBg"         Color="#FF003300" />
     <SolidColorBrush x:Key="PillRefBg"          Color="#FF222222" />
+    <SolidColorBrush x:Key="PillAssignedBg"     Color="#FF003300" />
+    <SolidColorBrush x:Key="PillAssignedFg"     Color="#FF00FF00" />
+    <SolidColorBrush x:Key="PillViewOnlyBg"     Color="#FF222222" />
+    <SolidColorBrush x:Key="PillViewOnlyFg"     Color="#FFAAAAAA" />
 
     <!-- Status dot fills -->
     <SolidColorBrush x:Key="SReadyBrush"        Color="#FF00FF00" />
@@ -234,5 +238,31 @@
         <GradientStop Color="#1A1A1A" Offset="0" />
         <GradientStop Color="#000000" Offset="1" />
     </LinearGradientBrush>
+
+    <!-- High contrast forbids soft depth cues - the hard borders carry separation instead. Defined but
+         invisible, because every theme must declare the same keys. -->
+    <DropShadowEffect x:Key="ShadowCard" Opacity="0" BlurRadius="0" ShadowDepth="0" />
+    <DropShadowEffect x:Key="ShadowDialog" Opacity="0" BlurRadius="0" ShadowDepth="0" />
+
+    <!-- Execution dashboard palette. High contrast collapses the surface ramp onto black/#1A1A1A and
+         uses pure hues, matching how the rest of this theme trades nuance for separation. -->
+    <SolidColorBrush x:Key="BgCanvas"          Color="#FF000000" />
+    <SolidColorBrush x:Key="DashBgCard"        Color="#FF1A1A1A" />
+    <SolidColorBrush x:Key="BgCardElevated"    Color="#FF1A1A1A" />
+    <SolidColorBrush x:Key="BgChip"            Color="#FF333333" />
+    <SolidColorBrush x:Key="BorderSubtle"      Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="BorderStrong"      Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="SpecTextPrimary"   Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="SpecTextSecondary" Color="#FFCCCCCC" />
+    <SolidColorBrush x:Key="SpecTextMuted"     Color="#FFCCCCCC" />
+    <SolidColorBrush x:Key="AccentBlue"        Color="#FF00FFFF" />
+    <SolidColorBrush x:Key="AccentGreen"       Color="#FF00FF00" />
+    <SolidColorBrush x:Key="AccentRed"         Color="#FFFF1F1F" />
+    <SolidColorBrush x:Key="AccentYellow"      Color="#FFFFFF00" />
+    <SolidColorBrush x:Key="AccentPurple"      Color="#FFFF00FF" />
+    <SolidColorBrush x:Key="ChipDoneBg"        Color="#FF003300" />
+    <SolidColorBrush x:Key="ChipRunningBg"     Color="#FF003333" />
+    <SolidColorBrush x:Key="ChipFailedBg"      Color="#FF330000" />
+    <SolidColorBrush x:Key="ChipPendingBg"     Color="#FF333333" />
 
 </ResourceDictionary>

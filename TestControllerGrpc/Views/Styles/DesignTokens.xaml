@@ -28,11 +28,12 @@
     <Thickness x:Key="PanelMargin">5</Thickness>
 
     <!-- ═══ Border Radii ═══ -->
+    <!-- Sm..Xl mirror the mockup's r-sm..r-xl (6/8/10/12); card=Lg, kpi=Md, dialog=Xl. -->
     <CornerRadius x:Key="RadiusXs">2</CornerRadius>
-    <CornerRadius x:Key="RadiusSm">3</CornerRadius>
-    <CornerRadius x:Key="RadiusMd">4</CornerRadius>
-    <CornerRadius x:Key="RadiusLg">6</CornerRadius>
-    <CornerRadius x:Key="RadiusXl">8</CornerRadius>
+    <CornerRadius x:Key="RadiusSm">6</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">8</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">10</CornerRadius>
+    <CornerRadius x:Key="RadiusXl">12</CornerRadius>
     <CornerRadius x:Key="RadiusPill">14</CornerRadius>
 
     <!-- ═══ Sizing ═══ -->

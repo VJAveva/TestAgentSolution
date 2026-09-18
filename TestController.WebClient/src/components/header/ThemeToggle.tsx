@@ -1,17 +1,19 @@
-import { Sun, Moon } from 'lucide-react';
-import { useThemeStore } from '../../stores/themeStore';
+import { Sun, Moon, Contrast } from 'lucide-react';
+import { useThemeStore, nextTheme } from '../../stores/themeStore';
+
+const ICONS = { light: Moon, dark: Sun, hc: Contrast } as const;
+const LABELS = { light: 'light', dark: 'dark', hc: 'high contrast' } as const;
 
 /**
- * Header control to switch between light and dark themes. Flips whatever is
- * currently shown; the choice persists (localStorage) and overrides the OS
- * preference. Shows a Sun in dark mode (click → light) and a Moon in light
- * mode (click → dark).
+ * Header control that steps through light -> dark -> high contrast. The choice persists
+ * (localStorage) and overrides the OS preference. The icon shows what a click will switch TO.
  */
 export default function ThemeToggle() {
   const resolved = useThemeStore((s) => s.resolved);
   const toggle = useThemeStore((s) => s.toggle);
-  const next = resolved === 'dark' ? 'light' : 'dark';
-  const label = `Switch to ${next} theme`;
+  const next = nextTheme(resolved);
+  const label = `Switch to ${LABELS[next]} theme`;
+  const Icon = ICONS[resolved];
 
   return (
     <button
@@ -22,7 +24,7 @@ export default function ThemeToggle() {
       className="flex items-center justify-center w-7 h-7 rounded border border-bdr text-text-secondary
                  hover:text-text-primary hover:bg-white/5 transition-colors"
     >
-      {resolved === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+      <Icon size={15} />
     </button>
   );
 }

@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
@@ -14,11 +14,11 @@
 
     <!-- Accents -->
     <SolidColorBrush x:Key="Accent"    Color="#FF2563EB" />
-    <SolidColorBrush x:Key="AccGreen"  Color="#FF16A34A" />
+    <SolidColorBrush x:Key="AccGreen"  Color="#FF117F3A" />
     <SolidColorBrush x:Key="AccPeach"  Color="#FFEA580C" />
-    <SolidColorBrush x:Key="AccRed"    Color="#FFDC2626" />
+    <SolidColorBrush x:Key="AccRed"    Color="#FFD82525" />
     <SolidColorBrush x:Key="AccMauve"  Color="#FF9333EA" />
-    <SolidColorBrush x:Key="AccYellow" Color="#FFCA8A04" />
+    <SolidColorBrush x:Key="AccYellow" Color="#FF956603" />
 
     <!-- Execution log severity (theme-aware, ~4.5:1 on log panel bg) -->
     <SolidColorBrush x:Key="LogInfoBrush"    Color="#FF1E293B" />
@@ -36,7 +36,8 @@
     <SolidColorBrush x:Key="BtnBorder"      Color="#22000000" />
     <SolidColorBrush x:Key="BtnHoverBg"     Color="#18000000" />
     <SolidColorBrush x:Key="BtnPressedBg"   Color="#222563EB" />
-    <SolidColorBrush x:Key="FieldBg"        Color="#FFFFFFFF" />
+    <!-- Tinted, not white: an input on a white card had zero fill contrast (1:1) and read as flat card. -->
+    <SolidColorBrush x:Key="FieldBg"        Color="#FFF7F9FC" />
     <SolidColorBrush x:Key="TabSelectedBg"  Color="#11000000" />
     <SolidColorBrush x:Key="TabHoverBg"     Color="#08000000" />
     <SolidColorBrush x:Key="GroupBg"        Color="#08000000" />
@@ -118,7 +119,7 @@
     <SolidColorBrush x:Key="CancelledBadgeBg" Color="#22CBD5E1" />
     <SolidColorBrush x:Key="PartialBadgeBg"   Color="#22EA580C" />
 
-    <!-- ═══ TreeView Spec — Light theme design tokens ═══ -->
+    <!-- â•â•â• TreeView Spec â€” Light theme design tokens â•â•â• -->
 
     <!-- Surfaces -->
     <SolidColorBrush x:Key="BgWindowBrush"      Color="#FFFFFFFF" />
@@ -160,6 +161,10 @@
     <SolidColorBrush x:Key="PillEmlBg"          Color="#1AD97706" />
     <SolidColorBrush x:Key="PillInitBg"         Color="#1A059669" />
     <SolidColorBrush x:Key="PillRefBg"          Color="#1A6B7280" />
+    <SolidColorBrush x:Key="PillAssignedBg"     Color="#1A059669" />
+    <SolidColorBrush x:Key="PillAssignedFg"     Color="#FF059669" />
+    <SolidColorBrush x:Key="PillViewOnlyBg"     Color="#1A6B7280" />
+    <SolidColorBrush x:Key="PillViewOnlyFg"     Color="#FF6B7280" />
 
     <!-- Status dot fills -->
     <SolidColorBrush x:Key="SReadyBrush"        Color="#FF16A34A" />
@@ -181,22 +186,22 @@
 
     <!-- Dashboard legacy tokens (theme-aware) -->
     <SolidColorBrush x:Key="StatusRunningBg" Color="#1A2563EB" />
-    <SolidColorBrush x:Key="StatusRunningFg" Color="#FF2563EB" />
+    <SolidColorBrush x:Key="StatusRunningFg" Color="#FF225BD8" />
     <SolidColorBrush x:Key="StatusSuccessBg" Color="#1A16A34A" />
-    <SolidColorBrush x:Key="StatusSuccessFg" Color="#FF16A34A" />
+    <SolidColorBrush x:Key="StatusSuccessFg" Color="#FF107535" />
     <SolidColorBrush x:Key="StatusFailedBg"  Color="#1ADC2626" />
-    <SolidColorBrush x:Key="StatusFailedFg"  Color="#FFDC2626" />
+    <SolidColorBrush x:Key="StatusFailedFg"  Color="#FFBD2121" />
     <SolidColorBrush x:Key="StatusWarningBg" Color="#1AD97706" />
-    <SolidColorBrush x:Key="StatusWarningFg" Color="#FFD97706" />
+    <SolidColorBrush x:Key="StatusWarningFg" Color="#FF985304" />
     <SolidColorBrush x:Key="StatusIdleBg"    Color="#FFF3F4F6" />
     <SolidColorBrush x:Key="StatusIdleFg"    Color="#FF9CA3AF" />
 
     <!-- Agent fleet card states. Tints are ~20-25% (not the 10% used elsewhere) because these cards must
          stay legible against a white panel; foregrounds are the deep variants for text contrast. -->
     <SolidColorBrush x:Key="StatusRebootBg"      Color="#3A9333EA" />
-    <SolidColorBrush x:Key="StatusRebootFg"      Color="#FF7E22CE" />
+    <SolidColorBrush x:Key="StatusRebootFg"      Color="#FF7B21CA" />
     <SolidColorBrush x:Key="StatusMaintenanceBg" Color="#33EA580C" />
-    <SolidColorBrush x:Key="StatusMaintenanceFg" Color="#FFC2410C" />
+    <SolidColorBrush x:Key="StatusMaintenanceFg" Color="#FFA7380A" />
     <SolidColorBrush x:Key="StatusDrainingBg"    Color="#2E64748B" />
     <SolidColorBrush x:Key="StatusDrainingFg"    Color="#FF475569" />
     <SolidColorBrush x:Key="DashboardBg"     Color="#FFF8FAFC" />
@@ -212,7 +217,7 @@
     <SolidColorBrush x:Key="TextDim"         Color="#FF9CA3AF" />
     <SolidColorBrush x:Key="MonoFont"        Color="#FF0891B2" />
 
-    <!-- ══ Build Report Card palette (light, readable on white cards) ══ -->
+    <!-- â•â• Build Report Card palette (light, readable on white cards) â•â• -->
     <SolidColorBrush x:Key="BgCanvasBrush"       Color="#EEF0F6" />
     <SolidColorBrush x:Key="BgPrimaryBrush"      Color="#FFFFFF" />
     <SolidColorBrush x:Key="BgSecondaryBrush"    Color="#F4F6FA" />
@@ -226,7 +231,7 @@
     <SolidColorBrush x:Key="BgSuccessBrush"      Color="#1A168A5F" />
     <SolidColorBrush x:Key="BgDangerBrush"       Color="#1ADC263C" />
     <SolidColorBrush x:Key="BgWarningBrush"      Color="#1AB4791F" />
-    <SolidColorBrush x:Key="TextTertiaryBrush"   Color="#7A8091" />
+    <SolidColorBrush x:Key="TextTertiaryBrush"   Color="#FF696E7D" />
     <SolidColorBrush x:Key="TextInfoBrush"       Color="#2563EB" />
     <SolidColorBrush x:Key="TextSuccessBrush"    Color="#168A5F" />
     <SolidColorBrush x:Key="TextDangerBrush"     Color="#DC263C" />
@@ -235,5 +240,32 @@
         <GradientStop Color="#E8EDF7" Offset="0" />
         <GradientStop Color="#F8FAFD" Offset="1" />
     </LinearGradientBrush>
+
+    <!-- Elevation. The UI kit gives cards a soft shadow and dialogs a stronger one; this is what makes
+         the light theme read as layered rather than flat. -->
+    <DropShadowEffect x:Key="ShadowCard" Color="#141E32" BlurRadius="6" ShadowDepth="1"
+                      Direction="270" Opacity="0.10" RenderingBias="Quality" />
+    <DropShadowEffect x:Key="ShadowDialog" Color="#141E32" BlurRadius="30" ShadowDepth="10"
+                      Direction="270" Opacity="0.16" RenderingBias="Quality" />
+
+    <!-- Execution dashboard palette, light equivalents of the spec roles (see DarkTheme for the source). -->
+    <SolidColorBrush x:Key="BgCanvas"          Color="#FFEEF0F6" />
+    <SolidColorBrush x:Key="DashBgCard"        Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="BgCardElevated"    Color="#FFF3F5FA" />
+    <SolidColorBrush x:Key="BgChip"            Color="#FFE6E9F0" />
+    <SolidColorBrush x:Key="BorderSubtle"      Color="#FFE5E7EB" />
+    <SolidColorBrush x:Key="BorderStrong"      Color="#FFC2CCDA" />
+    <SolidColorBrush x:Key="SpecTextPrimary"   Color="#FF1F2937" />
+    <SolidColorBrush x:Key="SpecTextSecondary" Color="#FF6B7280" />
+    <SolidColorBrush x:Key="SpecTextMuted"     Color="#FF696E7D" />
+    <SolidColorBrush x:Key="AccentBlue"        Color="#FF2563EB" />
+    <SolidColorBrush x:Key="AccentGreen"       Color="#FF117F3A" />
+    <SolidColorBrush x:Key="AccentRed"         Color="#FFD82525" />
+    <SolidColorBrush x:Key="AccentYellow"      Color="#FF956603" />
+    <SolidColorBrush x:Key="AccentPurple"      Color="#FF9333EA" />
+    <SolidColorBrush x:Key="ChipDoneBg"        Color="#2216A34A" />
+    <SolidColorBrush x:Key="ChipRunningBg"     Color="#222563EB" />
+    <SolidColorBrush x:Key="ChipFailedBg"      Color="#22DC2626" />
+    <SolidColorBrush x:Key="ChipPendingBg"     Color="#226B7280" />
 
 </ResourceDictionary>

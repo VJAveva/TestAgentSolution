@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.Results.BuildReportCardWindow"
+﻿<Window x:Class="TestControllerGrpc.Views.Results.BuildReportCardWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:res="clr-namespace:TestControllerGrpc.Views.Results"
@@ -27,14 +27,14 @@
         <!-- Section header bar -->
         <Style x:Key="SecHeader" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
-            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="Padding" Value="14,10" />
         </Style>
 
         <Style x:Key="KpiLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
-            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="Margin" Value="0,0,0,4" />
         </Style>
@@ -45,7 +45,7 @@
         </Style>
         <Style x:Key="KpiSub" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
             <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
             <Setter Property="Margin" Value="0,2,0,0" />
         </Style>
@@ -58,7 +58,7 @@
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="Margin" Value="4,0,0,0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize10}" />
         </Style>
     </Window.Resources>
 
@@ -78,18 +78,18 @@
                         ToolTip="Export this report card as a self-contained HTML file (print to PDF from a browser)"
                         Margin="0,0,8,0" />
                 <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11"
+                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="{StaticResource FontSize10}"
                            Text="Build:" Margin="0,0,6,0" />
                 <ComboBox DockPanel.Dock="Left" VerticalAlignment="Center" Width="220" Height="26"
                           ItemsSource="{Binding AvailableBuilds}"
                           SelectedItem="{Binding SelectedBuild, Mode=TwoWay}"
                           ToolTip="Select a build folder under the ReportResults root"
-                          Margin="0,0,8,0" />
+                          Margin="0,0,8,0"  AutomationProperties.Name="Build" />
                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11"
+                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="{StaticResource FontSize10}"
                            Text="{Binding StatusMessage}" />
                 <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource TextInfoBrush}"
-                           FontSize="11" Text="Loading…" Margin="8,0,0,0"
+                           FontSize="{StaticResource FontSize10}" Text="Loading…" Margin="8,0,0,0"
                            Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}" />
             </DockPanel>
         </Border>
@@ -111,11 +111,11 @@
 
                                     <!-- Left -->
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="BUILD REPORT CARD" FontSize="11" FontWeight="Medium"
+                                        <TextBlock Text="BUILD REPORT CARD" FontSize="{StaticResource FontSize10}" FontWeight="Medium"
                                                    Foreground="{DynamicResource TextTertiaryBrush}" />
                                         <TextBlock Text="{Binding Card.BuildNumber}" FontFamily="{StaticResource Mono}"
-                                                   FontSize="24" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,4" />
-                                        <TextBlock FontFamily="{StaticResource Mono}" FontSize="11"
+                                                   FontSize="{StaticResource FontSize24}" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,4" />
+                                        <TextBlock FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                                    Foreground="{DynamicResource TextSecondaryBrush}">
                                             <Run Text="Triggered by " /><Run Text="{Binding Card.TriggeredBy, Mode=OneWay}" />
                                             <Run Text="  ·  Duration " /><Run Text="{Binding Card.Duration, Mode=OneWay, StringFormat=hh\\:mm\\:ss}" />
@@ -148,27 +148,27 @@
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Card.Grade.Letter}" FontSize="38" FontWeight="SemiBold"
                                                            HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                                                <TextBlock Text="{Binding Card.PassRate, StringFormat={}{0:0.0}%}" FontSize="10"
+                                                <TextBlock Text="{Binding Card.PassRate, StringFormat={}{0:0.0}%}" FontSize="{StaticResource FontSize9}"
                                                            FontFamily="{StaticResource Mono}" HorizontalAlignment="Center"
                                                            Foreground="{DynamicResource TextSecondaryBrush}" />
                                             </StackPanel>
                                         </Border>
                                         <StackPanel VerticalAlignment="Center" Margin="14,0,0,0">
-                                            <TextBlock Text="{Binding Card.Grade.Verdict}" FontSize="13" FontWeight="Medium"
+                                            <TextBlock Text="{Binding Card.Grade.Verdict}" FontSize="{StaticResource FontSize12}" FontWeight="Medium"
                                                        Foreground="{DynamicResource TextWarningBrush}" />
-                                            <TextBlock FontSize="10" FontFamily="{StaticResource Mono}" Margin="0,3,0,0"
+                                            <TextBlock FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" Margin="0,3,0,0"
                                                        Foreground="{DynamicResource TextTertiaryBrush}">
                                                 <Run Text="{Binding Card.PassedTests, Mode=OneWay}" /><Run Text=" pass / " />
                                                 <Run Text="{Binding Card.FailedTests, Mode=OneWay}" /><Run Text=" fail / " />
                                                 <Run Text="{Binding Card.SkippedTests, Mode=OneWay}" /><Run Text=" skip" />
                                             </TextBlock>
-                                            <TextBlock FontSize="10" FontFamily="{StaticResource Mono}" Margin="0,3,0,0"
+                                            <TextBlock FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" Margin="0,3,0,0"
                                                        Foreground="{DynamicResource TextTertiaryBrush}">
                                                 <Run Text="{Binding Card.RegressionCount, Mode=OneWay}" /><Run Text=" regressions · " />
                                                 <Run Text="{Binding Card.FlakyCount, Mode=OneWay}" /><Run Text=" flaky · " />
                                                 <Run Text="{Binding Card.PsrErrorCount, Mode=OneWay}" /><Run Text=" PSR err" />
                                             </TextBlock>
-                                            <TextBlock FontSize="10" FontFamily="{StaticResource Mono}" Margin="0,4,0,0"
+                                            <TextBlock FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" Margin="0,4,0,0"
                                                        Foreground="{DynamicResource TextTertiaryBrush}"
                                                        Text="{Binding Card.DeltaVsLast, StringFormat=vs avg: {0:+0.0;-0.0}%}" />
                                         </StackPanel>
@@ -289,10 +289,10 @@
                                                         </Style>
                                                     </Ellipse.Style>
                                                 </Ellipse>
-                                                <TextBlock Text="{Binding Name}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                                <TextBlock Text="{Binding Name}" FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                                            FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}" />
                                             </StackPanel>
-                                            <TextBlock FontFamily="{StaticResource Mono}" FontSize="10" Margin="0,4,0,6"
+                                            <TextBlock FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize9}" Margin="0,4,0,6"
                                                        Foreground="{DynamicResource TextSecondaryBrush}">
                                                 <Run Text="{Binding Passed, Mode=OneWay}" /><Run Text=" / " />
                                                 <Run Text="{Binding Total, Mode=OneWay}" /><Run Text=" · " />
@@ -357,7 +357,7 @@
                                     <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}" />
                                     <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                                     <Setter Property="Padding" Value="6,5" />
-                                    <Setter Property="FontSize" Value="11" />
+                                    <Setter Property="FontSize" Value="{StaticResource FontSize10}" />
                                     <Setter Property="FontWeight" Value="SemiBold" />
                                     <Setter Property="BorderBrush" Value="{DynamicResource BorderTertiaryBrush}" />
                                     <Setter Property="BorderThickness" Value="0,0,0,1" />
@@ -397,7 +397,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                                             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                                             <Setter Property="ToolTip" Value="{Binding UseCase}" />
@@ -408,7 +408,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                                             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                                             <Setter Property="ToolTip" Value="{Binding AgentName}" />
@@ -438,7 +438,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="HorizontalAlignment" Value="Right" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                                         </Style>
@@ -448,7 +448,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="HorizontalAlignment" Value="Right" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextDangerBrush}" />
                                         </Style>
@@ -458,7 +458,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="HorizontalAlignment" Value="Right" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                                         </Style>
@@ -468,7 +468,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="HorizontalAlignment" Value="Right" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                                         </Style>
@@ -478,7 +478,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontFamily" Value="{StaticResource Mono}" />
-                                            <Setter Property="FontSize" Value="13" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize12}" />
                                             <Setter Property="HorizontalAlignment" Value="Right" />
                                             <Setter Property="Foreground" Value="{DynamicResource TextSuccessBrush}" />
                                         </Style>
@@ -529,15 +529,15 @@
                                                 </Style>
                                             </Border.Style>
                                             <StackPanel>
-                                                <TextBlock FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}">
+                                                <TextBlock FontSize="{StaticResource FontSize10}" FontWeight="Medium" Foreground="{DynamicResource TextPrimaryBrush}">
                                                     <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Scenario, Mode=OneWay}" />
                                                 </TextBlock>
-                                                <TextBlock Text="{Binding Outcome}" FontSize="9" FontFamily="{StaticResource Mono}" Margin="0,4,0,8"
+                                                <TextBlock Text="{Binding Outcome}" FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" Margin="0,4,0,8"
                                                            Foreground="{DynamicResource TextTertiaryBrush}" />
-                                                <TextBlock FontSize="9" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource TextSecondaryBrush}">
+                                                <TextBlock FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource TextSecondaryBrush}">
                                                     <Run Text="Tags " /><Run Text="{Binding Tags, Mode=OneWay}" />
                                                 </TextBlock>
-                                                <TextBlock FontSize="9" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource TextSecondaryBrush}">
+                                                <TextBlock FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" Foreground="{DynamicResource TextSecondaryBrush}">
                                                     <Run Text="Errors " /><Run Text="{Binding Errors, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>
@@ -576,7 +576,7 @@
                                                     </Border.Style>
                                                 </Border>
                                             </Border>
-                                            <TextBlock Text="{Binding Label}" FontSize="9" FontFamily="{StaticResource Mono}"
+                                            <TextBlock Text="{Binding Label}" FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}"
                                                        HorizontalAlignment="Center" Margin="0,4,0,0"
                                                        Foreground="{DynamicResource TextTertiaryBrush}" />
                                         </StackPanel>
@@ -584,7 +584,7 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <TextBlock Text="{Binding Card.DeltaVsLast, StringFormat=★ this build · {0:+0.0;-0.0}% vs avg}"
-                                       FontSize="10" FontFamily="{StaticResource Mono}" HorizontalAlignment="Center" Margin="0,0,0,12"
+                                       FontSize="{StaticResource FontSize9}" FontFamily="{StaticResource Mono}" HorizontalAlignment="Center" Margin="0,0,0,12"
                                        Foreground="{DynamicResource TextTertiaryBrush}" />
                         </StackPanel>
                     </Border>
@@ -648,12 +648,12 @@
                                                 <ColumnDefinition Width="1.4*" />
                                                 <ColumnDefinition Width="1.2*" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding TestName}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                            <TextBlock Grid.Column="0" Text="{Binding TestName}" FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                                        Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Ci}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                            <TextBlock Grid.Column="1" Text="{Binding Ci}" FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
                                             <TextBlock Grid.Column="2" Text="{Binding FailedOnAgents, Converter={StaticResource StringJoin}}" FontFamily="{StaticResource Mono}"
-                                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                             <Border Grid.Column="3" CornerRadius="99" Padding="8,2" HorizontalAlignment="Left" VerticalAlignment="Center"
                                                     Background="{DynamicResource BgChipBrush}">
                                                 <Border.Style>
@@ -672,12 +672,12 @@
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
-                                                <TextBlock Text="{Binding PatternLabel}" FontFamily="{StaticResource Mono}" FontSize="9" FontWeight="Medium"
+                                                <TextBlock Text="{Binding PatternLabel}" FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize9}" FontWeight="Medium"
                                                            Foreground="{DynamicResource TextPrimaryBrush}" />
                                             </Border>
-                                            <TextBlock Grid.Column="4" Text="{Binding Owner}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                            <TextBlock Grid.Column="4" Text="{Binding Owner}" FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="5" Text="{Binding FirstSeen}" FontFamily="{StaticResource Mono}" FontSize="11"
+                                            <TextBlock Grid.Column="5" Text="{Binding FirstSeen}" FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                                        Foreground="{DynamicResource TextTertiaryBrush}" VerticalAlignment="Center" />
                                         </Grid>
                                     </Border>
@@ -690,7 +690,7 @@
                 <!-- ═══ Footer ═══ -->
                 <Border Style="{StaticResource Card}">
                     <DockPanel Margin="14,10">
-                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontSize="10"
+                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontSize="{StaticResource FontSize9}"
                                    Foreground="{DynamicResource TextTertiaryBrush}"
                                    Text="{Binding Card.GeneratedUtc, StringFormat=Generated {0:yyyy-MM-dd HH:mm} UTC}" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

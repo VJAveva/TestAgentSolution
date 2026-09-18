@@ -1,4 +1,4 @@
-<UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.AgentWorkspaceView"
+﻿<UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.AgentWorkspaceView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:views="clr-namespace:TestControllerGrpc.Views.AgentWorkspace"
@@ -28,7 +28,7 @@
                 </Setter.Value>
             </Setter>
             <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="1"/>
         </Style>
@@ -58,7 +58,7 @@
                                     <Border Margin="5,0,0,0" CornerRadius="7" Padding="5,0" MinWidth="16"
                                             Background="{DynamicResource Accent}"
                                             Visibility="{Binding Maintenance.HasActive, Converter={StaticResource BoolVis}}">
-                                        <TextBlock Text="{Binding Maintenance.ActiveCount}" FontSize="9"
+                                        <TextBlock Text="{Binding Maintenance.ActiveCount}" FontSize="{StaticResource FontSize9}"
                                                    Foreground="White" HorizontalAlignment="Center"/>
                                     </Border>
                                 </StackPanel>

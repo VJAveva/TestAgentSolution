@@ -57,8 +57,8 @@ export default function ExecutionLogDialog({ build, testName, stepIndex, onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-bg-panel rounded-lg border border-bdr w-[1100px] h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-bg-panel rounded-lg border border-bdr w-full max-w-[1100px] h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-bdr">
           <div>
             <h2 className="text-lg font-bold text-text-primary">Execution Log Viewer</h2>
@@ -78,7 +78,7 @@ export default function ExecutionLogDialog({ build, testName, stepIndex, onClose
         {report && (
           <>
             {/* Context strip */}
-            <div className="grid grid-cols-6 gap-3 px-5 py-3 bg-white/5 border-b border-bdr text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 px-5 py-3 bg-white/5 border-b border-bdr text-xs">
               <div><div className="text-[10px] text-text-muted uppercase">Build</div><div className="font-bold">{report.buildName}</div></div>
               <div><div className="text-[10px] text-text-muted uppercase">Agent</div><div className="font-bold">{report.agent || '�'}</div></div>
               <div><div className="text-[10px] text-text-muted uppercase">Outcome</div>

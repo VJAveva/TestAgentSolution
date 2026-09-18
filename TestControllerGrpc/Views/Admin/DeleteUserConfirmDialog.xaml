@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.Admin.DeleteUserConfirmDialog"
+﻿<Window x:Class="TestControllerGrpc.Views.Admin.DeleteUserConfirmDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Confirm Delete" Height="240" Width="400"
@@ -7,23 +7,23 @@
 
     <Grid Margin="24">
         <StackPanel>
-            <TextBlock Text="Delete user" FontSize="16" FontWeight="SemiBold"
-                       Foreground="#F87171" Margin="0,0,0,12"/>
+            <TextBlock Text="Delete user" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
+                       Foreground="{DynamicResource LogErrorBrush}" Margin="0,0,0,12"/>
 
-            <TextBlock Text="{Binding WarningText}" FontSize="12"
+            <TextBlock Text="{Binding WarningText}" FontSize="{StaticResource FontSize11}"
                        Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-            <TextBlock Text="{Binding AuditRetentionText}" FontSize="11"
+            <TextBlock Text="{Binding AuditRetentionText}" FontSize="{StaticResource FontSize10}"
                        Foreground="{DynamicResource TextSecondary}" FontStyle="Italic" Margin="0,0,0,20"/>
 
             <!-- Buttons -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Cancel" Padding="12,8" FontSize="12" Margin="0,0,8,0"
+                <Button Content="Cancel" Padding="12,8" FontSize="{StaticResource FontSize11}" Margin="0,0,8,0"
                         IsCancel="True"/>
-                <Button Content="Delete user" Padding="12,8" FontSize="12" FontWeight="Medium"
+                <Button Content="Delete user" Padding="12,8" FontSize="{StaticResource FontSize11}" FontWeight="Medium"
                         IsEnabled="{Binding CanConfirm}"
                         Click="OnConfirmClick"
-                        Background="#F87171" Foreground="White"/>
+                        Background="{DynamicResource LogErrorBrush}" Foreground="White"/>
             </StackPanel>
         </StackPanel>
     </Grid>

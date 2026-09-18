@@ -1,14 +1,16 @@
-<Window x:Class="TestControllerGrpc.Views.Dialogs.LockConflictDialog"
+﻿<Window x:Class="TestControllerGrpc.Views.Dialogs.LockConflictDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
         Title="Pipeline Locked"
+        AutomationProperties.AutomationId="LockConflict.Window"
+        AutomationProperties.Name="Pipeline locked dialog"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" SizeToContent="WidthAndHeight"
         MinWidth="420" MaxWidth="500"
-        Background="{DynamicResource WindowBgBrush}">
+        Background="{DynamicResource WindowBg}">
     <!--
-        Conflict Dialog — Mockup 6.
+        Conflict Dialog â€” Mockup 6.
         Shows who holds the lock, expiry countdown, and optional force-release strip.
     -->
     <Grid Margin="24">
@@ -22,15 +24,15 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-            <mi:MaterialIcon Kind="Lock" Width="24" Height="24" Foreground="#FFF0B070" VerticalAlignment="Center" />
-            <TextBlock Text="Pipeline is locked" FontSize="16" FontWeight="SemiBold"
+            <mi:MaterialIcon Kind="Lock" Width="24" Height="24" Foreground="{DynamicResource CEmailBrush}" VerticalAlignment="Center" />
+            <TextBlock Text="Pipeline is locked" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextDefaultBrush}" Margin="8,0,0,0"
                        VerticalAlignment="Center" />
         </StackPanel>
 
         <!-- Body -->
         <TextBlock Grid.Row="1" TextWrapping="Wrap" Margin="0,0,0,16"
-                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13">
+                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="{StaticResource FontSize12}">
             <Run Text="This pipeline is currently being run by " />
             <Run Text="{Binding OwnerDisplayName, FallbackValue='unknown'}" FontWeight="SemiBold"
                  Foreground="{DynamicResource TextDefaultBrush}" />
@@ -41,9 +43,7 @@
         </TextBlock>
 
         <!-- Owner card -->
-        <Border Grid.Row="2" CornerRadius="6" Padding="12" Margin="0,0,0,16"
-                Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderDimBrush}"
-                BorderThickness="1">
+        <Border Grid.Row="2" Style="{DynamicResource CardBorderStyle}" Margin="0,0,0,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -55,12 +55,13 @@
                         Background="#33F0B070" VerticalAlignment="Top" Margin="0,0,12,0">
                     <TextBlock Text="{Binding OwnerInitials, FallbackValue='?'}"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                               FontSize="14" FontWeight="Bold" Foreground="#FFF0B070" />
+                               FontSize="{StaticResource FontSize14}" FontWeight="Bold" Foreground="{DynamicResource CEmailBrush}" />
                 </Border>
 
                 <!-- Details -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock FontSize="13" FontWeight="SemiBold"
+                    <TextBlock FontSize="{StaticResource FontSize12}" FontWeight="SemiBold"
+                               AutomationProperties.AutomationId="LockConflict.OwnerName"
                                Foreground="{DynamicResource TextDefaultBrush}"
                                Text="{Binding OwnerDisplayName, FallbackValue=''}" />
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -68,15 +69,16 @@
                         <Border CornerRadius="3" Padding="4,1" Background="#2274ACEA"
                                 Margin="0,0,8,0">
                             <TextBlock Text="{Binding OwnerClientKind, FallbackValue=''}"
-                                       FontSize="10" Foreground="#FF74ACEA" />
+                                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource CRunBrush}" />
                         </Border>
                         <!-- Started at -->
-                        <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}">
+                        <TextBlock FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextDimBrush}">
                             <Run Text="Started " />
                             <Run Text="{Binding AcquiredAtText, FallbackValue=''}" />
                         </TextBlock>
                     </StackPanel>
-                    <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,4,0,0"
+                    <TextBlock FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextDimBrush}" Margin="0,4,0,0"
+                               AutomationProperties.AutomationId="LockConflict.ExpiryCountdown"
                                Text="{Binding ExpiryCountdownText, FallbackValue=''}" />
                 </StackPanel>
             </Grid>
@@ -85,21 +87,25 @@
         <!-- Standard actions -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,0">
             <Button Content="Close" Command="{Binding CloseCommand}" MinWidth="80"
+                    AutomationProperties.AutomationId="LockConflict.CloseButton"
                     Style="{DynamicResource SecondaryButtonStyle}" Margin="0,0,8,0" />
             <Button Content="View dashboard" Command="{Binding ViewDashboardCommand}" MinWidth="120"
+                    AutomationProperties.AutomationId="LockConflict.ViewDashboardButton"
                     Style="{DynamicResource PrimaryButtonStyle}" />
         </StackPanel>
 
         <!-- Force-release strip (visible ONLY with Pipeline_ForceRelease capability) -->
         <Border Grid.Row="4" CornerRadius="6" Padding="12" Margin="0,16,0,0"
+                AutomationProperties.AutomationId="LockConflict.ForceReleaseStrip"
                 Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1"
                 Visibility="{Binding CanForceRelease, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
-                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                           FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextSecondaryBrush}"
                            Text="You have permission to take over this pipeline." />
-                <Button DockPanel.Dock="Right" Content="Take over and revert…"
+                <Button DockPanel.Dock="Right" Content="Take over and revertâ€¦"
                         Command="{Binding ForceReleaseCommand}" MinWidth="140"
+                        AutomationProperties.AutomationId="LockConflict.ForceReleaseButton"
                         Style="{DynamicResource AmberButtonStyle}" HorizontalAlignment="Right" />
             </DockPanel>
         </Border>

@@ -1,4 +1,4 @@
-<ResourceDictionary
+﻿<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
@@ -10,12 +10,12 @@
         All text elements should reference these styles for consistency.
     -->
 
-    <!-- ═══ Font Families ═══ -->
+    <!-- â•â•â• Font Families â•â•â• -->
     <FontFamily x:Key="FontUI">Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">Consolas</FontFamily>
     <FontFamily x:Key="FontIcon">Segoe MDL2 Assets</FontFamily>
 
-    <!-- ═══ Font Size Scale ═══ -->
+    <!-- â•â•â• Font Size Scale â•â•â• -->
     <!-- Small end nudged up +1 for readability (labels/captions were too small). -->
     <sys:Double x:Key="FontSize9">10</sys:Double>
     <sys:Double x:Key="FontSize10">11</sys:Double>
@@ -23,11 +23,13 @@
     <sys:Double x:Key="FontSize12">13</sys:Double>
     <sys:Double x:Key="FontSize13">13</sys:Double>
     <sys:Double x:Key="FontSize14">14</sys:Double>
+    <!-- The UI kit's "header" role; the scale had no 15 so views hardcoded it. -->
+    <sys:Double x:Key="FontSize15">15</sys:Double>
     <sys:Double x:Key="FontSize16">16</sys:Double>
     <sys:Double x:Key="FontSize20">20</sys:Double>
     <sys:Double x:Key="FontSize24">24</sys:Double>
 
-    <!-- ═══ Text Styles ═══ -->
+    <!-- â•â•â• Text Styles â•â•â• -->
 
     <!-- Headings -->
     <Style x:Key="TextH1" TargetType="TextBlock">

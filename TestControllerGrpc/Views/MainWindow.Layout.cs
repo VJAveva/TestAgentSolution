@@ -15,6 +15,7 @@ using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.Authorization;
 using TestControllerGrpc.ViewModels;
+using TestControllerGrpc.Views.Behaviors;
 
 using TestControllerGrpc.Views.Dialogs;
 
@@ -22,6 +23,113 @@ namespace TestControllerGrpc.Views;
 
 public partial class MainWindow : Window
 {
+    private readonly IUiLayoutStore _layoutStore = new UiLayoutStore();
+
+    /// <summary>What the USER asked for, which is not what is on screen once a narrow window forces
+    /// panes shut. Persisting this rather than the live flags is what lets a resize be non-destructive.</summary>
+    private (bool Tree, bool Agent, bool Log) _paneIntent = (true, true, true);
+
+    private Breakpoint _band = Breakpoint.Wide;
+    private bool _applyingBreakpoint;
+
+    /// <summary>Only a real user toggle redefines intent; our own breakpoint writes must not.</summary>
+    private void NotePaneIntent()
+    {
+        if (_applyingBreakpoint) return;
+        _paneIntent = (_vm.IsTreePanePinned, _vm.IsAgentPanePinned, _vm.IsLogPanePinned);
+    }
+
+    // The agent pane yields first, then the tree; the log is left to the user's own collapse toggle.
+    private static (bool Tree, bool Agent, bool Log) PanesFor(
+        (bool Tree, bool Agent, bool Log) intent, Breakpoint band) => LayoutBreakpoint.PanesFor(intent, band);
+
+    private void ApplyBreakpoint(double width)
+    {
+        var band = LayoutBreakpoint.Classify(width);
+        if (band == _band) return;
+
+        _band = band;
+        SetPanes(PanesFor(_paneIntent, band));
+    }
+
+    private void SetPanes((bool Tree, bool Agent, bool Log) panes)
+    {
+        _applyingBreakpoint = true;
+        try
+        {
+            _vm.IsTreePanePinned = panes.Tree;
+            _vm.IsAgentPanePinned = panes.Agent;
+            _vm.IsLogPanePinned = panes.Log;
+        }
+        finally
+        {
+            _applyingBreakpoint = false;
+        }
+
+        ApplyTreePaneLayout(panes.Tree);
+        ApplyAgentPaneLayout(panes.Agent);
+        ApplyLogPaneLayout(panes.Log);
+    }
+
+    /// <summary>
+    /// Layouts are kept per display configuration - a layout tuned on a 4K desktop is wrong when the
+    /// laptop is undocked, and restoring it blindly leaves panes off-screen or unusably narrow.
+    /// </summary>
+    private static string DisplayKey()
+    {
+        try
+        {
+            return string.Join("|", System.Windows.Forms.Screen.AllScreens
+                .Select(s => $"{s.Bounds.Width}x{s.Bounds.Height}")
+                .OrderBy(s => s, StringComparer.Ordinal));
+        }
+        catch (Exception)
+        {
+            return "default";
+        }
+    }
+
+    private void RestoreLayout()
+    {
+        // Seed intent from the view model first: with no saved layout we still must persist what the
+        // user actually started with, not this field's initialiser.
+        _paneIntent = (_vm.IsTreePanePinned, _vm.IsAgentPanePinned, _vm.IsLogPanePinned);
+
+        var saved = _layoutStore.Load(DisplayKey());
+        if (saved is null) return;
+
+        _savedTreeColWidth = new GridLength(saved.TreeWidth, GridUnitType.Star);
+        _savedPropertiesColWidth = new GridLength(saved.PropertiesWidth, GridUnitType.Star);
+        _savedAgentColWidth = new GridLength(saved.AgentWidth, GridUnitType.Star);
+        _savedLogRowHeight = new GridLength(saved.LogHeight, GridUnitType.Star);
+
+        _vm.IsLogCollapsed = saved.LogCollapsed;
+        _paneIntent = (saved.TreePinned, saved.AgentPinned, saved.LogPinned);
+
+        // Applied explicitly: if a flag already equalled the saved value no PropertyChanged fires,
+        // so the restored sizes above would never reach the grid.
+        SetPanes(PanesFor(_paneIntent, _band));
+    }
+
+    private void SaveLayout()
+    {
+        // A collapsed pane holds GridLength.Auto, whose Value is meaningless - fall back to the last
+        // starred size, which is exactly what the pin/unpin code keeps in the _saved* fields.
+        static double Star(GridLength live, GridLength fallback) => live.IsStar ? live.Value : fallback.Value;
+
+        _layoutStore.Save(DisplayKey(), new UiLayoutSnapshot
+        {
+            TreeWidth = Star(ColTreePanel.Width, _savedTreeColWidth),
+            PropertiesWidth = Star(ColNodeProperties.Width, _savedPropertiesColWidth),
+            AgentWidth = Star(ColAgentPanel.Width, _savedAgentColWidth),
+            LogHeight = Star(RowLogPane.Height, _savedLogRowHeight),
+            TreePinned = _paneIntent.Tree,
+            AgentPinned = _paneIntent.Agent,
+            LogPinned = _paneIntent.Log,
+            LogCollapsed = _vm.IsLogCollapsed,
+        });
+    }
+
     private void ApplyAgentPaneLayout(bool pinned)
     {
         if (pinned)
@@ -123,6 +231,8 @@ public partial class MainWindow : Window
     {
         if (sender is not Grid grid || grid.ActualWidth < 1 || grid.ActualHeight < 1)
             return;
+
+        ApplyBreakpoint(grid.ActualWidth);
 
         // Enforce max proportions using MaxWidth on grid columns.
         // This avoids converting star→pixel which breaks proportional layout.

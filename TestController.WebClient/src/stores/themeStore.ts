@@ -1,19 +1,31 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type ThemeChoice = 'light' | 'dark' | 'system';
-export type ResolvedTheme = 'light' | 'dark';
+export type ThemeChoice = 'light' | 'dark' | 'hc' | 'system';
+export type ResolvedTheme = 'light' | 'dark' | 'hc';
 
 const MEDIA_QUERY = '(prefers-color-scheme: dark)';
+const CONTRAST_QUERY = '(prefers-contrast: more)';
 
-function systemPrefersDark(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia(MEDIA_QUERY).matches;
+/** jsdom and some embedded webviews have `window` but no `matchMedia`; a bare typeof check throws there. */
+function media(query: string): MediaQueryList | null {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  return window.matchMedia(query);
 }
 
-/** Maps a user choice to a concrete light/dark theme. */
+function systemPrefersDark(): boolean {
+  return media(MEDIA_QUERY)?.matches ?? false;
+}
+
+function systemPrefersContrast(): boolean {
+  return media(CONTRAST_QUERY)?.matches ?? false;
+}
+
+/** Maps a user choice to a concrete theme. Contrast outranks colour scheme: it is an accessibility need. */
 function resolve(choice: ThemeChoice): ResolvedTheme {
-  if (choice === 'system') return systemPrefersDark() ? 'dark' : 'light';
-  return choice;
+  if (choice !== 'system') return choice;
+  if (systemPrefersContrast()) return 'hc';
+  return systemPrefersDark() ? 'dark' : 'light';
 }
 
 /** Writes the resolved theme to <html data-theme="..."> and returns it. */
@@ -32,8 +44,15 @@ interface ThemeState {
   resolved: ResolvedTheme;
   /** Set an explicit choice (overrides and persists). */
   setTheme: (theme: ThemeChoice) => void;
-  /** Flip between light and dark based on what's currently shown. */
+  /** Step to the next theme in the light -> dark -> high-contrast cycle. */
   toggle: () => void;
+}
+
+const CYCLE: ResolvedTheme[] = ['light', 'dark', 'hc'];
+
+/** The theme one step on from what is currently shown. Exported so the button can label itself. */
+export function nextTheme(current: ResolvedTheme): ResolvedTheme {
+  return CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
 }
 
 export const useThemeStore = create<ThemeState>()(
@@ -43,7 +62,7 @@ export const useThemeStore = create<ThemeState>()(
       resolved: resolve('system'),
       setTheme: (theme) => set({ theme, resolved: apply(theme) }),
       toggle: () => {
-        const next: ResolvedTheme = get().resolved === 'dark' ? 'light' : 'dark';
+        const next = nextTheme(get().resolved);
         set({ theme: next, resolved: apply(next) });
       },
     }),
@@ -58,11 +77,11 @@ export const useThemeStore = create<ThemeState>()(
   ),
 );
 
-// Follow live OS theme changes, but only while the user is on 'system'.
-if (typeof window !== 'undefined') {
-  window.matchMedia(MEDIA_QUERY).addEventListener('change', () => {
-    if (useThemeStore.getState().theme === 'system') {
-      useThemeStore.setState({ resolved: apply('system') });
-    }
-  });
-}
+// Follow live OS changes, but only while the user is on 'system'.
+const reapply = () => {
+  if (useThemeStore.getState().theme === 'system') {
+    useThemeStore.setState({ resolved: apply('system') });
+  }
+};
+media(MEDIA_QUERY)?.addEventListener('change', reapply);
+media(CONTRAST_QUERY)?.addEventListener('change', reapply);

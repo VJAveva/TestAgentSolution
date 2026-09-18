@@ -116,8 +116,8 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
   const hasConflicts = canTrigger != null && !canTrigger.canTrigger;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-bg-card border border-bdr rounded-lg w-[560px] max-h-[80vh] overflow-auto shadow-xl">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-bg-card border border-bdr rounded-lg w-full max-w-[560px] max-h-[80vh] overflow-auto shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-bdr">
           <div>

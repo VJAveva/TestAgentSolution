@@ -11,32 +11,14 @@
          ??????????????????????????????????????????????????????????????????? -->
 
     <!-- Backgrounds -->
-    <SolidColorBrush x:Key="BgCanvas"       Color="#111418"/>
-    <SolidColorBrush x:Key="DashBgCard"      Color="#1A1F26"/>
-    <SolidColorBrush x:Key="BgCardElevated" Color="#222831"/>
-    <SolidColorBrush x:Key="BgChip"         Color="#2A313C"/>
 
     <!-- Borders -->
-    <SolidColorBrush x:Key="BorderSubtle"   Color="#2D343F"/>
-    <SolidColorBrush x:Key="BorderStrong"   Color="#3A4250"/>
 
     <!-- Text -->
-    <SolidColorBrush x:Key="SpecTextPrimary"   Color="#E6E9EE"/>
-    <SolidColorBrush x:Key="SpecTextSecondary" Color="#9098A4"/>
-    <SolidColorBrush x:Key="SpecTextMuted"     Color="#6B7280"/>
 
     <!-- Accents -->
-    <SolidColorBrush x:Key="AccentBlue"   Color="#4A9EFF"/>
-    <SolidColorBrush x:Key="AccentGreen"  Color="#3DDC84"/>
-    <SolidColorBrush x:Key="AccentRed"    Color="#FF5C6C"/>
-    <SolidColorBrush x:Key="AccentYellow" Color="#E0B341"/>
-    <SolidColorBrush x:Key="AccentPurple" Color="#B57BFF"/>
 
     <!-- Chip backgrounds (20% alpha versions) -->
-    <SolidColorBrush x:Key="ChipDoneBg"    Color="#333DDC84"/>
-    <SolidColorBrush x:Key="ChipRunningBg" Color="#334A9EFF"/>
-    <SolidColorBrush x:Key="ChipFailedBg"  Color="#33FF5C6C"/>
-    <SolidColorBrush x:Key="ChipPendingBg" Color="#222A313C"/>
 
     <!-- Typography -->
     <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
@@ -85,7 +67,7 @@
                 </Style>
             </Border.Style>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding StatusIcon}" FontSize="9" Margin="0,0,3,0"
+                <TextBlock Text="{Binding StatusIcon}" FontSize="{StaticResource FontSize9}" Margin="0,0,3,0"
                            VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -104,7 +86,7 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <TextBlock Text="{Binding DisplayLabel}" FontSize="11"
+                <TextBlock Text="{Binding DisplayLabel}" FontSize="{StaticResource FontSize10}"
                            VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -140,7 +122,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="14,6"/>
         <Setter Property="Margin" Value="2,0"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSize12}"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -178,7 +160,7 @@
     <!-- Filter strip RadioButton (smaller, square-ish) -->
     <Style x:Key="FilterButtonStyle" TargetType="RadioButton" BasedOn="{StaticResource TabButtonStyle}">
         <Setter Property="Padding" Value="10,4"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
@@ -224,7 +206,7 @@
         <Setter Property="Foreground" Value="{StaticResource SpecTextPrimary}"/>
     </Style>
     <Style x:Key="MetricLabelStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
         <Setter Property="Foreground" Value="{StaticResource SpecTextMuted}"/>
         <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="0,2,0,0"/>

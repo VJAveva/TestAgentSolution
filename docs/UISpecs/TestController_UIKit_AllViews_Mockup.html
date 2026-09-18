@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestController — Comprehensive UI Design System & All Views</title>
+<style>
+  /* ============================================================
+     DESIGN TOKENS — the single source. Every view below inherits.
+     Theme is switched by setting data-theme on <body>.
+     ============================================================ */
+  :root{
+    --font-sans:'Segoe UI',system-ui,-apple-system,sans-serif;
+    --font-mono:'Cascadia Code','Consolas',monospace;
+    --fs-title:20px; --fs-header:15px; --fs-body:13px; --fs-label:11px; --fs-caption:10px; --fs-mono:12px;
+    --fw-reg:400; --fw-med:500; --fw-semi:600;
+    --r-sm:6px; --r-md:8px; --r-lg:10px; --r-xl:12px;
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px;
+  }
+  /* LIGHT (enterprise, layered) */
+  [data-theme="light"]{
+    --canvas:#eef1f6; --surface:#ffffff; --surface-alt:#f6f8fb; --field:#f7f9fc;
+    --border:#e3e8ef; --border-strong:#d4dae4; --divider:#eef1f5;
+    --ink:#1a1f2b; --ink-body:#2f3846; --ink-soft:#6b7688; --ink-faint:#93a0b4;
+    --accent:#2f6df6; --accent-soft:#eaf1fe; --accent-ink:#1f5fe0;
+    --green:#0f7a4d; --green-soft:#e6f6ee; --amber:#a1620a; --amber-soft:#fbf1de;
+    --red:#c62b30; --red-soft:#fde8e9; --purple:#7a4bc4;
+    --shadow:0 1px 3px rgba(20,30,50,.07),0 1px 2px rgba(20,30,50,.04);
+    --shadow-pop:0 10px 30px rgba(20,30,50,.16),0 2px 8px rgba(20,30,50,.08);
+  }
+  /* DARK */
+  [data-theme="dark"]{
+    --canvas:#0e1420; --surface:#1a2030; --surface-alt:#151b28; --field:#141b28;
+    --border:#2a3346; --border-strong:#33405a; --divider:#232b3c;
+    --ink:#e6ebf3; --ink-body:#d4dbe6; --ink-soft:#93a1b8; --ink-faint:#5f6f89;
+    --accent:#4d8bf5; --accent-soft:#1b2942; --accent-ink:#7fb0ff;
+    --green:#22c55e; --green-soft:#0f2a1c; --amber:#eab308; --amber-soft:#2a2410;
+    --red:#ef4444; --red-soft:#2a1414; --purple:#a855f7;
+    --shadow:0 2px 8px rgba(0,0,0,.3); --shadow-pop:0 12px 40px rgba(0,0,0,.5);
+  }
+  /* HIGH CONTRAST */
+  [data-theme="hc"]{
+    --canvas:#000; --surface:#000; --surface-alt:#000; --field:#000;
+    --border:#fff; --border-strong:#fff; --divider:#fff;
+    --ink:#fff; --ink-body:#fff; --ink-soft:#fff; --ink-faint:#ff0;
+    --accent:#ff0; --accent-soft:#000; --accent-ink:#ff0;
+    --green:#0f0; --green-soft:#000; --amber:#ff0; --amber-soft:#000;
+    --red:#f00; --red-soft:#000; --purple:#f0f;
+    --shadow:none; --shadow-pop:none;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--font-sans);font-size:var(--fs-body);color:var(--ink-body);background:var(--canvas);padding:18px;-webkit-font-smoothing:antialiased;transition:background .2s;}
+  .page{max-width:1180px;margin:0 auto;}
+
+  /* theme switcher */
+  .switcher{position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 16px;margin-bottom:18px;box-shadow:var(--shadow);}
+  .switcher .lbl{font-size:12px;font-weight:var(--fw-semi);color:var(--ink);}
+  .switcher .hint{font-size:11px;color:var(--ink-faint);}
+  .sw-btns{display:flex;gap:6px;margin-left:auto;}
+  .sw-btns button{font-family:var(--font-sans);font-size:12px;font-weight:var(--fw-med);padding:6px 14px;border-radius:var(--r-sm);border:1px solid var(--border-strong);background:var(--surface);color:var(--ink-soft);cursor:pointer;}
+  .sw-btns button.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  [data-theme="hc"] .sw-btns button.on{color:#000;border-color:#ff0;}
+
+  h2.sec{font-size:12px;font-weight:var(--fw-semi);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--divider);}
+
+  /* reusable primitives */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;}
+  [data-theme="hc"] .card{border-width:2px;}
+  .card-h{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider);}
+  .card-h .t{font-size:var(--fs-label);font-weight:var(--fw-semi);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);}
+  .card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .card-b{padding:14px;}
+  .t-title{font-size:var(--fs-title);font-weight:var(--fw-semi);color:var(--ink);line-height:1.3;}
+  .t-header{font-size:var(--fs-header);font-weight:var(--fw-semi);color:var(--ink);}
+  .lbl{font-size:var(--fs-label);font-weight:var(--fw-med);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px;}
+  .cap{font-size:var(--fs-caption);color:var(--ink-faint);}
+  .mono{font-family:var(--font-mono);font-size:var(--fs-mono);}
+  .field{background:var(--field);border:1px solid var(--border-strong);border-radius:var(--r-sm);padding:8px 11px;color:var(--ink-body);margin-bottom:12px;}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:8px 16px;font-family:var(--font-sans);font-size:var(--fs-body);font-weight:var(--fw-semi);cursor:pointer;}
+  [data-theme="hc"] .btn{color:#000;border:1px solid #ff0;}
+  .btn.ghost{background:var(--surface);border:1px solid var(--border-strong);color:var(--ink-soft);}
+  .chip{font-size:var(--fs-caption);font-weight:var(--fw-semi);padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:4px;}
+  .chip.ok{background:var(--green-soft);color:var(--green);} [data-theme="hc"] .chip.ok{border:1px solid #0f0;}
+  .chip.warn{background:var(--amber-soft);color:var(--amber);} [data-theme="hc"] .chip.warn{border:1px solid #ff0;}
+  .chip.err{background:var(--red-soft);color:var(--red);} [data-theme="hc"] .chip.err{border:1px solid #f00;}
+  .chip.acc{background:var(--accent-soft);color:var(--accent-ink);}
+  .pill{background:var(--accent-soft);color:var(--accent-ink);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:var(--fw-med);}
+
+  /* ===== APP SHELL (shared chrome for all views) ===== */
+  .shell{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--shadow);}
+  .titlebar{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);}
+  .brand{font-size:13px;font-weight:var(--fw-semi);color:var(--accent-ink);}
+  .nav{display:flex;gap:1px;}
+  .nav a{font-size:12px;color:var(--ink-soft);padding:6px 11px;border-radius:var(--r-sm);text-decoration:none;display:flex;align-items:center;gap:5px;}
+  .nav a.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:var(--fw-med);}
+  [data-theme="hc"] .nav a.on{border:1px solid #ff0;}
+  .titlebar .r{margin-left:auto;display:flex;align-items:center;gap:10px;}
+  .toolbar{display:flex;align-items:center;gap:2px;padding:6px 12px;background:var(--surface-alt);border-bottom:1px solid var(--border);}
+  .tb{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-soft);padding:5px 10px;border-radius:var(--r-sm);cursor:pointer;}
+  .tb:hover{background:var(--surface);color:var(--ink);}
+  .tb .i{font-size:13px;}
+  .sep{width:1px;height:16px;background:var(--border);margin:0 4px;}
+  .statusbar{display:flex;align-items:center;gap:14px;padding:5px 14px;background:var(--surface-alt);border-top:1px solid var(--border);font-size:var(--fs-caption);color:var(--ink-faint);}
+  .statusbar .r{margin-left:auto;display:flex;gap:12px;}
+
+  /* tree bits */
+  .tnode{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:var(--r-sm);font-size:var(--fs-body);color:var(--ink-body);cursor:pointer;white-space:nowrap;}
+  .tnode:hover{background:var(--surface-alt);}
+  .tnode.sel{background:var(--accent-soft);color:var(--accent-ink);font-weight:var(--fw-med);}
+  [data-theme="hc"] .tnode.sel{border:1px solid #ff0;}
+  .tnode .car{color:var(--ink-faint);font-size:8px;width:8px;}
+  .tnode .ic{color:var(--ink-soft);width:13px;text-align:center;}
+  .kind{font-family:var(--font-mono);font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:var(--surface-alt);color:var(--ink-soft);border:1px solid var(--border);}
+  .cnt{margin-left:auto;font-size:var(--fs-caption);color:var(--ink-faint);}
+
+  /* grid helper */
+  .g3{display:grid;grid-template-columns:280px 1fr 210px;gap:12px;}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+
+  /* KPI stat */
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:12px 14px;box-shadow:var(--shadow);}
+  .kpi .v{font-size:22px;font-weight:var(--fw-semi);color:var(--ink);}
+  .kpi .k{font-size:var(--fs-caption);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);padding:8px 10px;border-bottom:2px solid var(--border);background:var(--surface-alt);}
+  td{font-size:var(--fs-body);color:var(--ink-body);padding:8px 10px;border-bottom:1px solid var(--divider);}
+  tr:hover td{background:var(--surface-alt);}
+
+  /* log */
+  .logline{font-family:var(--font-mono);font-size:var(--fs-mono);color:var(--ink-body);padding:2px 8px;white-space:nowrap;}
+  .logline .ts{color:var(--ink-faint);}
+  .logline .pass{color:var(--green);font-weight:var(--fw-semi);}
+  .logline .info{color:var(--ink-soft);}
+
+  /* grade circle */
+  .grade{width:70px;height:70px;border-radius:50%;border:4px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:var(--fw-semi);color:var(--green);}
+
+  /* progress bar */
+  .bar{height:6px;background:var(--surface-alt);border-radius:3px;overflow:hidden;}
+  .bar > span{display:block;height:100%;background:var(--accent);}
+
+  .viewcap{font-size:12px;color:var(--ink-soft);margin:0 0 8px;}
+  .viewcap b{color:var(--ink);font-weight:var(--fw-semi);}
+
+  .dialog{width:440px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);box-shadow:var(--shadow-pop);overflow:hidden;}
+  [data-theme="hc"] .dialog{border-width:2px;}
+  .dlg-h{padding:14px 18px;} .dlg-b{padding:2px 18px 14px;} .dlg-f{padding:12px 18px;background:var(--surface-alt);border-top:1px solid var(--divider);display:flex;justify-content:flex-end;gap:8px;}
+</style>
+</head>
+<body data-theme="light">
+<div class="page">
+
+  <!-- THEME SWITCHER -->
+  <div class="switcher">
+    <span class="lbl">TestController — Complete UI</span>
+    <span class="hint">All views, one token system. Switch themes →</span>
+    <div class="sw-btns">
+      <button onclick="setTheme('light')" id="b-light" class="on">Light</button>
+      <button onclick="setTheme('dark')" id="b-dark">Dark</button>
+      <button onclick="setTheme('hc')" id="b-hc">High Contrast</button>
+    </div>
+  </div>
+
+  <!-- ===== DESIGN SYSTEM ===== -->
+  <h2 class="sec">Design System — the tokens every view inherits</h2>
+  <div class="g2">
+    <div class="card"><div class="card-h"><span class="t">Type Scale</span></div><div class="card-b">
+      <div style="margin-bottom:8px"><span class="t-title">Title 20/600</span></div>
+      <div style="margin-bottom:8px"><span class="t-header">Header 15/600</span></div>
+      <div style="margin-bottom:8px;color:var(--ink-body)">Body 13/400 — most interface text</div>
+      <div style="margin-bottom:8px"><span class="lbl">Label 11/500</span></div>
+      <div style="margin-bottom:8px"><span class="cap">Caption 10/400 · meta &amp; counts</span></div>
+      <div class="mono">Mono 12 · commands, logs, XML</div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="t">Components</span></div><div class="card-b">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <button class="btn">Primary</button>
+        <button class="btn ghost">Ghost</button>
+        <span class="chip ok">PASSED</span>
+        <span class="chip warn">REBOOT</span>
+        <span class="chip err">FAILED</span>
+        <span class="pill">Admin</span>
+      </div>
+      <span class="lbl">Field</span><div class="field">Input field on card</div>
+      <div class="bar" style="margin-top:6px"><span style="width:72%"></span></div>
+    </div></div>
+  </div>
+
+  <!-- ===== VIEW: WATCHLIST EDITOR ===== -->
+  <h2 class="sec">View · WatchList Editor</h2>
+  <p class="viewcap"><b>Three-pane work area</b> — tree · node properties · agents, all cards on the canvas. Compact toolbar, collapsible log strip.</p>
+  <div class="shell">
+    <div class="titlebar">
+      <span class="brand">TestController</span>
+      <div class="nav"><a class="on">&#128203; WatchList</a><a>&#9654; Execution</a><a>&#8767; Monitor</a><a>&#128220; Logs</a><a>&#128202; Results</a><a>&#127942; Report Card</a><a>&#128421; Agents</a></div>
+      <div class="r"><span class="pill">&#128100; vinodjavvadi · Admin</span></div>
+    </div>
+    <div class="toolbar">
+      <span class="tb"><span class="i">&#128193;</span>Open</span><span class="tb"><span class="i">&#128190;</span>Save</span><span class="tb"><span class="i">&#8635;</span>Refresh</span>
+      <span class="sep"></span>
+      <span class="tb"><span class="i">&#10133;</span>Test Item</span><span class="tb"><span class="i">&#9889;</span>Event</span><span class="tb"><span class="i">&#8862;</span>Group</span><span class="tb"><span class="i">&#128161;</span>Action</span><span class="tb"><span class="i">&#8631;</span>Ref</span>
+    </div>
+    <div class="card-b" style="background:var(--canvas)">
+      <div class="g3">
+        <div class="card"><div class="card-h"><span class="t">Test Plans</span><span class="cnt r">1 item</span></div><div class="card-b" style="padding:6px">
+          <div class="tnode"><span class="car">&#9660;</span><span class="ic">&#128203;</span>Test Plans<span class="cnt">1</span></div>
+          <div class="tnode" style="padding-left:18px"><span class="car">&#9660;</span><span class="ic">&#128260;</span>Revert 9 Nodes<span class="cnt">1</span></div>
+          <div class="tnode" style="padding-left:34px"><span class="car">&#9660;</span><span class="ic">&#9889;</span>Renamed<span class="kind">EVT</span></div>
+          <div class="tnode" style="padding-left:50px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>Revert All Nine<span class="kind">SEQ</span></div>
+          <div class="tnode" style="padding-left:66px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>PHASE 1<span class="kind">PAR</span></div>
+          <div class="tnode sel" style="padding-left:82px"><span class="ic">&#128196;</span>Copy Prepare-Agent<span class="kind">REF</span></div>
+          <div class="tnode" style="padding-left:66px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>Revert Sanity<span class="kind">SEQ</span></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="t">Node Properties</span></div><div class="card-b">
+          <span class="lbl">Tag</span><div class="field">Copy Prepare-Agent.bat on warmhist</div>
+          <span class="lbl">Action Type</span><div class="field">RunRemoteCommand</div>
+          <div class="t-header" style="margin:8px 0">Command Settings</div>
+          <span class="lbl">Parameters</span><div class="field mono">/c xcopy /Y \\[_ControllerName]\c$\...\Prepare-Agent.bat C:\TestAgentService\ /S /E</div>
+          <button class="btn">Apply Changes</button>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="t">Agents</span><span class="pill r">10</span></div><div class="card-b" style="padding:8px">
+          <div class="tnode" style="background:var(--amber-soft);border-radius:6px;margin-bottom:4px"><span class="ic">&#9679;</span>JVHIST<span class="cnt" style="color:var(--amber)">reboot</span></div>
+          <div class="tnode">&#9679; JVGR1<span class="cnt">idle</span></div>
+          <div class="tnode">&#9679; JVGR2<span class="cnt">idle</span></div>
+          <div class="tnode">&#9679; WARMGR<span class="cnt">idle</span></div>
+          <div class="tnode">&#9679; WARMPRI<span class="cnt">idle</span></div>
+        </div></div>
+      </div>
+    </div>
+    <div class="statusbar"><span>&#9679; Execution Log · 25</span><span class="mono" style="color:var(--ink-faint)">[17:25] Agent check complete: 10/10 online</span><span style="color:var(--accent-ink)">&#9650; Expand</span><div class="r"><span>CPU 7%</span><span>MEM 9.7GB</span><span>AGENTS 10/10</span></div></div>
+  </div>
+
+  <!-- ===== VIEW: EXECUTION ===== -->
+  <h2 class="sec">View · Execution (live)</h2>
+  <p class="viewcap"><b>Sessions + live log.</b> Agent-filtered stream, per-agent progress. Running agents highlighted.</p>
+  <div class="shell">
+    <div class="card-b" style="background:var(--canvas)">
+      <div class="g2" style="grid-template-columns:260px 1fr">
+        <div class="card"><div class="card-h"><span class="t">Sessions</span></div><div class="card-b">
+          <div style="padding:8px;background:var(--green-soft);border-radius:var(--r-sm);margin-bottom:8px">
+            <div style="font-weight:var(--fw-semi);color:var(--ink)">SmokeTest &#9679;</div>
+            <div class="cap">Running · 4 agents · 10:07</div>
+            <div class="bar" style="margin-top:6px"><span style="width:62%;background:var(--green)"></span></div>
+          </div>
+          <div class="tnode sel">&#9679; JVGR1 <span class="cnt" style="color:var(--green)">RUNNING</span></div>
+          <div class="tnode">&#9679; JVGR2 <span class="cnt" style="color:var(--green)">RUNNING</span></div>
+          <div class="tnode">&#9679; JVHIST <span class="cnt" style="color:var(--green)">RUNNING</span></div>
+          <div class="tnode">&#9675; WARMGR <span class="cnt">idle</span></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="t">Live Execution Log — JVGR1</span><span class="chip acc r">Filtered</span></div><div class="card-b" style="padding:6px 4px">
+          <div class="logline"><span class="ts">17:23:08</span> <span style="color:var(--accent-ink)">[JVGR1]</span> <span class="pass">[PASS]</span> AVEVA Application Server 2023 R2 SP2</div>
+          <div class="logline"><span class="ts">17:23:08</span> <span style="color:var(--accent-ink)">[JVGR1]</span> <span class="pass">[PASS]</span> AppServerDocs</div>
+          <div class="logline"><span class="ts">17:24:09</span> <span style="color:var(--accent-ink)">[JVGR1]</span> <span class="pass">[PASS]</span> AVEVA OMI - Modern Editors</div>
+          <div class="logline"><span class="ts">17:24:09</span> <span style="color:var(--accent-ink)">[JVGR1]</span> <span class="info">[INFO]</span> Components: 18 (18 ok, 0 fail) | Elapsed: 00:09:06</div>
+          <div class="logline"><span class="ts">17:25:09</span> <span style="color:var(--accent-ink)">[JVGR1]</span> <span class="pass">[PASS]</span> AVEVA InTouch HMI</div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== VIEW: AGENTS FLEET ===== -->
+  <h2 class="sec">View · Agents (Fleet)</h2>
+  <p class="viewcap"><b>Fleet grid</b> with live metrics. Cards color-coded by state; scales to 50+ with virtualization.</p>
+  <div class="g4">
+    <div class="kpi"><div class="v">10</div><div class="k">Agents</div></div>
+    <div class="kpi"><div class="v" style="color:var(--green)">10</div><div class="k">Online</div></div>
+    <div class="kpi"><div class="v" style="color:var(--amber)">1</div><div class="k">Needs reboot</div></div>
+    <div class="kpi"><div class="v">0</div><div class="k">Busy</div></div>
+  </div>
+  <div class="g4" style="margin-top:10px">
+    <div class="card"><div class="card-b"><div style="display:flex;justify-content:space-between;align-items:center"><span class="t-header">JVGR1</span><span class="chip ok">Idle</span></div><div class="cap" style="margin-top:6px">CPU 2% · Mem 1.6GB · Disk 58GB</div></div></div>
+    <div class="card"><div class="card-b"><div style="display:flex;justify-content:space-between;align-items:center"><span class="t-header">JVHIST</span><span class="chip warn">Reboot</span></div><div class="cap" style="margin-top:6px">CPU 0% · Mem 1.6GB · Disk 74GB</div></div></div>
+    <div class="card"><div class="card-b"><div style="display:flex;justify-content:space-between;align-items:center"><span class="t-header">WARMGR</span><span class="chip ok">Idle</span></div><div class="cap" style="margin-top:6px">CPU 22% · Mem 1.6GB · Disk 69GB</div></div></div>
+    <div class="card"><div class="card-b"><div style="display:flex;justify-content:space-between;align-items:center"><span class="t-header">WARMPRI</span><span class="chip ok">Idle</span></div><div class="cap" style="margin-top:6px">CPU 15% · Mem 1.6GB · Disk 86GB</div></div></div>
+  </div>
+
+  <!-- ===== VIEW: RESULTS + REPORT CARD ===== -->
+  <h2 class="sec">View · Results &amp; Report Card</h2>
+  <div class="g2">
+    <div class="card"><div class="card-h"><span class="t">Build Report Card</span></div><div class="card-b" style="display:flex;gap:16px;align-items:center">
+      <div class="grade">B</div>
+      <div>
+        <div class="t-title">94.3%</div>
+        <div class="cap">Ship with caveats · 76 of 79 passed</div>
+        <div style="display:flex;gap:6px;margin-top:8px"><span class="chip ok">67 pass</span><span class="chip err">3 fail</span><span class="chip warn">9 skip</span></div>
+      </div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="t">Results Browser</span></div><div class="card-b" style="padding:0">
+      <table><thead><tr><th>Agent</th><th>Pass</th><th>Fail</th><th>Duration</th></tr></thead><tbody>
+        <tr><td>JVGR1</td><td style="color:var(--green)">20</td><td>0</td><td class="mono">18:22</td></tr>
+        <tr><td>JVGR2</td><td style="color:var(--green)">20</td><td>0</td><td class="mono">19:05</td></tr>
+        <tr><td>JVHIST</td><td style="color:var(--green)">16</td><td style="color:var(--red)">3</td><td class="mono">16:48</td></tr>
+        <tr><td>WARMGR</td><td style="color:var(--green)">20</td><td>0</td><td class="mono">18:25</td></tr>
+      </tbody></table>
+    </div></div>
+  </div>
+
+  <!-- ===== VIEW: MONITOR + LOGS ===== -->
+  <h2 class="sec">View · Monitor &amp; Logs</h2>
+  <div class="g2">
+    <div class="card"><div class="card-h"><span class="t">Monitor — live metrics</span></div><div class="card-b">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="lbl" style="margin:0">Controller CPU</span><span class="mono">7%</span></div>
+      <div class="bar" style="margin-bottom:12px"><span style="width:7%"></span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="lbl" style="margin:0">Memory</span><span class="mono">9.7 GB</span></div>
+      <div class="bar" style="margin-bottom:12px"><span style="width:48%"></span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="lbl" style="margin:0">Disk</span><span class="mono">82%</span></div>
+      <div class="bar"><span style="width:82%;background:var(--amber)"></span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="t">Unified Logs</span><span class="chip acc r">All levels</span></div><div class="card-b" style="padding:6px 4px">
+      <div class="logline"><span class="ts">17:25:16</span> <span class="info">[INFO]</span> Agent discovered via heartbeat: jvkpri</div>
+      <div class="logline"><span class="ts">17:25:16</span> <span class="info">[INFO]</span> Loaded startup config: WatchList.xml</div>
+      <div class="logline"><span class="ts">17:25:17</span> <span class="pass">[OK]</span> Agent check complete: 10/10 online</div>
+      <div class="logline"><span class="ts">17:25:17</span> <span class="info">[INFO]</span> Testing 10 agent(s)...</div>
+    </div></div>
+  </div>
+
+  <!-- ===== VIEW: ADMIN / RBAC ===== -->
+  <h2 class="sec">View · Admin / RBAC</h2>
+  <div class="card"><div class="card-h"><span class="t">Users &amp; Roles</span><span class="r"><button class="btn" style="padding:5px 12px">+ Add User</button></span></div><div class="card-b" style="padding:0">
+    <table><thead><tr><th>User</th><th>Role</th><th>Pipelines</th><th>Status</th></tr></thead><tbody>
+      <tr><td>vinodjavvadi</td><td><span class="chip acc">Admin</span></td><td>All</td><td><span class="chip ok">Active</span></td></tr>
+      <tr><td>ravivenula</td><td><span class="chip acc">Manager</span></td><td>3 granted</td><td><span class="chip ok">Active</span></td></tr>
+      <tr><td>leelap</td><td><span class="chip acc">Engineer</span></td><td>2 granted</td><td><span class="chip ok">Active</span></td></tr>
+    </tbody></table>
+  </div></div>
+
+  <!-- ===== DIALOGS ===== -->
+  <h2 class="sec">Dialogs (same tokens, floating shadow)</h2>
+  <div class="g2">
+    <div style="display:flex;justify-content:center"><div class="dialog">
+      <div class="dlg-h"><div class="t-title">Register Agent</div><div class="cap" style="margin-top:2px">Add a new agent node to the fleet</div></div>
+      <div class="dlg-b"><span class="lbl">Agent Name</span><div class="field">warmpri</div><span class="lbl">Endpoint</span><div class="field mono">http://warmpri:5200</div></div>
+      <div class="dlg-f"><button class="btn ghost">Cancel</button><button class="btn">Register</button></div>
+    </div></div>
+    <div style="display:flex;justify-content:center"><div class="dialog">
+      <div class="dlg-h"><div class="t-title">Pipeline Locked</div><div class="cap" style="margin-top:2px">In use by another user</div></div>
+      <div class="dlg-b"><div style="padding:10px;background:var(--amber-soft);border-radius:var(--r-sm)"><span class="chip warn">LOCKED</span> <span style="color:var(--ink-body)">WarmPSR is running by <b>Leela</b> · 06:12</span></div><div class="cap" style="margin-top:8px">You can watch the live log, or wait until it finishes.</div></div>
+      <div class="dlg-f"><button class="btn ghost">Watch</button><button class="btn">OK</button></div>
+    </div></div>
+  </div>
+
+  <div style="height:30px"></div>
+</div>
+
+<script>
+  function setTheme(t){
+    document.body.setAttribute('data-theme', t);
+    ['light','dark','hc'].forEach(x=>document.getElementById('b-'+x).classList.toggle('on', x===t));
+  }
+</script>
+</body>
+</html>

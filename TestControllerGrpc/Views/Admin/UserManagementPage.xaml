@@ -1,4 +1,4 @@
-<UserControl x:Class="TestControllerGrpc.Views.Admin.UserManagementPage"
+﻿<UserControl x:Class="TestControllerGrpc.Views.Admin.UserManagementPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:admin="clr-namespace:TestControllerGrpc.Views.Admin"
@@ -15,7 +15,7 @@
         <admin:UserListView Grid.Column="0" DataContext="{Binding}"/>
 
         <!-- Divider -->
-        <Rectangle Grid.Column="1" Fill="{DynamicResource BorderDefault}" Width="1"/>
+        <Rectangle Grid.Column="1" Fill="{DynamicResource Bdr}" Width="1"/>
 
         <!-- Right pane: User detail -->
         <admin:UserDetailView Grid.Column="2" DataContext="{Binding}"/>

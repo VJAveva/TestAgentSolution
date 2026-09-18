@@ -263,6 +263,10 @@ public partial class MainWindow : Window
 
     private void OnWindowClosing(object? sender, CancelEventArgs e)
     {
+        // Saved before the tray short-circuit: closing to tray is the common path, and a layout only
+        // persisted on a true exit would be lost whenever the process is killed from the tray.
+        SaveLayout();
+
         if (_isActuallyExiting) return;
 
         e.Cancel = true;
@@ -372,6 +376,8 @@ public partial class MainWindow : Window
 
     private void OnWindowLoaded(object sender, RoutedEventArgs e)
     {
+        RestoreLayout();
+
         Dispatcher.InvokeAsync(() =>
         {
             _vm.SyncRegisteredAgents();
@@ -444,14 +450,17 @@ public partial class MainWindow : Window
         }
         else if (e.PropertyName == nameof(MainViewModel.IsAgentPanePinned))
         {
+            NotePaneIntent();
             ApplyAgentPaneLayout(_vm.IsAgentPanePinned);
         }
         else if (e.PropertyName == nameof(MainViewModel.IsLogPanePinned))
         {
+            NotePaneIntent();
             ApplyLogPaneLayout(_vm.IsLogPanePinned);
         }
         else if (e.PropertyName == nameof(MainViewModel.IsTreePanePinned))
         {
+            NotePaneIntent();
             ApplyTreePaneLayout(_vm.IsTreePanePinned);
         }
     }

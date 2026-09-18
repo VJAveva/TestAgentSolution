@@ -101,7 +101,7 @@ export default function BuildDetail() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard label="Total" value={build.totalTests} color="text-accent" />
         <KpiCard label="Passed" value={build.passedTests} color="text-acc-green" />
         <KpiCard label="Failed" value={build.failedTests} color="text-acc-red" />

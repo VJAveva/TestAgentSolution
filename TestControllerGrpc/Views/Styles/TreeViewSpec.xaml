@@ -44,7 +44,7 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style x:Key="TreePillText" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="9.5" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSize9}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="TextAlignment" Value="Center" />
@@ -61,7 +61,7 @@
     </Style>
     <Style x:Key="FilePillText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Cascadia Code, Consolas, monospace" />
-        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSize10}" />
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -155,7 +155,7 @@
             </Ellipse>
 
             <!-- HC glyph fallback (letter glyph visible only in High Contrast) -->
-            <TextBlock Grid.Column="0" FontSize="9" FontWeight="Bold"
+            <TextBlock Grid.Column="0" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
                        Foreground="{DynamicResource HcGlyphFg}"
                        VerticalAlignment="Center" Margin="0,0,5,0"
                        IsHitTestVisible="False">
@@ -268,7 +268,7 @@
                 </TextBlock.Text>
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                        <Setter Property="FontSize" Value="12.5" />
+                        <Setter Property="FontSize" Value="{DynamicResource FontSize12}" />
                         <Setter Property="Foreground" Value="{DynamicResource TextDefaultBrush}" />
                         <Style.Triggers>
                             <!-- Strong label for WatchList/WatchItem -->
@@ -616,7 +616,7 @@
                             </Style>
                         </mi:MaterialIcon.Style>
                     </mi:MaterialIcon>
-                    <TextBlock FontSize="10" VerticalAlignment="Center">
+                    <TextBlock FontSize="{DynamicResource FontSize9}" VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value="Assigned to you" />
@@ -648,7 +648,7 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <TextBlock FontSize="10.5" VerticalAlignment="Center">
+                <TextBlock FontSize="{DynamicResource FontSize10}" VerticalAlignment="Center">
                     <TextBlock.Text>
                         <MultiBinding Converter="{StaticResource PluralizeActions}">
                             <Binding Path="Children.Count" />

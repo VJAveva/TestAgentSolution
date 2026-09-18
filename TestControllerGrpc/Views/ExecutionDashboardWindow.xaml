@@ -4,9 +4,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:exec="clr-namespace:TestControllerGrpc.ViewModels.Execution"
     xmlns:controls="clr-namespace:TestControllerGrpc.Views.Controls"
+    xmlns:beh="clr-namespace:TestControllerGrpc.Views.Behaviors"
     Title="Execution Dashboard"
     Height="800" Width="1300" MinWidth="800" MinHeight="500"
     WindowStartupLocation="CenterScreen"
+    beh:LayoutBreakpoint.IsEnabled="True"
     Background="{DynamicResource DashboardBg}">
 
     <Grid>
@@ -19,46 +21,58 @@
         <!-- ?????????????????????????????????????????????????????????? -->
         <!-- Shared Header: Summary Stats Bar                          -->
         <!-- ?????????????????????????????????????????????????????????? -->
-        <UniformGrid Grid.Row="0" Rows="1" Margin="8">
-            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+        <UniformGrid Grid.Row="0" Margin="8">
+            <!-- Wraps to two rows rather than dropping figures the operator is watching. -->
+            <UniformGrid.Style>
+                <Style TargetType="UniformGrid">
+                    <Setter Property="Rows" Value="1" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Path=(beh:LayoutBreakpoint.Current), RelativeSource={RelativeSource Self}}"
+                                     Value="Narrow">
+                            <Setter Property="Rows" Value="2" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </UniformGrid.Style>
+            <Border Style="{DynamicResource KpiCardStyle}" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding ActiveSessionCount}" FontSize="18" FontWeight="Medium"
                                Foreground="{DynamicResource StatusRunningFg}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Active Sessions" FontSize="10"
+                    <TextBlock Text="Active Sessions" FontSize="{StaticResource FontSize9}"
                                Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Style="{DynamicResource KpiCardStyle}" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding LockedAgentCount}" FontSize="18" FontWeight="Medium"
                                Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Agents Locked" FontSize="10"
+                    <TextBlock Text="Agents Locked" FontSize="{StaticResource FontSize9}"
                                Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Style="{DynamicResource KpiCardStyle}" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding TotalPassedActions}" FontSize="18" FontWeight="Medium"
                                Foreground="{DynamicResource StatusSuccessFg}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Actions Passed" FontSize="10"
+                    <TextBlock Text="Actions Passed" FontSize="{StaticResource FontSize9}"
                                Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Style="{DynamicResource KpiCardStyle}" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock Text="{Binding TotalFailedActions}" FontSize="18" FontWeight="Medium"
                                Foreground="{DynamicResource StatusFailedFg}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Actions Failed" FontSize="10"
+                    <TextBlock Text="Actions Failed" FontSize="{StaticResource FontSize9}"
                                Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource CardBg}" CornerRadius="4" Padding="8" Margin="2">
+            <Border Style="{DynamicResource KpiCardStyle}" Padding="8" Margin="2">
                 <StackPanel HorizontalAlignment="Center">
                     <TextBlock FontSize="18" FontWeight="Medium"
                                Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center">
                         <Run Text="{Binding OverallProgressPercent, Mode=OneWay}"/><Run Text="%"/>
                     </TextBlock>
-                    <TextBlock Text="Overall Progress" FontSize="10"
+                    <TextBlock Text="Overall Progress" FontSize="{StaticResource FontSize9}"
                                Foreground="{DynamicResource TextDim}" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
@@ -74,7 +88,7 @@
                 <!-- Dark-themed tab header style -->
                 <Style TargetType="TabItem">
                     <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
-                    <Setter Property="FontSize" Value="12"/>
+                    <Setter Property="FontSize" Value="{StaticResource FontSize11}"/>
                     <Setter Property="FontWeight" Value="Medium"/>
                     <Setter Property="Padding" Value="14,6"/>
                     <Setter Property="Background" Value="Transparent"/>
@@ -123,11 +137,11 @@
                         <DockPanel>
                             <!-- Status RadioButtons + Demo button (right side) -->
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                <Button Content="&#x1F504; Reload" FontSize="10" Padding="8,3" Margin="0,0,6,0"
+                                <Button Content="&#x1F504; Reload" FontSize="{StaticResource FontSize9}" Padding="8,3" Margin="0,0,6,0"
                                         Foreground="{StaticResource AccentBlue}"
                                         Command="{Binding ReloadSnapshotsCommand}"
                                         ToolTip="Reload pipeline snapshots from disk (crash recovery)"/>
-                                <Button Content="&#x25B6; Demo" FontSize="10" Padding="8,3" Margin="0,0,10,0"
+                                <Button Content="&#x25B6; Demo" FontSize="{StaticResource FontSize9}" Padding="8,3" Margin="0,0,10,0"
                                         Foreground="{StaticResource AccentBlue}"
                                         Command="{Binding LoadDemoDataCommand}"
                                         ToolTip="Load demo data to test the dashboard UI"/>
@@ -149,10 +163,10 @@
                             </StackPanel>
 
                             <!-- Free-text filter (fills remaining space) -->
-                            <TextBlock Text="Filter:" FontSize="11"
+                            <TextBlock Text="Filter:" FontSize="{StaticResource FontSize10}"
                                        Foreground="{StaticResource SpecTextSecondary}"
                                        VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="PipelineFilterBox" FontSize="11" MinWidth="220"
+                            <TextBox x:Name="PipelineFilterBox" AutomationProperties.Name="Filter pipelines" FontSize="{StaticResource FontSize10}" MinWidth="220"
                                      Background="{StaticResource DashBgCard}"
                                      Foreground="{StaticResource SpecTextPrimary}"
                                      BorderBrush="{StaticResource BorderSubtle}" Padding="6,3"
@@ -205,7 +219,7 @@
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <!-- Expand arrow -->
-                                                        <TextBlock FontSize="9" Foreground="{DynamicResource TextDim}"
+                                                        <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextDim}"
                                                                    Margin="0,0,6,0" VerticalAlignment="Center"
                                                                    RenderTransformOrigin="0.5,0.5">
                                                             <TextBlock.Style>
@@ -237,7 +251,7 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Border.Style>
-                                                            <TextBlock Text="{Binding StatusBadge}" FontSize="10" FontWeight="Medium">
+                                                            <TextBlock Text="{Binding StatusBadge}" FontSize="{StaticResource FontSize9}" FontWeight="Medium">
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
                                                                         <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
@@ -257,11 +271,11 @@
                                                             </TextBlock>
                                                         </Border>
                                                         <!-- Pipeline name -->
-                                                        <TextBlock Text="{Binding WatchItemTag}" FontSize="14" FontWeight="Medium"
+                                                        <TextBlock Text="{Binding WatchItemTag}" FontSize="{StaticResource FontSize14}" FontWeight="Medium"
                                                                    Foreground="{DynamicResource TextPrimary}"
                                                                    VerticalAlignment="Center"/>
                                                         <!-- Build number -->
-                                                        <TextBlock Text="{Binding BuildNumber}" FontSize="11"
+                                                        <TextBlock Text="{Binding BuildNumber}" FontSize="{StaticResource FontSize10}"
                                                                    FontFamily="Consolas" Foreground="{DynamicResource TextDim}"
                                                                    Margin="8,0,0,0" VerticalAlignment="Center"
                                                                    Visibility="{Binding BuildNumber, Converter={StaticResource NullToCollapsed}}"/>
@@ -272,27 +286,27 @@
                                                                 Padding="4,1" Margin="4,0"
                                                                 ToolTip="{Binding OwnerTooltip}">
                                                             <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="{Binding RoleIcon}" FontSize="9"
+                                                                <TextBlock Text="{Binding RoleIcon}" FontSize="{StaticResource FontSize9}"
                                                                            VerticalAlignment="Center" Margin="0,0,3,0"
                                                                            Visibility="{Binding HasRole, Converter={StaticResource BoolToVis}}"/>
-                                                                <TextBlock Text="{Binding OwnerLabel}" FontSize="9"
+                                                                <TextBlock Text="{Binding OwnerLabel}" FontSize="{StaticResource FontSize9}"
                                                                            FontFamily="Consolas"
                                                                            Foreground="{DynamicResource TextSecondary}"/>
-                                                                <TextBlock Text="{Binding RoleLabel}" FontSize="9"
+                                                                <TextBlock Text="{Binding RoleLabel}" FontSize="{StaticResource FontSize9}"
                                                                            Margin="3,0,0,0"
                                                                            Foreground="{DynamicResource TextDim}"
                                                                            Visibility="{Binding HasRole, Converter={StaticResource BoolToVis}}"/>
                                                             </StackPanel>
                                                         </Border>
-                                                        <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                                                        <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="{StaticResource FontSize10}"
                                                                    Margin="8,0" VerticalAlignment="Center">
                                                             <Run Text="{Binding Agents.Count, Mode=OneWay}"/>
                                                             <Run Text="agents"/>
                                                         </TextBlock>
-                                                        <TextBlock Text="{Binding Elapsed}" FontFamily="Consolas" FontSize="11"
+                                                        <TextBlock Text="{Binding Elapsed}" FontFamily="Consolas" FontSize="{StaticResource FontSize10}"
                                                                    Foreground="{DynamicResource TextSecondary}"
                                                                    VerticalAlignment="Center" Margin="8,0"/>
-                                                        <TextBlock FontSize="11" FontWeight="Medium"
+                                                        <TextBlock FontSize="{StaticResource FontSize10}" FontWeight="Medium"
                                                                    Foreground="{DynamicResource TextPrimary}"
                                                                    VerticalAlignment="Center" Margin="8,0">
                                                             <Run Text="{Binding ProgressPercent, Mode=OneWay}"/><Run Text="%"/>
@@ -301,7 +315,7 @@
                                                                 Command="{Binding DataContext.CancelSessionCommand,
                                                                     RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                 CommandParameter="{Binding SessionId}"
-                                                                FontSize="10" Padding="6,2" Margin="8,0,0,0"
+                                                                FontSize="{StaticResource FontSize9}" Padding="6,2" Margin="8,0,0,0"
                                                                 Foreground="{DynamicResource StatusFailedFg}"
                                                                 Visibility="{Binding Status, Converter={StaticResource RunningToVisible}}"/>
                                                     </StackPanel>
@@ -328,9 +342,9 @@
                                                                         MouseLeftButtonUp="AgentName_Click">
                                                                     <StackPanel>
                                                                         <TextBlock Text="{Binding AgentName}"
-                                                                                   FontFamily="Consolas" FontSize="11" FontWeight="Medium"
+                                                                                   FontFamily="Consolas" FontSize="{StaticResource FontSize10}" FontWeight="Medium"
                                                                                    Foreground="{DynamicResource TextPrimary}"/>
-                                                                        <TextBlock Text="{Binding StatusText}" FontSize="9" Margin="0,2,0,0">
+                                                                        <TextBlock Text="{Binding StatusText}" FontSize="{StaticResource FontSize9}" Margin="0,2,0,0">
                                                                             <TextBlock.Style>
                                                                                 <Style TargetType="TextBlock">
                                                                                     <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
@@ -406,7 +420,7 @@
                                                                                             </Style>
                                                                                         </Border.Style>
                                                                                         <StackPanel Orientation="Horizontal">
-                                                                                            <TextBlock Text="{Binding StatusIcon}" FontSize="9" Margin="0,0,3,0"
+                                                                                            <TextBlock Text="{Binding StatusIcon}" FontSize="{StaticResource FontSize9}" Margin="0,0,3,0"
                                                                                                        VerticalAlignment="Center">
                                                                                                 <TextBlock.Style>
                                                                                                     <Style TargetType="TextBlock">
@@ -425,7 +439,7 @@
                                                                                                     </Style>
                                                                                                 </TextBlock.Style>
                                                                                             </TextBlock>
-                                                                                            <TextBlock Text="{Binding DisplayLabel}" FontSize="11"
+                                                                                            <TextBlock Text="{Binding DisplayLabel}" FontSize="{StaticResource FontSize10}"
                                                                                                        VerticalAlignment="Center"
                                                                                                        TextTrimming="CharacterEllipsis" MaxWidth="180">
                                                                                                 <TextBlock.Style>
@@ -448,7 +462,7 @@
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                     <!-- Arrow separator between chips -->
-                                                                                    <TextBlock Text="&#x2192;" FontSize="9" Margin="4,0"
+                                                                                    <TextBlock Text="&#x2192;" FontSize="{StaticResource FontSize9}" Margin="4,0"
                                                                                                Foreground="{DynamicResource TextDim}"
                                                                                                VerticalAlignment="Center"/>
                                                                                 </StackPanel>
@@ -496,7 +510,7 @@
                                         <Border Grid.Column="0" Background="{DynamicResource AgentColumnBg}"
                                                 BorderBrush="{DynamicResource RowBorder}" BorderThickness="0,0,0.5,0"
                                                 Padding="8,0">
-                                            <TextBlock Text="{Binding AgentName}" FontFamily="Consolas" FontSize="11"
+                                            <TextBlock Text="{Binding AgentName}" FontFamily="Consolas" FontSize="{StaticResource FontSize10}"
                                                        FontWeight="Medium" Foreground="{DynamicResource TextPrimary}"
                                                        VerticalAlignment="Center"/>
                                         </Border>
@@ -526,10 +540,10 @@
                             BorderBrush="{DynamicResource RowBorder}" BorderThickness="0,0,0,0.5">
                         <WrapPanel>
                             <!-- Session filter -->
-                            <TextBlock Text="Session:" FontSize="11"
+                            <TextBlock Text="Session:" FontSize="{StaticResource FontSize10}"
                                        Foreground="{DynamicResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <ComboBox x:Name="SessionFilter" MinWidth="140" FontSize="11"
+                            <ComboBox x:Name="SessionFilter" AutomationProperties.Name="Filter by session" MinWidth="140" FontSize="{StaticResource FontSize10}"
                                       Background="{DynamicResource CardBg}"
                                       Foreground="{DynamicResource TextPrimary}"
                                       BorderBrush="{DynamicResource CardBorder}"
@@ -538,10 +552,10 @@
                             </ComboBox>
 
                             <!-- Severity filter -->
-                            <TextBlock Text="Level:" FontSize="11"
+                            <TextBlock Text="Level:" FontSize="{StaticResource FontSize10}"
                                        Foreground="{DynamicResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="12,0,4,0"/>
-                            <ComboBox x:Name="SeverityFilter" MinWidth="90" FontSize="11"
+                            <ComboBox x:Name="SeverityFilter" AutomationProperties.Name="Filter by severity" MinWidth="90" FontSize="{StaticResource FontSize10}"
                                       Background="{DynamicResource CardBg}"
                                       Foreground="{DynamicResource TextPrimary}"
                                       BorderBrush="{DynamicResource CardBorder}"
@@ -554,7 +568,7 @@
                             </ComboBox>
 
                             <!-- Agent toggle buttons -->
-                            <TextBlock Text="Agents:" FontSize="11"
+                            <TextBlock Text="Agents:" FontSize="{StaticResource FontSize10}"
                                        Foreground="{DynamicResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="12,0,4,0"/>
                             <ItemsControl x:Name="AgentTogglePanel">
@@ -566,24 +580,24 @@
                             </ItemsControl>
 
                             <!-- Search box -->
-                            <TextBox x:Name="LogSearchBox" MinWidth="150" FontSize="11" Margin="12,0,0,0"
+                            <TextBox x:Name="LogSearchBox" AutomationProperties.Name="Search log" MinWidth="150" FontSize="{StaticResource FontSize10}" Margin="12,0,0,0"
                                      Background="{DynamicResource CardBg}"
                                      Foreground="{DynamicResource TextPrimary}"
                                      BorderBrush="{DynamicResource CardBorder}" Padding="6,3"
                                      TextChanged="LogSearch_TextChanged"/>
 
                             <!-- Entry count + clear -->
-                            <TextBlock FontSize="10" Foreground="{DynamicResource TextDim}"
+                            <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextDim}"
                                        VerticalAlignment="Center" Margin="8,0">
                                 <Run Text="{Binding LogEntries.Count, Mode=OneWay}"/>
                                 <Run Text="entries"/>
                             </TextBlock>
                             <Button Content="Clear filter"
                                     Command="{Binding ClearSelectionCommand}"
-                                    FontSize="10" Margin="4,0" Padding="6,2"
+                                    FontSize="{StaticResource FontSize9}" Margin="4,0" Padding="6,2"
                                     Visibility="{Binding SelectedSessionId, Converter={StaticResource NullToCollapsed}}"/>
                             <Button Content="Clear" Command="{Binding ClearLogsCommand}"
-                                    FontSize="10" Margin="4,0" Padding="6,2"/>
+                                    FontSize="{StaticResource FontSize9}" Margin="4,0" Padding="6,2"/>
                         </WrapPanel>
                     </Border>
 
@@ -604,22 +618,22 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{Binding Timestamp}"
-                                               FontFamily="Consolas" FontSize="10"
+                                               FontFamily="Consolas" FontSize="{StaticResource FontSize9}"
                                                Foreground="{DynamicResource TextDim}"/>
                                     <Border Grid.Column="1" CornerRadius="2" Padding="3,0" Margin="2,1"
                                             Background="{DynamicResource StatusIdleBg}"
                                             HorizontalAlignment="Left" Cursor="Hand"
                                             MouseLeftButtonUp="LogSessionBadge_Click">
                                         <TextBlock Text="{Binding SessionName}"
-                                                   FontFamily="Consolas" FontSize="9" FontWeight="Medium"
+                                                   FontFamily="Consolas" FontSize="{StaticResource FontSize9}" FontWeight="Medium"
                                                    Foreground="{DynamicResource TextSecondary}"/>
                                     </Border>
                                     <TextBlock Grid.Column="2" Text="{Binding AgentName}"
-                                               FontFamily="Consolas" FontSize="10"
+                                               FontFamily="Consolas" FontSize="{StaticResource FontSize9}"
                                                Foreground="{DynamicResource TextSecondary}"
                                                Cursor="Hand" MouseLeftButtonUp="LogAgentName_Click"/>
                                     <TextBlock Grid.Column="3" Text="{Binding Message}"
-                                               FontFamily="Consolas" FontSize="10"
+                                               FontFamily="Consolas" FontSize="{StaticResource FontSize9}"
                                                TextTrimming="CharacterEllipsis">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
@@ -654,14 +668,14 @@
                 Padding="12,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Ellipse Style="{StaticResource ConnectionDotStyle}"/>
-                <TextBlock VerticalAlignment="Center" FontSize="11"
+                <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize10}"
                            Foreground="{StaticResource SpecTextSecondary}">
                     <Run Text="{Binding ConnectionStatus, Mode=OneWay}"/>
                     <Run Text=" - "/>
                     <Run Text="ControllerService"/>
                 </TextBlock>
                 <Border Width="1" Background="{StaticResource BorderSubtle}" Margin="14,2"/>
-                <TextBlock VerticalAlignment="Center" FontSize="11"
+                <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize10}"
                            Foreground="{StaticResource SpecTextMuted}">
                     <Run Text="{Binding Sessions.Count, Mode=OneWay}"/>
                     <Run Text="sessions |"/>

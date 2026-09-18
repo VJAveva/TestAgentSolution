@@ -1,8 +1,15 @@
-<UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.FleetView"
+﻿<UserControl x:Class="TestControllerGrpc.Views.AgentWorkspace.FleetView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
-    xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace">
+    xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace"
+    xmlns:conv="clr-namespace:TestControllerGrpc.ViewModels"
+    xmlns:beh="clr-namespace:TestControllerGrpc.Views.Behaviors"
+    beh:LayoutBreakpoint.IsEnabled="True">
+
+    <UserControl.Resources>
+        <conv:StringEmptyToVisibilityConverter x:Key="EmptyVis" />
+    </UserControl.Resources>
 
     <DockPanel>
         <!-- Summary bar -->
@@ -20,7 +27,7 @@
                             <Border Margin="3,0,0,0" CornerRadius="7" Padding="4,0" MinWidth="14"
                                     Background="{DynamicResource AccRed}" VerticalAlignment="Center"
                                     Visibility="{Binding Updates.HasUnread, Converter={StaticResource BoolVis}}">
-                                <TextBlock Text="{Binding Updates.UnreadCount}" FontSize="9" FontWeight="Bold"
+                                <TextBlock Text="{Binding Updates.UnreadCount}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
                                            HorizontalAlignment="Center" Foreground="{DynamicResource TreeBadgeFg}"/>
                             </Border>
                         </StackPanel>
@@ -32,15 +39,15 @@
                                 BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
                             <DockPanel>
                                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                    <Button DockPanel.Dock="Right" Content="Mark all read" FontSize="9"
+                                    <Button DockPanel.Dock="Right" Content="Mark all read" FontSize="{StaticResource FontSize9}"
                                             Padding="6,2" Cursor="Hand"
                                             Background="Transparent" Foreground="{DynamicResource Accent}"
                                             BorderThickness="0"
                                             Command="{Binding Updates.MarkAllReadCommand}"/>
-                                    <TextBlock Text="Notifications" FontSize="11" FontWeight="SemiBold"
+                                    <TextBlock Text="Notifications" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
                                                VerticalAlignment="Center" Foreground="{DynamicResource TextP}"/>
                                 </DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="Nothing to report." FontSize="10"
+                                <TextBlock DockPanel.Dock="Top" Text="Nothing to report." FontSize="{StaticResource FontSize9}"
                                            Foreground="{DynamicResource TextS}"
                                            Visibility="{Binding Updates.HasUnread, Converter={StaticResource InvBoolVis}}"/>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -50,16 +57,16 @@
                                                 <Border Padding="6,4" Margin="0,0,0,3" CornerRadius="3"
                                                         Background="{DynamicResource BgCard}">
                                                     <StackPanel>
-                                                        <TextBlock FontSize="10" FontWeight="SemiBold"
+                                                        <TextBlock FontSize="{StaticResource FontSize9}" FontWeight="SemiBold"
                                                                    Foreground="{DynamicResource TextP}">
                                                             <Run Text="{Binding NodeId, Mode=OneWay}"/>
                                                             <Run Text=" — "/>
                                                             <Run Text="{Binding Title, Mode=OneWay}"/>
                                                         </TextBlock>
-                                                        <TextBlock Text="{Binding Description}" FontSize="9"
+                                                        <TextBlock Text="{Binding Description}" FontSize="{StaticResource FontSize9}"
                                                                    TextWrapping="Wrap"
                                                                    Foreground="{DynamicResource TextS}"/>
-                                                        <TextBlock FontSize="9" Foreground="{DynamicResource TextS}">
+                                                        <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}">
                                                             <Run Text="{Binding SourceText, Mode=OneWay}"/>
                                                             <Run Text=" · "/>
                                                             <Run Text="{Binding RelativeTime, Mode=OneWay}"/>
@@ -76,7 +83,7 @@
                 </Grid>
                 <!-- Register Agent button -->
                 <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="10,4"
-                        FontSize="10" Cursor="Hand"
+                        FontSize="{StaticResource FontSize9}" Cursor="Hand"
                         Command="{Binding RequestRegisterAgentCommand}"
                         Background="{DynamicResource AccentBtnBg}"
                         Foreground="{DynamicResource Accent}"
@@ -85,41 +92,74 @@
                     <TextBlock Text="+ Register Agent" FontWeight="SemiBold"/>
                 </Button>
                 <!-- Filter textbox -->
-                <TextBox DockPanel.Dock="Right" Width="140" Margin="8,0,0,0"
-                         Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
-                         Background="{DynamicResource BgCard}"
-                         Foreground="{DynamicResource TextP}"
-                         BorderBrush="{DynamicResource Bdr}"
-                         FontSize="10" Padding="4,3" VerticalContentAlignment="Center"/>
-                <!-- Stats with utilization bar -->
+                <Grid DockPanel.Dock="Right" Width="140" Margin="8,0,0,0">
+                    <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                             Background="{DynamicResource BgCard}"
+                             Foreground="{DynamicResource TextP}"
+                             BorderBrush="{DynamicResource Bdr}"
+                             FontSize="{StaticResource FontSize9}" Padding="4,3" VerticalContentAlignment="Center" AutomationProperties.Name="Filter agents" />
+                    <TextBlock Text="Filter agents..." IsHitTestVisible="False"
+                               FontSize="{StaticResource FontSize9}" Margin="7,0,0,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource PlaceholderFg}"
+                               Visibility="{Binding FilterText, Converter={StaticResource EmptyVis}}" />
+                </Grid>
+                <!-- Stats: KPI cards per the UI kit's "Agents (Fleet)" view -->
                 <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextS}">
-                        <Run Text="{Binding TotalCount, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"/>
-                        <Run Text=" agents ·"/>
-                        <Run Text="{Binding BusyCount, Mode=OneWay}" Foreground="{DynamicResource Accent}"/>
-                        <Run Text=" busy ·"/>
-                        <Run Text="{Binding FreeCount, Mode=OneWay}" Foreground="{DynamicResource AccGreen}"/>
-                        <Run Text=" free ·"/>
-                        <Run Text="{Binding FailedCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
-                        <Run Text=" failed ·"/>
-                        <Run Text="{Binding OfflineCount, Mode=OneWay}" Foreground="{DynamicResource AccRed}"/>
-                        <Run Text=" offline"/>
-                    </TextBlock>
-                    <TextBlock VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0"
+                    <Border Style="{DynamicResource KpiCardStyle}"
+                            ToolTip="Total registered agents. Bar shows fleet utilisation (busy/total)."
+                            AutomationProperties.AutomationId="Fleet.Kpi.Agents">
+                        <StackPanel>
+                            <TextBlock Style="{DynamicResource KpiValueStyle}" Text="{Binding TotalCount, Mode=OneWay}"/>
+                            <TextBlock Style="{DynamicResource KpiLabelStyle}" Text="AGENTS"/>
+                            <!-- Track stays 80px wide: FleetVM scales UtilizationBarWidth against that maximum. -->
+                            <Border Width="80" Height="3" CornerRadius="2" Margin="0,4,0,1"
+                                    HorizontalAlignment="Left" Background="{DynamicResource Bdr}"
+                                    AutomationProperties.AutomationId="Fleet.UtilizationBar">
+                                <Border HorizontalAlignment="Left" Height="3" CornerRadius="2"
+                                        Background="{DynamicResource Accent}"
+                                        Width="{Binding UtilizationBarWidth, Mode=OneWay}"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{DynamicResource KpiCardStyle}" ToolTip="Agents currently executing"
+                            AutomationProperties.AutomationId="Fleet.Kpi.Busy">
+                        <StackPanel>
+                            <TextBlock Style="{DynamicResource KpiValueStyle}" Text="{Binding BusyCount, Mode=OneWay}"
+                                       Foreground="{DynamicResource Accent}"/>
+                            <TextBlock Style="{DynamicResource KpiLabelStyle}" Text="BUSY"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{DynamicResource KpiCardStyle}" ToolTip="Agents idle and available"
+                            AutomationProperties.AutomationId="Fleet.Kpi.Free">
+                        <StackPanel>
+                            <TextBlock Style="{DynamicResource KpiValueStyle}" Text="{Binding FreeCount, Mode=OneWay}"
+                                       Foreground="{DynamicResource AccGreen}"/>
+                            <TextBlock Style="{DynamicResource KpiLabelStyle}" Text="FREE"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{DynamicResource KpiCardSecondaryStyle}" ToolTip="Agents whose last run failed"
+                            AutomationProperties.AutomationId="Fleet.Kpi.Failed">
+                        <StackPanel>
+                            <TextBlock Style="{DynamicResource KpiValueStyle}" Text="{Binding FailedCount, Mode=OneWay}"
+                                       Foreground="{DynamicResource AccRed}"/>
+                            <TextBlock Style="{DynamicResource KpiLabelStyle}" Text="FAILED"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{DynamicResource KpiCardSecondaryStyle}" ToolTip="Agents not reporting a heartbeat"
+                            AutomationProperties.AutomationId="Fleet.Kpi.Offline">
+                        <StackPanel>
+                            <TextBlock Style="{DynamicResource KpiValueStyle}" Text="{Binding OfflineCount, Mode=OneWay}"
+                                       Foreground="{DynamicResource AccRed}"/>
+                            <TextBlock Style="{DynamicResource KpiLabelStyle}" Text="OFFLINE"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize10}" Margin="6,0,0,0"
                                Foreground="{DynamicResource StatusMaintenanceFg}"
                                Visibility="{Binding HasReverting, Converter={StaticResource BoolVis}}">
                         <Run Text="·"/>
                         <Run Text="{Binding RevertingCount, Mode=OneWay}" FontWeight="SemiBold"/>
                         <Run Text=" reverting"/>
                     </TextBlock>
-                    <!-- Fleet utilization bar -->
-                    <Border Width="80" Height="4" CornerRadius="2" Margin="10,0,0,0"
-                            Background="{DynamicResource Bdr}" VerticalAlignment="Center"
-                            ToolTip="Fleet utilization (busy/total)">
-                        <Border HorizontalAlignment="Left" Height="4" CornerRadius="2"
-                                Background="{DynamicResource Accent}"
-                                Width="{Binding UtilizationBarWidth, Mode=OneWay}"/>
-                    </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -143,24 +183,24 @@
                             </Style>
                         </Border.Style>
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="6,1" FontSize="11"
+                            <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="6,1" FontSize="{StaticResource FontSize10}"
                                     Margin="6,0,0,0" Cursor="Hand" VerticalAlignment="Center"
                                     Background="Transparent" Foreground="{DynamicResource TextS}"
                                     BorderThickness="0"
-                                    ToolTip="Dismiss. Returns if the affected agents change."
+                                    AutomationProperties.Name="Dismiss. Returns if the affected agents change." ToolTip="Dismiss. Returns if the affected agents change."
                                     Command="{Binding DataContext.Updates.DismissBannerCommand,
                                               RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                     CommandParameter="{Binding}"/>
-                            <Button DockPanel.Dock="Right" Content="Review" Padding="10,3" FontSize="10"
+                            <Button DockPanel.Dock="Right" Content="Review" Padding="10,3" FontSize="{StaticResource FontSize9}"
                                     Cursor="Hand" VerticalAlignment="Center"
                                     Background="Transparent" Foreground="{DynamicResource TextP}"
                                     BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
                                     Command="{Binding DataContext.Updates.ReviewCommand,
                                               RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
                             <StackPanel>
-                                <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding Title}" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
                                            Foreground="{DynamicResource TextP}"/>
-                                <TextBlock Text="{Binding Detail}" FontSize="10" TextWrapping="Wrap"
+                                <TextBlock Text="{Binding Detail}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
                                            Foreground="{DynamicResource TextS}"/>
                             </StackPanel>
                         </DockPanel>
@@ -174,7 +214,7 @@
             <!-- Empty state -->
             <TextBlock Text="No agents registered"
                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                       FontSize="12" Foreground="{DynamicResource TextS}"
+                       FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextS}"
                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}"/>
 
             <!-- Grouped list (outer uses VirtualizingStackPanel for scalability) -->
@@ -233,16 +273,16 @@
                                         <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                     VerticalAlignment="Center"
                                                     ToolTip="{Binding OwnerTooltip}">
-                                            <TextBlock Text="{Binding Title}" FontSize="12"
+                                            <TextBlock Text="{Binding Title}" FontSize="{StaticResource FontSize11}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextP}"/>
-                                            <TextBlock Text="{Binding OwnerRoleIcon}" FontSize="10"
+                                            <TextBlock Text="{Binding OwnerRoleIcon}" FontSize="{StaticResource FontSize9}"
                                                        Margin="6,0,0,0" VerticalAlignment="Center"
                                                        Visibility="{Binding HasOwnerRole, Converter={StaticResource BoolVis}}"/>
-                                            <TextBlock Text="{Binding OwnerDisplay}" FontSize="10"
+                                            <TextBlock Text="{Binding OwnerDisplay}" FontSize="{StaticResource FontSize9}"
                                                        Margin="3,0,0,0"
                                                        Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding OwnerRoleLabel}" FontSize="10"
+                                            <TextBlock Text="{Binding OwnerRoleLabel}" FontSize="{StaticResource FontSize9}"
                                                        Margin="4,0,0,0"
                                                        Foreground="{DynamicResource TextS}"
                                                        Visibility="{Binding HasOwnerRole, Converter={StaticResource BoolVis}}"/>
@@ -250,7 +290,7 @@
 
                                         <!-- Agent count -->
                                         <TextBlock Grid.Column="2"
-                                                   Text="{Binding Count}" FontSize="11"
+                                                   Text="{Binding Count}" FontSize="{StaticResource FontSize10}"
                                                    FontWeight="SemiBold"
                                                    Foreground="{DynamicResource TextS}"
                                                    VerticalAlignment="Center"/>
@@ -431,7 +471,7 @@
                                                                 </Style>
                                                             </TextBlock.Style>
                                                         </TextBlock>
-                                                        <TextBlock Text="{Binding AgentName}" FontSize="11"
+                                                        <TextBlock Text="{Binding AgentName}" FontSize="{StaticResource FontSize10}"
                                                                    FontWeight="SemiBold" FontFamily="Consolas"
                                                                    Foreground="{DynamicResource TextP}"
                                                                    TextTrimming="CharacterEllipsis"
@@ -456,7 +496,7 @@
                                                                 <mi:MaterialIcon Kind="ShieldAlertOutline" Width="9" Height="9"
                                                                                  VerticalAlignment="Center" Margin="0,0,3,0"
                                                                                  Foreground="{DynamicResource TextS}"/>
-                                                                <TextBlock Text="{Binding UpdateBadgeText}" FontSize="9"
+                                                                <TextBlock Text="{Binding UpdateBadgeText}" FontSize="{StaticResource FontSize9}"
                                                                            VerticalAlignment="Center"
                                                                            Foreground="{DynamicResource TextP}"/>
                                                             </StackPanel>
@@ -477,7 +517,7 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Border.Style>
-                                                            <TextBlock FontSize="9"
+                                                            <TextBlock FontSize="{StaticResource FontSize9}"
                                                                        Foreground="{DynamicResource Accent}"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        MaxWidth="160"
@@ -486,7 +526,7 @@
                                                     </StackPanel>
                                                     <!-- Row 2: status detail -->
                                                     <TextBlock Grid.Row="1" Text="{Binding StatusDetail}"
-                                                               FontSize="9" FontFamily="Consolas"
+                                                               FontSize="{StaticResource FontSize9}" FontFamily="Consolas"
                                                                Foreground="{DynamicResource TextS}"
                                                                VerticalAlignment="Bottom"
                                                                TextTrimming="CharacterEllipsis"

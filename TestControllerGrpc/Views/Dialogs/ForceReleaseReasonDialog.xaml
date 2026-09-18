@@ -1,13 +1,13 @@
-<Window x:Class="TestControllerGrpc.Views.Dialogs.ForceReleaseReasonDialog"
+﻿<Window x:Class="TestControllerGrpc.Views.Dialogs.ForceReleaseReasonDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
         Title="Take Over Pipeline"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" SizeToContent="Height" Width="460"
-        Background="{DynamicResource WindowBgBrush}">
+        Background="{DynamicResource WindowBg}">
     <!--
-        Force-Release Reason Dialog — Mockup 9.
+        Force-Release Reason Dialog â€” Mockup 9.
         Deliberately high-friction: reason + affirmation required.
     -->
     <Grid Margin="24">
@@ -23,12 +23,12 @@
 
         <!-- Warning header -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-            <mi:MaterialIcon Kind="Alert" Width="24" Height="24" Foreground="#FFF0B070"
+            <mi:MaterialIcon Kind="Alert" Width="24" Height="24" Foreground="{DynamicResource CEmailBrush}"
                              VerticalAlignment="Center" />
             <StackPanel Margin="8,0,0,0">
-                <TextBlock Text="Take over and revert" FontSize="15" FontWeight="SemiBold"
+                <TextBlock Text="Take over and revert" FontSize="{StaticResource FontSize15}" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextDefaultBrush}" />
-                <TextBlock Text="This action cannot be undone" FontSize="11"
+                <TextBlock Text="This action cannot be undone" FontSize="{StaticResource FontSize10}"
                            Foreground="{DynamicResource TextDimBrush}" Margin="0,2,0,0" />
             </StackPanel>
         </StackPanel>
@@ -37,13 +37,13 @@
         <Border Grid.Row="1" CornerRadius="4" Padding="10" Margin="0,8,0,12"
                 Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1">
             <StackPanel>
-                <TextBlock Text="This action will:" FontSize="11" FontWeight="SemiBold"
-                           Foreground="#FFF0B070" Margin="0,0,0,4" />
-                <TextBlock FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
-                    <Run Text="• Cancel the current run and revert any partial changes" /><LineBreak />
-                    <Run Text="• Notify the current owner of the takeover" /><LineBreak />
-                    <Run Text="• Record this action in the audit log with your reason" /><LineBreak />
-                    <Run Text="• Acquire the pipeline lock for your session" />
+                <TextBlock Text="This action will:" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource CEmailBrush}" Margin="0,0,0,4" />
+                <TextBlock FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
+                    <Run Text="â€¢ Cancel the current run and revert any partial changes" /><LineBreak />
+                    <Run Text="â€¢ Notify the current owner of the takeover" /><LineBreak />
+                    <Run Text="â€¢ Record this action in the audit log with your reason" /><LineBreak />
+                    <Run Text="â€¢ Acquire the pipeline lock for your session" />
                 </TextBlock>
             </StackPanel>
         </Border>
@@ -52,17 +52,17 @@
         <TextBox Grid.Row="2" MinHeight="80" MaxHeight="140"
                  TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
                  Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}"
-                 FontSize="12" Padding="8"
-                 Background="{DynamicResource InputBgBrush}"
+                 FontSize="{StaticResource FontSize11}" Padding="8"
+                 Background="{DynamicResource FieldBg}"
                  Foreground="{DynamicResource TextDefaultBrush}"
-                 BorderBrush="{DynamicResource BorderDimBrush}">
+                 BorderBrush="{DynamicResource Bdr}" AutomationProperties.Name="Reason" >
             <TextBox.ToolTip>
                 <TextBlock Text="Explain why you are taking over this pipeline..." />
             </TextBox.ToolTip>
         </TextBox>
 
         <!-- Character counter -->
-        <TextBlock Grid.Row="3" Margin="0,4,0,8" FontSize="10.5" HorizontalAlignment="Right"
+        <TextBlock Grid.Row="3" Margin="0,4,0,8" FontSize="{StaticResource FontSize10}" HorizontalAlignment="Right"
                    Text="{Binding CharacterCounter, FallbackValue='0 / 10 minimum'}">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
@@ -79,7 +79,7 @@
         <!-- Affirmation checkbox -->
         <CheckBox Grid.Row="4" Margin="0,0,0,12"
                   IsChecked="{Binding IsAffirmationChecked}"
-                  Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12">
+                  Foreground="{DynamicResource TextSecondaryBrush}" FontSize="{StaticResource FontSize11}">
             <TextBlock Text="{Binding AffirmationLabel, FallbackValue='I confirm this action'}"
                        TextWrapping="Wrap" />
         </CheckBox>
@@ -87,7 +87,7 @@
         <!-- Error message -->
         <TextBlock Grid.Row="5" Margin="0,0,0,8"
                    Text="{Binding ErrorMessage, FallbackValue=''}"
-                   Foreground="{DynamicResource SFailedBrush}" FontSize="11"
+                   Foreground="{DynamicResource SFailedBrush}" FontSize="{StaticResource FontSize10}"
                    Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}, FallbackValue=Collapsed}"
                    TextWrapping="Wrap" />
 

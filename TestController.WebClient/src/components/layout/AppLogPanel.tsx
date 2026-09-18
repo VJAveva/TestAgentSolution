@@ -83,7 +83,7 @@ export default function AppLogPanel() {
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-14 right-4 z-[9998] w-[600px] max-h-[70vh] flex flex-col
+        <div className="fixed bottom-14 right-4 z-[9998] w-[600px] max-w-[calc(100vw-2rem)] max-h-[70vh] flex flex-col
                         bg-bg-panel border border-bdr rounded-lg shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-bdr bg-bg-ribbon">

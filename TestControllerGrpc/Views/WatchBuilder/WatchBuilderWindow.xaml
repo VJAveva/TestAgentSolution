@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.WatchBuilder.WatchBuilderWindow"
+﻿<Window x:Class="TestControllerGrpc.Views.WatchBuilder.WatchBuilderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
@@ -36,7 +36,7 @@
 
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize10}" />
             <Setter Property="Margin" Value="0,8,0,2" />
         </Style>
         <Style TargetType="TextBox">
@@ -47,48 +47,48 @@
         <!-- ================= Detail templates (implicit, by VM type) ============= -->
         <DataTemplate DataType="{x:Type vm:WatchItemNodeViewModel}">
             <StackPanel Margin="12">
-                <TextBlock Text="WatchItem" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="WatchItem" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextPrimaryBrush}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Tag" />
-                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Tag" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Path (folder to watch)" />
-                <TextBox Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Path (folder to watch)" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Filter" />
-                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Filter" />
                 <CheckBox Content="Enabled" Margin="0,8,0,0"
                           Foreground="{DynamicResource TextPrimaryBrush}"
                           IsChecked="{Binding IsEnabled}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Build Number Field" />
-                <TextBox Text="{Binding BuildNumberField, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding BuildNumberField, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Build Number Field" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Drop Location Field" />
-                <TextBox Text="{Binding DropLocationField, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding DropLocationField, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Drop Location Field" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Build Base Path" />
-                <TextBox Text="{Binding BuildBasePath, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding BuildBasePath, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Build Base Path" />
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type vm:EventNodeViewModel}">
             <StackPanel Margin="12">
-                <TextBlock Text="Event" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="Event" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextPrimaryBrush}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Type" />
                 <ComboBox ItemsSource="{Binding EventTypes}"
-                          SelectedItem="{Binding Type, UpdateSourceTrigger=PropertyChanged}" />
+                          SelectedItem="{Binding Type, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Type" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Execution Type" />
                 <ComboBox ItemsSource="{Binding Source={StaticResource ExecutionModes}}"
-                          SelectedItem="{Binding ExecutionType}" />
+                          SelectedItem="{Binding ExecutionType}"  AutomationProperties.Name="Execution Type" />
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type vm:ActionGroupNodeViewModel}">
             <StackPanel Margin="12">
-                <TextBlock Text="Action Group" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="Action Group" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextPrimaryBrush}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Tag" />
-                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Tag" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Execution Type" />
                 <ComboBox ItemsSource="{Binding Source={StaticResource ExecutionModes}}"
-                          SelectedItem="{Binding ExecutionType}" />
+                          SelectedItem="{Binding ExecutionType}"  AutomationProperties.Name="Execution Type" />
                 <CheckBox Content="Fail and continue" Margin="0,8,0,0"
                           Foreground="{DynamicResource TextPrimaryBrush}"
                           IsChecked="{Binding FailAndContinue}" />
@@ -97,36 +97,36 @@
                           ToolTip="Skip this action group and its descendants during execution"
                           IsChecked="{Binding Skip}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Skip reason" />
-                <TextBox Text="{Binding SkipReason, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding SkipReason, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Skip reason" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Comment" />
                 <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}"
-                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="45" />
+                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="45"  AutomationProperties.Name="Comment" />
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type vm:ActionNodeViewModel}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="12">
-                    <TextBlock Text="Action" FontSize="14" FontWeight="Bold"
+                    <TextBlock Text="Action" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                                Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Style="{StaticResource FieldLabel}" Text="Type" />
                     <ComboBox ItemsSource="{Binding Source={StaticResource ActionTypes}}"
-                              SelectedItem="{Binding Type}" />
+                              SelectedItem="{Binding Type}"  AutomationProperties.Name="Type" />
                     <TextBlock Style="{StaticResource FieldLabel}" Text="Tag" />
-                    <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Tag" />
 
                     <!-- Command fields (RunCommand / RunRemoteCommand) -->
                     <StackPanel Visibility="{Binding IsCommand, Converter={StaticResource BoolToVis}}">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Agent Name" />
-                        <TextBox Text="{Binding AgentName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding AgentName, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Agent Name" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Command" />
-                        <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Command" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Parameters" />
-                        <TextBox Text="{Binding Parameters, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding Parameters, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Parameters" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Timeout (seconds, 0 = infinite)" />
-                        <TextBox Text="{Binding Timeout, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding Timeout, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Timeout (seconds, 0 = infinite)" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Poll Interval (ms)" />
-                        <TextBox Text="{Binding PollInterval, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding PollInterval, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Poll Interval (ms)" />
                         <CheckBox Content="Is reboot" Margin="0,8,0,0"
                                   Foreground="{DynamicResource TextPrimaryBrush}"
                                   IsChecked="{Binding IsReboot}" />
@@ -135,28 +135,28 @@
                     <!-- Credentials (RunRemoteCommand) -->
                     <StackPanel Visibility="{Binding IsRemoteCommand, Converter={StaticResource BoolToVis}}">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="User Name" />
-                        <TextBox Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="User Name" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Password" />
-                        <TextBox Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Password" />
                     </StackPanel>
 
                     <!-- SendMail fields -->
                     <StackPanel Visibility="{Binding IsSendMail, Converter={StaticResource BoolToVis}}">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="From" />
-                        <TextBox Text="{Binding From, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding From, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="From" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="To" />
-                        <TextBox Text="{Binding To, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding To, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="To" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Title" />
-                        <TextBox Text="{Binding EmailTitle, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding EmailTitle, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Title" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Body" />
                         <TextBox Text="{Binding Body, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
+                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"  AutomationProperties.Name="Body" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Attachment" />
-                        <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding Attachment, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Attachment" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Embed" />
-                        <TextBox Text="{Binding Embed, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding Embed, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Embed" />
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Large Files Share" />
-                        <TextBox Text="{Binding LargeFilesShare, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Text="{Binding LargeFilesShare, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Large Files Share" />
                     </StackPanel>
 
                     <CheckBox Content="Fail and continue" Margin="0,8,0,0"
@@ -167,31 +167,31 @@
                               ToolTip="Skip this action and its execution"
                               IsChecked="{Binding Skip}" />
                     <TextBlock Style="{StaticResource FieldLabel}" Text="Skip reason" />
-                    <TextBox Text="{Binding SkipReason, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox Text="{Binding SkipReason, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Skip reason" />
                     <TextBlock Style="{StaticResource FieldLabel}" Text="Comment" />
                     <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}"
-                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="45" />
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="45"  AutomationProperties.Name="Comment" />
                 </StackPanel>
             </ScrollViewer>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type vm:InitializeNodeViewModel}">
             <StackPanel Margin="12">
-                <TextBlock Text="Initialize" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="Initialize" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextPrimaryBrush}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Tag" />
-                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Tag" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Parameter File" />
-                <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Parameter File" />
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type vm:RefNodeViewModel}">
             <StackPanel Margin="12">
-                <TextBlock Text="Template Reference" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="Template Reference" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextPrimaryBrush}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Template ID" />
-                <TextBox Text="{Binding TemplateID, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox Text="{Binding TemplateID, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Template ID" />
             </StackPanel>
         </DataTemplate>
     </Window.Resources>
@@ -274,12 +274,12 @@
                         Background="{DynamicResource BgPrimaryBrush}">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="Live XML" Margin="8,6"
-                                   Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11" />
+                                   Foreground="{DynamicResource TextTertiaryBrush}" FontSize="{StaticResource FontSize10}" />
                         <TextBox Text="{Binding LiveXml, Mode=OneWay}" IsReadOnly="True"
-                                 FontFamily="{StaticResource Mono}" FontSize="11"
+                                 FontFamily="{StaticResource Mono}" FontSize="{StaticResource FontSize10}"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                                  Background="Transparent" BorderThickness="0"
-                                 Foreground="{DynamicResource TextPrimaryBrush}" />
+                                 Foreground="{DynamicResource TextPrimaryBrush}"  AutomationProperties.Name="Live XML" />
                     </DockPanel>
                 </Border>
 
@@ -291,7 +291,7 @@
                         Background="{DynamicResource BgPrimaryBrush}">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="Validation" Margin="8,6"
-                                   Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11" />
+                                   Foreground="{DynamicResource TextTertiaryBrush}" FontSize="{StaticResource FontSize10}" />
                         <ListView ItemsSource="{Binding Issues}" Background="Transparent" BorderThickness="0">
                             <ListView.View>
                                 <GridView>
@@ -312,7 +312,7 @@
         <!-- Status bar -->
         <Border Grid.Row="2" Margin="0,8,0,0" Padding="8,5"
                 Background="{DynamicResource BgSecondaryBrush}">
-            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="11" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="{StaticResource FontSize10}" />
         </Border>
     </Grid>
 </Window>

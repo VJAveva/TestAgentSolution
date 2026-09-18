@@ -1,11 +1,11 @@
-<Window x:Class="TestControllerGrpc.Views.Dialogs.RevertMachineDialog"
+﻿<Window x:Class="TestControllerGrpc.Views.Dialogs.RevertMachineDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mi="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
         Title="Revert machine to snapshot"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" SizeToContent="Height" Width="460"
-        Background="{DynamicResource WindowBgBrush}">
+        Background="{DynamicResource WindowBg}">
     <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" /> <!-- Header -->
@@ -18,13 +18,13 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-            <mi:MaterialIcon Kind="BackupRestore" Width="24" Height="24" Foreground="#FFF0B070"
+            <mi:MaterialIcon Kind="BackupRestore" Width="24" Height="24" Foreground="{DynamicResource CEmailBrush}"
                              VerticalAlignment="Center" />
             <StackPanel Margin="8,0,0,0">
-                <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextDefaultBrush}">
+                <TextBlock FontSize="{StaticResource FontSize15}" FontWeight="SemiBold" Foreground="{DynamicResource TextDefaultBrush}">
                     <Run Text="Revert " /><Run Text="{Binding AgentName}" FontFamily="Consolas" />
                 </TextBlock>
-                <TextBlock Text="The agent is destroyed and rebuilt from the snapshot." FontSize="11"
+                <TextBlock Text="The agent is destroyed and rebuilt from the snapshot." FontSize="{StaticResource FontSize10}"
                            Foreground="{DynamicResource TextDimBrush}" Margin="0,2,0,0" />
             </StackPanel>
         </StackPanel>
@@ -33,19 +33,19 @@
         <Border Grid.Row="1" CornerRadius="4" Padding="10" Margin="0,0,0,12"
                 Background="#1AF0B070" BorderBrush="#44F0B070" BorderThickness="1"
                 Visibility="{Binding IsBusyWarningVisible, Converter={StaticResource BoolVis}}">
-            <TextBlock Text="{Binding BusyWarning}" FontSize="11" TextWrapping="Wrap"
-                       Foreground="#FFF0B070" />
+            <TextBlock Text="{Binding BusyWarning}" FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource CEmailBrush}" />
         </Border>
 
         <!-- Snapshot -->
         <StackPanel Grid.Row="2" Margin="0,0,0,12">
-            <TextBlock Text="Snapshot name" FontSize="11" FontWeight="SemiBold"
+            <TextBlock Text="Snapshot name" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
             <TextBox Text="{Binding SnapshotName, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="12" Padding="8"
-                     Background="{DynamicResource InputBgBrush}"
+                     FontSize="{StaticResource FontSize11}" Padding="8"
+                     Background="{DynamicResource FieldBg}"
                      Foreground="{DynamicResource TextDefaultBrush}"
-                     BorderBrush="{DynamicResource BorderDimBrush}" />
+                     BorderBrush="{DynamicResource Bdr}"  AutomationProperties.Name="Snapshot name" />
         </StackPanel>
 
         <!-- Options (R10) -->
@@ -64,25 +64,25 @@
 
         <!-- Reason -->
         <StackPanel Grid.Row="4" Margin="0,0,0,16">
-            <TextBlock Text="Reason (optional)" FontSize="11" FontWeight="SemiBold"
+            <TextBlock Text="Reason (optional)" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
             <TextBox Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="12" Padding="8"
-                     Background="{DynamicResource InputBgBrush}"
+                     FontSize="{StaticResource FontSize11}" Padding="8"
+                     Background="{DynamicResource FieldBg}"
                      Foreground="{DynamicResource TextDefaultBrush}"
-                     BorderBrush="{DynamicResource BorderDimBrush}" />
+                     BorderBrush="{DynamicResource Bdr}"  AutomationProperties.Name="Reason (optional)" />
         </StackPanel>
 
         <!-- Actions -->
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Cancel" IsCancel="True" MinWidth="90" Padding="10,6" Margin="0,0,8,0"
-                    Background="{DynamicResource InputBgBrush}"
+                    Background="{DynamicResource FieldBg}"
                     Foreground="{DynamicResource TextDefaultBrush}"
-                    BorderBrush="{DynamicResource BorderDimBrush}" />
+                    BorderBrush="{DynamicResource Bdr}" />
             <Button Content="{Binding ConfirmText}" MinWidth="120" Padding="10,6"
                     Command="{Binding ConfirmCommand}"
                     IsEnabled="{Binding CanConfirm}"
-                    Background="#FFF0B070" Foreground="#FF1B1B1B" BorderThickness="0" FontWeight="SemiBold" />
+                    Background="{DynamicResource CEmailBrush}" Foreground="#FF1B1B1B" BorderThickness="0" FontWeight="SemiBold" />
         </StackPanel>
     </Grid>
 </Window>

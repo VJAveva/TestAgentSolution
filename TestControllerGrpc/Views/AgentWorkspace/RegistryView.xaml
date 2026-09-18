@@ -14,7 +14,7 @@
         <Style x:Key="SmBtn" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource BgSurface}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -52,7 +52,7 @@
         <!-- Field caption label -->
         <Style x:Key="Lbl" TargetType="Label">
             <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
-            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0,0,0,2"/>
@@ -65,7 +65,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
     </UserControl.Resources>
@@ -92,12 +92,12 @@
             <!-- Title row: heading + primary action -->
             <Border DockPanel.Dock="Top" Padding="8,6,8,2">
                 <DockPanel>
-                    <Button Content="+ Add Agent" FontSize="10" DockPanel.Dock="Right" Height="26" Margin="0"
+                    <Button Content="+ Add Agent" FontSize="{StaticResource FontSize9}" DockPanel.Dock="Right" Height="26" Margin="0"
                             Style="{DynamicResource SmBtn}" VerticalAlignment="Center"
                             Background="{DynamicResource AccPeach}" Foreground="{DynamicResource TreeBadgeFg}"
                             Command="{Binding AddNewCommand}"
                             ToolTip="Register a new agent"/>
-                    <TextBlock Text="Registered Agents" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock Text="Registered Agents" FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}" VerticalAlignment="Center"/>
                 </DockPanel>
             </Border>
@@ -135,7 +135,7 @@
                                     Command="{Binding TestAllCommand}"
                                     ToolTip="Test connectivity for all registered agents">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE8AF;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="&#xE8AF;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <TextBlock Text="Test All" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
@@ -152,7 +152,7 @@
                                     Command="{Binding ExportAgentsCommand}"
                                     ToolTip="Export all registered agents to a JSON file">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <TextBlock Text="Export" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
@@ -160,7 +160,7 @@
                                     Command="{Binding ImportAgentsCommand}"
                                     ToolTip="Import a JSON agent list and register all entries">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <TextBlock Text="Import" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
@@ -178,7 +178,7 @@
                                     Command="{Binding RegisterAllCommand}"
                                     ToolTip="Re-register all listed agents simultaneously">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <TextBlock Text="Register All" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
@@ -187,7 +187,7 @@
                                     Command="{Binding UnregisterAllCommand}"
                                     ToolTip="Unregister all agents simultaneously">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <TextBlock Text="Unregister All" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
@@ -211,11 +211,11 @@
                     </Style>
                 </Border.Style>
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Content="?" FontSize="9" Padding="4,2"
+                    <Button DockPanel.Dock="Right" Content="?" FontSize="{StaticResource FontSize9}" Padding="4,2"
                             Background="Transparent" BorderThickness="0" Cursor="Hand"
                             Foreground="{DynamicResource TextS}"
-                            Command="{Binding ClearDiagnosticCommand}" ToolTip="Dismiss"/>
-                    <TextBlock Text="{Binding DiagnosticResult}" FontSize="10" FontFamily="Consolas"
+                            Command="{Binding ClearDiagnosticCommand}" ToolTip="Dismiss" AutomationProperties.Name="Dismiss"/>
+                    <TextBlock Text="{Binding DiagnosticResult}" FontSize="{StaticResource FontSize9}" FontFamily="Consolas"
                                Foreground="{DynamicResource TextS}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                 </DockPanel>
             </Border>
@@ -229,12 +229,12 @@
                       HorizontalGridLinesBrush="{DynamicResource Bdr}"
                       HeadersVisibility="Column" CanUserResizeRows="False"
                       SelectionMode="Single" SelectionUnit="FullRow"
-                      FontSize="11">
+                      FontSize="{StaticResource FontSize10}">
                 <DataGrid.ColumnHeaderStyle>
                     <Style TargetType="DataGridColumnHeader">
                         <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
                         <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
-                        <Setter Property="FontSize" Value="10"/>
+                        <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
                         <Setter Property="FontWeight" Value="SemiBold"/>
                         <Setter Property="Padding" Value="8,4"/>
                         <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
@@ -263,7 +263,7 @@
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="FontFamily" Value="Consolas"/>
-                                <Setter Property="FontSize" Value="10"/>
+                                <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
@@ -271,7 +271,7 @@
                     <DataGridTemplateColumn Header="LATENCY" Width="60">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock FontSize="10" FontFamily="Consolas" VerticalAlignment="Center">
+                                <TextBlock FontSize="{StaticResource FontSize9}" FontFamily="Consolas" VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="{Binding LatencyMs, StringFormat={}{0}ms}"/>
@@ -298,21 +298,21 @@
                 Visibility="{Binding IsEditing, Converter={StaticResource BoolVis}}">
             <StackPanel>
                 <DockPanel Margin="0,0,0,10">
-                    <Button DockPanel.Dock="Right" Content="?" FontSize="12" Padding="4,2"
+                    <Button DockPanel.Dock="Right" Content="?" FontSize="{StaticResource FontSize11}" Padding="4,2"
                             Background="Transparent" BorderThickness="0" Cursor="Hand"
                             Foreground="{DynamicResource TextS}"
-                            Command="{Binding CancelCommand}" ToolTip="Close"/>
-                    <TextBlock Text="Agent Details" FontSize="12" FontWeight="SemiBold"
+                            Command="{Binding CancelCommand}" ToolTip="Close" AutomationProperties.Name="Close"/>
+                    <TextBlock Text="Agent Details" FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}" VerticalAlignment="Center"/>
                 </DockPanel>
 
                 <Label Content="Hostname / Agent Name" Style="{DynamicResource Lbl}"/>
                 <TextBox Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{DynamicResource Fld}" Margin="0,0,0,8"/>
+                         Style="{DynamicResource Fld}" Margin="0,0,0,8" AutomationProperties.Name="Hostname / Agent Name"/>
 
                 <Label Content="gRPC Address" Style="{DynamicResource Lbl}"/>
                 <TextBox Text="{Binding EditAddress, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{DynamicResource Fld}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,12"/>
+                         Style="{DynamicResource Fld}" FontFamily="Consolas" FontSize="{StaticResource FontSize10}" Margin="0,0,0,12" AutomationProperties.Name="gRPC Address"/>
 
                 <StackPanel Orientation="Vertical">
                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -320,7 +320,7 @@
                                 Background="{DynamicResource AccGreen}" Foreground="{DynamicResource TreeBadgeFg}"
                                 Command="{Binding SaveCommand}" Margin="0,0,4,0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                 <TextBlock Text="Save" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -328,7 +328,7 @@
                                 Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
                                 Command="{Binding TestConnectionCommand}" Margin="0,0,4,0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE839;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="&#xE839;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                 <TextBlock Text="Test" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -337,7 +337,7 @@
                                 Command="{Binding DiagnoseAgentCommand}" Margin="0,0,4,0"
                                 ToolTip="Run full connectivity diagnostic (DNS, TCP, HTTP/2, gRPC)">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                 <TextBlock Text="Diagnose" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -352,7 +352,7 @@
                             <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                 <Setter Property="Background" Value="{DynamicResource DangerBtnBgAlt}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource AccRed}"/>
-                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="FontSize" Value="{StaticResource FontSize10}"/>
                                 <Setter Property="Padding" Value="8,4"/>
                                 <Setter Property="Margin" Value="0,4,0,0"/>
                                 <Setter Property="Cursor" Value="Hand"/>
@@ -366,7 +366,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <TextBlock Text="Unregister Agent" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
@@ -392,11 +392,11 @@
                                 Command="{Binding CopyDetailsCommand}"
                                 ToolTip="Copy diagnostic details to clipboard">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                <TextBlock Text="Copy" FontSize="10" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="Copy" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                        <TextBlock Text="{Binding TestResult}" FontSize="10" FontFamily="Consolas"
+                        <TextBlock Text="{Binding TestResult}" FontSize="{StaticResource FontSize9}" FontFamily="Consolas"
                                    Foreground="{DynamicResource TextS}" TextWrapping="Wrap"/>
                     </DockPanel>
                 </Border>

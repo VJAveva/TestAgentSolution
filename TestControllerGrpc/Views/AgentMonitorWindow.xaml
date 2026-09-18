@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.AgentMonitorWindow"
+﻿<Window x:Class="TestControllerGrpc.Views.AgentMonitorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{Binding WindowTitle}" Height="550" Width="800"
@@ -20,7 +20,7 @@
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Clear" Padding="10,3"
-                        FontSize="10" Margin="6,0,0,0"
+                        FontSize="{StaticResource FontSize9}" Margin="6,0,0,0"
                         Command="{Binding ClearHistoryCommand}"
                         Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
                         BorderThickness="0" Cursor="Hand">
@@ -51,7 +51,7 @@
                         </Ellipse.Style>
                     </Ellipse>
                     <!-- HC glyph fallback (visible only in High Contrast) -->
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10"
+                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="{StaticResource FontSize9}"
                                FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource HcGlyphFg}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
@@ -65,15 +65,15 @@
                         </TextBlock.Style>
                     </TextBlock>
                     <TextBlock Text="{Binding MonitorAgentName}" FontWeight="Bold"
-                               Foreground="{DynamicResource TextP}" FontSize="13" VerticalAlignment="Center" />
+                               Foreground="{DynamicResource TextP}" FontSize="{StaticResource FontSize12}" VerticalAlignment="Center" />
                     <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,0,0"
-                               FontSize="11" VerticalAlignment="Center">
+                               FontSize="{StaticResource FontSize10}" VerticalAlignment="Center">
                         <Run Text="{Binding MonitorAgentState, Mode=OneWay}" />
                         <Run Text=" &#x00B7; " />
                         <Run Text="{Binding ConnectionStatusText, Mode=OneWay}" />
                     </TextBlock>
                     <TextBlock Text="{Binding LiveActionName}" Foreground="{DynamicResource AccGreen}"
-                               FontFamily="Consolas" FontSize="11" Margin="20,0,0,0"
+                               FontFamily="Consolas" FontSize="{StaticResource FontSize10}" Margin="20,0,0,0"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                MaxWidth="350" />
                 </StackPanel>
@@ -94,17 +94,17 @@
                 </Style>
             </Border.Style>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Foreground="{DynamicResource TextS}" FontSize="10" VerticalAlignment="Center"
+                <TextBlock Foreground="{DynamicResource TextS}" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center"
                            Margin="0,0,12,0" Text="HEALTH" FontWeight="SemiBold" />
                 <!-- CPU -->
-                <TextBlock FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"
+                <TextBlock FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" Margin="0,0,6,0"
                            Foreground="{DynamicResource TextS}" Text="CPU" />
-                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                <TextBlock FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" FontFamily="Consolas"
                            Foreground="{DynamicResource Accent}"
                            Text="{Binding CpuUsagePct, StringFormat='{}{0:F1}%'}" />
                 <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
-                           FontSize="11" VerticalAlignment="Center" Text="MEM" />
-                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" Text="MEM" />
+                <TextBlock FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" FontFamily="Consolas"
                            Foreground="{DynamicResource Accent}">
                     <TextBlock.Text>
                         <MultiBinding StringFormat="{}{0:F0} / {1:F0} MB">
@@ -114,17 +114,17 @@
                     </TextBlock.Text>
                 </TextBlock>
                 <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
-                           FontSize="11" VerticalAlignment="Center" Text="DISK FREE" />
-                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" Text="DISK FREE" />
+                <TextBlock FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" FontFamily="Consolas"
                            Foreground="{DynamicResource Accent}"
                            Text="{Binding DiskFreeGb, StringFormat='{}{0:F1} GB'}" />
                 <TextBlock Foreground="{DynamicResource TextS}" Margin="12,0,6,0"
-                           FontSize="11" VerticalAlignment="Center" Text="PROCS" />
-                <TextBlock FontSize="11" VerticalAlignment="Center" FontFamily="Consolas"
+                           FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" Text="PROCS" />
+                <TextBlock FontSize="{StaticResource FontSize10}" VerticalAlignment="Center" FontFamily="Consolas"
                            Foreground="{DynamicResource Accent}"
                            Text="{Binding ActiveProcessCount}" />
                 <TextBlock Foreground="{DynamicResource TextS}" Margin="16,0,0,0"
-                           FontSize="10" VerticalAlignment="Center" FontStyle="Italic"
+                           FontSize="{StaticResource FontSize9}" VerticalAlignment="Center" FontStyle="Italic"
                            Text="{Binding LastHeartbeatTime, StringFormat='Last: {0}'}" />
             </StackPanel>
         </Border>
@@ -134,7 +134,7 @@
                   IsReadOnly="True" Background="Transparent"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   BorderThickness="0" CanUserSortColumns="True"
-                  Foreground="{DynamicResource TextP}" FontSize="11.5"
+                  Foreground="{DynamicResource TextP}" FontSize="{StaticResource FontSize11}"
                   RowBackground="Transparent" AlternatingRowBackground="{DynamicResource BgRowHoverBrush}"
                   Margin="6">
             <DataGrid.ColumnHeaderStyle>
@@ -142,7 +142,7 @@
                     <Setter Property="Background" Value="{DynamicResource BgCard}" />
                     <Setter Property="Foreground" Value="{DynamicResource TextS}" />
                     <Setter Property="Padding" Value="8,5" />
-                    <Setter Property="FontSize" Value="10" />
+                    <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
                     <Setter Property="FontWeight" Value="SemiBold" />
                     <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
                     <Setter Property="BorderThickness" Value="0,0,0,1" />

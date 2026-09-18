@@ -1,4 +1,4 @@
-<Window x:Class="TestControllerGrpc.Views.Regression.AdoSignInDialog"
+﻿<Window x:Class="TestControllerGrpc.Views.Regression.AdoSignInDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AVEVA · Azure DevOps Sign-In"
@@ -10,11 +10,11 @@
     </Window.Resources>
     <Border Padding="24">
         <StackPanel>
-            <TextBlock Text="AVEVA" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextTertiaryBrush}" />
-            <TextBlock Text="Azure DevOps Sign-In" FontSize="20" FontWeight="SemiBold"
+            <TextBlock Text="AVEVA" FontSize="{StaticResource FontSize11}" FontWeight="Bold" Foreground="{DynamicResource TextTertiaryBrush}" />
+            <TextBlock Text="Azure DevOps Sign-In" FontSize="{StaticResource FontSize20}" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,2,0,4" />
             <TextBlock Text="Uses your Microsoft (Entra) identity — no PAT to rotate."
-                       FontSize="11.5" Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,0,18" TextWrapping="Wrap" />
+                       FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,0,18" TextWrapping="Wrap" />
 
             <!-- Current account / status -->
             <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="6" Padding="14,12"
@@ -33,10 +33,10 @@
                                 </Style>
                             </Ellipse.Style>
                         </Ellipse>
-                        <TextBlock Text="{Binding AccountText}" FontSize="13" FontWeight="Medium"
+                        <TextBlock Text="{Binding AccountText}" FontSize="{StaticResource FontSize12}" FontWeight="Medium"
                                    Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Text="{Binding StatusText}" FontSize="11" TextWrapping="Wrap"
+                    <TextBlock Text="{Binding StatusText}" FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextTertiaryBrush}" Margin="17,6,0,0" />
                 </StackPanel>
             </Border>
@@ -63,7 +63,7 @@
                                     <Rectangle Grid.Row="1" Grid.Column="0" Fill="#00A4EF" Margin="0,1,1,0" />
                                     <Rectangle Grid.Row="1" Grid.Column="1" Fill="#FFB900" Margin="1,1,0,0" />
                                 </Grid>
-                                <TextBlock Text="Sign in with Microsoft" FontSize="13" VerticalAlignment="Center" Foreground="White" />
+                                <TextBlock Text="Sign in with Microsoft" FontSize="{StaticResource FontSize12}" VerticalAlignment="Center" Foreground="White" />
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -83,10 +83,10 @@
                     Background="{DynamicResource BgSecondaryBrush}" CornerRadius="6" Padding="14,12"
                     BorderBrush="{DynamicResource BorderTertiaryBrush}" BorderThickness="1" Margin="0,18,0,0">
                 <StackPanel>
-                    <TextBlock Text="Impact index" FontSize="12.5" FontWeight="SemiBold"
+                    <TextBlock Text="Impact index" FontSize="{StaticResource FontSize12}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Text="Rebuilds the index on THIS machine using your signed-in identity. Run it on the host that serves the index."
-                               FontSize="11" TextWrapping="Wrap"
+                               FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,3,0,10" />
                     <StackPanel Orientation="Horizontal">
                         <Button Content="Rebuild now" Command="{Binding RebuildIndexCommand}"
@@ -96,7 +96,7 @@
                     </StackPanel>
                     <ProgressBar Height="3" IsIndeterminate="True" BorderThickness="0" Margin="0,10,0,0"
                                  Visibility="{Binding Rebuild.IsRebuilding, Converter={StaticResource BoolToVis}}" />
-                    <TextBlock Text="{Binding Rebuild.StatusText}" FontSize="11" TextWrapping="Wrap"
+                    <TextBlock Text="{Binding Rebuild.StatusText}" FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
