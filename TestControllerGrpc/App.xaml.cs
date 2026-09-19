@@ -26,6 +26,12 @@ public partial class App : Application
     private static Mutex? _singleInstanceMutex;
     private readonly CancellationTokenSource _appShutdownCts = new();
 
+    // Set true the moment shutdown begins so the error handlers below never try
+    // to create UI (ThemedMessageBox) while the Application object is tearing
+    // down — doing so throws "The Application object is being shut down" and
+    // turns a single fault into a cascade of secondary crashes.
+    private volatile bool _isShuttingDown;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // Allow gRPC over plain HTTP/2 (without TLS) for local/intranet agent communication.
@@ -45,6 +51,8 @@ public partial class App : Application
 
         if (!isNew)
         {
+            // Startup prompt: the app is starting normally here and the dispatcher
+            // is healthy, so showing UI directly is safe (unlike the error paths).
             var answer = ThemedMessageBox.Show(
                 "TestController is already running.\n\n" +
                 "YES = Kill old instance and start fresh\n" +
@@ -114,7 +122,8 @@ public partial class App : Application
                     cfg.GetSection(ControllerTimeoutOptions.SectionName).Bind(opts);
                     return opts;
                 });
-                services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();                services.AddSingleton(sp =>
+                services.AddSingleton<IAgentGrpcDispatcher, AgentGrpcDispatcher>();
+                services.AddSingleton(sp =>
                 {
                     var cfg = sp.GetRequiredService<IConfiguration>();
                     var logDir = cfg.GetValue<string>("Logging:LogDirectory")
@@ -308,11 +317,28 @@ public partial class App : Application
         {
             if (t.IsFaulted && t.Exception is not null)
             {
+                // Logging is always safe — do it unconditionally.
                 CrashDumpHelper.RecordCrash("HostStart", t.Exception);
-                Dispatcher.BeginInvoke(new Action(() =>
-                    ThemedMessageBox.Show(
-                        "The application host failed to start. See crash log:\n" + CrashDumpHelper.CrashLogPath,
-                        "Startup error", MessageBoxButton.OK, MessageBoxImage.Error)));
+
+                // Only attempt UI if the app is not shutting down and the dispatcher
+                // is still alive; otherwise ThemedMessageBox.Show() would throw
+                // "The Application object is being shut down" and cascade.
+                if (!_isShuttingDown && !Dispatcher.HasShutdownStarted)
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            ThemedMessageBox.Show(
+                                "The application host failed to start. See crash log:\n" + CrashDumpHelper.CrashLogPath,
+                                "Startup error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                        catch
+                        {
+                            // Already logged above — never let the error reporter cascade.
+                        }
+                    }));
+                }
             }
         }, TaskScheduler.Default);
     }
@@ -330,15 +356,33 @@ public partial class App : Application
             return;
         }
 
-        ThemedMessageBox.Show(
-            $"Unhandled UI exception:\n\n{e.Exception.GetType().Name}: {e.Exception.Message}\n\n" +
-            $"Details: {CrashDumpHelper.CrashLogPath}",
-            "Unhandled Exception", MessageBoxButton.OK, MessageBoxImage.Error);
+        // Only show the error dialog if the app can still safely create UI. During
+        // shutdown the Application object cannot load new components, so attempting
+        // to show a ThemedMessageBox here would itself throw and mask the real fault.
+        if (!_isShuttingDown && !Dispatcher.HasShutdownStarted)
+        {
+            try
+            {
+                ThemedMessageBox.Show(
+                    $"Unhandled UI exception:\n\n{e.Exception.GetType().Name}: {e.Exception.Message}\n\n" +
+                    $"Details: {CrashDumpHelper.CrashLogPath}",
+                    "Unhandled Exception", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch
+            {
+                // The fault is already recorded above; never let the reporter cascade.
+            }
+        }
+
         e.Handled = true;
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Mark shutdown FIRST so the exception handlers above stop trying to
+        // create UI from this point on.
+        _isShuttingDown = true;
+
         try
         {
             _appShutdownCts.Cancel();
@@ -352,9 +396,17 @@ public partial class App : Application
         finally
         {
             _host?.Dispose();
-            _singleInstanceMutex?.ReleaseMutex();
+
+            // Dispose only — do NOT call ReleaseMutex(). OnExit is not guaranteed
+            // to run on the thread that acquired the mutex in OnStartup, and
+            // Mutex.ReleaseMutex() throws ApplicationException ("Object
+            // synchronization method was called from an unsynchronized block of
+            // code") when called from a non-owning thread. Dispose() frees the
+            // handle safely from any thread, and the OS releases the mutex when
+            // the process exits.
             _singleInstanceMutex?.Dispose();
         }
+
         base.OnExit(e);
     }
 
