@@ -26,6 +26,25 @@ public record TriggerRequest
     public long? LockVersion { get; init; }
 }
 
+/// <summary>Request body for running a single node of a pipeline.</summary>
+public record NodeRunRequest
+{
+    /// <summary>Structural path of the node, e.g. "e0/c2/c1". Never travels in the URL — it contains '/'.</summary>
+    public string? NodePath { get; init; }
+
+    /// <summary>"OnlyThisNode" (default) or "NodeWithInitialize".</summary>
+    public string? Scope { get; init; }
+
+    /// <summary>Tree revision the client rendered; the run is rejected when it no longer matches.</summary>
+    public string? TreeRevision { get; init; }
+
+    public string? BuildNumber { get; init; }
+    public string? DropLocation { get; init; }
+    public Dictionary<string, string>? Parameters { get; init; }
+    public string? UserId { get; init; }
+    public long? LockVersion { get; init; }
+}
+
 [ApiController]
 [Route("api/execution")]
 [Authorize(Policy = SecurityPolicies.User)]
@@ -95,6 +114,7 @@ public class ExecutionController : ControllerBase
                 sessionId = s.SessionId,
                 watchItemTag = s.WatchItemTag,
                 eventType = s.EventType,
+                isFullPipelineRun = s.IsFullPipelineRun,
                 state = s.State.ToString(),
                 startedUtc = s.StartedUtc,
                 totalActions = s.SnapshotNodes.Count,
@@ -660,6 +680,396 @@ public class ExecutionController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// GET /api/execution/pipelines/{watchItemTag}/nodes — the runnable-node map for the tree UI.
+    /// Returns the structural path of every node, whether it can be run on its own, and the tree
+    /// revision the client must echo back when it asks for a run.
+    /// </summary>
+    [HttpGet("pipelines/{watchItemTag}/nodes")]
+    public IActionResult GetPipelineNodes(string watchItemTag)
+    {
+        var watchItem = _vocabMonitor.CurrentConfig?.WatchItems
+            .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
+
+        if (watchItem == null)
+            return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
+
+        var events = new List<object>(watchItem.Events.Count);
+        for (var e = 0; e < watchItem.Events.Count; e++)
+        {
+            var path = NodeAddressing.EventPath(e);
+            events.Add(new
+            {
+                path,
+                kind = nameof(RunnableNodeKind.Event),
+                name = watchItem.Events[e].Type,
+                runnable = true,
+                hasInitialize = NodeAddressing.NearestInitializeFor(watchItem, path) is not null,
+                children = MapNodes(watchItem, watchItem.Events[e].Children, path),
+            });
+        }
+
+        return Ok(new
+        {
+            watchItemTag = watchItem.Tag,
+            treeRevision = NodeAddressing.RevisionOf(watchItem),
+            events,
+        });
+    }
+
+    private static List<object> MapNodes(WatchItemConfig item, List<IActionNode> children, string parentPath)
+    {
+        var mapped = new List<object>(children.Count);
+        for (var i = 0; i < children.Count; i++)
+        {
+            var child = children[i];
+            var path = NodeAddressing.ChildPath(parentPath, i);
+            var runnable = NodeAddressing.TryResolve(item, path, out var resolved, out _);
+
+            mapped.Add(new
+            {
+                path,
+                kind = runnable ? resolved!.Kind.ToString() : child.NodeType,
+                name = runnable ? resolved!.DisplayName : (child as InitializeConfig)?.Tag ?? child.NodeType,
+                runnable,
+                // Drives the "+ its Initialize" option; shown only where an ancestor actually declares one.
+                hasInitialize = runnable && NodeAddressing.NearestInitializeFor(item, path) is not null,
+                agentName = (child as ActionConfig)?.AgentName ?? "",
+                children = child is ActionGroupConfig group ? MapNodes(item, group.Children, path) : [],
+            });
+        }
+        return mapped;
+    }
+
+    /// <summary>
+    /// POST /api/execution/pipelines/{watchItemTag}/nodes/run — run a single node of a pipeline.
+    /// Same RBAC, maintenance gate, pipeline lock and agent locks as the root trigger; the node
+    /// runs in isolation through the same executor, so nothing before or after it runs.
+    /// </summary>
+    /// <remarks>
+    /// The node path travels in the BODY, never as a path segment: it contains '/' and IIS rejects
+    /// an encoded separator in a segment (allowDoubleEscaping is off), which is the same failure that
+    /// took out every tag-in-path endpoint once.
+    /// </remarks>
+    [HttpPost("pipelines/{watchItemTag}/nodes/run")]
+    public async Task<IActionResult> RunPipelineNode(
+        string watchItemTag,
+        [FromBody] NodeRunRequest request)
+    {
+        var userId = request?.UserId
+            ?? HttpContext.Request.Headers["X-User-Id"].FirstOrDefault()
+            ?? "anonymous";
+        var source = HttpContext.Request.Headers["X-Source"].FirstOrDefault() ?? "WebClient";
+
+        var displayName = HttpContext.User?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(displayName))
+            displayName = userId;
+        var role = _modeProvider.ResolveRole(HttpContext.User ?? new System.Security.Claims.ClaimsPrincipal()).ToString();
+
+        // A node-run is the same authority as a root trigger: granted the pipeline (or admin) = run any
+        // node in it. Deliberately NOT a new permission — the three permission catalogs would have to
+        // stay in sync for no additional safety.
+        if (!await IsRbacAuthorizedAsync(Permission.Pipeline_Trigger, watchItemTag, HttpContext.RequestAborted))
+            return StatusCode(403, ApiErrorFactory.Forbidden($"Not authorized to trigger pipeline '{watchItemTag}'."));
+
+        var config = _vocabMonitor.CurrentConfig;
+        var watchItem = config?.WatchItems
+            .FirstOrDefault(w => string.Equals(w.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
+
+        if (watchItem == null)
+            return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
+
+        // WatchList.xml hot-reloads, so a path captured at render time can point at a different node
+        // by the time the user confirms. Reject rather than run the wrong thing.
+        var currentRevision = NodeAddressing.RevisionOf(watchItem);
+        if (!string.IsNullOrEmpty(request?.TreeRevision) &&
+            !string.Equals(request.TreeRevision, currentRevision, StringComparison.Ordinal))
+        {
+            return Conflict(new
+            {
+                error = "tree-changed",
+                message = "This pipeline changed since the tree was loaded. Refresh and pick the node again.",
+                yourRevision = request.TreeRevision,
+                currentRevision,
+            });
+        }
+
+        if (!NodeAddressing.TryResolve(watchItem, request?.NodePath, out var resolved, out var resolveError))
+            return BadRequest(ApiErrorFactory.BadRequest(resolveError));
+
+        var scope = string.Equals(request?.Scope, nameof(NodeRunScope.NodeWithInitialize), StringComparison.OrdinalIgnoreCase)
+            ? NodeRunScope.NodeWithInitialize
+            : NodeRunScope.OnlyThisNode;
+
+        var initialize = scope == NodeRunScope.NodeWithInitialize
+            ? NodeAddressing.NearestInitializeFor(watchItem, resolved!.Path)
+            : null;
+
+        // Same boundary validation as the root trigger: these values are substituted verbatim into a
+        // shell argument string, so a metacharacter here is arbitrary code execution.
+        var asTrigger = new TriggerRequest
+        {
+            BuildNumber = request?.BuildNumber,
+            DropLocation = request?.DropLocation,
+            Parameters = request?.Parameters,
+        };
+        if (TriggerParameterValidator.Validate(asTrigger) is { } rejection)
+            return BadRequest(ApiErrorFactory.BadRequest(rejection));
+
+        var resolveCtx = new PipelineExecutionContext { WatchItemTag = watchItem.Tag };
+        ParameterResolver.LoadForWatchItem(resolveCtx, watchItem);
+        var parameters = new Dictionary<string, string>(resolveCtx.Parameters, StringComparer.OrdinalIgnoreCase);
+
+        var callerOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(request?.BuildNumber))
+        {
+            parameters["_BuildNumber"] = request.BuildNumber;
+            parameters["BuildNumber"] = request.BuildNumber;
+            callerOverrides["_BuildNumber"] = request.BuildNumber;
+        }
+        if (!string.IsNullOrEmpty(request?.DropLocation))
+        {
+            parameters["_DropLocation"] = request.DropLocation;
+            parameters["DropLocation"] = request.DropLocation;
+            callerOverrides["_DropLocation"] = request.DropLocation;
+        }
+        if (request?.Parameters != null)
+        {
+            foreach (var kvp in request.Parameters)
+            {
+                parameters[kvp.Key] = kvp.Value;
+                if (kvp.Key.StartsWith('_'))
+                {
+                    parameters[kvp.Key[1..]] = kvp.Value;
+                    callerOverrides[kvp.Key] = kvp.Value;
+                }
+                else
+                {
+                    callerOverrides['_' + kvp.Key] = kvp.Value;
+                }
+            }
+        }
+
+        // Node-scoped: lock only the agents this node actually uses, not the whole pipeline's fleet.
+        var requiredAgents = ResolveNodeAgents(config, resolved!, parameters);
+
+        if (_maintenanceState is not null)
+        {
+            var unavailable = DispatchGate.GetMaintenanceBlockers(_maintenanceState, requiredAgents);
+            if (unavailable is not null)
+                return Conflict(new
+                {
+                    error = "fleet-unavailable",
+                    message = $"{unavailable.BlockedNodes.Count} required agent(s) are in maintenance and cannot take work.",
+                    blockedNodes = unavailable.BlockedNodes.Select(b => new { agent = b.NodeId, reason = b.Reason }),
+                });
+        }
+
+        if (request?.LockVersion.HasValue == true && request.LockVersion.Value != _lockManager.Version)
+        {
+            return Conflict(new
+            {
+                error = "Lock state changed",
+                message = "The agent availability changed since you last checked. Please refresh and try again.",
+                isStaleState = true,
+                yourVersion = request.LockVersion.Value,
+                currentVersion = _lockManager.Version,
+            });
+        }
+
+        var eventTypeLabel = NodeAddressing.SessionEventTypeFor(resolved!);
+        var tagLock = _triggerLocks.GetOrAdd(watchItemTag, _ => new object());
+        string sessionId;
+        var pipelineLockToken = string.Empty;
+        lock (tagLock)
+        {
+            if (_sessionManager.HasActiveExecution(watchItemTag))
+                return Conflict(ApiErrorFactory.Conflict($"WatchItem '{watchItemTag}' is already running"));
+
+            if (_lockRegistry is not null)
+            {
+                var clientKind = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase)
+                    ? ClientKind.Wpf : ClientKind.Web;
+                var owner = new OwnerIdentity(userId, displayName, clientKind);
+                var acquire = _lockRegistry.TryAcquire(watchItemTag, owner, LockKind.Trigger);
+                if (acquire is AcquireResult.Conflict pipelineConflict)
+                    return Conflict(new { error = "pipeline-locked", @lock = LockMapper.ToDto(pipelineConflict.ExistingLock) });
+                if (acquire is AcquireResult.Success pipelineSuccess)
+                    pipelineLockToken = pipelineSuccess.Lock.Token;
+            }
+
+            sessionId = Guid.NewGuid().ToString("N")[..12];
+            if (requiredAgents.Count > 0)
+            {
+                var (locked, conflicts) = _lockManager.TryLockAgents(
+                    requiredAgents, sessionId, watchItemTag, userId, source);
+
+                if (!locked)
+                {
+                    if (_lockRegistry is not null && pipelineLockToken.Length > 0)
+                        _lockRegistry.TryRelease(watchItemTag, pipelineLockToken);
+
+                    var newestConflict = conflicts.OrderByDescending(c => c.LockedAtUtc).First();
+                    return Conflict(new
+                    {
+                        error = "Agents are busy",
+                        isRaceCondition = (DateTime.UtcNow - newestConflict.LockedAtUtc).TotalSeconds < 5,
+                        message = $"Cannot run '{resolved!.DisplayName}' \u2014 {conflicts.Count} required agent(s) are locked by other sessions",
+                        conflicts = conflicts.Select(c => new
+                        {
+                            c.AgentName,
+                            lockedBy = c.UserId,
+                            pipeline = c.WatchItemTag,
+                            sessionId = c.SessionId,
+                            source = c.Source,
+                            lockedSince = c.LockedAtUtc,
+                            duration = FormatDuration(DateTime.UtcNow - c.LockedAtUtc),
+                        }),
+                        requiredAgents,
+                        yourUserId = userId,
+                        retryAdvice = "Wait for the blocking run to complete.",
+                    });
+                }
+            }
+
+            // Pre-registered so the ExecutionStarted broadcast carries pendingActions. BeginSession
+            // returns this instance unchanged to the executor, so the EventType MUST already be the
+            // scoped one or the run would report itself as a full pipeline run.
+            var session = _sessionManager.BeginSession(
+                watchItemTag, eventTypeLabel,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                NodeAddressing.RunChildrenOf(resolved!),
+                sessionId);
+            session.UserId = userId;
+            session.UserDisplayName = displayName;
+            session.UserRole = role;
+            session.OwnerSid = _ownershipChecker.GetUserSid(HttpContext.User);
+            session.Source = source;
+            session.LockedAgents = requiredAgents.ToArray();
+        }
+
+        // Deliberately no parameter-file write-back: a node-run is a debugging run and must not
+        // repoint the pipeline's stored build for every later run.
+        var ctx = new PipelineExecutionContext
+        {
+            WatchItemPath = watchItem.Path,
+            WatchItemTag = watchItem.Tag,
+            SessionId = sessionId,
+            StartedUtc = DateTime.UtcNow,
+            Parameters = parameters,
+            LockToken = pipelineLockToken,
+            UserId = userId,
+            UserDisplayName = displayName,
+            UserRole = role,
+        };
+        ParameterResolver.ApplyRunOverrides(ctx, callerOverrides);
+
+        var clientCorr = HttpContext.Items["CorrelationId"] as string
+            ?? HttpContext.Request.Headers["X-Request-Id"].FirstOrDefault()
+            ?? "n/a";
+        _appLogger.LogStructured(
+            Microsoft.Extensions.Logging.LogLevel.Information,
+            category: "Execution",
+            message: $"\u25b6 Node-run '{resolved!.DisplayName}' ({resolved.Kind}, {resolved.Path}) in '{watchItemTag}' by {displayName} [req {clientCorr}]",
+            agent: null,
+            runId: sessionId,
+            pipeline: watchItemTag,
+            action: "NodeRun");
+
+        BroadcastLockChange("Node run started");
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _executor.ExecuteResolvedNodeAsync(watchItemTag, resolved!, initialize, ctx, CancellationToken.None);
+                await PublishNodeRunCompletedAsync(sessionId, watchItemTag, null);
+            }
+            catch (OperationCanceledException)
+            {
+                await PublishNodeRunCompletedAsync(sessionId, watchItemTag, "Cancelled");
+            }
+            catch (Exception ex)
+            {
+                await PublishNodeRunCompletedAsync(sessionId, watchItemTag, "Failed", ex.Message);
+            }
+            finally
+            {
+                if (_lockManager.ReleaseSession(sessionId) > 0)
+                    BroadcastLockChange("Node run completed");
+            }
+        });
+
+        _events.Publish(new ExecutionStartedEvent(sessionId, watchItemTag, eventTypeLabel, source));
+
+        return Accepted(new
+        {
+            sessionId,
+            nodePath = resolved!.Path,
+            nodeKind = resolved.Kind.ToString(),
+            nodeName = resolved.DisplayName,
+            scope = scope.ToString(),
+            includedInitialize = initialize?.Tag ?? "",
+            treeRevision = currentRevision,
+            message = $"Node '{resolved.DisplayName}' of '{watchItemTag}' started",
+        });
+    }
+
+    /// <summary>
+    /// Agents a node-run will touch. Falls back to the whole WatchItem only for a Ref, whose
+    /// template body is the executor's to resolve.
+    /// </summary>
+    private static List<string> ResolveNodeAgents(
+        WatchListConfig? config, ResolvedNode resolved, Dictionary<string, string> parameters)
+        => resolved.Kind switch
+        {
+            RunnableNodeKind.Event => AgentResolver.ExtractAgentNames(resolved.OwningEvent, parameters),
+            RunnableNodeKind.Group => AgentResolver.ExtractAgentNames((ActionGroupConfig)resolved.Node!, parameters),
+            RunnableNodeKind.Action => AgentResolver.ExtractAgentNames((ActionConfig)resolved.Node!, parameters),
+            RunnableNodeKind.Template => config?.Templates.FirstOrDefault(t =>
+                    string.Equals(t.ID, ((RefConfig)resolved.Node!).TemplateID, StringComparison.OrdinalIgnoreCase)) is { } template
+                ? AgentResolver.ExtractAgentNames(template, parameters)
+                : [],
+            _ => [],
+        };
+
+    private async Task PublishNodeRunCompletedAsync(
+        string sessionId, string watchItemTag, string? forcedState, string? error = null)
+    {
+        var session = _sessionManager.GetSession(sessionId) ?? _sessionManager.GetLastSession(watchItemTag);
+        var state = forcedState ?? session?.State switch
+        {
+            SessionState.Completed => "Success",
+            SessionState.PartialFailure => "PartialFailure",
+            SessionState.Failed => "Failed",
+            _ => "Success",
+        };
+
+        _events.Publish(new ExecutionCompletedEvent(
+            sessionId, watchItemTag, state,
+            forcedState is null ? session?.SucceededCount ?? 0 : 0,
+            forcedState is null ? session?.FailedCount ?? 0 : 0,
+            forcedState is null ? session?.TotalActions ?? 0 : 0));
+
+        await _hub.Clients.Group("global").SendAsync("ExecutionCompleted", new
+        {
+            sessionId,
+            watchItemTag,
+            state,
+            error,
+            passed = forcedState is null ? session?.SucceededCount ?? 0 : 0,
+            failed = forcedState is null ? session?.FailedCount ?? 0 : 0,
+            total = forcedState is null ? session?.TotalActions ?? 0 : 0,
+            timestamp = DateTime.UtcNow.ToString("o"),
+            owner = new
+            {
+                userId = session?.UserId ?? "",
+                displayName = session?.UserDisplayName ?? session?.UserId ?? "",
+                role = session?.UserRole ?? "",
+            },
+        }, new CancellationTokenSource(BroadcastTimeout).Token);
+    }
+
     /// <summary>GET /api/execution/available-builds?basePath=...</summary>
     [HttpGet("available-builds")]
     public IActionResult GetAvailableBuilds([FromQuery] string? basePath)
@@ -1077,6 +1487,7 @@ public class ExecutionController : ControllerBase
         sessionId = s.SessionId,
         watchItemTag = s.WatchItemTag,
         eventType = s.EventType,
+        isFullPipelineRun = s.IsFullPipelineRun,
         startedUtc = s.StartedUtc,
         completedUtc = s.CompletedUtc,
         state = s.State.ToString(),
@@ -1093,6 +1504,8 @@ public class ExecutionController : ControllerBase
     {
         sessionId = s.SessionId,
         watchItemTag = s.WatchItemTag,
+        eventType = s.EventType,
+        isFullPipelineRun = s.IsFullPipelineRun,
         userId = s.UserId,
         source = s.Source,
         status = MapSessionStatus(s.State),

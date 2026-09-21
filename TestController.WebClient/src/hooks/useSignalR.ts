@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel, type IRetryPolicy, type RetryContext } from '@microsoft/signalr';
 import { apiGet } from '../lib/api';
 import { useWatchListStore } from '../stores/watchlistStore';
+import { toNodeStatus } from '../lib/nodeStatus';
 import { useAgentStore } from '../stores/agentStore';
 import { useExecutionStore } from '../stores/executionStore';
 import { useResultsStore } from '../stores/resultsStore';
@@ -165,11 +166,7 @@ export function useSignalR(enabled = true): HubConnection | null {
     conn.on('ActionProgress', (data: {
       actionTag?: string; groupTag?: string; agentName?: string; command?: string; status?: string;
     }) => {
-      const mapped: NodeStatus =
-        data.status === 'Running' ? 'Running'
-        : data.status === 'Success' ? 'Success'
-        : data.status === 'Failed' ? 'Failed'
-        : 'Idle';
+      const mapped = toNodeStatus(data.status);
       const actionTag = data.actionTag || data.command || '';
       if (actionTag) {
         useWatchListStore.getState().updateNodeStatus(actionTag, mapped);
@@ -183,6 +180,9 @@ export function useSignalR(enabled = true): HubConnection | null {
     conn.on('ExecutionStarted', (data: {
       sessionId?: string; watchItemTag?: string; eventType?: string;
     }) => {
+      // Drop the previous run's per-node colours; without this a re-run shows stale green/red
+      // on every node until that node happens to report again.
+      useWatchListStore.getState().clearNodeStatus();
       if (data.watchItemTag) {
         useWatchListStore.getState().updateNodeStatus(data.watchItemTag, 'Running');
       }
@@ -204,8 +204,8 @@ export function useSignalR(enabled = true): HubConnection | null {
         const mapped: NodeStatus =
           data.state === 'Success' ? 'Success'
           : data.state === 'Failed' || data.state === 'PartialFailure' ? 'Failed'
-          : data.state === 'Cancelled' ? 'Idle'
-          : 'Idle';
+          : data.state === 'Cancelled' ? 'Cancelled'
+          : 'Failed';
         useWatchListStore.getState().updateNodeStatus(data.watchItemTag, mapped);
       }
       useExecutionStore.getState().addLog({
@@ -231,7 +231,7 @@ export function useSignalR(enabled = true): HubConnection | null {
       sessionId?: string; watchItemTag?: string;
     }) => {
       if (data.watchItemTag) {
-        useWatchListStore.getState().updateNodeStatus(data.watchItemTag, 'Idle');
+        useWatchListStore.getState().updateNodeStatus(data.watchItemTag, 'Cancelled');
       }
       useExecutionStore.getState().addLog({
         message: `Execution Cancelled: ${data.watchItemTag ?? data.sessionId}`,

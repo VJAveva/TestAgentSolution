@@ -64,4 +64,73 @@ public interface IActionPipelineExecutor
     /// using the same resolved parameters from the original run.
     /// </summary>
     Task RetryFailedAsync(ExecutionSession previousSession, CancellationToken ct);
+
+    /// <summary>
+    /// Runs one already-resolved node of a pipeline in isolation, dispatching to the same tracked
+    /// entry points a full run uses so behaviour, sessions, live log and lock lifecycle are identical.
+    /// </summary>
+    /// <param name="watchItemTag">Pipeline the node belongs to; also the lock and RBAC resource id.</param>
+    /// <param name="resolved">Node located by <see cref="NodeAddressing.TryResolve"/>.</param>
+    /// <param name="initialize">
+    /// Initialize node to load before the run, or null. Initialize only loads a parameter file — it
+    /// dispatches no work — so it is applied to the context rather than executed as a pipeline step,
+    /// which keeps the session's EventType (and therefore its label) describing the node the user picked.
+    /// </param>
+    /// <remarks>
+    /// A default implementation so every existing executor and test fake keeps compiling unchanged.
+    /// </remarks>
+    Task<bool> ExecuteResolvedNodeAsync(
+        string watchItemTag,
+        ResolvedNode resolved,
+        InitializeConfig? initialize,
+        PipelineExecutionContext ctx,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(resolved);
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        if (initialize is not null)
+        {
+            var path = ParameterResolver.Resolve(initialize.ParameterFile, ctx);
+            if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                ParameterResolver.TryLoadJsonConfig(ctx, path, initialize.Profile, ctx.WatchItemTag);
+            else
+                ParameterResolver.LoadParameterFile(ctx, path);
+        }
+
+        switch (resolved.Kind)
+        {
+            case RunnableNodeKind.Event:
+                return RunEventAsync();
+
+            case RunnableNodeKind.Group when resolved.Node is ActionGroupConfig group:
+                return ExecuteGroupTrackedAsync(watchItemTag, group, ctx, ct);
+
+            case RunnableNodeKind.Action when resolved.Node is ActionConfig action:
+                return ExecuteSingleActionTrackedAsync(watchItemTag, action, ctx, ct);
+
+            // A Ref is run through the group path so template lookup, expansion and failure
+            // reporting stay in the executor's own ExecuteRefTracked rather than being duplicated here.
+            case RunnableNodeKind.Template when resolved.Node is RefConfig refNode:
+                return ExecuteGroupTrackedAsync(
+                    watchItemTag,
+                    new ActionGroupConfig
+                    {
+                        Tag = resolved.DisplayName,
+                        ExecutionType = ExecutionMode.Sequential,
+                        Children = [refNode],
+                    },
+                    ctx, ct);
+
+            default:
+                throw new InvalidOperationException(
+                    $"Node '{resolved.Path}' of kind {resolved.Kind} cannot be run on its own.");
+        }
+
+        async Task<bool> RunEventAsync()
+        {
+            await ExecuteEventTrackedAsync(watchItemTag, resolved.OwningEvent, ctx, ct);
+            return true;
+        }
+    }
 }

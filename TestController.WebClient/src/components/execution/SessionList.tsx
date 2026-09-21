@@ -4,6 +4,7 @@ import { useAgentStore } from '../../stores/agentStore';
 import { useExecution } from '../../hooks/useExecution';
 import { agentColor } from '../../lib/agentColors';
 import { logCatch } from '../../lib/logger';
+import { scopedRunLabel } from '../../lib/scopedRun';
 import { PlayCircle, XCircle, X, RefreshCw } from 'lucide-react';
 
 export default function SessionList() {
@@ -105,8 +106,16 @@ export default function SessionList() {
                 {/* Header: tag + state + cancel */}
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="text-xs font-semibold text-text-primary truncate flex-1">
-                    {s.watchItemTag}
+                    {scopedRunLabel(s) ?? s.watchItemTag}
                   </span>
+                  {scopedRunLabel(s) && (
+                    <span
+                      className="shrink-0 rounded-sm border border-acc-mauve/50 bg-acc-mauve/15 px-1 text-[9px] font-bold uppercase text-acc-mauve"
+                      title={`Scoped node-run in ${s.watchItemTag}`}
+                    >
+                      Node
+                    </span>
+                  )}
                   <span className={`text-[10px] font-bold ${stateColor}`}>{s.state}</span>
                   {s.state === 'Running' && (
                     <button

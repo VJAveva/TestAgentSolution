@@ -90,12 +90,12 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
     /// </summary>
     public void Start()
     {
-        // C# events from pipeline executor (kept for back-compat / non-tracked
-        // single-action runs). Session-aware ActionProgress/AgentOutput now
-        // come from the EventAggregator subscriptions below, so the WebClient
-        // can route messages to the correct session card.
+        // C# events from pipeline executor. NodeProgress is deliberately NOT forwarded to SignalR:
+        // it carries no SessionId, and every tracked run already reports each node through the
+        // EventAggregator below. Forwarding both sent every per-node message TWICE, half of them
+        // unroutable by the dashboard (which looks the card up by sessionId). The WPF tree still
+        // subscribes to the C# event directly, so desktop behaviour is unchanged.
         _executor.LogEntry += OnLogEntry;
-        _executor.NodeProgress += OnNodeProgress;
 
         // C# events from agent dispatcher
         _dispatcher.OutputReceived += OnOutputReceived;
@@ -123,7 +123,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _outputTimer = new Timer(FlushOutput, null, 500, 500);
 
         _logger.LogInformation(
-            "SignalRNotifier started � subscribed to: LogEntry, NodeProgress, " +
+            "SignalRNotifier started \u2014 subscribed to: LogEntry, " +
             "OutputReceived, StatusChanged, AgentRegistered, AgentUnregistered, " +
             "Heartbeat, ExecutionStarted, ExecutionCompleted, ConfigReloaded, " +
             "NodeProgressEvent (with SessionId), AgentOutputEvent (with SessionId)");
@@ -183,40 +183,11 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         });
     }
 
-    private void OnNodeProgress(IActionNode node, string status)
-    {
-        if (node is ActionConfig action)
-        {
-            var agentName = string.IsNullOrEmpty(action.AgentName) ? "Controller" : action.AgentName;
-            SendSafe("ActionProgress", new
-            {
-                actionTag = action.ResolvedTag,
-                actionType = action.Type.ToString(),
-                agentName,
-                command = SecurityRedactor.Redact(action.Command),
-                status = SecurityRedactor.Redact(status),
-                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
-            });
-        }
-        else if (node is ActionGroupConfig group)
-        {
-            SendSafe("ActionProgress", new
-            {
-                groupTag = group.Tag,
-                executionType = group.ExecutionType.ToString(),
-                status,
-                timestamp = DateTime.Now.ToString("HH:mm:ss.fff"),
-            });
-        }
-    }
-
     /// <summary>
-    /// Session-aware action progress (preferred). Fired by
-    /// <c>ExecutionSessionManager.BeginAction</c> / <c>RecordResult</c>; carries
-    /// the SessionId so the WebClient/standalone Dashboard can route the
-    /// message to the correct session card. The legacy
-    /// <see cref="OnNodeProgress"/> handler above still fires for non-tracked
-    /// runs (single-action / ad-hoc trigger).
+    /// Session-aware per-node progress — the ONLY source of "ActionProgress" on the wire.
+    /// Actions are reported by <c>ExecutionSessionManager.BeginAction</c>/<c>RecordResult</c>;
+    /// groups and template refs by <c>PublishNodeProgress</c> from the tracked executor. Every
+    /// message therefore carries a SessionId, which is what the dashboard routes on.
     /// </summary>
     private void OnNodeProgressEvent(NodeProgressEvent e)
     {
@@ -566,7 +537,6 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _heartbeatTimer?.Dispose();
         _outputTimer?.Dispose();
         _executor.LogEntry -= OnLogEntry;
-        _executor.NodeProgress -= OnNodeProgress;
         _dispatcher.OutputReceived -= OnOutputReceived;
         _dispatcher.StatusChanged -= OnStatusChanged;
         _vocabMonitor.ConfigReloaded -= OnWatchListReloaded;

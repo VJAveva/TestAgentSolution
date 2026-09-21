@@ -260,6 +260,8 @@ export interface SessionInfo {
   sessionId: string;
   watchItemTag: string;
   eventType: string;
+  /** False for a node-run. Server-derived, so the client never re-implements the prefix rule. */
+  isFullPipelineRun?: boolean;
   state: string;
   startedUtc: string;
   totalActions: number;
@@ -295,7 +297,7 @@ export interface LogEntry {
 // ?? Tree node (UI-side flattened model) ?????????????????????????????
 
 export type NodeKind = 'WatchList' | 'WatchItem' | 'Event' | 'ActionGroup' | 'Action' | 'Initialize' | 'Ref' | 'TemplateList' | 'Template';
-export type NodeStatus = 'Idle' | 'Running' | 'Success' | 'Failed';
+export type NodeStatus = 'Idle' | 'Running' | 'Success' | 'Failed' | 'Skipped' | 'Cancelled';
 
 export interface TreeNode {
   id: string;
@@ -307,6 +309,45 @@ export interface TreeNode {
   isExpanded: boolean;
   depth: number;
   model?: WatchItemConfig | EventConfig | ActionNode | TemplateConfig;
+  /**
+   * Structural path the server addresses this node by, e.g. "e0/c2/c1".
+   * Mirrors NodeAddressing in Core; `id` is a render key only and means nothing to the server.
+   */
+  nodePath?: string;
+  /** Tag of the WatchItem this node belongs to — the pipeline a node-run locks and authorizes against. */
+  watchItemTag?: string;
+}
+
+// ── Node-wise execution ─────────────────────────────────────────────
+
+export type NodeRunScope = 'OnlyThisNode' | 'NodeWithInitialize';
+export type RunnableNodeKind = 'Event' | 'Group' | 'Action' | 'Template';
+
+export interface PipelineNodeDto {
+  path: string;
+  kind: string;
+  name: string;
+  runnable: boolean;
+  hasInitialize: boolean;
+  agentName: string;
+  children: PipelineNodeDto[];
+}
+
+export interface PipelineNodesResponse {
+  watchItemTag: string;
+  treeRevision: string;
+  events: PipelineNodeDto[];
+}
+
+export interface NodeRunResponse {
+  sessionId: string;
+  nodePath: string;
+  nodeKind: RunnableNodeKind;
+  nodeName: string;
+  scope: NodeRunScope;
+  includedInitialize: string;
+  treeRevision: string;
+  message: string;
 }
 
 // ── Failure Analysis models ─────────────────────────────────────────

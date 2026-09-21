@@ -16,12 +16,24 @@ interface WatchListState {
   selectNode: (node: TreeNode | null) => void;
   toggleExpand: (id: string) => void;
   updateNodeStatus: (tag: string, status: NodeStatus) => void;
+  clearNodeStatus: () => void;
 }
 
 let nodeIdCounter = 0;
 function nextId(): string { return `n-${++nodeIdCounter}`; }
 
-function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
+/**
+ * Structural path the server addresses a node by. Mirrors NodeAddressing in Core: the event index
+ * then one child index per level. Derived from the same ordered config the server parsed, so the
+ * indices agree without any id being persisted in WatchList.xml.
+ */
+function buildActionNodeTree(
+  node: ActionNode,
+  depth: number,
+  nodePath: string,
+  watchItemTag: string | undefined,
+): TreeNode {
+  const childPath = (i: number) => (nodePath ? `${nodePath}/c${i}` : '');
   switch (node.nodeType) {
     case 'ActionGroup': {
       const ag = node;
@@ -29,8 +41,8 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
         id: nextId(), nodeKind: 'ActionGroup',
         displayText: ag.tag || 'Group',
         tag: ag.tag, executionStatus: 'Idle',
-        children: ag.children.map(c => buildActionNodeTree(c, depth + 1)),
-        isExpanded: false, depth, model: node,
+        children: ag.children.map((c, i) => buildActionNodeTree(c, depth + 1, childPath(i), watchItemTag)),
+        isExpanded: false, depth, model: node, nodePath, watchItemTag,
       };
     }
     case 'Action': {
@@ -44,7 +56,7 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
       return {
         id: nextId(), nodeKind: 'Action', displayText: label,
         tag: a.tag || a.order || a.command || '', executionStatus: 'Idle', children: [],
-        isExpanded: false, depth, model: node,
+        isExpanded: false, depth, model: node, nodePath, watchItemTag,
       };
     }
     case 'Initialize':
@@ -52,21 +64,21 @@ function buildActionNodeTree(node: ActionNode, depth: number): TreeNode {
         id: nextId(), nodeKind: 'Initialize',
         displayText: node.tag || (node.parameterFile ? node.parameterFile.split(/[/\\]/).pop()! : 'Initialize'),
         tag: node.tag, executionStatus: 'Idle', children: [],
-        isExpanded: false, depth, model: node,
+        isExpanded: false, depth, model: node, nodePath, watchItemTag,
       };
     case 'Ref':
       return {
         id: nextId(), nodeKind: 'Ref',
         displayText: node.templateID || 'Ref',
         tag: '', executionStatus: 'Idle', children: [],
-        isExpanded: false, depth, model: node,
+        isExpanded: false, depth, model: node, nodePath, watchItemTag,
       };
     default:
       return {
         id: nextId(), nodeKind: 'Action',
         displayText: 'Unknown',
         tag: '', executionStatus: 'Idle', children: [],
-        isExpanded: false, depth, model: node,
+        isExpanded: false, depth, model: node, nodePath, watchItemTag,
       };
   }
 }
@@ -82,17 +94,18 @@ function buildTree(config: WatchListConfig): TreeNode[] {
         id: nextId(), nodeKind: 'WatchItem',
         displayText: wi.tag || 'Untitled',
         tag: wi.tag, executionStatus: 'Idle',
-        children: wi.events.map((ev: EventConfig) => {
+        children: wi.events.map((ev: EventConfig, evIndex: number) => {
+          const evPath = `e${evIndex}`;
           const evNode: TreeNode = {
             id: nextId(), nodeKind: 'Event',
             displayText: ev.type || 'Event',
             tag: '', executionStatus: 'Idle',
-            children: ev.children.map(c => buildActionNodeTree(c, 3)),
-            isExpanded: false, depth: 2, model: ev,
+            children: ev.children.map((c, i) => buildActionNodeTree(c, 3, `${evPath}/c${i}`, wi.tag)),
+            isExpanded: false, depth: 2, model: ev, nodePath: evPath, watchItemTag: wi.tag,
           };
           return evNode;
         }),
-        isExpanded: false, depth: 1, model: wi,
+        isExpanded: false, depth: 1, model: wi, watchItemTag: wi.tag,
       };
       return wiNode;
     }),
@@ -110,7 +123,8 @@ function buildTree(config: WatchListConfig): TreeNode[] {
         id: nextId(), nodeKind: 'Template' as const,
         displayText: `Template: ${t.id}`,
         tag: t.id, executionStatus: 'Idle' as const,
-        children: t.children.map(c => buildActionNodeTree(c, 2)),
+        // Template library nodes sit outside any WatchItem, so they carry no runnable node path.
+        children: t.children.map(c => buildActionNodeTree(c, 2, '', undefined)),
         isExpanded: false, depth: 1, model: t,
       })),
       isExpanded: true, depth: 0,
@@ -143,6 +157,8 @@ export const useWatchListStore = create<WatchListState>((set) => ({
   toggleExpand: (id) => set((s) => ({ treeRoots: toggleRecursive(s.treeRoots, id) })),
   updateNodeStatus: (tag, status) =>
     set((s) => ({ nodeStatus: { ...s.nodeStatus, [tag.toLowerCase()]: status as NodeStatus } })),
+  // Called when a run starts so the tree never shows the PREVIOUS run's colours on a re-run.
+  clearNodeStatus: () => set({ nodeStatus: {} }),
 }));
 
 /**

@@ -867,6 +867,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Lock and session tag for a scoped run: the owning WatchItem, else the owning Template, else the
+    /// node's own tag. Shared by the execute commands and their CanExecute so the button and the run
+    /// can never disagree about which pipeline is being occupied.
+    /// </summary>
+    private static string ScopedRunTag(TreeNodeViewModel? node, string fallback) =>
+        FindWatchItemTag(node) ?? FindTemplateTag(node) ?? fallback;
+
     /// <summary>Auto-populate gRPC address from agent name for convenience.</summary>
     partial void OnNewAgentNameChanged(string value)
     {

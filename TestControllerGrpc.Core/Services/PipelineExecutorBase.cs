@@ -447,6 +447,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
         OnNodeProgress(node, "Running");
+        PublishContainerProgress(node, session, "Running");
         bool success;
         try
         {
@@ -462,6 +463,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         catch (OperationCanceledException)
         {
             OnNodeProgress(node, "Cancelled");
+            PublishContainerProgress(node, session, "Cancelled");
             return false;
         }
         catch (Exception ex)
@@ -469,10 +471,34 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             _logger.LogError(ex, "Node execution error");
             OnNodeFailed(node, -1, ex.Message);
             OnNodeProgress(node, "Failed");
+            PublishContainerProgress(node, session, "Failed");
             return false;
         }
         OnNodeProgress(node, success ? "Success" : "Failed");
+        PublishContainerProgress(node, session, success ? "Success" : "Failed");
         return success;
+    }
+
+    /// <summary>
+    /// Emits session-aware progress for the CONTAINER nodes an action's own result does not cover.
+    /// </summary>
+    /// <remarks>
+    /// Actions already report through <c>ExecutionSessionManager.BeginAction/RecordResult</c>, which
+    /// stamp the SessionId. Groups and Refs did not, so their only broadcast came from the legacy
+    /// executor event with no SessionId — and the dashboard routes per-node messages BY SessionId,
+    /// so group status could never appear there.
+    /// </remarks>
+    private void PublishContainerProgress(IActionNode node, ExecutionSession session, string status)
+    {
+        var tag = node switch
+        {
+            ActionGroupConfig group => group.Tag,
+            RefConfig refNode       => refNode.TemplateID,
+            _                       => null,
+        };
+        if (string.IsNullOrEmpty(tag)) return;
+
+        _sessionManager.PublishNodeProgress(session.SessionId, tag, node.NodeType, status);
     }
 
     protected async Task<bool> ExecuteRefTrackedAsync(

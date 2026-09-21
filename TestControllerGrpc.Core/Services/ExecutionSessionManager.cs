@@ -117,13 +117,36 @@ public sealed class ExecutionSessionManager
         }
     }
 
+    /// <summary>
+    /// Publishes session-aware progress for a node that has no <see cref="ActionExecutionResult"/>
+    /// of its own (groups, template refs), so every per-node broadcast carries a SessionId.
+    /// </summary>
+    public void PublishNodeProgress(string sessionId, string nodeTag, string nodeType, string status)
+    {
+        _events?.Publish(new NodeProgressEvent(
+            SessionId: sessionId,
+            AgentName: "Controller",
+            NodeTag: nodeTag,
+            ActionType: nodeType,
+            Command: string.Empty,
+            Status: status));
+    }
+
+    /// <summary>
+    /// Maps an outcome to the status the UI shows. Every member MUST land on a terminal value:
+    /// a non-terminal status as an action's FINAL message leaves the node pulsing forever with no
+    /// pass or fail. <c>Skipped</c> and <c>Unknown</c> previously fell through to "Running" and did
+    /// exactly that.
+    /// </summary>
     private static string MapOutcome(ActionOutcome outcome) => outcome switch
     {
         ActionOutcome.Success    => "Success",
         ActionOutcome.Failed     => "Failed",
         ActionOutcome.Terminated => "Failed",
         ActionOutcome.TimedOut   => "Failed",
-        _                        => "Running",
+        ActionOutcome.Skipped    => "Skipped",
+        // An action that finished without a recorded outcome is not evidence of success.
+        _                        => "Failed",
     };
 
     /// <summary>Marks a session complete and archives it into history.</summary>

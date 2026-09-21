@@ -2,7 +2,9 @@ import { useCallback } from 'react';
 import { apiGet, apiPost } from '../lib/api';
 import { useExecutionStore } from '../stores/executionStore';
 import { appLogger } from '../lib/logger';
-import type { ExecutionStatus, SessionsResponse } from '../types/api';
+import type {
+  ExecutionStatus, SessionsResponse, PipelineNodesResponse, NodeRunResponse, NodeRunScope,
+} from '../types/api';
 import type { PipelineLockDto } from '../stores/lockStore';
 
 /** Dispatched when a trigger call returns 409 with a PipelineLockDto body. */
@@ -120,5 +122,43 @@ export function useExecution() {
     }
   }, [fetchSessions]);
 
-  return { fetchStatus, fetchSessions, triggerAll, triggerByTag, triggerEvent, cancelAll, cancelSession, retrySession, retryByTag };
+  /** Runnable-node map + tree revision for one pipeline. */
+  const fetchPipelineNodes = useCallback(async (tag: string) =>
+    apiGet<PipelineNodesResponse>(`/api/execution/pipelines/${encodeURIComponent(tag)}/nodes`), []);
+
+  /**
+   * Runs one node of a pipeline in isolation. `treeRevision` is echoed from fetchPipelineNodes so
+   * the server can reject the run if WatchList.xml hot-reloaded and the path now means another node.
+   */
+  const runPipelineNode = useCallback(async (
+    tag: string,
+    body: {
+      nodePath: string;
+      scope: NodeRunScope;
+      treeRevision?: string;
+      buildNumber?: string;
+      dropLocation?: string;
+      lockVersion?: number;
+    },
+  ) => {
+    try {
+      const data = await apiPost<NodeRunResponse>(
+        `/api/execution/pipelines/${encodeURIComponent(tag)}/nodes/run`, body);
+      if (data?.sessionId) {
+        useExecutionStore.getState().setLogSessionFilter(data.sessionId);
+        appLogger.info('Execution', `Ran node ${data.nodeName} of ${tag} \u2192 run ${data.sessionId}`);
+      }
+      await fetchSessions();
+      return data;
+    } catch (err: any) {
+      const lock = extractLockFrom409(err);
+      if (lock) {
+        dispatchLockConflict(lock);
+        return;
+      }
+      throw err;
+    }
+  }, [fetchSessions]);
+
+  return { fetchStatus, fetchSessions, triggerAll, triggerByTag, triggerEvent, cancelAll, cancelSession, retrySession, retryByTag, fetchPipelineNodes, runPipelineNode };
 }

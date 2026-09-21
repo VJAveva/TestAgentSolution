@@ -13,7 +13,19 @@ import type { PipelineLockDto } from '../../stores/lockStore';
 import LockBadge from './LockBadge';
 import DisabledTriggerButton from '../common/DisabledTriggerButton';
 import TriggerDialog from '../execution/TriggerDialog';
+import NodeRunDialog from './NodeRunDialog';
 import LockConflictModal from '../dialogs/LockConflictModal';
+
+/** Node kinds that can be run on their own. Mirrors RunnableNodeKind in Core. */
+const RUNNABLE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>(['Event', 'ActionGroup', 'Action', 'Ref']);
+
+/** Label for the per-node run control, matching what the run actually scopes to. */
+const runLabel: Partial<Record<NodeKind, string>> = {
+  Event: 'Run',
+  ActionGroup: 'Run group',
+  Action: 'Run action',
+  Ref: 'Run template',
+};
 
 const kindIcon: Record<NodeKind, React.ReactNode> = {
   WatchList:    <List size={14} className="text-accent" />,
@@ -70,11 +82,23 @@ function NodeBadge({ node }: { node: TreeNode }) {
   );
 }
 
+// Running is a GREEN pulse to match the WPF tree; every other value is terminal and must stay
+// visible, so a finished node never silently reverts to showing nothing.
 const statusDot: Record<string, string> = {
-  Idle:    '',
-  Running: 'bg-accent animate-pulse',
-  Success: 'bg-acc-green',
-  Failed:  'bg-acc-red',
+  Idle:      '',
+  Running:   'bg-acc-green animate-pulse',
+  Success:   'bg-acc-green',
+  Failed:    'bg-acc-red',
+  Skipped:   'bg-text-muted',
+  Cancelled: 'bg-acc-yellow',
+};
+
+const statusTitle: Record<string, string> = {
+  Running:   'Running',
+  Success:   'Passed',
+  Failed:    'Failed',
+  Skipped:   'Skipped',
+  Cancelled: 'Cancelled',
 };
 
 /**
@@ -105,6 +129,7 @@ export default function WatchListTree() {
   const { items: filteredWatchItems, label: filterLabel } = useFilteredWatchItems();
   const { triggerByTag } = useExecution();
   const [triggerTarget, setTriggerTarget] = useState<string | null>(null);
+  const [nodeRunTarget, setNodeRunTarget] = useState<TreeNode | null>(null);
   const [conflictLock, setConflictLock] = useState<PipelineLockDto | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -198,7 +223,7 @@ export default function WatchListTree() {
                 className="absolute top-0 left-0 w-full"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
-                <TreeNodeRow node={node} onTriggerRequest={setTriggerTarget} onOverrideRequest={setConflictLock} />
+                <TreeNodeRow node={node} onTriggerRequest={setTriggerTarget} onOverrideRequest={setConflictLock} onNodeRunRequest={setNodeRunTarget} />
               </div>
             );
           })}
@@ -221,13 +246,21 @@ export default function WatchListTree() {
           onClose={() => setConflictLock(null)}
         />
       )}
+
+      {nodeRunTarget && (
+        <NodeRunDialog
+          node={nodeRunTarget}
+          onClose={() => setNodeRunTarget(null)}
+          onRan={() => setNodeRunTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
 type PipelineState = 'triggerable' | 'viewOnly' | 'disabled' | 'locked';
 
-const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverrideRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void; onOverrideRequest: (lock: PipelineLockDto) => void }) {
+const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverrideRequest, onNodeRunRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void; onOverrideRequest: (lock: PipelineLockDto) => void; onNodeRunRequest: (node: TreeNode) => void }) {
   const selectNode = useWatchListStore(s => s.selectNode);
   const toggleExpand = useWatchListStore(s => s.toggleExpand);
   const selectedNode = useWatchListStore(s => s.selectedNode);
@@ -260,6 +293,26 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverri
   const canForceRelease = useCan('Pipeline_ForceRelease', node.tag ?? undefined);
   const { cancelSession, fetchSessions } = useExecution();
 
+  // Node-run authority is the OWNING pipeline's, not the node's own tag (an action's tag is a
+  // label, never a pipeline id) — granted the pipeline means run any node in it.
+  const canRunNode = useCan('Pipeline_Trigger', node.watchItemTag ?? undefined);
+  const canForceReleaseOwner = useCan('Pipeline_ForceRelease', node.watchItemTag ?? undefined);
+  const ownerPipelineLocked = useLockStore(
+    s => (node.watchItemTag ? s.hasActiveLock(node.watchItemTag) : false));
+  const ownerPipelineLock = useLockStore(
+    s => (node.watchItemTag ? s.locks[node.watchItemTag] : undefined));
+  const ownerPipelineStatus = useWatchListStore(
+    s => (node.watchItemTag ? s.nodeStatus[node.watchItemTag.toLowerCase()] : undefined) ?? 'Idle');
+
+  const isRunnableNode =
+    !isWatchItem && RUNNABLE_KINDS.has(node.nodeKind) && !!node.nodePath && !!node.watchItemTag;
+  const showNodeRun = isRunnableNode && canRunNode && !ownerPipelineLocked;
+  // A node-run takes the pipeline lock, so an admin must be able to clear a blocking lock from the
+  // node they are standing on rather than hunting for the pipeline row.
+  const showNodeOverride =
+    isRunnableNode && ownerPipelineLocked && !!ownerPipelineLock
+    && ownerPipelineLock.ownerUserId !== currentUserId && canForceReleaseOwner;
+
   // The lock identifies the pipeline but not the run, so resolve the session on demand rather
   // than depending on the execution store being populated in the WatchList view.
   const cancelOwnRun = async () => {
@@ -271,7 +324,7 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverri
 
   return (
     <div
-      className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer text-xs transition-colors
+      className={`group flex flex-wrap items-start gap-x-1.5 gap-y-0.5 py-1 pr-2 cursor-pointer text-xs transition-colors
         ${isSelected ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-text-primary'}
         ${rowOpacity}`}
       style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
@@ -296,12 +349,17 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverri
 
       {/* Status indicator */}
       {status !== 'Idle' && (
-        <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot[status]}`} />
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${statusDot[status] ?? 'bg-acc-red'}`}
+          title={statusTitle[status] ?? status}
+          aria-label={`Status: ${statusTitle[status] ?? status}`}
+        />
       )}
 
-      {/* Icon + label */}
+      {/* Icon + label. Wraps rather than truncating, with a width floor so the pills and Run button
+          wrap to their own line instead of squeezing the name down to one word per line. */}
       {kindIcon[node.nodeKind]}
-      <span className="truncate">{node.displayText}</span>
+      <span className="flex-1 min-w-[8rem] break-words leading-snug" title={node.displayText}>{node.displayText}</span>
 
       {/* Action-type badge */}
       <NodeBadge node={node} />
@@ -343,9 +401,44 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverri
         </div>
       )}
 
+      {/* Per-node run. Revealed on hover but ALSO on keyboard focus, so it is never hover-only. */}
+      {isRunnableNode && (
+        <div className="shrink-0 ml-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {ownerPipelineLocked ? (
+            <>
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-acc-green">
+                <span className="w-1.5 h-1.5 rounded-full bg-acc-green animate-pulse" />
+                {ownerPipelineStatus === 'Running' ? 'RUNNING' : 'LOCKED'}
+              </span>
+              {showNodeOverride && (
+                <button
+                  className="rounded-sm bg-acc-mauve/80 px-1.5 py-0.5 text-[10px] font-semibold text-white
+                    hover:bg-acc-mauve"
+                  title={`Override the lock held by ${ownerPipelineLock!.ownerDisplayName}`}
+                  onClick={() => onOverrideRequest(ownerPipelineLock!)}
+                >
+                  Override
+                </button>
+              )}
+            </>
+          ) : showNodeRun ? (
+            <button
+              className="inline-flex items-center gap-1 rounded-sm border border-bdr px-1.5 py-0.5 text-[10px]
+                font-semibold text-accent opacity-0 transition-opacity hover:bg-accent hover:text-white
+                hover:border-accent focus:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"
+              title={`${runLabel[node.nodeKind]} in isolation`}
+              onClick={() => onNodeRunRequest(node)}
+            >
+              <Play size={9} />
+              {runLabel[node.nodeKind]}
+            </button>
+          ) : null}
+        </div>
+      )}
+
       {/* Child count annotation */}
       {hasChildren && (
-        <span className="shrink-0 text-[10px] text-text-muted ml-auto mr-1">
+        <span className="shrink-0 text-[10px] text-text-muted mr-1">
           {node.children.length} {node.children.length === 1 ? 'item' : 'items'}
         </span>
       )}

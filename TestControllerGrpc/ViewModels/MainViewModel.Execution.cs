@@ -677,7 +677,21 @@ public sealed partial class MainViewModel
     private TreeNodeViewModel? ActiveExecNode =>
         ActiveEditingContext == "Templates" ? SelectedTemplateNode : SelectedNode;
 
-    private bool CanExecuteGroup => ActiveExecNode?.NodeKind == NodeKinds.ActionGroup;
+    private bool CanExecuteGroup
+    {
+        get
+        {
+            var node = ActiveExecNode;
+            if (node?.NodeKind != NodeKinds.ActionGroup) return false;
+            if (node.ModelObject is not ActionGroupConfig ag) return false;
+            if (_lockStateService.HasActiveLock(ScopedRunTag(node, ag.Tag))) return false;
+            // A node in the Templates tree has no owning pipeline and therefore no assignment to check.
+            // AuthorizationService has no unscoped Pipeline_Trigger rule for Engineers, so gating it here
+            // would disable the button for exactly the people who use templates.
+            var pipelineTag = FindWatchItemTag(node);
+            return pipelineTag is null || _capabilityChecker.Can(Permission.Pipeline_Trigger, pipelineTag);
+        }
+    }
 
     /// <summary>Execute a single ActionGroup and its children (from the WatchList or the Templates tree).</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteGroup), AllowConcurrentExecutions = true)]
@@ -686,14 +700,41 @@ public sealed partial class MainViewModel
         var node = ActiveExecNode;
         if (node?.ModelObject is not ActionGroupConfig ag) return;
 
-        var tag = FindWatchItemTag(node) ?? FindTemplateTag(node) ?? ag.Tag;
+        var tag = ScopedRunTag(node, ag.Tag);
         if (IsWatchItemRunning(tag))
         {
             AddLog($"WatchItem '{tag}' is already running");
             return;
         }
 
+        // Authorization before any lock is taken, exactly as the root trigger does. A scoped run
+        // dispatches real work to real agents, so it cannot be less gated than the pipeline it belongs to.
+        var pipelineTag = FindWatchItemTag(node);
+        if (pipelineTag is not null)
+        {
+            try
+            {
+                await _pipelineGuard.AuthorizeAsync(
+                    GetCurrentUserContext(), Permission.Pipeline_Trigger, pipelineTag);
+            }
+            catch (PipelineAuthorizationDeniedException ex)
+            {
+                AddLog($"Run denied for group '{ag.Tag}': {ex.Message}", LogSeverity.Warning);
+                ShowAuthorizationDeniedDialog(ex.Message);
+                return;
+            }
+        }
+
         WriteBackAll();
+
+        // Single-run pipeline lock, same as a root trigger: a scoped run still occupies the pipeline,
+        // and the WebClient's node-run takes this lock, so skipping it here would let the two hosts
+        // run the same pipeline at once.
+        var pipelineToken = AcquirePipelineLock(tag);
+        if (pipelineToken is null) return;
+
+        using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
+            _lockRegistry, tag, pipelineToken, _lockRegistry.RenewalInterval);
 
         var session = CreateSession(tag);
         var wiConfig = FindAncestorModel<WatchItemConfig>(node);
@@ -708,7 +749,7 @@ public sealed partial class MainViewModel
 
         // Acquire agent locks so Registry/Monitor reflect live status
         var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters);
-        if (IsBlockedByMaintenance(tag, requiredAgents, null, session)) return;
+        if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -719,6 +760,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start group '{ag.Tag}' \u2014 agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                _lockRegistry.TryRelease(tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
@@ -770,6 +812,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockRegistry.TryRelease(tag, pipelineToken);
             _lockManager.ReleaseSession(session.SessionId);
             _events.Publish(new AgentLocksChangedEvent
             {
@@ -786,7 +829,17 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanExecuteTemplate => SelectedTemplateNode?.NodeKind == NodeKinds.Template;
+    private bool CanExecuteTemplate
+    {
+        get
+        {
+            if (SelectedTemplateNode?.NodeKind != NodeKinds.Template) return false;
+            if (SelectedTemplateNode.ModelObject is not TemplateConfig tpl) return false;
+            // No permission check: a Template has no owning pipeline, and the only rule that would
+            // apply denies Engineers outright. Gating it is a policy decision, not a bug fix.
+            return !_lockStateService.HasActiveLock($"Template:{tpl.ID}");
+        }
+    }
 
     /// <summary>Execute a Template directly — all of its Actions and ActionGroups — independent of any WatchItem.</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteTemplate), AllowConcurrentExecutions = true)]
@@ -803,6 +856,13 @@ public sealed partial class MainViewModel
 
         WriteBackAll();
 
+        // Keyed on the synthetic Template tag, so two runs of the same template cannot overlap.
+        var pipelineToken = AcquirePipelineLock(tag);
+        if (pipelineToken is null) return;
+
+        using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
+            _lockRegistry, tag, pipelineToken, _lockRegistry.RenewalInterval);
+
         var session = CreateSession(tag);
 
         // Templates have no WatchItem context — collect only their own Initialize parameters.
@@ -818,7 +878,7 @@ public sealed partial class MainViewModel
         StampOwner(ctx);
 
         var requiredAgents = AgentResolver.ExtractAgentNames(tpl, ctx.Parameters);
-        if (IsBlockedByMaintenance(tag, requiredAgents, null, session)) return;
+        if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -829,6 +889,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start template '{tpl.ID}' \u2014 agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                _lockRegistry.TryRelease(tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
@@ -879,6 +940,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockRegistry.TryRelease(tag, pipelineToken);
             _lockManager.ReleaseSession(session.SessionId);
             _events.Publish(new AgentLocksChangedEvent
             {
@@ -895,7 +957,18 @@ public sealed partial class MainViewModel
         }
     }
 
-    private bool CanExecuteSingleAction => ActiveExecNode?.NodeKind == NodeKinds.Action;
+    private bool CanExecuteSingleAction
+    {
+        get
+        {
+            var node = ActiveExecNode;
+            if (node?.NodeKind != NodeKinds.Action) return false;
+            if (node.ModelObject is not ActionConfig action) return false;
+            if (_lockStateService.HasActiveLock(ScopedRunTag(node, action.Command))) return false;
+            var pipelineTag = FindWatchItemTag(node);
+            return pipelineTag is null || _capabilityChecker.Can(Permission.Pipeline_Trigger, pipelineTag);
+        }
+    }
 
     /// <summary>Execute a single Action node (from the WatchList or the Templates tree).</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteSingleAction), AllowConcurrentExecutions = true)]
@@ -904,14 +977,36 @@ public sealed partial class MainViewModel
         var node = ActiveExecNode;
         if (node?.ModelObject is not ActionConfig action) return;
 
-        var tag = FindWatchItemTag(node) ?? FindTemplateTag(node) ?? action.Command;
+        var tag = ScopedRunTag(node, action.Command);
         if (IsWatchItemRunning(tag))
         {
             AddLog($"WatchItem '{tag}' is already running");
             return;
         }
 
+        var pipelineTag = FindWatchItemTag(node);
+        if (pipelineTag is not null)
+        {
+            try
+            {
+                await _pipelineGuard.AuthorizeAsync(
+                    GetCurrentUserContext(), Permission.Pipeline_Trigger, pipelineTag);
+            }
+            catch (PipelineAuthorizationDeniedException ex)
+            {
+                AddLog($"Run denied for action '{action.ResolvedTag}': {ex.Message}", LogSeverity.Warning);
+                ShowAuthorizationDeniedDialog(ex.Message);
+                return;
+            }
+        }
+
         WriteBackAll();
+
+        var pipelineToken = AcquirePipelineLock(tag);
+        if (pipelineToken is null) return;
+
+        using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
+            _lockRegistry, tag, pipelineToken, _lockRegistry.RenewalInterval);
 
         var session = CreateSession(tag);
         var wiConfig = FindAncestorModel<WatchItemConfig>(node);
@@ -926,7 +1021,7 @@ public sealed partial class MainViewModel
 
         // Acquire agent lock so Registry/Monitor reflect live status
         var requiredAgents = AgentResolver.ExtractAgentNames(action, ctx.Parameters);
-        if (IsBlockedByMaintenance(tag, requiredAgents, null, session)) return;
+        if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
             var wpfUser = $"WPF/{Environment.UserName}@{Environment.MachineName}";
@@ -937,6 +1032,7 @@ public sealed partial class MainViewModel
                 var conflictMsg = string.Join("\n",
                     conflicts.Select(c => $"  {c.AgentName} \u2190 locked by {c.UserId} ({c.WatchItemTag})"));
                 AddLog($"Cannot start action '{action.ResolvedTag}' \u2014 agent is busy:\n{conflictMsg}", LogSeverity.Warning);
+                _lockRegistry.TryRelease(tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
             }
@@ -988,6 +1084,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            _lockRegistry.TryRelease(tag, pipelineToken);
             _lockManager.ReleaseSession(session.SessionId);
             _events.Publish(new AgentLocksChangedEvent
             {
