@@ -45,9 +45,46 @@ public class FleetMaintenanceServiceTests
         });
     }
 
+    /// <summary>
+    /// The operations restore the state invariant in their own catch (Quarantined). RunAsync's outer net
+    /// does not - it records the operation as Failed and leaves the node claiming to be Rebooting, which
+    /// DispatchGate blocks and nothing re-evaluates until the controller restarts.
+    /// </summary>
     [Fact]
-    public async Task PrecheckAsync_Should_ReportBusyWatchItemAndNotDispatchable_When_NodeLocked()
+    public async Task RunAsync_Should_NotLeaveNodeInATransientState_When_TheOperationThrows()
     {
+        var stateStore = new MaintenanceStateStore();
+
+        var rebootOp = new Mock<IMachineRebootOperation>();
+        rebootOp
+            .Setup(o => o.ExecuteAsync(It.IsAny<MaintenanceOperation>(), It.IsAny<RebootRequest>(),
+                It.IsAny<IProgress<MaintenanceProgress>>(), It.IsAny<CancellationToken>()))
+            .Returns<MaintenanceOperation, RebootRequest, IProgress<MaintenanceProgress>, CancellationToken>(
+                (_, req, _, _) =>
+                {
+                    // Mirrors the real phase 2, which marks the node in-flight before any work happens.
+                    stateStore.Set(req.NodeId, MaintenanceState.Rebooting);
+                    throw new InvalidOperationException("dispatcher faulted");
+                });
+
+        var sut = Build(new Mock<IMachineRevertOperation>().Object, new Mock<IAgentGrpcDispatcher>().Object,
+            new AgentLockManager(), stateStore, rebootOp.Object);
+
+        var completed = new TaskCompletionSource<MaintenanceOperation>();
+        sut.OperationCompleted += (_, op) => completed.TrySetResult(op);
+
+        await sut.StartRebootAsync(
+            new RebootRequest { NodeId = Node, TriggerSource = MaintenanceTriggerSource.WebApi },
+            CancellationToken.None);
+
+        var result = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.NotEqual(MaintenanceState.Rebooting, stateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task PrecheckAsync_Should_ReportBusyWatchItemAndNotDispatchable_When_NodeLocked()    {
         var lockManager = new AgentLockManager();
         lockManager.TryLockAgents(new[] { Node }, "sess1", "Nightly Regression", "user1", "WPF");
 

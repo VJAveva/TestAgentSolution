@@ -17,6 +17,13 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     private readonly INodeUpdateStatusStore? _store;
     private readonly IFleetNotificationService? _notifications;
     private readonly IFleetMaintenanceService? _maintenance;
+    private readonly INodeUpdateInstaller? _installer;
+
+    /// <summary>
+    /// Keyed by agent, and deliberately NOT on the row: RebuildRows throws every row away on each status
+    /// report, which would wipe an in-flight "Installing" the moment any node reported anything.
+    /// </summary>
+    private readonly Dictionary<string, NodeUpdateActionVM> _updateActions = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly UpdatePolicyStore? _policy;
     private readonly Dispatcher _uiDispatcher;
@@ -77,7 +84,8 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         INodeUpdateStatusStore? store = null,
         IFleetNotificationService? notifications = null,
         IFleetMaintenanceService? maintenance = null,
-        UpdatePolicyStore? policy = null)
+        UpdatePolicyStore? policy = null,
+        INodeUpdateInstaller? installer = null)
     {
         _dispatcher = dispatcher;
         _uiDispatcher = uiDispatcher;
@@ -85,6 +93,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         _notifications = notifications;
         _maintenance = maintenance;
         _policy = policy;
+        _installer = installer;
 
         if (_store is not null) _store.Changed += OnStatusChanged;
         if (_notifications is not null) _notifications.NotificationsChanged += OnNotificationsChanged;
@@ -137,13 +146,13 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         {
             statuses.TryGetValue(node, out var status);
             registered.Add(node);
-            built.Add(new NodeUpdateRowVM(node, status, staleAfter));
+            built.Add(new NodeUpdateRowVM(node, status, staleAfter, ActionFor(node)));
         }
 
         // A node that reported but is no longer registered still matters to the operator. Membership is a set
         // lookup, not a scan of Rows per orphan.
         foreach (var orphan in statuses.Values.Where(s => !registered.Contains(s.NodeId)))
-            built.Add(new NodeUpdateRowVM(orphan.NodeId, orphan, staleAfter));
+            built.Add(new NodeUpdateRowVM(orphan.NodeId, orphan, staleAfter, ActionFor(orphan.NodeId)));
 
         // Actionable first: at 50 rows the operator should not have to hunt for the node needing a reboot.
         foreach (var row in built
@@ -287,6 +296,101 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         await StartRebootAsync(nodeId);
     }
 
+    internal NodeUpdateActionVM ActionFor(string agentName)
+    {
+        if (_updateActions.TryGetValue(agentName, out var existing)) return existing;
+        var created = new NodeUpdateActionVM();
+        _updateActions[agentName] = created;
+        return created;
+    }
+
+    /// <summary>
+    /// One button, two verbs: check when idle, install once updates are known. Per node and manual by
+    /// design - nothing here acts on the fleet, and no snapshot is touched.
+    /// </summary>
+    [RelayCommand]
+    private async Task UpdateActionAsync(string? nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(nodeId)) return;
+
+        var action = ActionFor(nodeId);
+        if (!action.CanAct) return;
+
+        if (_installer is null)
+        {
+            action.Detail = "No update installer is configured on this controller.";
+            action.State = NodeUpdateActionState.Unsupported;
+            return;
+        }
+
+        if (action.State == NodeUpdateActionState.Available)
+            await InstallUpdatesAsync(nodeId, action).ConfigureAwait(true);
+        else
+            await CheckUpdatesAsync(nodeId, action).ConfigureAwait(true);
+    }
+
+    private async Task CheckUpdatesAsync(string nodeId, NodeUpdateActionVM action)
+    {
+        action.Detail = "";
+        action.State = NodeUpdateActionState.Checking;
+        try
+        {
+            // Asked, never assumed: agents provisioned under an auto-logon user cannot install.
+            if (!await _installer!.IsInstallSupportedAsync(nodeId, CancellationToken.None).ConfigureAwait(true))
+            {
+                action.Detail = "This agent cannot install updates (not running elevated).";
+                action.State = NodeUpdateActionState.Unsupported;
+                return;
+            }
+
+            var result = await _installer.SearchAsync(nodeId, CancellationToken.None).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                action.Detail = result.Error ?? "Update search failed.";
+                action.State = NodeUpdateActionState.Error;
+                return;
+            }
+
+            action.AvailableCount = result.AvailableCount;
+            action.Detail = result.AvailableCount == 0
+                ? "No updates available."
+                : string.Join(Environment.NewLine, result.Titles.Take(10));
+            action.State = result.AvailableCount > 0 ? NodeUpdateActionState.Available : NodeUpdateActionState.Done;
+        }
+        catch (Exception ex)
+        {
+            action.Detail = ex.Message;
+            action.State = NodeUpdateActionState.Error;
+        }
+    }
+
+    private async Task InstallUpdatesAsync(string nodeId, NodeUpdateActionVM action)
+    {
+        action.State = NodeUpdateActionState.Installing;
+        try
+        {
+            var result = await _installer!.InstallAsync(nodeId, CancellationToken.None).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                action.Detail = result.Error ?? "Update install failed.";
+                action.State = NodeUpdateActionState.Error;
+                return;
+            }
+
+            action.AvailableCount = 0;
+            action.RebootRequired = result.RebootRequired;
+            action.Detail = result.RebootRequired
+                ? $"Installed {result.InstalledCount} update(s). A reboot is required."
+                : $"Installed {result.InstalledCount} update(s).";
+            action.State = NodeUpdateActionState.Done;
+        }
+        catch (Exception ex)
+        {
+            action.Detail = ex.Message;
+            action.State = NodeUpdateActionState.Error;
+        }
+    }
+
     /// <summary>Patch Tuesday button: queues a reboot for every RebootRequired node that is not already draining (R19).</summary>
     [RelayCommand]
     private async Task RebootAllReadyAsync()
@@ -389,12 +493,52 @@ public sealed class FleetNotificationVM
     public string RelativeTime { get; }
 }
 
+public enum NodeUpdateActionState { Idle, Checking, Available, Installing, Done, Error, Unsupported }
+
+/// <summary>
+/// The per-node "check / install updates" button. Patches the LIVE node only - a later revert to snapshot
+/// discards the updates, which is the whole difference between this and a golden-image refresh.
+/// </summary>
+public sealed partial class NodeUpdateActionVM : ObservableObject
+{
+    [ObservableProperty] private NodeUpdateActionState _state = NodeUpdateActionState.Idle;
+    [ObservableProperty] private int _availableCount;
+    [ObservableProperty] private bool _rebootRequired;
+    [ObservableProperty] private string _detail = "";
+
+    public string Label => State switch
+    {
+        NodeUpdateActionState.Checking => "Checking\u2026",
+        NodeUpdateActionState.Available => AvailableCount == 1 ? "Install 1 update" : $"Install {AvailableCount} updates",
+        NodeUpdateActionState.Installing => "Installing\u2026",
+        NodeUpdateActionState.Done => "Up to date",
+        NodeUpdateActionState.Error => "Failed \u2014 retry",
+        NodeUpdateActionState.Unsupported => "Not supported",
+        _ => "Check for updates",
+    };
+
+    /// <summary>Unsupported is terminal: the node cannot install, so offering a retry would be a lie.</summary>
+    public bool CanAct => State is NodeUpdateActionState.Idle or NodeUpdateActionState.Available
+        or NodeUpdateActionState.Done or NodeUpdateActionState.Error;
+
+    public bool IsBusy => State is NodeUpdateActionState.Checking or NodeUpdateActionState.Installing;
+
+    partial void OnStateChanged(NodeUpdateActionState value)
+    {
+        OnPropertyChanged(nameof(Label));
+        OnPropertyChanged(nameof(CanAct));
+        OnPropertyChanged(nameof(IsBusy));
+    }
+
+    partial void OnAvailableCountChanged(int value) => OnPropertyChanged(nameof(Label));
+}
+
 /// <summary>One row of the Maintenance-tab updates grid, and the backing data for a card's shield badge (R17/R19/R23).</summary>
 public sealed class NodeUpdateRowVM
-{
-    public NodeUpdateRowVM(string agentName, NodeUpdateStatus? status, TimeSpan staleAfter)
+{    public NodeUpdateRowVM(string agentName, NodeUpdateStatus? status, TimeSpan staleAfter, NodeUpdateActionVM? action = null)
     {
         AgentName = agentName;
+        Action = action ?? new NodeUpdateActionVM();
         HasReported = status is not null;
         State = status?.State ?? WindowsUpdateState.Unknown;
         PendingCount = status?.PendingCount ?? 0;
@@ -423,6 +567,10 @@ public sealed class NodeUpdateRowVM
     }
 
     public string AgentName { get; }
+
+    /// <summary>Shared with the parent VM, so it outlives this row.</summary>
+    public NodeUpdateActionVM Action { get; }
+
     public bool HasReported { get; }
     public WindowsUpdateState State { get; }
     public string StateText { get; }

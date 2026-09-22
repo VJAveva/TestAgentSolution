@@ -645,6 +645,29 @@ public partial class FleetCardVM : ObservableObject
     public int MaintenanceProgressPercent =>
         MaintenanceStepCount > 0 ? (int)(100.0 * MaintenanceStep / MaintenanceStepCount) : 0;
 
+    /// <summary>
+    /// Quarantine is sticky — set when an operation fails and cleared only by an operator. A node whose agent
+    /// reconnected after the wait timed out therefore still reads as failed, which is why this says so plainly.
+    /// </summary>
+    public bool IsQuarantinedAndOnline => IsQuarantined && !IsError;
+
+    public string QuarantineHint =>
+        !IsQuarantined ? ""
+        : IsError ? "Quarantined \u00b7 agent offline"
+        : "Quarantined \u00b7 agent is back online \u2014 return to rotation";
+
+    partial void OnIsQuarantinedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsQuarantinedAndOnline));
+        OnPropertyChanged(nameof(QuarantineHint));
+    }
+
+    partial void OnIsErrorChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsQuarantinedAndOnline));
+        OnPropertyChanged(nameof(QuarantineHint));
+    }
+
     public string MaintenanceLine
     {
         get

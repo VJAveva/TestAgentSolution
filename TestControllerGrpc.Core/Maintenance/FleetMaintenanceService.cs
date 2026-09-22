@@ -221,6 +221,18 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
         catch (Exception ex)
         {
             _logger.Error(LogCategory, $"Maintenance operation for '{nodeId}' faulted.", ex);
+
+            // The operations quarantine in their own handlers. If one throws past that, the node would keep
+            // claiming Rebooting/Reverting - which DispatchGate blocks and nothing re-evaluates until the
+            // controller restarts. Only transient states are converted, so a precheck fault (state still
+            // None) does not earn a node a quarantine it never needed.
+            if (_stateStore.Get(nodeId) is MaintenanceState.Rebooting
+                or MaintenanceState.Reverting or MaintenanceState.Updating)
+            {
+                _stateStore.Set(nodeId, MaintenanceState.Quarantined);
+                _logger.Warn(LogCategory, $"'{nodeId}' quarantined: the operation faulted while the node was in-flight.");
+            }
+
             result = running.Operation with
             {
                 State = MaintenanceOperationState.Failed,

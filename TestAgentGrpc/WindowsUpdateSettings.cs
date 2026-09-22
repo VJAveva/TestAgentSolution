@@ -37,4 +37,13 @@ public sealed class WindowsUpdateSettings
 
     /// <summary>Cap on update titles reported per event.</summary>
     public int MaxReportedItems { get; set; } = 30;
+
+    /// <summary>
+    /// Whether a pending file rename counts as "reboot required". Off, because ANY installer replacing a
+    /// locked file sets it — measured 2026-09-22 on this fleet, every flagged node was tripping on AVEVA's
+    /// own AMP.Installer and MSI rollback files, with no Windows Update pending at all. A reboot-required
+    /// node stops taking pipeline work, so this was blocking runs on a signal that had nothing to do with
+    /// Windows Update. Still reported via <c>PendingFileRenameCount</c>.
+    /// </summary>
+    public bool TreatPendingFileRenamesAsRebootRequired { get; set; }
 }

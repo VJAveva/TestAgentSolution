@@ -413,6 +413,16 @@
                                                                 <Setter Property="BorderBrush" Value="{DynamicResource StatusFailedFg}"/>
                                                                 <Setter Property="Opacity" Value="1.0"/>
                                                             </DataTrigger>
+                                                            <!-- Amber, not red: the node is flagged for review but the machine is answering. -->
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsQuarantined}" Value="True"/>
+                                                                    <Condition Binding="{Binding IsError}" Value="False"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Background" Value="{DynamicResource StatusMaintenanceBg}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource StatusMaintenanceFg}"/>
+                                                                <Setter Property="Opacity" Value="1.0"/>
+                                                            </MultiDataTrigger>
                                                             <DataTrigger Binding="{Binding IsDraining}" Value="True">
                                                                 <Setter Property="Background" Value="{DynamicResource StatusDrainingBg}"/>
                                                                 <Setter Property="BorderBrush" Value="{DynamicResource StatusDrainingFg}"/>
@@ -536,8 +546,38 @@
                                                                Foreground="{DynamicResource TextS}"
                                                                VerticalAlignment="Bottom"
                                                                TextTrimming="CharacterEllipsis"
+                                                               Margin="12,2,0,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsUnderMaintenance}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsQuarantined}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <!-- Row 2 (quarantined): why it is flagged, and whether the agent is answering -->
+                                                    <TextBlock Grid.Row="1" Text="{Binding QuarantineHint}"
+                                                               FontSize="{StaticResource FontSize9}" FontFamily="Consolas"
+                                                               VerticalAlignment="Bottom"
+                                                               TextTrimming="CharacterEllipsis"
                                                                Margin="12,2,0,0"
-                                                               Visibility="{Binding IsUnderMaintenance, Converter={StaticResource InvBoolVis}}"/>
+                                                               Visibility="{Binding IsQuarantined, Converter={StaticResource BoolVis}}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource StatusFailedFg}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsQuarantinedAndOnline}" Value="True">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource StatusMaintenanceFg}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                     <!-- Row 2 (maintenance): phase message + progress bar -->
                                                     <StackPanel Grid.Row="1" Margin="12,2,0,0" VerticalAlignment="Bottom"
                                                                 Visibility="{Binding IsUnderMaintenance, Converter={StaticResource BoolVis}}">

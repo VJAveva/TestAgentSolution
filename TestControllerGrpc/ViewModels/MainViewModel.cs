@@ -353,7 +353,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TestControllerGrpc.Core.Maintenance.IMaintenanceOperationStore? maintenanceStore = null,
         TestControllerGrpc.Core.Maintenance.INodeUpdateStatusStore? updateStatus = null,
         TestControllerGrpc.Core.Maintenance.IFleetNotificationService? fleetNotifications = null,
-        TestControllerGrpc.Core.Maintenance.UpdatePolicyStore? updatePolicy = null)
+        TestControllerGrpc.Core.Maintenance.UpdatePolicyStore? updatePolicy = null,
+        TestControllerGrpc.Core.Maintenance.INodeUpdateInstaller? updateInstaller = null)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -376,7 +377,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher, fleetMaintenance, _maintenanceState, maintenanceStore,
-            updateStatus, fleetNotifications, updatePolicy);
+            updateStatus, fleetNotifications, updatePolicy, updateInstaller);
 
         // Mirror fleet-maintenance (revert / reboot) activity into the main execution log.
         if (_fleetMaintenance is not null)

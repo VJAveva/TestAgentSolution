@@ -89,6 +89,17 @@ public sealed class WindowsUpdateDetector : BackgroundService
     {
         var rebootRequired = IsRebootRequired();
 
+        // Visible without being actionable: these are almost always an installer replacing a locked file,
+        // which is why they no longer flag the node.
+        if (!_settings.TreatPendingFileRenamesAsRebootRequired)
+        {
+            var pendingRenames = PendingFileRenameCount();
+            if (pendingRenames > 0)
+                _logger.LogDebug(
+                    "{Count} pending file rename(s) queued for next boot; not treated as reboot-required.",
+                    pendingRenames);
+        }
+
         // The WUApi COM search blocks; run it off the loop thread with a hard timeout so a hung
         // Windows Update service can never stall the agent.
         var (pendingCount, items) = _settings.ScanPendingUpdates
@@ -132,11 +143,12 @@ public sealed class WindowsUpdateDetector : BackgroundService
         : MaintenanceEventKind.RebootCleared;
 
     // ── Registry path ────────────────────────────────────────────────
-    // Any one of the three signals means a reboot is owed. Read-only, explicit 64-bit view.
+    // Only the two servicing-owned keys are authoritative. PendingFileRenameOperations is reported but does
+    // not gate dispatch unless explicitly enabled - see WindowsUpdateSettings.
     private bool IsRebootRequired()
         => KeyExists(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired")
         || KeyExists(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending")
-        || HasPendingFileRenames();
+        || (_settings.TreatPendingFileRenamesAsRebootRequired && PendingFileRenameCount() > 0);
 
     private bool KeyExists(string path)
     {
@@ -153,18 +165,21 @@ public sealed class WindowsUpdateDetector : BackgroundService
         }
     }
 
-    private bool HasPendingFileRenames()
+    /// <summary>Informational: how many file replacements are queued for next boot, whatever scheduled them.</summary>
+    private int PendingFileRenameCount()
     {
         try
         {
             using var root = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
             using var key = root.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager");
-            return key?.GetValue("PendingFileRenameOperations") is string[] { Length: > 0 };
+            return key?.GetValue("PendingFileRenameOperations") is string[] entries
+                ? entries.Count(e => !string.IsNullOrWhiteSpace(e))
+                : 0;
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "PendingFileRenameOperations probe failed.");
-            return false;
+            return 0;
         }
     }
 

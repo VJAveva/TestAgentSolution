@@ -31,13 +31,14 @@ public partial class AgentWorkspaceVM : ObservableObject, IDisposable
         IMaintenanceOperationStore? maintenanceStore = null,
         INodeUpdateStatusStore? updateStatus = null,
         IFleetNotificationService? notifications = null,
-        UpdatePolicyStore? updatePolicy = null)
+        UpdatePolicyStore? updatePolicy = null,
+        INodeUpdateInstaller? updateInstaller = null)
     {
         Fleet = new FleetVM(dispatcher, lockManager, sessionManager, events, uiDispatcher, maintenanceService, maintenanceState);
         Monitor = new MonitorVM(dispatcher, lockManager, sessionManager, events, uiDispatcher);
         Registry = new RegistryVM(dispatcher, lockManager, events, uiDispatcher);
         Maintenance = new MaintenanceVM(maintenanceService, maintenanceStore, uiDispatcher);
-        Updates = new FleetUpdatesVM(dispatcher, uiDispatcher, updateStatus, notifications, maintenanceService, updatePolicy);
+        Updates = new FleetUpdatesVM(dispatcher, uiDispatcher, updateStatus, notifications, maintenanceService, updatePolicy, updateInstaller);
 
         Fleet.AttachUpdates(Updates);
         Maintenance.AttachUpdates(Updates);

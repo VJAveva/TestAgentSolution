@@ -179,6 +179,14 @@
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">
+                                            <!-- Patches the LIVE node only; a later revert discards the updates. -->
+                                            <Button Content="{Binding Action.Label}" Padding="6,2" FontSize="{StaticResource FontSize9}" Margin="0,0,4,0"
+                                                    Cursor="Hand" MinWidth="104"
+                                                    IsEnabled="{Binding Action.CanAct}"
+                                                    ToolTip="{Binding Action.Detail}"
+                                                    Command="{Binding DataContext.Updates.UpdateActionCommand,
+                                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding AgentName}"/>
                                             <Button Content="Reboot now" Padding="6,2" FontSize="{StaticResource FontSize9}" Margin="0,0,4,0"
                                                     Cursor="Hand" IsEnabled="{Binding IsRebootRequired}"
                                                     ToolTip="{Binding Provenance}"
