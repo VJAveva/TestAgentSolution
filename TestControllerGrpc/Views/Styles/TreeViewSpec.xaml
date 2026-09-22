@@ -98,15 +98,15 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" /> <!-- Status dot -->
                 <ColumnDefinition Width="Auto" /> <!-- Icon -->
-                <!-- Star, not Auto: the label must be the column that absorbs slack, otherwise its
-                     CharacterEllipsis never triggers and deep rows overflow the viewport instead. -->
-                <ColumnDefinition Width="*" MinWidth="40" /> <!-- Label -->
+                <!-- Auto, not star: the label takes its natural width so deep rows stay readable and
+                     the tree scrolls horizontally instead of squeezing names down to an ellipsis. -->
+                <ColumnDefinition Width="Auto" /> <!-- Label -->
                 <ColumnDefinition Width="Auto" /> <!-- Pill(s) -->
                 <ColumnDefinition Width="Auto" /> <!-- File pill -->
                 <ColumnDefinition Width="Auto" /> <!-- Status spinner -->
                 <ColumnDefinition Width="Auto" /> <!-- Lock badge -->
                 <ColumnDefinition Width="Auto" /> <!-- Permission pill -->
-                <ColumnDefinition Width="Auto" /> <!-- Spacer: the label star now pushes the badge right -->
+                <ColumnDefinition Width="Auto" /> <!-- Spacer -->
                 <ColumnDefinition Width="Auto" /> <!-- Count badge -->
             </Grid.ColumnDefinitions>
 
@@ -254,8 +254,7 @@
             </mi:MaterialIcon>
 
             <!-- ── Column 2: Label ── -->
-            <TextBlock Grid.Column="2" VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis">
+            <TextBlock Grid.Column="2" VerticalAlignment="Center">
                 <TextBlock.Text>
                     <MultiBinding Converter="{StaticResource ActionLabelConv}">
                         <Binding Path="Tag" />
@@ -298,7 +297,7 @@
             </TextBlock>
 
             <!-- ── Column 3: Type Pills ── -->
-            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
 
                 <!-- Event Trigger pill: EVT -->
                 <Border>

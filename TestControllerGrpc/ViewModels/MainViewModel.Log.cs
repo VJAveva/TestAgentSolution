@@ -343,13 +343,16 @@ public sealed partial class MainViewModel
         AddLog($"Log exported to {dlg.FileName}", LogSeverity.Success);
     }
 
-    private void AddLog(string msg, LogSeverity severity = LogSeverity.Info,
+    private void AddLog(string msg, LogSeverity? severityOverride = null,
         string sessionId = "", string agentName = "", string watchItemTag = "")
     {
         msg = TestControllerGrpc.Services.SecurityRedactor.Redact(msg) ?? string.Empty;
 
-        // Auto-detect severity from message content when using default
-        if (severity == LogSeverity.Info)
+        var severity = severityOverride ?? LogSeverity.Info;
+
+        // Sniff content only when the caller stated no severity. An explicit Info must survive, or a
+        // successful JSON payload renders red purely because "error" and "failed" are KEY names in it.
+        if (severityOverride is null)
         {
             if (msg.Contains("error", StringComparison.OrdinalIgnoreCase)
              || msg.Contains("failed", StringComparison.OrdinalIgnoreCase)
