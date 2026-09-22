@@ -98,13 +98,15 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" /> <!-- Status dot -->
                 <ColumnDefinition Width="Auto" /> <!-- Icon -->
-                <ColumnDefinition Width="Auto" /> <!-- Label -->
+                <!-- Star, not Auto: the label must be the column that absorbs slack, otherwise its
+                     CharacterEllipsis never triggers and deep rows overflow the viewport instead. -->
+                <ColumnDefinition Width="*" MinWidth="40" /> <!-- Label -->
                 <ColumnDefinition Width="Auto" /> <!-- Pill(s) -->
                 <ColumnDefinition Width="Auto" /> <!-- File pill -->
                 <ColumnDefinition Width="Auto" /> <!-- Status spinner -->
                 <ColumnDefinition Width="Auto" /> <!-- Lock badge -->
                 <ColumnDefinition Width="Auto" /> <!-- Permission pill -->
-                <ColumnDefinition Width="*" />    <!-- Spacer -->
+                <ColumnDefinition Width="Auto" /> <!-- Spacer: the label star now pushes the badge right -->
                 <ColumnDefinition Width="Auto" /> <!-- Count badge -->
             </Grid.ColumnDefinitions>
 

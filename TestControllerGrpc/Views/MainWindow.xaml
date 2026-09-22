@@ -86,12 +86,79 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="12,5" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="BorderThickness" Value="0" />
+            <!-- Transparent 1px border rather than 0: hover and focus can then recolour it without
+                 resizing the button. -->
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Margin" Value="3" />
             <Setter Property="FontSize" Value="{StaticResource FontSize11}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.75" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="Button" x:Key="SmBtn" BasedOn="{StaticResource Btn}">
             <Setter Property="FontSize" Value="{StaticResource FontSize10}" /><Setter Property="Padding" Value="8,4" /><Setter Property="Margin" Value="3" />
+        </Style>
+        <!-- Matches SmBtn's corner radius so toggles sitting in the same bar don't read as square. -->
+        <Style TargetType="ToggleButton" x:Key="PillToggle">
+            <Setter Property="Background" Value="{DynamicResource BtnBg}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="Button" x:Key="DangerBtn" BasedOn="{StaticResource SmBtn}">
             <Setter Property="Background" Value="{DynamicResource DangerBtnBgAlt}" /><Setter Property="Foreground" Value="{DynamicResource AccRed}" />
@@ -290,7 +357,7 @@
             <Setter Property="FontSize" Value="{StaticResource FontSize10}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="MinWidth" Value="52" />
-            <Setter Property="Height" Value="44" />
+            <Setter Property="Height" Value="30" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
@@ -345,7 +412,7 @@
             <Setter Property="Foreground" Value="{DynamicResource AccYellow}" />
         </Style>
         <Style x:Key="RibbonBtnLarge" TargetType="Button" BasedOn="{StaticResource RibbonBtn}">
-            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Padding" Value="8,2" />
             <Setter Property="MinWidth" Value="56" />
         </Style>
 
@@ -360,6 +427,8 @@
         </Style>
         <Style x:Key="RibbonIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
             <Setter Property="FontSize" Value="{StaticResource FontSize16}" />
+            <!-- Separates glyph from caption now that button content runs inline. -->
+            <Setter Property="Margin" Value="0,0,5,0" />
         </Style>
         <Style x:Key="TreeIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
             <Setter Property="FontSize" Value="{StaticResource FontSize14}" />
@@ -1309,6 +1378,17 @@
                 <TabControl Grid.Column="0" Background="Transparent" BorderThickness="0" Padding="0"
                             Visibility="{Binding IsSimplifiedLayout, Converter={StaticResource InvBoolVis}}">
                     <TabControl.Resources>
+                        <!-- Ribbon buttons stack icon over caption inside their own content. Flipping this
+                             one implicit style lays all ~45 of them out inline, which is what halves the
+                             ribbon height without touching a single Command binding. Scoped to this
+                             TabControl, so the Simplified bar outside it is unaffected. -->
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Orientation" Value="Horizontal" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
                         <Style TargetType="TabItem">
                             <Setter Property="Background" Value="Transparent" />
                             <Setter Property="Foreground" Value="{DynamicResource TextS}" />
@@ -1404,8 +1484,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="File" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1464,8 +1542,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Test Plans" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1531,8 +1607,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Library" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1580,8 +1654,6 @@
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
-                                        <TextBlock Text="View" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -1640,8 +1712,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Run" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1673,8 +1743,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Control" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1689,8 +1757,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="View" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1719,8 +1785,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Log" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1778,9 +1842,6 @@
                                             <TextBlock Text="Agent Panel" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"
                                                        VerticalAlignment="Center" Margin="6,0,0,0" />
                                         </StackPanel>
-                                        <TextBlock Text="Panels" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
-                                                   Foreground="{DynamicResource TextS}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -1810,8 +1871,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Results" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccGreen}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1826,8 +1885,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Code Churn" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1842,8 +1899,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Help" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
@@ -1858,8 +1913,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Security" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccYellow}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -1891,8 +1944,6 @@
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
-                                        <TextBlock Text="Administration" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccMauve}"
-                                                   HorizontalAlignment="Center" Margin="0,1,0,0" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -2055,7 +2106,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="250" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition x:Name="RowLogPane" Height="2*" MinHeight="120" />
+                <RowDefinition x:Name="RowLogPane" Height="0.8*" MinHeight="120" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="ColTreePanel" Width="2.5*" MinWidth="220" /> <!-- Col 0: Tree -->
@@ -2135,6 +2186,8 @@
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
                                       ItemContainerStyle="{StaticResource SpecTVI}"
                                       ItemTemplate="{StaticResource WatchTreeSpecTemplate}"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                      HorizontalContentAlignment="Stretch"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
                                       VirtualizingPanel.ScrollUnit="Pixel"
@@ -2180,6 +2233,8 @@
                                       BorderThickness="0" Margin="4,0,4,4" Padding="0,4"
                                       ItemContainerStyle="{StaticResource SpecTVI}"
                                       ItemTemplate="{StaticResource WatchTreeSpecTemplate}"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                      HorizontalContentAlignment="Stretch"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
                                       VirtualizingPanel.ScrollUnit="Pixel" />
@@ -2355,28 +2410,54 @@
                                         <TextBlock Text="SOURCE" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}" />
                                     </Expander.Header>
                                     <StackPanel Margin="0,4,0,0">
-                                        <Label Content="WATCH PATH" Style="{StaticResource Lbl}" />
+                                        <!-- Paired: both hold short values, so one row instead of two. -->
                                         <Grid>
-                                            <TextBox Text="{Binding WatchPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="WATCH PATH" />
-                                            <TextBlock Text="e.g. C:\WatchFolder" IsHitTestVisible="False" FontSize="{StaticResource FontSize12}" FontFamily="Consolas" Padding="8,6"
-                                                       Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
-                                                       Visibility="{Binding WatchPath, Converter={StaticResource EmptyVis}}" />
-                                        </Grid>
-                                        <Label Content="FILTER" Style="{StaticResource Lbl}" />
-                                        <Grid>
-                                            <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="FILTER" />
-                                            <TextBlock Text="e.g. *.txt" IsHitTestVisible="False" FontSize="{StaticResource FontSize12}" FontFamily="Consolas" Padding="8,6"
-                                                       Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
-                                                       Visibility="{Binding Filter, Converter={StaticResource EmptyVis}}" />
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="10" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <Label Content="WATCH PATH" Style="{StaticResource Lbl}" />
+                                                <Grid>
+                                                    <TextBox Text="{Binding WatchPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="WATCH PATH" />
+                                                    <TextBlock Text="e.g. C:\WatchFolder" IsHitTestVisible="False" FontSize="{StaticResource FontSize12}" FontFamily="Consolas" Padding="8,6"
+                                                               Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
+                                                               Visibility="{Binding WatchPath, Converter={StaticResource EmptyVis}}" />
+                                                </Grid>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <Label Content="FILTER" Style="{StaticResource Lbl}" />
+                                                <Grid>
+                                                    <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="FILTER" />
+                                                    <TextBlock Text="e.g. *.txt" IsHitTestVisible="False" FontSize="{StaticResource FontSize12}" FontFamily="Consolas" Padding="8,6"
+                                                               Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
+                                                               Visibility="{Binding Filter, Converter={StaticResource EmptyVis}}" />
+                                                </Grid>
+                                            </StackPanel>
                                         </Grid>
 
                                         <!-- Trigger file metadata fields (read from Filter file) -->
                                         <TextBlock Text="TRIGGER FILE FIELDS" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
                                                    Foreground="{DynamicResource TextS}" Margin="0,12,0,4" />
-                                        <Label Content="BUILD NUMBER FIELD" Style="{StaticResource Lbl}" />
-                                        <TextBox Text="{Binding BuildNumberField, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="BUILD NUMBER FIELD" />
-                                        <Label Content="DROP LOCATION FIELD" Style="{StaticResource Lbl}" />
-                                        <TextBox Text="{Binding DropLocationField, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="DROP LOCATION FIELD" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="10" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <Label Content="BUILD NUMBER FIELD" Style="{StaticResource Lbl}" />
+                                                <!-- Half-width now, so drop paths truncate: tooltip keeps the full value readable. -->
+                                                <TextBox Text="{Binding BuildNumberField, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="BUILD NUMBER FIELD"
+                                                         ToolTip="{Binding BuildNumberField}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <Label Content="DROP LOCATION FIELD" Style="{StaticResource Lbl}" />
+                                                <TextBox Text="{Binding DropLocationField, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="DROP LOCATION FIELD"
+                                                         ToolTip="{Binding DropLocationField}" />
+                                            </StackPanel>
+                                        </Grid>
 
                                         <!-- ══ Build Source ══ -->
                                         <TextBlock Text="BUILD SOURCE" Style="{StaticResource Sec}" />
@@ -2981,6 +3062,13 @@
                                            VerticalAlignment="Center" Margin="8,0,0,0"
                                            Visibility="{Binding IsLogPaused, Converter={StaticResource BoolVis}}" />
                             </StackPanel>
+                            <!-- Fill child: only meaningful while collapsed, where it is the whole log. -->
+                            <TextBlock Text="{Binding LatestLogLine}" FontFamily="Consolas"
+                                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                       VerticalAlignment="Center" Margin="12,0,8,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       AutomationProperties.Name="Latest log line"
+                                       Visibility="{Binding IsLogCollapsed, Converter={StaticResource BoolVis}}" />
                         </DockPanel>
                     </Border>
 
@@ -3028,11 +3116,10 @@
                                      Style="{StaticResource Fld}" Margin="0,0,2,0" Padding="5,3"
                                      ToolTip="Search text or regex pattern (Ctrl+L to focus)"  AutomationProperties.Name="Search" />
                             <ToggleButton IsChecked="{Binding IsRegexSearch}"
-                                          Content=".*" FontFamily="Consolas" FontSize="{StaticResource FontSize9}"
+                                          Style="{StaticResource PillToggle}"
+                                          Content=".*" FontFamily="Consolas"
                                           Padding="4,3" MinWidth="28"
-                                          AutomationProperties.Name="Toggle regex search mode" ToolTip="Toggle regex search mode"
-                                          Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
-                                          BorderThickness="1" BorderBrush="{DynamicResource Bdr}" Cursor="Hand" />
+                                          AutomationProperties.Name="Toggle regex search mode" ToolTip="Toggle regex search mode" />
 
                             <!-- Search match count -->
                             <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" VerticalAlignment="Center"
@@ -3046,10 +3133,9 @@
 
                             <!-- Quick toggles -->
                             <ToggleButton IsChecked="{Binding ShowErrorsOnly}"
-                                          Padding="6,3" Margin="0,0,4,0"
-                                          ToolTip="Show only errors"
-                                          Background="{DynamicResource BtnBg}" Foreground="{DynamicResource TextS}"
-                                          BorderThickness="1" BorderBrush="{DynamicResource Bdr}" Cursor="Hand">
+                                          Style="{StaticResource PillToggle}"
+                                          Margin="0,0,4,0"
+                                          ToolTip="Show only errors">
                                 <TextBlock Text="Errors Only" FontSize="{StaticResource FontSize9}" />
                             </ToggleButton>
 

@@ -444,7 +444,8 @@
         <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="10,6,28,6" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize11}" />
-        <Setter Property="MaxDropDownHeight" Value="320" />
+        <!-- ~7 rows. At 320 an 11-agent list stopped just short of scrolling and covered the log pane. -->
+        <Setter Property="MaxDropDownHeight" Value="200" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />

@@ -42,13 +42,15 @@
             <Setter Property="Foreground" Value="{DynamicResource TextP}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BtnBorder}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="Margin" Value="2" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="2,1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontSize" Value="{StaticResource FontSize10}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="MinWidth" Value="52" />
-            <Setter Property="Height" Value="52" />
+            <!-- Stacked content, unlike MainWindow's inline ribbon: this is a WrapPanel, and inline
+                 buttons are wide enough to wrap the Statistics group onto a second row. -->
+            <Setter Property="Height" Value="40" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
@@ -104,7 +106,7 @@
         </Style>
         <Style x:Key="RibbonIconText" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
-            <Setter Property="FontSize" Value="{StaticResource FontSize20}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize16}" />
             <Setter Property="Foreground" Value="{DynamicResource IconFg}" />
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -164,8 +166,6 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
-                        <TextBlock Text="Navigation" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
                     </StackPanel>
                 </Border>
 
@@ -186,8 +186,6 @@
                             <Button Content="Apply" Style="{StaticResource SmBtn}" Command="{Binding ApplyThresholdsCommand}"
                                     FontSize="{StaticResource FontSize9}" Padding="6,3" Margin="2,0" />
                         </StackPanel>
-                        <TextBlock Text="Thresholds" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
                     </StackPanel>
                 </Border>
 
@@ -254,8 +252,6 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
-                        <TextBlock Text="Export &amp; Analysis" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
                     </StackPanel>
                 </Border>
 
@@ -284,8 +280,6 @@
                                 <Run Text="{Binding StatFailed, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource AccRed}" />
                             </TextBlock>
                         </StackPanel>
-                        <TextBlock Text="Statistics" FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource TextS}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0" />
                     </StackPanel>
                 </Border>
             </WrapPanel>

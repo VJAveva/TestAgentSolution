@@ -3,6 +3,60 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.AgentWorkspace">
 
+    <UserControl.Resources>
+        <!-- This was the only view with DataGrids and no DataGrid styling, so both grids fell back to the
+             default WPF chrome: white rows and full gridlines. Implicit styles, so both pick them up. -->
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
+            <Setter Property="GridLinesVisibility" Value="None"/>
+            <Setter Property="RowBackground" Value="Transparent"/>
+            <Setter Property="AlternatingRowBackground" Value="{DynamicResource TabHoverBg}"/>
+            <Setter Property="AlternationCount" Value="2"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="SelectionMode" Value="Single"/>
+            <Setter Property="SelectionUnit" Value="FullRow"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="DataGridRow">
+            <Setter Property="Foreground" Value="{DynamicResource TextP}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource FieldBg}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
     <DockPanel>
         <!-- Header -->
         <Border DockPanel.Dock="Top" Padding="10,6" Background="{DynamicResource BgCard}"
@@ -45,6 +99,21 @@
                                 ToolTip="Queues a reboot for every node reporting Reboot required that is not draining."
                                 Background="{DynamicResource StatusRebootBg}" Foreground="{DynamicResource StatusRebootFg}"
                                 BorderBrush="{DynamicResource StatusRebootFg}" BorderThickness="1"/>
+                        <!-- At 50+ nodes the grid is unreadable unbounded: filter first. Docked beside the
+                             cards rather than on its own row, which cost a whole row of height. -->
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                            <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize9}" Margin="0,0,6,0"
+                                       Foreground="{DynamicResource TextS}" Text="Show"/>
+                            <ComboBox Width="150" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center"
+                                      ItemsSource="{Binding Updates.RowFilters}"
+                                      DisplayMemberPath="Label"
+                                      SelectedValuePath="Value"
+                                      SelectedValue="{Binding Updates.RowFilter, Mode=TwoWay}"
+                                      ToolTip="Narrow the grid to the agents that need action" AutomationProperties.Name="Show" />
+                            <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize9}" Margin="8,0,0,0"
+                                       Foreground="{DynamicResource TextS}"
+                                       Text="{Binding Updates.FilterSummary}"/>
+                        </StackPanel>
                         <WrapPanel>
                             <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
                                     Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
@@ -81,24 +150,9 @@
                         </WrapPanel>
                     </DockPanel>
 
-                    <!-- At 50+ nodes the grid is unreadable unbounded: filter first, and show enough rows to work with. -->
-                    <DockPanel Margin="0,0,0,4">
-                        <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="{StaticResource FontSize9}"
-                                   Foreground="{DynamicResource TextS}"
-                                   Text="{Binding Updates.FilterSummary}"/>
-                        <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize9}" Margin="0,0,6,0"
-                                   Foreground="{DynamicResource TextS}" Text="Show"/>
-                        <ComboBox Width="150" HorizontalAlignment="Left" FontSize="{StaticResource FontSize9}"
-                                  ItemsSource="{Binding Updates.RowFilters}"
-                                  DisplayMemberPath="Label"
-                                  SelectedValuePath="Value"
-                                  SelectedValue="{Binding Updates.RowFilter, Mode=TwoWay}"
-                                  ToolTip="Narrow the grid to the agents that need action" AutomationProperties.Name="Show" />
-                    </DockPanel>
-
                     <DataGrid ItemsSource="{Binding Updates.FilteredRows}" MaxHeight="420"
                               AutoGenerateColumns="False" IsReadOnly="True"
-                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
                               Background="Transparent" BorderThickness="0" FontSize="{StaticResource FontSize9}"
                               FrozenColumnCount="1"
                               ScrollViewer.HorizontalScrollBarVisibility="Auto">
@@ -213,11 +267,15 @@
             </ItemsControl>
 
             <!-- R11: completed-operation history -->
-            <DataGrid Grid.Row="2" ItemsSource="{Binding History}" Margin="8" AutoGenerateColumns="False"
-                      IsReadOnly="True" CanUserAddRows="False" GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column" Background="Transparent" BorderThickness="0"
-                      RowBackground="Transparent" Foreground="{DynamicResource TextP}"
-                      HorizontalScrollBarVisibility="Auto" FontSize="{StaticResource FontSize10}">
+            <DockPanel Grid.Row="2" Margin="8">
+                <!-- Labelled: without it the second grid's header reads as another header row of the one above. -->
+                <TextBlock DockPanel.Dock="Top" Text="HISTORY" FontSize="{StaticResource FontSize9}"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextS}" Margin="0,0,0,4"/>
+                <DataGrid ItemsSource="{Binding History}" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False"
+                          HeadersVisibility="Column" Background="Transparent" BorderThickness="0"
+                          Foreground="{DynamicResource TextP}"
+                          HorizontalScrollBarVisibility="Auto" FontSize="{StaticResource FontSize10}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Agent" Binding="{Binding NodeId, Mode=OneWay}" Width="120"/>
                     <DataGridTextColumn Header="Operation" Binding="{Binding KindText, Mode=OneWay}" Width="90"/>
@@ -228,7 +286,8 @@
                     <DataGridTextColumn Header="Duration" Binding="{Binding DurationText, Mode=OneWay}" Width="80"/>
                     <DataGridTextColumn Header="Result" Binding="{Binding ResultText, Mode=OneWay}" Width="90"/>
                 </DataGrid.Columns>
-            </DataGrid>
+                </DataGrid>
+            </DockPanel>
         </Grid>
     </DockPanel>
 </UserControl>

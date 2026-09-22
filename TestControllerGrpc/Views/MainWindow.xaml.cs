@@ -41,7 +41,8 @@ public partial class MainWindow : Window
     private GridLength _savedAgentColWidth = new(3, GridUnitType.Star);
     private GridLength _savedTreeColWidth = new(2.5, GridUnitType.Star);
     private GridLength _savedPropertiesColWidth = new(5, GridUnitType.Star);
-    private GridLength _savedLogRowHeight = new(2, GridUnitType.Star);
+    // Must match RowLogPane's XAML height: re-pinning the log pane stamps this over the grid.
+    private GridLength _savedLogRowHeight = new(0.8, GridUnitType.Star);
 
     // ── Panel sizing tokens (loaded from DesignTokens.xaml) ────────────────
     private double _treePanelMinWidth = 220;
@@ -456,6 +457,10 @@ public partial class MainWindow : Window
         else if (e.PropertyName == nameof(MainViewModel.IsLogPanePinned))
         {
             NotePaneIntent();
+            ApplyLogPaneLayout(_vm.IsLogPanePinned);
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsLogCollapsed))
+        {
             ApplyLogPaneLayout(_vm.IsLogPanePinned);
         }
         else if (e.PropertyName == nameof(MainViewModel.IsTreePanePinned))

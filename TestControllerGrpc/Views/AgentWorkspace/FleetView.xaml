@@ -83,6 +83,7 @@
                 </Grid>
                 <!-- Register Agent button -->
                 <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="10,4"
+                        VerticalAlignment="Center"
                         FontSize="{StaticResource FontSize9}" Cursor="Hand"
                         Command="{Binding RequestRegisterAgentCommand}"
                         Background="{DynamicResource AccentBtnBg}"
@@ -92,14 +93,19 @@
                     <TextBlock Text="+ Register Agent" FontWeight="SemiBold"/>
                 </Button>
                 <!-- Filter textbox -->
-                <Grid DockPanel.Dock="Right" Width="140" Margin="8,0,0,0">
+                <!-- Centred, not stretched: the KPI cards set this row's height, so without this the
+                     text box rendered ~50px tall. -->
+                <Grid DockPanel.Dock="Right" Width="150" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <!-- FieldBg, not BgCard: BgCard is the raised card surface, which made this read as a
+                         pale block instead of an inset field like every other text box. -->
                     <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
-                             Background="{DynamicResource BgCard}"
+                             Background="{DynamicResource FieldBg}"
                              Foreground="{DynamicResource TextP}"
                              BorderBrush="{DynamicResource Bdr}"
-                             FontSize="{StaticResource FontSize9}" Padding="4,3" VerticalContentAlignment="Center" AutomationProperties.Name="Filter agents" />
+                             BorderThickness="1"
+                             FontSize="{StaticResource FontSize10}" Padding="6,4" VerticalContentAlignment="Center" AutomationProperties.Name="Filter agents" />
                     <TextBlock Text="Filter agents..." IsHitTestVisible="False"
-                               FontSize="{StaticResource FontSize9}" Margin="7,0,0,0" VerticalAlignment="Center"
+                               FontSize="{StaticResource FontSize10}" Margin="7,0,0,0" VerticalAlignment="Center"
                                Foreground="{DynamicResource PlaceholderFg}"
                                Visibility="{Binding FilterText, Converter={StaticResource EmptyVis}}" />
                 </Grid>

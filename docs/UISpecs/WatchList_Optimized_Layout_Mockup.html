@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestController — Optimized Layout</title>
+<style>
+  :root{
+    --font-sans:'Segoe UI',system-ui,sans-serif; --font-mono:'Cascadia Code','Consolas',monospace;
+    --fs-title:15px; --fs-body:12px; --fs-label:10px; --fs-cap:9px; --fs-mono:11px;
+    --fw-reg:400; --fw-med:500; --fw-semi:600;
+    --bg:#0e1420; --surface:#161d2b; --surface-alt:#111827; --bar:#1a2233; --field:#131a28;
+    --border:#28324a; --border-soft:#1e2740; --divider:#212b42;
+    --ink:#e6ebf3; --ink-body:#cfd7e6; --ink-soft:#8b97ad; --ink-faint:#5a6680;
+    --accent:#4d8bf5; --accent-soft:#16233d; --accent-ink:#7fb0ff;
+    --green:#22c55e; --green-soft:#0f2a1c; --amber:#eab308; --amber-soft:#2a2410;
+    --red:#ef4444; --purple:#a855f7;
+    --seq:#4d8bf5; --par:#eab308; --evt:#a855f7; --ref:#22c55e; --init:#06b6d4; --rmt:#f472b6; --cmd:#94a3b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--font-sans);font-size:var(--fs-body);color:var(--ink-body);background:#070b12;padding:14px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1280px;margin:0 auto;}
+  .note{background:var(--surface);border:1px dashed #33405a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);}
+  .note b{color:var(--ink);font-weight:var(--fw-semi);}
+  .tag{display:inline-block;font-size:10px;font-weight:var(--fw-semi);padding:2px 7px;border-radius:9px;background:var(--green-soft);color:var(--green);margin-right:4px;}
+
+  .frame{background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5);}
+
+  /* ===== COMPACT MENU + RIBBON (was ~88px, now ~34+40) ===== */
+  .menubar{display:flex;align-items:center;gap:12px;height:30px;padding:0 12px;background:var(--surface-alt);border-bottom:1px solid var(--border);}
+  .brand{font-size:12px;font-weight:var(--fw-semi);color:var(--accent-ink);}
+  .menu{display:flex;gap:1px;}
+  .menu span{font-size:11px;color:var(--ink-soft);padding:3px 9px;border-radius:4px;}
+  .menu span.on{background:var(--accent-soft);color:var(--accent-ink);}
+  .menubar .r{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--ink-faint);}
+  .userchip{background:var(--accent-soft);border:1px solid #2f477a;border-radius:12px;padding:2px 10px;color:var(--ink);font-size:11px;}
+
+  /* ONE compact toolbar row (was two-row stacked ribbon) */
+  .toolbar{display:flex;align-items:center;gap:2px;height:40px;padding:0 10px;background:var(--bar);border-bottom:1px solid var(--border);}
+  .tb{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);padding:6px 10px;border-radius:6px;cursor:pointer;}
+  .tb:hover{background:#222c42;color:var(--ink);}
+  .tb .i{font-size:14px;}
+  .tb.accent{color:var(--accent-ink);}
+  .sep{width:1px;height:18px;background:var(--border);margin:0 5px;}
+  .toolbar .r{margin-left:auto;display:flex;align-items:center;gap:8px;}
+  .chip{font-size:10px;padding:4px 9px;border-radius:5px;border:1px solid var(--border);color:var(--ink-soft);display:flex;align-items:center;gap:5px;}
+  .chip.on{background:var(--accent-soft);border-color:#2f477a;color:var(--ink);}
+
+  /* ===== WORK AREA ===== */
+  .work{display:grid;grid-template-columns:300px 5px 1fr 5px 240px;height:440px;}
+  .split{background:var(--surface-alt);position:relative;cursor:col-resize;}
+  .split::after{content:'';position:absolute;top:50%;left:1px;width:3px;height:28px;background:var(--border);border-radius:2px;transform:translateY(-50%);}
+  .pane{background:var(--surface);display:flex;flex-direction:column;overflow:hidden;}
+  .pane-h{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;background:var(--surface-alt);border-bottom:1px solid var(--divider);}
+  .pane-h .t{font-size:10px;font-weight:var(--fw-semi);letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);}
+  .pane-h .r{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .badge{font-size:9px;font-weight:var(--fw-semi);padding:2px 7px;border-radius:8px;background:var(--green-soft);color:var(--green);}
+  .pane-b{flex:1;overflow:auto;padding:8px;}
+
+  /* tree */
+  .tabs{display:flex;gap:2px;padding:5px 8px;border-bottom:1px solid var(--divider);}
+  .tabs span{font-size:10.5px;color:var(--ink-faint);padding:3px 8px;border-radius:4px;}
+  .tabs span.on{background:var(--accent-soft);color:var(--ink);}
+  .search{margin:6px 8px;background:var(--field);border:1px solid var(--border);border-radius:5px;padding:5px 9px;font-size:10.5px;color:var(--ink-faint);}
+  .tnode{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;white-space:nowrap;font-size:11.5px;color:var(--ink-body);}
+  .tnode:hover{background:#1c2538;}
+  .tnode.sel{background:var(--accent-soft);color:var(--accent-ink);}
+  .car{color:var(--ink-faint);font-size:7px;width:8px;flex-shrink:0;}
+  .ic{color:var(--ink-soft);width:12px;text-align:center;flex-shrink:0;font-size:10px;}
+  .kd{font-family:var(--font-mono);font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:3px;background:#1a2338;border:1px solid var(--border);flex-shrink:0;}
+  .k-seq{color:var(--seq);} .k-par{color:var(--par);} .k-evt{color:var(--evt);} .k-ref{color:var(--ref);} .k-init{color:var(--init);} .k-rmt{color:var(--rmt);} .k-cmd{color:var(--cmd);}
+  .cnt{margin-left:auto;font-size:9px;color:var(--ink-faint);flex-shrink:0;}
+  .ok{color:var(--green);font-size:9px;}
+
+  /* node properties - 2 COLUMN form (the key change) */
+  .np-banner{background:var(--green-soft);border:1px solid #1c5238;border-radius:6px;padding:8px 11px;margin-bottom:12px;display:flex;align-items:center;font-size:11.5px;color:#7ff0a8;}
+  .np-banner .b{margin-left:auto;background:var(--green);color:#062611;font-size:10px;font-weight:var(--fw-semi);padding:3px 10px;border-radius:5px;}
+  .np-section{font-size:10px;font-weight:var(--fw-semi);letter-spacing:.05em;text-transform:uppercase;color:var(--accent-ink);margin:4px 0 8px;}
+  .form2{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;}
+  .form2.full > *{grid-column:1 / -1;}
+  .fld{}
+  .lbl{font-size:9.5px;font-weight:var(--fw-med);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.03em;display:block;margin-bottom:3px;}
+  .val{background:var(--field);border:1px solid var(--border);border-radius:5px;padding:6px 9px;font-size:11px;color:var(--ink-body);}
+  .val.mono{font-family:var(--font-mono);font-size:10.5px;}
+  .apply{margin-top:12px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 15px;font-size:11.5px;font-weight:var(--fw-semi);}
+
+  /* agents - inline KPI (was big stacked numerals) */
+  .kpi-inline{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--divider);font-size:11px;flex-wrap:wrap;}
+  .kpi-inline b{color:var(--ink);font-weight:var(--fw-semi);}
+  .kpi-inline .off{color:var(--amber);}
+  .agc{display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid var(--border);border-radius:7px;margin-bottom:5px;background:var(--surface-alt);}
+  .agc .d{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);flex-shrink:0;}
+  .agc .an{font-size:11px;font-weight:var(--fw-med);}
+  .agc .as{font-size:9px;color:var(--ink-faint);margin-left:auto;}
+  .agc.warn{background:var(--amber-soft);border-color:#5c4d12;}
+  .agc.off{background:#2a1414;border-color:#5c2626;}
+  .agc.off .d{background:var(--red);}
+  .rb{font-size:8.5px;color:var(--amber);}
+
+  /* ===== LOG STRIP (collapsed by default) ===== */
+  .logstrip{display:flex;align-items:center;gap:10px;height:28px;padding:0 12px;background:var(--surface-alt);border-top:1px solid var(--border);cursor:pointer;}
+  .logstrip .dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+  .logstrip .t{font-size:11px;font-weight:var(--fw-semi);color:var(--ink-soft);}
+  .logstrip .cnt{font-size:9px;font-weight:var(--fw-semi);padding:1px 7px;border-radius:8px;background:var(--accent-soft);color:var(--accent-ink);}
+  .logstrip .err{font-size:9px;font-weight:var(--fw-semi);padding:1px 7px;border-radius:8px;background:#2a1414;color:var(--red);}
+  .logstrip .last{flex:1;font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .logstrip .exp{font-size:10.5px;color:var(--accent-ink);}
+
+  .statusbar{display:flex;align-items:center;gap:14px;height:24px;padding:0 12px;background:var(--surface-alt);border-top:1px solid var(--border);font-size:9.5px;color:var(--ink-faint);}
+  .statusbar .r{margin-left:auto;display:flex;gap:12px;}
+  .statusbar .warn{color:var(--amber);}
+
+  .measure{display:flex;gap:20px;margin-top:14px;flex-wrap:wrap;}
+  .mcard{flex:1;min-width:220px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:12px 15px;}
+  .mcard h4{font-size:12px;color:var(--accent-ink);margin-bottom:6px;}
+  .mcard p{font-size:11px;color:var(--ink-soft);line-height:1.5;}
+  .mcard .big{font-size:20px;font-weight:var(--fw-semi);color:var(--green);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="note">
+    <span class="tag">OPTIMIZED</span> <b>Compact ribbon + collapsible log.</b> The two-row stacked ribbon (~88px) becomes one 40px toolbar. The execution log collapses to a 28px strip (one click expands it full-height for triaging errors). Node Properties pairs its six fat fields into two columns. Agents KPI goes inline — and now surfaces <b>OFFLINE</b>, which the old header hid. Net: ~130px of vertical space handed back to the panes on a laptop.
+  </div>
+
+  <div class="frame">
+
+    <!-- compact menu row -->
+    <div class="menubar">
+      <span class="brand">TestController</span>
+      <div class="menu"><span class="on">Home</span><span>Execution</span><span>Tools</span><span>Admin</span></div>
+      <div class="r"><span>2 watch items · 2 templates</span><span class="userchip">&#128100; vinodjavvadi · Admin</span></div>
+    </div>
+
+    <!-- ONE compact toolbar (was ~88px two-row ribbon) -->
+    <div class="toolbar">
+      <span class="tb accent"><span class="i">&#128193;</span>Open</span>
+      <span class="tb"><span class="i">&#128190;</span>Save</span>
+      <span class="tb"><span class="i">&#128229;</span>Export</span>
+      <span class="tb"><span class="i">&#8635;</span>Refresh</span>
+      <span class="sep"></span>
+      <span class="tb"><span class="i">&#10133;</span>Test Item</span>
+      <span class="tb"><span class="i">&#9889;</span>Event</span>
+      <span class="tb"><span class="i">&#8862;</span>Group</span>
+      <span class="tb"><span class="i">&#128161;</span>Action</span>
+      <span class="tb"><span class="i">&#8631;</span>Ref</span>
+      <span class="tb"><span class="i">&#9881;</span>Init</span>
+      <span class="sep"></span>
+      <span class="tb" style="color:var(--red)"><span class="i">&#128465;</span>Delete</span>
+      <div class="r">
+        <span class="chip on">&#9681; Dark</span>
+        <span class="chip">Simplified</span>
+      </div>
+    </div>
+
+    <!-- work area: tree | props (2-col) | agents -->
+    <div class="work">
+      <!-- tree -->
+      <div class="pane">
+        <div class="tabs"><span class="on">Test Plans</span><span>Library</span><span>History</span></div>
+        <div class="search">&#128269; Search nodes…</div>
+        <div class="pane-b" style="padding:2px 6px">
+          <div class="tnode"><span class="car">&#9660;</span><span class="ic">&#128203;</span>Test Plans<span class="cnt">2 items</span></div>
+          <div class="tnode" style="padding-left:16px"><span class="car">&#9660;</span><span class="ic">&#128260;</span>Revert 9 Nodes - Install SP2023R2SP2 <span class="ok">&#10003;</span><span class="cnt">1</span></div>
+          <div class="tnode" style="padding-left:32px"><span class="car">&#9660;</span><span class="ic">&#9889;</span>Renamed<span class="kd k-evt">EVT</span></div>
+          <div class="tnode" style="padding-left:48px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>Revert All Nine Nodes<span class="kd k-seq">SEQ</span><span class="cnt">4</span></div>
+          <div class="tnode" style="padding-left:64px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>PHASE 1 - Revert All Nine<span class="kd k-par">PAR</span></div>
+          <div class="tnode" style="padding-left:80px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>Revert WARM Pool (4)<span class="kd k-seq">SEQ</span></div>
+          <div class="tnode" style="padding-left:96px"><span class="ic">&#9881;</span>Initialize<span class="kd k-init">INIT</span></div>
+          <div class="tnode" style="padding-left:80px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>Revert Sanity Pool (5)<span class="kd k-seq">SEQ</span></div>
+          <div class="tnode sel" style="padding-left:96px"><span class="ic">&#8631;</span>RevertSanityAgents<span class="kd k-ref">REF</span></div>
+          <div class="tnode" style="padding-left:64px"><span class="ic">&#9655;</span>Settle 4 min after revert<span class="kd k-cmd">CMD</span></div>
+          <div class="tnode" style="padding-left:48px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>PHASE 3 - Prep and Install<span class="kd k-par">PAR</span></div>
+          <div class="tnode" style="padding-left:80px"><span class="car">&#9660;</span><span class="ic">&#8942;</span>WARM - Copy Agent Prep<span class="kd k-par">PAR</span></div>
+          <div class="tnode" style="padding-left:96px"><span class="ic">&#128196;</span>Copy on warmgr<span class="kd k-rmt">RMT</span></div>
+          <div class="tnode" style="padding-left:96px"><span class="ic">&#128196;</span>Copy on warmpri<span class="kd k-rmt">RMT</span></div>
+        </div>
+      </div>
+
+      <div class="split"></div>
+
+      <!-- node properties 2-column -->
+      <div class="pane">
+        <div class="pane-h"><span class="t">Node Properties</span><span class="r"><span class="badge">SUCCESS</span></span></div>
+        <div class="pane-b">
+          <div class="np-banner">Execute all events for this WatchItem<span class="b">&#9654; Trigger All</span></div>
+          <div class="np-section">General</div>
+          <div class="form2">
+            <div class="fld" style="grid-column:1 / -1"><span class="lbl">Tag</span><div class="val">Revert 9 Nodes - Install SP2023R2SP2</div></div>
+            <div class="fld"><span class="lbl">Watch Path</span><div class="val mono">C:\Triggers\</div></div>
+            <div class="fld"><span class="lbl">Filter</span><div class="val mono">RevertAllAndInstallSP2023R2SP2.txt</div></div>
+          </div>
+          <div class="np-section" style="margin-top:14px">Trigger File Fields</div>
+          <div class="form2">
+            <div class="fld"><span class="lbl">Build Number Field</span><div class="val mono">_BuildNumber</div></div>
+            <div class="fld"><span class="lbl">Drop Location Field</span><div class="val mono">_DropLocation</div></div>
+          </div>
+          <div class="np-section" style="margin-top:14px">Build Source</div>
+          <div class="form2">
+            <div class="fld" style="grid-column:1 / -1"><span class="lbl">Build Base Path</span><div class="val mono">\\DevTFSBldoaksp\REPL\Ado\SP-2023-R2-SP2\</div></div>
+          </div>
+          <button class="apply">Apply Changes</button>
+        </div>
+      </div>
+
+      <div class="split"></div>
+
+      <!-- agents with inline KPI + OFFLINE surfaced -->
+      <div class="pane">
+        <div class="pane-h"><span class="t">Agents</span><span class="r"><span class="badge" style="background:var(--accent-soft);color:var(--accent-ink)">10</span></span></div>
+        <div class="kpi-inline">
+          <span><b>10</b> agents</span><span><b>0</b> busy</span><span><b>10</b> free</span>
+          <span class="off"><b>1</b> offline</span>
+        </div>
+        <div class="pane-b" style="padding:6px 8px">
+          <div class="agc off"><span class="d"></span><span class="an">JVKPRI</span><span class="as" style="color:var(--red)">offline</span></div>
+          <div class="agc warn"><span class="d" style="background:var(--amber)"></span><span class="an">JVGR1</span><span class="rb as">reboot req</span></div>
+          <div class="agc warn"><span class="d" style="background:var(--amber)"></span><span class="an">JVGR2</span><span class="rb as">reboot req</span></div>
+          <div class="agc"><span class="d"></span><span class="an">JVHIST</span><span class="as">idle</span></div>
+          <div class="agc warn"><span class="d" style="background:var(--amber)"></span><span class="an">JVKBAK</span><span class="rb as">reboot req</span></div>
+          <div class="agc"><span class="d"></span><span class="an">WARMGR</span><span class="as">idle</span></div>
+          <div class="agc"><span class="d"></span><span class="an">WARMPRI</span><span class="as">idle</span></div>
+          <div class="agc"><span class="d"></span><span class="an">WARMBAK</span><span class="as">idle</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG collapsed to a strip -->
+    <div class="logstrip">
+      <span class="dot"></span>
+      <span class="t">Execution Log</span>
+      <span class="cnt">3166</span>
+      <span class="err">130 errors</span>
+      <span class="last">[00:09:03] Agent JVKPRI: Connection error (Cancelled) · Agent check complete: 9/10 online</span>
+      <span class="exp">&#9650; Expand log</span>
+    </div>
+
+    <div class="statusbar">
+      <span>C:\TestControllerService\WatchList.xml</span>
+      <div class="r"><span>CPU 20%</span><span>MEM 12.6 GB</span><span>DISK 84%</span><span>NET 15 ms</span><span>AGENTS 10/10</span><span class="warn">&#9888; 2 warnings</span></div>
+    </div>
+
+  </div>
+
+  <!-- what changed -->
+  <div class="measure">
+    <div class="mcard"><h4>Ribbon</h4><div class="big">~88 → 40px</div><p>Two-row stacked icons + captions + group labels collapse into one compact toolbar. ~48px back, every screen.</p></div>
+    <div class="mcard"><h4>Log</h4><div class="big">28px strip</div><p>Collapsed by default (latest line + error count). One click expands to full height for triaging the 130 errors — space on demand.</p></div>
+    <div class="mcard"><h4>Node Properties</h4><div class="big">2 columns</div><p>Six full-width fields paired. ~115px of vertical handed to the tree and agents.</p></div>
+    <div class="mcard"><h4>Agents</h4><div class="big">+ OFFLINE</div><p>Inline KPI saves ~25px AND surfaces the offline count the old header hid — JVKPRI shows offline, not "free".</p></div>
+  </div>
+
+</div>
+</body>
+</html>

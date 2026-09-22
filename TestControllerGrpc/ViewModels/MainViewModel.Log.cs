@@ -407,6 +407,8 @@ public sealed partial class MainViewModel
             if (!string.IsNullOrEmpty(e.SessionId) && !AvailableSessionIds.Contains(e.SessionId))
                 AvailableSessionIds.Add(e.SessionId);
         }
+
+        if (batch.Count > 0) LatestLogLine = batch[^1].FullText;
     }
 
     /// <summary>

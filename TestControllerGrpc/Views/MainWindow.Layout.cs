@@ -96,7 +96,13 @@ public partial class MainWindow : Window
         _paneIntent = (_vm.IsTreePanePinned, _vm.IsAgentPanePinned, _vm.IsLogPanePinned);
 
         var saved = _layoutStore.Load(DisplayKey());
-        if (saved is null) return;
+        if (saved is null)
+        {
+            // A field initialiser raises no PropertyChanged, so the collapsed default would never
+            // reach the grid on a first run.
+            ApplyLogPaneLayout(_vm.IsLogPanePinned);
+            return;
+        }
 
         _savedTreeColWidth = new GridLength(saved.TreeWidth, GridUnitType.Star);
         _savedPropertiesColWidth = new GridLength(saved.PropertiesWidth, GridUnitType.Star);
@@ -164,7 +170,9 @@ public partial class MainWindow : Window
 
     private void ApplyLogPaneLayout(bool pinned)
     {
-        if (pinned)
+        // Collapsed behaves like unpinned: the strip stays, the row shrinks to it. Without this the
+        // content hides but the row keeps its star height, leaving a tall empty box.
+        if (pinned && !_vm.IsLogCollapsed)
         {
             RowLogPane.Height = _savedLogRowHeight;
             RowLogPane.MinHeight = _logPaneMinHeight;

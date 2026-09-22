@@ -197,7 +197,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _isLogPaused;
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
-    [ObservableProperty] private bool _isLogCollapsed;
+    // Collapsed on first run: the strip still carries counts and the latest line, and the panes
+    // get the height back. RestoreLayout overrides this for anyone with a saved layout.
+    [ObservableProperty] private bool _isLogCollapsed = true;
+
+    [ObservableProperty] private string _latestLogLine = "";
 
     // ── Enhanced log filter properties ───────────────────────────────
     /// <summary>Filter by session ID. Empty = show all sessions.</summary>
