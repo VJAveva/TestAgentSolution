@@ -17,6 +17,18 @@ public enum WindowsUpdateState
     Suppressed,
 }
 
+/// <summary>
+/// Whether a node's pending-update count can be believed. Unknown is deliberately the default so an agent
+/// that never sends it, or a scan that failed, can never be rendered as a clean node.
+/// </summary>
+public enum UpdateScanStatus
+{
+    Unknown = 0,
+    Ok,
+    Stale,
+    Failed,
+}
+
 /// <summary>What triggered an agent maintenance event (mirrors the proto enum).</summary>
 public enum MaintenanceEventKind
 {

@@ -102,11 +102,11 @@ public sealed class WindowsUpdateDetector : BackgroundService
 
         // The WUApi COM search blocks; run it off the loop thread with a hard timeout so a hung
         // Windows Update service can never stall the agent.
-        var (pendingCount, items) = _settings.ScanPendingUpdates
+        ScanOutcome scan = _settings.ScanPendingUpdates
             ? await Task.Run(SearchPending, ct)
                 .WaitAsync(TimeSpan.FromSeconds(_settings.ScanTimeoutSeconds), ct)
                 .ConfigureAwait(false)
-            : (0, (IReadOnlyList<UpdateItemDto>)[]);
+            : new ScanOutcome(null, [], UpdateScanStatus.Unknown, null, null);
 
         WindowsUpdateStatusDto status;
         bool? previousReboot;
@@ -115,14 +115,20 @@ public sealed class WindowsUpdateDetector : BackgroundService
             status = new WindowsUpdateStatusDto
             {
                 RebootRequired = rebootRequired,
-                PendingCount = pendingCount,
-                Items = items,
+                PendingCount = scan.Count,
+                Items = scan.Items,
                 LastInstallUtc = _lastInstallUtc,
+                ScanStatus = scan.Status,
+                LastScanUtc = scan.Status == UpdateScanStatus.Failed ? null : DateTimeOffset.UtcNow,
+                WindowsLastSearchUtc = scan.WindowsLastSearchUtc,
+                ScanError = scan.Error,
             };
             _current = status;
             previousReboot = _lastRebootRequired;
             _lastRebootRequired = rebootRequired;
         }
+
+        var items = scan.Items;
 
         if (forceSnapshot)
         {
@@ -184,16 +190,64 @@ public sealed class WindowsUpdateDetector : BackgroundService
     }
 
     // ── WUApi path ───────────────────────────────────────────────────
+    /// <summary>What one cache read produced. A null <paramref name="Count"/> means "not known".</summary>
+    internal sealed record ScanOutcome(
+        int? Count,
+        IReadOnlyList<UpdateItemDto> Items,
+        UpdateScanStatus Status,
+        DateTimeOffset? WindowsLastSearchUtc,
+        string? Error);
+
+    /// <summary>
+    /// Windows' own last successful search. Null when the COM API does not expose it — which must read as
+    /// "age unknown", never as "old", or every node without the property would be reported Stale.
+    /// </summary>
+    internal static DateTimeOffset? ReadWindowsLastSearchUtc()
+    {
+        try
+        {
+            System.Type? autoUpdateType = System.Type.GetTypeFromProgID("Microsoft.Update.AutoUpdate");
+            if (autoUpdateType is null) return null;
+
+            dynamic autoUpdate = Activator.CreateInstance(autoUpdateType)!;
+            dynamic results = autoUpdate.Results;
+            var last = (DateTime)results.LastSearchSuccessDate;
+            return last == default ? null : new DateTimeOffset(DateTime.SpecifyKind(last, DateTimeKind.Utc));
+        }
+        catch
+        {
+            return null;   // property absent, never searched, or access denied
+        }
+    }
+
+    /// <summary>Decides Ok vs Stale from Windows' own last search; unknown age is not old age.</summary>
+    internal static UpdateScanStatus ClassifyFreshness(DateTimeOffset? windowsLastSearchUtc, DateTimeOffset now, int staleAfterDays)
+        => windowsLastSearchUtc is { } last && (now - last).TotalDays > staleAfterDays
+            ? UpdateScanStatus.Stale
+            : UpdateScanStatus.Ok;
+
+    /// <summary>
+    /// What a failed scan reports. Debug level made a broken scan invisible, and returning 0 made it
+    /// indistinguishable from a clean node, so this warns and reports NO count rather than a fabricated zero.
+    /// </summary>
+    internal static ScanOutcome ScanFailed(ILogger logger, Exception ex, DateTimeOffset? windowsLastSearchUtc)
+    {
+        logger.LogWarning(ex, "WUApi pending-update search failed; reporting ScanStatus=Failed.");
+        return new ScanOutcome(null, [], UpdateScanStatus.Failed, windowsLastSearchUtc, ex.Message);
+    }
+
     // Late-bound search of the LOCAL cache (Online=false: no WU-server round-trip) for applicable, not-yet-installed
     // software updates. Late binding avoids a COM interop assembly reference.
-    private (int Count, IReadOnlyList<UpdateItemDto> Items) SearchPending()
+    private ScanOutcome SearchPending()
     {
         var items = new List<UpdateItemDto>();
+        DateTimeOffset? windowsLastSearchUtc = ReadWindowsLastSearchUtc();
         try
         {
             // Fully qualify: Google.Protobuf.WellKnownTypes (in scope agent-wide) also defines a Type.
             System.Type? sessionType = System.Type.GetTypeFromProgID("Microsoft.Update.Session");
-            if (sessionType is null) return (0, items);
+            if (sessionType is null)
+                return new ScanOutcome(null, [], UpdateScanStatus.Failed, windowsLastSearchUtc, "Microsoft.Update.Session is not registered.");
 
             dynamic session = Activator.CreateInstance(sessionType)!;
             dynamic searcher = session.CreateUpdateSearcher();
@@ -216,12 +270,13 @@ public sealed class WindowsUpdateDetector : BackgroundService
                 }
                 catch { /* skip malformed entry */ }
             }
-            return (count, items);
+
+            var status = ClassifyFreshness(windowsLastSearchUtc, DateTimeOffset.UtcNow, _settings.StaleAfterDays);
+            return new ScanOutcome(count, items, status, windowsLastSearchUtc, null);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "WUApi pending-update search unavailable; reporting reboot-required only.");
-            return (items.Count, items);
+            return ScanFailed(_logger, ex, windowsLastSearchUtc);
         }
     }
 

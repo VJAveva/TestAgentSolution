@@ -18,9 +18,23 @@ public sealed record UpdateItemDto
 public sealed record WindowsUpdateStatusDto
 {
     public bool RebootRequired { get; init; }
-    public int PendingCount { get; init; }
+
+    // Null means "not known". A failed scan used to report 0, which read as a clean node.
+    public int? PendingCount { get; init; }
     public IReadOnlyList<UpdateItemDto> Items { get; init; } = [];
     public DateTimeOffset? LastInstallUtc { get; init; }
+
+    /// <summary>Whether the pending-update read can be believed. Defaults to Unknown so an agent that does
+    /// not send it cannot be mistaken for a healthy scan.</summary>
+    public UpdateScanStatus ScanStatus { get; init; } = UpdateScanStatus.Unknown;
+
+    /// <summary>When the agent last read the local update cache successfully.</summary>
+    public DateTimeOffset? LastScanUtc { get; init; }
+
+    /// <summary>When Windows itself last refreshed updates; null when the COM API does not expose it.</summary>
+    public DateTimeOffset? WindowsLastSearchUtc { get; init; }
+
+    public string? ScanError { get; init; }
 }
 
 /// <summary>Controller-side twin of the agent's NodeMaintenanceEvent proto (the gRPC handler maps proto → this).</summary>
@@ -46,8 +60,16 @@ public sealed record NodeUpdateStatus
     public DateTimeOffset LastReportUtc { get; init; }
 
     public DateTimeOffset? LastInstallUtc { get; init; }
-    public int PendingCount { get; init; }
+
+    /// <summary>Null when the scan did not succeed — never coerce this to zero for display.</summary>
+    public int? PendingCount { get; init; }
     public IReadOnlyList<UpdateItemDto> Items { get; init; } = [];
+
+    /// <summary>Unknown unless the agent proved otherwise — see <see cref="WindowsUpdateStatusDto.ScanStatus"/>.</summary>
+    public UpdateScanStatus ScanStatus { get; init; } = UpdateScanStatus.Unknown;
+    public DateTimeOffset? LastScanUtc { get; init; }
+    public DateTimeOffset? WindowsLastSearchUtc { get; init; }
+    public string? ScanError { get; init; }
     public DateTimeOffset? SuppressedUntilUtc { get; init; }
     public DateTimeOffset? SnoozedUntilUtc { get; init; }
     public bool Acknowledged { get; init; }

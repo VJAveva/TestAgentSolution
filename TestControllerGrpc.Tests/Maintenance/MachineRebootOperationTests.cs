@@ -141,4 +141,121 @@ public class MachineRebootOperationTests
             d => d.ExecuteRemoteCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    // ---- Wave 0: failure and cancel branches -------------------------------
+
+    [Fact]
+    public async Task ExecuteAsync_Should_RejectAtPrecheck_When_NodeIsNotRegistered()
+    {
+        var h = new Harness();
+        h.Dispatcher.Setup(d => d.RegisteredAgents).Returns(Array.Empty<string>());
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.Precheck, result.FailurePhase);
+        // Precheck must not leave a state behind - that is the F-2 class of stranding.
+        Assert.Equal(MaintenanceState.None, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_AbortTheRunningSession_When_ForcedWhileBusy()
+    {
+        var h = new Harness();
+        h.LockManager.TryLockAgents([Node], "sess1", "Nightly Regression", "user1", "WPF");
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(force: true), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Succeeded, result.State);
+        // The lock must be gone, or the node returns to rotation still owned by a dead session.
+        Assert.Null(h.LockManager.GetLock(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_QuarantineAtPowerOn_When_TheRebootCommandThrows()
+    {
+        var h = new Harness();
+        h.Dispatcher
+            .Setup(d => d.ExecuteRemoteCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("channel died"));
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.PowerOn, result.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_CancelAndQuarantine_When_CancelledBeforeTheAgentWait()
+    {
+        // CancelAsync had no coverage at all. A cancelled reboot must still quarantine: the machine was told
+        // to restart, so leaving it in rotation would hand work to a node that is about to disappear.
+        var h = new Harness();
+        using var cts = new CancellationTokenSource();
+        h.Dispatcher
+            .Setup(d => d.ExecuteRemoteCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { cts.Cancel(); return Task.FromResult(new ActionResult(true, 0, "")); });
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), cts.Token);
+
+        Assert.Equal(MaintenanceOperationState.Cancelled, result.State);
+        Assert.Equal(RevertPhase.AgentWait, result.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_CancelAndQuarantine_When_CancelledDuringTheAgentWait()
+    {
+        var h = new Harness();
+        using var cts = new CancellationTokenSource();
+        h.Probe.Setup(p => p.WaitForAgentAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { cts.Cancel(); return Task.FromResult(new ReadinessResult(true, TimeSpan.Zero, null)); });
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), cts.Token);
+
+        Assert.Equal(MaintenanceOperationState.Cancelled, result.State);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_QuarantineAndFail_When_AnUnexpectedExceptionEscapes()
+    {
+        // The outer catch is the last line of defence: whatever throws, the node must not be left mid-flight.
+        var h = new Harness();
+        h.Probe.Setup(p => p.WaitForAgentAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("probe exploded"));
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    // ---- F-1: quarantine, then the agent comes back healthy ----------------
+
+    [Fact]
+    public async Task Quarantine_Should_Persist_When_TheAgentLaterReturnsHealthy()
+    {
+        // F-1. A node quarantined by a timeout must NOT silently return to rotation just because the agent
+        // reconnected - the reason it was quarantined was never established. Quarantine is sticky by design
+        // and ClearQuarantineAsync is its only exit; an operator must see it.
+        var h = new Harness();
+        h.Probe.Setup(p => p.WaitForAgentAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReadinessResult(false, TimeSpan.FromMinutes(15), "Agent did not reconnect."));
+
+        var first = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+
+        // The agent is now healthy again, and a fresh reboot is attempted.
+        h.Probe.Setup(p => p.WaitForAgentAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReadinessResult(true, TimeSpan.Zero, null));
+
+        var second = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(RevertPhase.AgentWait, first.FailurePhase);
+        Assert.Equal(MaintenanceOperationState.Failed, second.State);
+        Assert.Equal(RevertPhase.Precheck, second.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
 }

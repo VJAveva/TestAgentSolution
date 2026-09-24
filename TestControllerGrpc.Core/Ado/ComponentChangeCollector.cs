@@ -18,6 +18,7 @@ public sealed class ComponentChangeCollector
     private const int MaxBuildsPerComponentInRange = 12; // bound how many builds we aggregate per component in a window
     private const int MaxConcurrentComponentScans = 5; // scan components in parallel (bounded) so wide windows stay responsive
     private const int MaxCommitsPerComponent = 200; // cap branch-history commits scanned per component
+    private const int FallbackLookbackDays = 30;    // only used when the branch has no previous successful build
     private const int MaxPrsPerComponent = 40; // cap PRs (and their work-item lookups) scanned per component
 
     private readonly IBuildQueries _builds;
@@ -164,13 +165,19 @@ public sealed class ComponentChangeCollector
             {
                 ct.ThrowIfCancellationRequested();
 
-                // Window start = the branch's first build; no build on the branch => the component never ran there.
+                // Baseline = the previous SUCCESSFUL build of this definition on this branch. "First build on the
+                // branch" is only the branch's creation date for short-lived branches; on a long-lived one like
+                // Dev it is years back, which buried the build's own delta under its entire history.
                 var firstBuild = await _builds.GetFirstBuildOnBranchAsync(omiProject, comp.BuildDefinitionId, branch, ct);
                 if (firstBuild is null)
                     return;
                 var latest = await _builds.GetLatestBuildsByDefinitionAsync(omiProject, comp.BuildDefinitionId, 1, branch, ct);
                 var headerBuild = latest.Count > 0 ? latest[0] : firstBuild;
-                var since = firstBuild.StartTime ?? firstBuild.FinishTime ?? DateTimeOffset.UtcNow.AddYears(-1);
+
+                var headerTime = headerBuild.FinishTime ?? headerBuild.StartTime ?? DateTimeOffset.UtcNow;
+                var previous = await _builds.GetPreviousBuildAsync(
+                    omiProject, comp.BuildDefinitionId, headerTime, branch, succeededOnly: true, ct);
+                var since = ResolveBranchWindowStart(previous, firstBuild, DateTimeOffset.UtcNow);
 
                 string? repoId = null;
                 string? defaultBranch = null;
@@ -228,8 +235,12 @@ public sealed class ComponentChangeCollector
         var changeRefs = new List<RegressionChangeRef>();
         var allFiles = new List<string>();
 
-        // Commits on the branch since the window start.
-        var commits = await _git.GetCommitsOnBranchSinceAsync(omiProject, repoId, branch, since, MaxCommitsPerComponent, ct);
+        // Commits on the branch since the window start, newest first so the cap drops the OLDEST work.
+        // Truncating the other way silently hid the very commits the build actually contained.
+        var commits = (await _git.GetCommitsOnBranchSinceAsync(omiProject, repoId, branch, since, MaxCommitsPerComponent, ct))
+            .OrderByDescending(c => c.Author?.Date ?? c.Committer?.Date ?? DateTimeOffset.MinValue)
+            .Take(MaxCommitsPerComponent)
+            .ToList();
         var fileLookups = 0;
         foreach (var c in commits)
         {
@@ -252,6 +263,8 @@ public sealed class ComponentChangeCollector
         // PRs targeting the branch, created on/after the window start; work items come from the PRs.
         var prs = (await _git.GetPullRequestsTargetingBranchAsync(omiProject, repoId, branch, MaxPrsPerComponent, ct))
             .Where(p => (p.CreationDate ?? DateTimeOffset.MaxValue) >= since)
+            .OrderByDescending(p => p.CreationDate ?? DateTimeOffset.MinValue)
+            .Take(MaxPrsPerComponent)
             .ToList();
         var manualSuitesForRow = new List<RegressionSuiteRef>();
         foreach (var pr in prs)
@@ -283,6 +296,21 @@ public sealed class ComponentChangeCollector
         string.IsNullOrWhiteSpace(repo)
             ? null
             : $"https://dev.azure.com/{_options.Organization}/{Uri.EscapeDataString(project)}/_git/{Uri.EscapeDataString(repo)}/pullrequest/{prId}";
+
+    /// <summary>
+    /// Churn window start: the previous successful build on the same branch. With no such build the branch has
+    /// never gone green, so fall back to a bounded lookback rather than the branch's whole history — floored at
+    /// the first build so we never claim changes from before the branch existed.
+    /// </summary>
+    internal static DateTimeOffset ResolveBranchWindowStart(AdoBuildDto? previousSuccessful, AdoBuildDto firstBuild, DateTimeOffset now)
+    {
+        if (previousSuccessful?.FinishTime is { } finished)
+            return finished;
+
+        var firstSeen = firstBuild.StartTime ?? firstBuild.FinishTime ?? now.AddDays(-FallbackLookbackDays);
+        var bounded = now.AddDays(-FallbackLookbackDays);
+        return firstSeen > bounded ? firstSeen : bounded;
+    }
 
     /// <summary>Recent builds for one component definition, newest first — for the build picker dropdown.</summary>
     public async Task<IReadOnlyList<RegressionBuildRef>> GetComponentBuildsAsync(int definitionId, int top, CancellationToken ct)

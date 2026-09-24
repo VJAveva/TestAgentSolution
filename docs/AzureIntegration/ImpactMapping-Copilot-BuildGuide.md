@@ -344,7 +344,7 @@ Selection:  MmrLambda=0.70, MaxTestCasesPerFeature=12, MaxTestCasesTotal=150,
             MinFinalScore=0.15,
             TierBudgets={Smoke:00:15:00, Targeted:01:30:00, Full:10675199.02:48:05.4775807}
 
-Learning:   ScoringMode="Linear" (Linear|Calibrated|Ranker), RankerModelPath=null,
+Learning:   ScoringMode="Linear" (Linear|Ranker), RankerModelPath=null,
             RecordOutcomes=true
 
 Add:  IReadOnlyList<string> Validate();   // returns problems, never throws

@@ -115,14 +115,23 @@ public static class ImpactServiceCollectionExtensions
 
         services.TryAddSingleton<IHydeQueryGenerator, HydeQueryGenerator>();
 
-        // Calibration by scoring mode (isotonic is fitted offline in P28, so it is not a startup choice).
-        if (string.Equals(options.Learning.ScoringMode, "Ranker", StringComparison.OrdinalIgnoreCase))
+        // Isotonic calibration is fitted offline in P28, so it is not a startup choice - Linear and Ranker
+        // are the only resolvers that exist. An explicitly wrong value must not degrade silently.
+        string scoringMode = (options.Learning.ScoringMode ?? string.Empty).Trim();
+        switch (scoringMode.ToLowerInvariant())
         {
-            services.TryAddSingleton<IScoreCalibrator, RankerScoreCalibrator>();
-        }
-        else
-        {
-            services.TryAddSingleton<IScoreCalibrator, LinearScoreCalibrator>();
+            case "":
+            case "linear":
+                services.TryAddSingleton<IScoreCalibrator, LinearScoreCalibrator>();
+                break;
+            case "ranker":
+                services.TryAddSingleton<IScoreCalibrator, RankerScoreCalibrator>();
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"ImpactMapping:Learning:ScoringMode '{scoringMode}' is not supported. " +
+                    "Valid values are 'Linear' or 'Ranker'; leave it unset for 'Linear'. " +
+                    "Earlier builds accepted 'Calibrated' and silently degraded to Linear - it has no resolver.");
         }
 
         services.TryAddSingleton<IFeatureVectorExtractor, FeatureVectorExtractor>();

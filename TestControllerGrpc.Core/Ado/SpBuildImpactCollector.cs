@@ -45,6 +45,27 @@ public sealed class SpBuildImpactCollector
         await CollectAsync(null, null, ct);
 
     /// <summary>
+    /// Keeps only builds sharing the NEWEST build's branch, preserving order. A baseline taken from another
+    /// branch diffs across the divergence point and reports years of unrelated churn. Builds with no branch
+    /// information are left untouched rather than discarded.
+    /// </summary>
+    internal static IReadOnlyList<AdoBuildDto> FilterToNewestBranch(IReadOnlyList<AdoBuildDto> builds)
+    {
+        if (builds.Count == 0)
+            return builds;
+        var branch = builds[0].SourceBranch;
+        if (string.IsNullOrWhiteSpace(branch))
+            return builds;
+        return builds.Where(b => string.Equals(b.SourceBranch, branch, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>refs/heads/Dev → Dev. The build APIs return the full ref; the branch filter wants the short name.</summary>
+    internal static string? ShortBranch(string? sourceBranch) =>
+        string.IsNullOrWhiteSpace(sourceBranch)
+            ? null
+            : sourceBranch.Replace("refs/heads/", "", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Selects the SP builds to diff: when <paramref name="from"/>/<paramref name="to"/> are given, the SP builds
     /// that finished in that window (current = newest in window, previous = the build just before the window);
     /// otherwise the latest build vs its predecessor. Falls back to latest-vs-previous when the window is empty.
@@ -61,13 +82,15 @@ public sealed class SpBuildImpactCollector
 
         if (from is { } f && to is { } t)
         {
-            var inRange = await _builds.GetBuildsByDefinitionInRangeAsync(spProject, spDefinitionId, f, t, ct);
+            var inRange = FilterToNewestBranch(await _builds.GetBuildsByDefinitionInRangeAsync(spProject, spDefinitionId, f, t, ct));
             if (inRange.Count > 0)
             {
                 current = inRange[0];
                 previous = inRange.Count > 1
                     ? inRange[^1]                                              // diff spans the whole window
-                    : await _builds.GetPreviousBuildAsync(spProject, spDefinitionId, inRange[0].FinishTime ?? DateTimeOffset.MaxValue, ct);
+                    : await _builds.GetPreviousBuildAsync(
+                        spProject, spDefinitionId, inRange[0].FinishTime ?? DateTimeOffset.MaxValue,
+                        ShortBranch(inRange[0].SourceBranch), succeededOnly: true, ct);
                 _logger.Info("Ado", $"SP builds in [{f}..{t}] for def {spDefinitionId}: {inRange.Count}. current={current.Id}, previous={previous?.Id.ToString() ?? "none"}.");
             }
             else
@@ -78,8 +101,8 @@ public sealed class SpBuildImpactCollector
 
         if (current is null)
         {
-            var latest = await _builds.GetLatestBuildsByDefinitionAsync(
-                spProject, spDefinitionId, Math.Max(2, _options.SpBuildHistoryCount), ct);
+            var latest = FilterToNewestBranch(await _builds.GetLatestBuildsByDefinitionAsync(
+                spProject, spDefinitionId, Math.Max(2, _options.SpBuildHistoryCount), ct));
             if (latest.Count == 0)
             {
                 _logger.Warn("Ado", $"No SP builds found for definition {spDefinitionId} in '{spProject}'.");

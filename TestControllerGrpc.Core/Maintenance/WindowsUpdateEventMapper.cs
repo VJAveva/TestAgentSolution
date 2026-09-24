@@ -40,6 +40,10 @@ public static class WindowsUpdateEventMapper
                 PendingCount = payload.PendingCount,
                 Items = payload.Items,
                 LastInstallUtc = payload.LastInstallUtc,
+                ScanStatus = payload.ScanStatus,
+                LastScanUtc = payload.LastScanUtc,
+                WindowsLastSearchUtc = payload.WindowsLastSearchUtc,
+                ScanError = payload.ScanError,
             },
             DetectedUtc = payload.DetectedUtc == default ? receivedUtc : payload.DetectedUtc,
         };

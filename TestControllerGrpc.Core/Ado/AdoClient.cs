@@ -71,6 +71,10 @@ public sealed class AdoClient
     }
 
     public async Task<T> GetAsync<T>(string relativePathAndQuery, CancellationToken ct)
+        => (await GetWithContinuationAsync<T>(relativePathAndQuery, ct)).Value;
+
+    /// <summary>ADO returns list continuation tokens in the x-ms-continuationtoken HEADER, never the body.</summary>
+    public async Task<(T Value, string? ContinuationToken)> GetWithContinuationAsync<T>(string relativePathAndQuery, CancellationToken ct)
     {
         var correlationId = Guid.NewGuid().ToString("N")[..8];
         for (var attempt = 1; attempt <= MaxRetries; attempt++)
@@ -120,7 +124,13 @@ public sealed class AdoClient
             }
 
             var result = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
-            return result ?? throw new AdoApiException($"[{correlationId}] ADO returned an empty body.");
+            if (result is null)
+                throw new AdoApiException($"[{correlationId}] ADO returned an empty body.");
+
+            var token = response.Headers.TryGetValues("x-ms-continuationtoken", out var values)
+                ? values.FirstOrDefault()
+                : null;
+            return (result, string.IsNullOrWhiteSpace(token) ? null : token);
         }
 
         throw new AdoApiException($"[{correlationId}] Exhausted retries calling ADO.");

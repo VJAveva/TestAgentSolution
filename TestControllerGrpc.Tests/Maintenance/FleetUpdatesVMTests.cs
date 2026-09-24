@@ -233,4 +233,78 @@ public class FleetUpdatesVMTests
         Assert.Equal(2, vm.Rows.Count);
         Assert.Contains(vm.Rows, r => r.AgentName == NodeB && r.IsRebootRequired);
     }
+
+    private static NodeUpdateRowVM Row(UpdateScanStatus scan, int? pending) =>
+        new("JVGR1", new NodeUpdateStatus
+        {
+            NodeId = "JVGR1",
+            State = pending > 0 ? WindowsUpdateState.UpdatePending : WindowsUpdateState.Unknown,
+            LastSource = MaintenanceEventSource.StartupSnapshot,
+            ScanStatus = scan,
+            PendingCount = pending,
+            LastReportUtc = DateTimeOffset.UtcNow,
+        }, TimeSpan.FromHours(6));
+
+    [Theory]
+    [InlineData(UpdateScanStatus.Failed)]
+    [InlineData(UpdateScanStatus.Stale)]
+    [InlineData(UpdateScanStatus.Unknown)]
+    public void PendingText_Should_ShowADash_When_TheScanDidNotSucceed(UpdateScanStatus scan)
+    {
+        // Rendering "0" here is the whole bug: it tells an operator the node is clean when nobody looked.
+        Assert.Equal("\u2014", Row(scan, pending: null).PendingText);
+        Assert.Equal("\u2014", Row(scan, pending: 0).PendingText);
+    }
+
+    [Fact]
+    public void PendingText_Should_ShowTheCount_When_TheScanSucceeded()
+    {
+        Assert.Equal("0", Row(UpdateScanStatus.Ok, pending: 0).PendingText);
+        Assert.Equal("4", Row(UpdateScanStatus.Ok, pending: 4).PendingText);
+    }
+
+    [Theory]
+    [InlineData(UpdateScanStatus.Failed, "Scan failed")]
+    [InlineData(UpdateScanStatus.Stale, "Scan stale")]
+    public void StateText_Should_NameTheScanProblem_When_TheScanDidNotSucceed(UpdateScanStatus scan, string expected)
+    {
+        Assert.Equal(expected, Row(scan, pending: null).StateText);
+    }
+
+    private static NodeMaintenanceEventDto ScanEvent(string nodeId, UpdateScanStatus scan, int? pending) => new()
+    {
+        NodeId = nodeId,
+        Kind = pending > 0 ? MaintenanceEventKind.UpdatePending : MaintenanceEventKind.RebootCleared,
+        Source = MaintenanceEventSource.StartupSnapshot,
+        Status = new WindowsUpdateStatusDto { PendingCount = pending, ScanStatus = scan },
+        DetectedUtc = DateTimeOffset.UtcNow,
+    };
+
+    [Fact]
+    public void ScanUnknownCount_Should_CountNodesWhosePostureIsNotProven()
+    {
+        var store = new NodeUpdateStatusStore();
+        store.Apply(ScanEvent(NodeA, UpdateScanStatus.Failed, pending: null));
+        store.Apply(ScanEvent(NodeB, UpdateScanStatus.Ok, pending: 0));
+
+        // NodeC never reports at all, which is also "not proven" - silence is not an all-clear.
+        var vm = Build(store, null, NodeA, NodeB, "NodeC");
+        Drain();
+
+        Assert.Equal(2, vm.ScanUnknownCount);
+    }
+
+    [Fact]
+    public void ScanUnknownCount_Should_BeZero_When_EveryScanSucceeded()
+    {
+        var store = new NodeUpdateStatusStore();
+        store.Apply(ScanEvent(NodeA, UpdateScanStatus.Ok, pending: 0));
+        store.Apply(ScanEvent(NodeB, UpdateScanStatus.Ok, pending: 3));
+
+        var vm = Build(store, null, NodeA, NodeB);
+        Drain();
+
+        Assert.Equal(0, vm.ScanUnknownCount);
+        Assert.Equal(1, vm.PendingCount);
+    }
 }

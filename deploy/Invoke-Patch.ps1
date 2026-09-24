@@ -300,6 +300,33 @@ function Compare-Config {
     Write-Info 'Add these by hand to the target appsettings.json, then re-run to confirm.'
 }
 
+function Compare-AgentRoster {
+    param([string]$ControllerConfig, [string]$WebConfig)
+
+    if (-not (Test-Path $ControllerConfig) -or -not (Test-Path $WebConfig)) { return }
+
+    try {
+        $ctl = @((Get-Content $ControllerConfig -Raw | ConvertFrom-Json).Agents | ForEach-Object { $_.Name })
+        $web = @((Get-Content $WebConfig -Raw | ConvertFrom-Json).Agents | ForEach-Object { $_.Name })
+    }
+    catch {
+        Write-Warn "agents: could not compare rosters - $($_.Exception.Message)"
+        return
+    }
+
+    $onlyCtl = @($ctl | Where-Object { $web -notcontains $_ })
+    $onlyWeb = @($web | Where-Object { $ctl -notcontains $_ })
+
+    if ($onlyCtl.Count -eq 0 -and $onlyWeb.Count -eq 0) {
+        Write-Ok "agents: controller and web rosters match ($($ctl.Count) agent(s))"
+        return
+    }
+
+    # An agent missing from a host's Agents[] does not exist to that host - there is no enable flag.
+    Write-Warn 'agents: controller and web rosters DIFFER - a host cannot see an agent it does not list.'
+    if ($onlyCtl.Count -gt 0) { Write-Info "  controller only : $($onlyCtl -join ', ')" }
+    if ($onlyWeb.Count -gt 0) { Write-Info "  web only        : $($onlyWeb -join ', ')" }}
+
 function Invoke-PatchRollback {
     param([string]$TargetRoot, [string]$Stamp, [string]$Label, [switch]$DoIt)
 
@@ -419,6 +446,11 @@ foreach ($name in $components) {
     # appsettings drift is reported for every run, apply or not
     Compare-Config -PublishedPath (Join-Path $spec.Stage 'appsettings.json') `
                    -DeployedPath (Join-Path $spec.Path 'appsettings.json')
+
+    if ($name -eq 'web') {
+        Compare-AgentRoster -ControllerConfig (Join-Path $Targets.controller.Path 'appsettings.json') `
+                            -WebConfig (Join-Path $spec.Path 'appsettings.Production.json')
+    }
 
     if ($changed.Count -eq 0) { continue }
     if (-not $Apply) { Write-Warn 'DRY RUN - nothing copied.'; continue }

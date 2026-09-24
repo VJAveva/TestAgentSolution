@@ -98,6 +98,8 @@ public class RegressionSourceCatalogBranchTests
             => throw new NotSupportedException();
         public Task<AdoBuildDto?> GetPreviousBuildAsync(string project, int definitionId, DateTimeOffset before, CancellationToken ct)
             => throw new NotSupportedException();
+        public Task<AdoBuildDto?> GetPreviousBuildAsync(string project, int definitionId, DateTimeOffset before, string? branchName, bool succeededOnly, CancellationToken ct)
+            => throw new NotSupportedException();
         public Task<AdoBuildDto?> GetBuildAsync(string project, int buildId, CancellationToken ct)
             => throw new NotSupportedException();
         public Task<IReadOnlyList<AdoBuildChangeDto>> GetBuildChangesAsync(int buildId, CancellationToken ct)

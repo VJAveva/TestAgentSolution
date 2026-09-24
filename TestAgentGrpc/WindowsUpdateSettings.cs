@@ -46,4 +46,7 @@ public sealed class WindowsUpdateSettings
     /// Windows Update. Still reported via <c>PendingFileRenameCount</c>.
     /// </summary>
     public bool TreatPendingFileRenamesAsRebootRequired { get; set; }
+
+    /// <summary>Windows' own last successful search older than this marks the posture Stale.</summary>
+    public int StaleAfterDays { get; set; } = 7;
 }

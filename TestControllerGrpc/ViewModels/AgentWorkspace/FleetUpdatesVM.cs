@@ -62,6 +62,10 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     [ObservableProperty] private int _rebootRequiredCount;
     [ObservableProperty] private int _pendingCount;
     [ObservableProperty] private int _failedCount;
+
+    /// <summary>Nodes whose posture is not proven. Without this tile a fleet of broken scans reads "0 updates pending".</summary>
+    [ObservableProperty] private int _scanUnknownCount;
+
     [ObservableProperty] private int _unreadCount;
 
     public bool HasBanners => Banners.Count > 0;
@@ -166,6 +170,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         RebootRequiredCount = Rows.Count(r => r.State == WindowsUpdateState.RebootRequired);
         PendingCount = Rows.Count(r => r.State == WindowsUpdateState.UpdatePending);
         FailedCount = _notifications?.Notifications.Count(n => n.Kind == MaintenanceEventKind.UpdateFailed) ?? 0;
+        ScanUnknownCount = Rows.Count(r => r.ScanStatus is UpdateScanStatus.Failed or UpdateScanStatus.Unknown);
 
         ApplyRowFilter();
         RowsChanged?.Invoke();
@@ -541,11 +546,27 @@ public sealed class NodeUpdateRowVM
         Action = action ?? new NodeUpdateActionVM();
         HasReported = status is not null;
         State = status?.State ?? WindowsUpdateState.Unknown;
-        PendingCount = status?.PendingCount ?? 0;
+        ScanStatus = status?.ScanStatus ?? UpdateScanStatus.Unknown;
+        PendingCount = status?.PendingCount;
+        ScanError = status?.ScanError;
         Items = status?.Items ?? [];
         IsDraining = status?.State == WindowsUpdateState.RebootRequired;
 
-        StateText = UpdateDisplay.StateText(State, HasReported);
+        // A count is only meaningful when the scan succeeded; otherwise show nothing rather than a zero.
+        PendingText = ScanStatus == UpdateScanStatus.Ok && PendingCount is { } pc
+            ? pc.ToString()
+            : "\u2014";
+
+        WindowsLastSearch = status?.WindowsLastSearchUtc is { } ws
+            ? UpdateDisplay.Relative(ws)
+            : "unknown";
+
+        StateText = ScanStatus switch
+        {
+            UpdateScanStatus.Failed => "Scan failed",
+            UpdateScanStatus.Stale => "Scan stale",
+            _ => UpdateDisplay.StateText(State, HasReported),
+        };
         DetectedBy = status is null ? "—" : UpdateDisplay.SourceText(status.LastSource);
         LastInstall = status?.LastInstallUtc is { } li ? li.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : "—";
         LastReport = status is null ? "never" : UpdateDisplay.Relative(status.LastReportUtc);
@@ -574,7 +595,13 @@ public sealed class NodeUpdateRowVM
     public bool HasReported { get; }
     public WindowsUpdateState State { get; }
     public string StateText { get; }
-    public int PendingCount { get; }
+    public int? PendingCount { get; }
+
+    /// <summary>The count, or an em dash when the scan cannot be believed.</summary>
+    public string PendingText { get; }
+    public UpdateScanStatus ScanStatus { get; }
+    public string? ScanError { get; }
+    public string WindowsLastSearch { get; }
     public IReadOnlyList<UpdateItemDto> Items { get; }
     public string DetectedBy { get; }
     public string LastInstall { get; }
@@ -584,13 +611,21 @@ public sealed class NodeUpdateRowVM
     public string DispatchText { get; }
     public string Provenance { get; }
 
-    public bool HasBadge => State is WindowsUpdateState.UpdatePending or WindowsUpdateState.RebootRequired;
+    // A broken or stale scan is its own state. Folding it into "Unknown" hides the difference between
+    // "nobody asked" and "we asked and it failed".
+    public bool HasBadge => State is WindowsUpdateState.UpdatePending or WindowsUpdateState.RebootRequired
+                            || ScanStatus is UpdateScanStatus.Failed or UpdateScanStatus.Stale;
     public bool IsRebootRequired => State == WindowsUpdateState.RebootRequired;
     public string BadgeText => State switch
     {
         WindowsUpdateState.RebootRequired => "Reboot required",
         WindowsUpdateState.UpdatePending => $"{PendingCount} pending",
-        _ => "",
+        _ => ScanStatus switch
+        {
+            UpdateScanStatus.Failed => "Scan failed",
+            UpdateScanStatus.Stale => $"Scan stale · {WindowsLastSearch}",
+            _ => "",
+        },
     };
 }
 internal static class UpdateDisplay

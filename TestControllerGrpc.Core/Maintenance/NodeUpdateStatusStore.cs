@@ -41,6 +41,10 @@ public sealed class NodeUpdateStatusStore : INodeUpdateStatusStore
             LastInstallUtc = evt.Status.LastInstallUtc ?? existing?.LastInstallUtc,
             PendingCount = evt.Status.PendingCount,
             Items = evt.Status.Items,
+            ScanStatus = evt.Status.ScanStatus,
+            LastScanUtc = evt.Status.LastScanUtc ?? existing?.LastScanUtc,
+            WindowsLastSearchUtc = evt.Status.WindowsLastSearchUtc ?? existing?.WindowsLastSearchUtc,
+            ScanError = evt.Status.ScanError,
             SuppressedUntilUtc = existing?.SuppressedUntilUtc,
             SnoozedUntilUtc = existing?.SnoozedUntilUtc,
             Acknowledged = existing?.Acknowledged ?? false,
@@ -74,8 +78,14 @@ public sealed class NodeUpdateStatusStore : INodeUpdateStatusStore
             return WindowsUpdateState.UpdateInstalling;
         if (status.RebootRequired)
             return WindowsUpdateState.RebootRequired;
-        if (status.PendingCount > 0)
+        if (status.PendingCount is > 0)
             return WindowsUpdateState.UpdatePending;
-        return WindowsUpdateState.UpToDate;
+
+        // UpToDate is a claim about the machine, so only make it when the scan succeeded. A failed, stale or
+        // absent scan reports Unknown - it must not look clean, and the policy maps it to None so it does not
+        // block dispatch either.
+        return status.ScanStatus == UpdateScanStatus.Ok
+            ? WindowsUpdateState.UpToDate
+            : WindowsUpdateState.Unknown;
     }
 }

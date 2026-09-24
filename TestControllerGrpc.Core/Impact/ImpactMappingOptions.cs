@@ -282,7 +282,7 @@ public sealed class ImpactMappingOptions
     /// <summary>Score calibration + outcome-learning configuration.</summary>
     public sealed class LearningOptions
     {
-        public string ScoringMode { get; set; } = "Linear"; // Linear | Calibrated | Ranker
+        public string ScoringMode { get; set; } = "Linear"; // Linear | Ranker
         public string? RankerModelPath { get; set; }
         public bool RecordOutcomes { get; set; } = true;
 

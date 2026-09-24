@@ -1116,6 +1116,7 @@
                         <DataTemplate>
                             <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}" Cursor="Hand"
                                           Background="Transparent" BorderThickness="0" Padding="0"
+                                          VerticalAlignment="Top" Margin="0,2,0,0"
                                           AutomationProperties.Name="Show / hide row details" ToolTip="Show / hide row details">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
@@ -1150,7 +1151,7 @@
                 <DataGridTemplateColumn Header="REPOSITORIES" Width="2.4*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize10}" FontFamily="{StaticResource Mono}" TextTrimming="CharacterEllipsis"
+                            <TextBlock VerticalAlignment="Top" FontSize="{StaticResource FontSize10}" FontFamily="{StaticResource Mono}" TextTrimming="CharacterEllipsis"
                                        ToolTip="Component (repository) — click the repo to open it in Azure DevOps">
                                 <Run Text="{Binding Component, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" (" Foreground="{DynamicResource TextTertiaryBrush}" /><Hyperlink NavigateUri="{Binding RepositoryUrl, Converter={StaticResource StrToUri}}" RequestNavigate="OnHyperlinkNavigate"><Run Text="{Binding Repository, Mode=OneWay}" /></Hyperlink><Run Text=")" Foreground="{DynamicResource TextTertiaryBrush}" />
                             </TextBlock>
@@ -1186,7 +1187,7 @@
                 <DataGridTemplateColumn Header="LATEST OK BUILD" Width="1.2*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize10}" FontFamily="{StaticResource Mono}">
+                            <TextBlock VerticalAlignment="Top" FontSize="{StaticResource FontSize10}" FontFamily="{StaticResource Mono}">
                                 <Hyperlink NavigateUri="{Binding LatestSuccessfulBuildUrl, Converter={StaticResource StrToUri}}"
                                            RequestNavigate="OnHyperlinkNavigate" ToolTip="Open the latest successful build in Azure DevOps">
                                     <Run Text="{Binding LatestSuccessfulBuild, Mode=OneWay}" />

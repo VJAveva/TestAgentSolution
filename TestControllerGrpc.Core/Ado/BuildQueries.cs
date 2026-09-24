@@ -37,6 +37,12 @@ public interface IBuildQueries
     /// <summary>The newest completed build for a definition that finished strictly before <paramref name="before"/>.</summary>
     Task<AdoBuildDto?> GetPreviousBuildAsync(string project, int definitionId, DateTimeOffset before, CancellationToken ct);
 
+    /// <summary>
+    /// As above, scoped to one branch and optionally to succeeded builds only. Churn baselines MUST use this:
+    /// the unscoped overload can return another branch's build, which yields a diff spanning the divergence.
+    /// </summary>
+    Task<AdoBuildDto?> GetPreviousBuildAsync(string project, int definitionId, DateTimeOffset before, string? branchName, bool succeededOnly, CancellationToken ct);
+
     /// <summary>A single build by id (for the build picker's re-fetch of a specific build).</summary>
     Task<AdoBuildDto?> GetBuildAsync(string project, int buildId, CancellationToken ct);
 
@@ -55,6 +61,9 @@ public interface IBuildQueries
 
 public sealed class BuildQueries : IBuildQueries
 {
+    private const int ChangePageSize = 200;  // ADO caps builds/{id}/changes at 200 per page
+    private const int MaxChangePages = 20;   // 4000 commits is far past useful churn; stop rather than loop forever
+
     private readonly AdoClient _client;
 
     public BuildQueries(AdoClient client) => _client = client;
@@ -116,13 +125,19 @@ public sealed class BuildQueries : IBuildQueries
         return result.Value;
     }
 
-    public async Task<AdoBuildDto?> GetPreviousBuildAsync(string project, int definitionId, DateTimeOffset before, CancellationToken ct)
+    public Task<AdoBuildDto?> GetPreviousBuildAsync(string project, int definitionId, DateTimeOffset before, CancellationToken ct)
+        => GetPreviousBuildAsync(project, definitionId, before, null, false, ct);
+
+    public async Task<AdoBuildDto?> GetPreviousBuildAsync(
+        string project, int definitionId, DateTimeOffset before, string? branchName, bool succeededOnly, CancellationToken ct)
     {
+        var branch = string.IsNullOrWhiteSpace(branchName) ? "" : $"&branchName=refs/heads/{Uri.EscapeDataString(branchName)}";
+        var result = succeededOnly ? "&resultFilter=succeeded" : "";
         var path = _client.ProjectApiPath(project,
-            $"build/builds?definitions={definitionId}&maxTime={before:o}&$top=2&statusFilter=completed&queryOrder=finishTimeDescending&api-version=7.1");
-        var result = await _client.GetAsync<AdoListResponse<AdoBuildDto>>(path, ct);
+            $"build/builds?definitions={definitionId}&maxTime={before:o}&$top=2{branch}{result}&statusFilter=completed&queryOrder=finishTimeDescending&api-version=7.1");
+        var page = await _client.GetAsync<AdoListResponse<AdoBuildDto>>(path, ct);
         // maxTime is inclusive, so the first entry may be the boundary build itself — take the first that finished strictly earlier.
-        return result.Value.FirstOrDefault(b => b.FinishTime is { } f && f < before);
+        return page.Value.FirstOrDefault(b => b.FinishTime is { } f && f < before);
     }
 
     public async Task<AdoBuildDto?> GetBuildAsync(string project, int buildId, CancellationToken ct)
@@ -146,18 +161,36 @@ public sealed class BuildQueries : IBuildQueries
             .ToList();
     }
 
-    public async Task<IReadOnlyList<AdoBuildChangeDto>> GetBuildChangesAsync(int buildId, CancellationToken ct)
-    {
-        var path = _client.ProjectApiPath($"build/builds/{buildId}/changes?api-version=7.1");
-        var result = await _client.GetAsync<AdoListResponse<AdoBuildChangeDto>>(path, ct);
-        return result.Value;
-    }
+    public Task<IReadOnlyList<AdoBuildChangeDto>> GetBuildChangesAsync(int buildId, CancellationToken ct)
+        => GetBuildChangesPagedAsync(_client.ProjectApiPath($"build/builds/{buildId}/changes"), ct);
 
-    public async Task<IReadOnlyList<AdoBuildChangeDto>> GetBuildChangesAsync(string project, int buildId, CancellationToken ct)
+    public Task<IReadOnlyList<AdoBuildChangeDto>> GetBuildChangesAsync(string project, int buildId, CancellationToken ct)
+        => GetBuildChangesPagedAsync(_client.ProjectApiPath(project, $"build/builds/{buildId}/changes"), ct);
+
+    // Without $top ADO serves a single default-sized page and the rest is silently lost, which reads as
+    // "that build changed nothing" rather than as an error.
+    private async Task<IReadOnlyList<AdoBuildChangeDto>> GetBuildChangesPagedAsync(string basePath, CancellationToken ct)
     {
-        var path = _client.ProjectApiPath(project, $"build/builds/{buildId}/changes?api-version=7.1");
-        var result = await _client.GetAsync<AdoListResponse<AdoBuildChangeDto>>(path, ct);
-        return result.Value;
+        var all = new List<AdoBuildChangeDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? continuation = null;
+
+        for (var page = 0; page < MaxChangePages; page++)
+        {
+            var token = continuation is null ? "" : $"&continuationToken={Uri.EscapeDataString(continuation)}";
+            var path = $"{basePath}?$top={ChangePageSize}{token}&api-version=7.1";
+            var (body, next) = await _client.GetWithContinuationAsync<AdoListResponse<AdoBuildChangeDto>>(path, ct);
+
+            foreach (var change in body.Value)
+                if (seen.Add(change.Id))
+                    all.Add(change);
+
+            if (string.IsNullOrWhiteSpace(next) || body.Value.Count == 0)
+                return all;
+            continuation = next;
+        }
+
+        return all;
     }
 
     public async Task<IReadOnlyList<int>> GetBuildWorkItemIdsAsync(int buildId, CancellationToken ct)

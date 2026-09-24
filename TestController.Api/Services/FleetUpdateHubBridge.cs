@@ -76,6 +76,12 @@ public static class FleetUpdateDto
         lastReportUtc = s.LastReportUtc,
         lastInstallUtc = s.LastInstallUtc,
         pendingCount = s.PendingCount,
+        // Ship the provenance with the number: a consumer that renders pendingCount without checking
+        // scanStatus would resurrect the fake "0 updates" this change exists to remove.
+        scanStatus = s.ScanStatus.ToString(),
+        lastScanUtc = s.LastScanUtc,
+        windowsLastSearchUtc = s.WindowsLastSearchUtc,
+        scanError = s.ScanError,
         suppressedUntilUtc = s.SuppressedUntilUtc,
         snoozedUntilUtc = s.SnoozedUntilUtc,
         acknowledged = s.Acknowledged,

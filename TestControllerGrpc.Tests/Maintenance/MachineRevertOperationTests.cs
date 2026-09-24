@@ -20,7 +20,7 @@ public class MachineRevertOperationTests
         public MaintenanceOptions Options { get; }
         public List<ScriptInvocation> Invocations { get; } = new();
 
-        public Harness(string? revertScriptPath = null)
+        public Harness(string? revertScriptPath = null, bool withPrepScript = false)
         {
             var dir = Path.Combine(Path.GetTempPath(), "maint-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
@@ -41,6 +41,7 @@ public class MachineRevertOperationTests
             Options = new MaintenanceOptions
             {
                 RevertScriptPath = scriptPath,
+                PrepScriptPath = withPrepScript ? scriptPath : null,
                 LogDirectory = dir,
             };
 
@@ -227,5 +228,190 @@ public class MachineRevertOperationTests
         h.Probe.Verify(
             p => p.WaitForPingAsync(It.IsAny<string>(), It.IsAny<PingOptions>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    // ---- Wave 0: failure and cancel branches -------------------------------
+
+    [Theory]
+    [InlineData(2)]   // F-5: the revert script exits 2 when RCLOUD_USER / RCLOUD_PASSWORD are unset
+    [InlineData(1)]
+    public async Task ExecuteAsync_Should_QuarantineAtSnapshotRevert_When_TheScriptExitsNonZero(int exitCode)
+    {
+        var h = new Harness();
+        h.ScriptRunner
+            .Setup(r => r.RunAsync(It.IsAny<ScriptInvocation>(), It.IsAny<IProgress<ScriptOutputLine>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ScriptResult(exitCode, TimeSpan.FromSeconds(3), false));
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.SnapshotRevert, result.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+        // The exit code must survive onto the operation, or the operator cannot tell 2 (no creds) from 1.
+        Assert.Equal(exitCode, result.ExitCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_RejectAtPrecheck_When_NodeIsNotRegistered()
+    {
+        var h = new Harness();
+        h.Dispatcher.Setup(d => d.RegisteredAgents).Returns(Array.Empty<string>());
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.Precheck, result.FailurePhase);
+        Assert.Equal(MaintenanceState.None, h.StateStore.Get(Node));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ExecuteAsync_Should_RejectAtPrecheck_When_SnapshotNameIsBlank(string snapshot)
+    {
+        var h = new Harness();
+
+        var result = await h.Build().ExecuteAsync(
+            Shell(), Request(snapshot: snapshot), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.Precheck, result.FailurePhase);
+        Assert.Equal(MaintenanceState.None, h.StateStore.Get(Node));
+        h.ScriptRunner.Verify(
+            r => r.RunAsync(It.IsAny<ScriptInvocation>(), It.IsAny<IProgress<ScriptOutputLine>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_CompleteWithoutWaiting_When_WaitForAgentIsFalse()
+    {
+        // Fire-and-forget revert: the operation completes at SnapshotRevert and never probes for recovery.
+        var h = new Harness();
+
+        var result = await h.Build().ExecuteAsync(
+            Shell(), Request(waitForAgent: false), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Succeeded, result.State);
+        Assert.Equal(MaintenanceState.None, h.StateStore.Get(Node));
+        h.Probe.Verify(
+            p => p.WaitForPingAsync(It.IsAny<string>(), It.IsAny<PingOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        h.Probe.Verify(
+            p => p.WaitForAgentAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_QuarantineAtPingWait_When_TheMachineNeverAnswers()
+    {
+        var h = new Harness();
+        h.Probe.Setup(p => p.WaitForPingAsync(It.IsAny<string>(), It.IsAny<PingOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReadinessResult(false, TimeSpan.FromMinutes(10), "Host never responded to ping."));
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.PingWait, result.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_CancelAndQuarantine_When_CancelledDuringThePingWait()
+    {
+        var h = new Harness();
+        using var cts = new CancellationTokenSource();
+        h.Probe.Setup(p => p.WaitForPingAsync(It.IsAny<string>(), It.IsAny<PingOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { cts.Cancel(); return Task.FromResult(new ReadinessResult(true, TimeSpan.Zero, null)); });
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), cts.Token);
+
+        Assert.Equal(MaintenanceOperationState.Cancelled, result.State);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_CancelAndQuarantine_When_CancelledAfterTheAgentReconnects()
+    {
+        var h = new Harness();
+        using var cts = new CancellationTokenSource();
+        h.Probe.Setup(p => p.WaitForAgentAsync(It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { cts.Cancel(); return Task.FromResult(new ReadinessResult(true, TimeSpan.Zero, null)); });
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), cts.Token);
+
+        Assert.Equal(MaintenanceOperationState.Cancelled, result.State);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_QuarantineAndFail_When_AnUnexpectedExceptionEscapes()
+    {
+        var h = new Harness();
+        h.ScriptRunner
+            .Setup(r => r.RunAsync(It.IsAny<ScriptInvocation>(), It.IsAny<IProgress<ScriptOutputLine>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("runner exploded"));
+
+        var result = await h.Build().ExecuteAsync(Shell(), Request(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    // ---- PostPrep: the second and third script invocations -----------------
+
+    private static RevertRequest PrepRequest() => new()
+    {
+        NodeId = Node,
+        SnapshotName = "snap 1",
+        TriggerSource = MaintenanceTriggerSource.FleetPanel,
+        WaitForAgent = true,
+        RunPrep = true,
+    };
+
+    /// <summary>Revert script succeeds, then the prep script returns whatever the test asks for.</summary>
+    private static void PrepReturns(Harness h, ScriptResult prepResult)
+    {
+        var call = 0;
+        h.ScriptRunner
+            .Setup(r => r.RunAsync(It.IsAny<ScriptInvocation>(), It.IsAny<IProgress<ScriptOutputLine>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++call == 1 ? new ScriptResult(0, TimeSpan.Zero, false) : prepResult);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_QuarantineAtPostPrep_When_ThePrepScriptFails()
+    {
+        var h = new Harness(withPrepScript: true);
+        PrepReturns(h, new ScriptResult(3, TimeSpan.Zero, false));
+
+        var result = await h.Build().ExecuteAsync(Shell(), PrepRequest(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Failed, result.State);
+        Assert.Equal(RevertPhase.PostPrep, result.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_CancelAtPostPrep_When_ThePrepScriptIsCancelled()
+    {
+        var h = new Harness(withPrepScript: true);
+        PrepReturns(h, new ScriptResult(-1, TimeSpan.Zero, true));
+
+        var result = await h.Build().ExecuteAsync(Shell(), PrepRequest(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Cancelled, result.State);
+        Assert.Equal(RevertPhase.PostPrep, result.FailurePhase);
+        Assert.Equal(MaintenanceState.Quarantined, h.StateStore.Get(Node));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_SkipPrep_When_NoPrepScriptIsConfigured()
+    {
+        // RunPrep on its own must not run anything - an unset PrepScriptPath is not an error.
+        var h = new Harness(withPrepScript: false);
+
+        var result = await h.Build().ExecuteAsync(Shell(), PrepRequest(), new Progress<MaintenanceProgress>(), CancellationToken.None);
+
+        Assert.Equal(MaintenanceOperationState.Succeeded, result.State);
+        Assert.Single(h.Invocations);   // the revert script only
     }
 }

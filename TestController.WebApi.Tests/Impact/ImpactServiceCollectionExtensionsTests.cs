@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TestControllerGrpc.Ado;
 using TestControllerGrpc.Core.Impact;
 using TestControllerGrpc.Core.Impact.Ado;
+using TestControllerGrpc.Core.Impact.Learning;
 using TestControllerGrpc.Services;
 
 namespace TestController.WebApi.Tests.Impact;
@@ -51,6 +52,60 @@ public sealed class ImpactServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetService<IImpactIndexPathProvider>());
         Assert.NotNull(provider.GetService<IImpactIndexHealthCheck>());
         Assert.NotNull(provider.GetService<IImpactPersistenceService>());
+    }
+
+    // ---- ScoringMode -------------------------------------------------------
+    // "Calibrated" was documented for a resolver that never existed, so it silently degraded to Linear and
+    // nobody found out their calibration was inert. Unset still means Linear; a wrong value must be loud.
+
+    private static IServiceCollection ServicesFor(string? scoringMode)
+    {
+        var settings = new Dictionary<string, string?>();
+        if (scoringMode is not null)
+            settings["ImpactMapping:Learning:ScoringMode"] = scoringMode;
+
+        IConfiguration config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IAppLogger, NoopAppLogger>();
+        services.AddSingleton<IAdoWorkItemClient, ThrowingAdo>();
+        services.AddImpactMapping(config, ImpactHostRole.Reader);
+        return services;
+    }
+
+    [Theory]
+    [InlineData(null)]      // key absent entirely
+    [InlineData("")]        // present but blank
+    [InlineData("   ")]
+    [InlineData("Linear")]
+    [InlineData("linear")]
+    public void AddImpactMapping_Should_ResolveLinearCalibrator_When_ScoringModeIsUnsetOrLinear(string? mode)
+    {
+        using ServiceProvider provider = ServicesFor(mode).BuildServiceProvider(validateScopes: true);
+
+        Assert.IsType<LinearScoreCalibrator>(provider.GetRequiredService<IScoreCalibrator>());
+    }
+
+    [Theory]
+    [InlineData("Ranker")]
+    [InlineData("ranker")]
+    public void AddImpactMapping_Should_ResolveRankerCalibrator_When_ScoringModeIsRanker(string mode)
+    {
+        using ServiceProvider provider = ServicesFor(mode).BuildServiceProvider(validateScopes: true);
+
+        Assert.IsType<RankerScoreCalibrator>(provider.GetRequiredService<IScoreCalibrator>());
+    }
+
+    [Theory]
+    [InlineData("Calibrated")]
+    [InlineData("Foo")]
+    public void AddImpactMapping_Should_Throw_When_ScoringModeIsExplicitlyUnsupported(string mode)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => ServicesFor(mode));
+
+        Assert.Contains(mode, ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Linear", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Ranker", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

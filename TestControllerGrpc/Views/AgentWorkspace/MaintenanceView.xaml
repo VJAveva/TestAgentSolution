@@ -140,6 +140,14 @@
                                 </StackPanel>
                             </Border>
                             <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
+                                    Background="{DynamicResource StatusWarningBg}" BorderBrush="{DynamicResource StatusWarningFg}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.ScanUnknownCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource StatusWarningFg}"/>
+                                    <TextBlock Text="scan not proven" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
                                     Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Updates.FailedCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
@@ -160,7 +168,7 @@
                             <DataGridTextColumn Header="Agent" Binding="{Binding AgentName}" Width="130" MinWidth="120"/>
                             <DataGridTextColumn Header="Update state" Binding="{Binding StateText}" Width="110" MinWidth="110"/>
                             <DataGridTextColumn x:Name="LastInstallColumn" Header="Last install" Binding="{Binding LastInstall}" Width="120" MinWidth="110"/>
-                            <DataGridTextColumn Header="Pending" Binding="{Binding PendingCount}" Width="60" MinWidth="70"/>
+                                <DataGridTextColumn Header="Pending" Binding="{Binding PendingText}" Width="60" MinWidth="70"/>
                             <DataGridTextColumn x:Name="DetectedByColumn" Header="Detected by" Binding="{Binding DetectedBy}" Width="100" MinWidth="130"/>
                             <DataGridTextColumn Header="Last report" Binding="{Binding LastReport}" Width="90" MinWidth="100">
                                 <DataGridTextColumn.ElementStyle>
