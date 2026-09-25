@@ -49,7 +49,13 @@ public partial class RegressionWindow : Window
     private void OnHideDetails(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is SubsystemRowViewModel vm)
+        {
             vm.IsExpanded = false;
+            // Selection is what expands a row, so a collapsed row must not stay selected: SelectionChanged
+            // would never fire for it again and clicking it could not reopen it.
+            if (ReferenceEquals(ChurnGrid.SelectedItem, vm))
+                ChurnGrid.SelectedItem = null;
+        }
     }
 
     // Show/hide the Subsystem (Solutions) column; off by default because its wrapped .sln lists make rows uneven.

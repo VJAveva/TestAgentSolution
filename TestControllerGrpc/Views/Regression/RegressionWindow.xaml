@@ -831,7 +831,7 @@
         </Border>
 
         <!-- ── R9 grid — the feature ── -->
-        <DataGrid ItemsSource="{Binding Rows}" Margin="12,8,12,0"
+        <DataGrid x:Name="ChurnGrid" ItemsSource="{Binding Rows}" Margin="12,8,12,0"
                   AutoGenerateColumns="False" IsReadOnly="True"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   Background="Transparent" RowBackground="Transparent"
@@ -1116,13 +1116,13 @@
                         <DataTemplate>
                             <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}" Cursor="Hand"
                                           Background="Transparent" BorderThickness="0" Padding="0"
-                                          VerticalAlignment="Top" Margin="0,2,0,0"
                                           AutomationProperties.Name="Show / hide row details" ToolTip="Show / hide row details">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
                                         <Border Background="Transparent">
+                                            <!-- Glyph is top-aligned, the button is not: stretching keeps the whole cell clickable on tall rows. -->
                                             <TextBlock x:Name="chev" Text="&#x25B8;" FontSize="{StaticResource FontSize11}"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,3,0,0"
                                                        Foreground="{DynamicResource TextTertiaryBrush}" />
                                         </Border>
                                         <ControlTemplate.Triggers>
