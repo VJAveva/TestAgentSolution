@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,7 +9,7 @@ using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Folding;
 using ICSharpCode.AvalonEdit.Highlighting;
-using ICSharpCode.AvalonEdit.Highlighting.Xshd;
+using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.Views;
@@ -73,12 +72,11 @@ public partial class RawXmlEditorWindow : Window
 
     private void ConfigureEditor()
     {
-        // Load custom XML syntax highlighting from embedded resource
-        var highlighting = LoadXmlHighlighting();
-        if (highlighting is not null)
-            XmlEditor.SyntaxHighlighting = highlighting;
-        else
-            XmlEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("XML");
+        ApplyHighlighting(ThemeService.CurrentTheme);
+
+        // ThemeChanged is static-rooted, so this window must unhook itself or it is leaked.
+        ThemeService.ThemeChanged += OnThemeChanged;
+        Closed += (_, _) => ThemeService.ThemeChanged -= OnThemeChanged;
 
         // Editor settings
         XmlEditor.Options.EnableHyperlinks = false;
@@ -406,24 +404,15 @@ public partial class RawXmlEditorWindow : Window
         CursorPositionText.Text = $"Ln {caret.Line}, Col {caret.Column}";
     }
 
-    private static IHighlightingDefinition? LoadXmlHighlighting()
-    {
-        try
+    private void OnThemeChanged(string themeName) =>
+        Dispatcher.InvokeAsync(() =>
         {
-            var assembly = Assembly.GetExecutingAssembly();
-            var resourceName = "TestControllerGrpc.Resources.XmlSyntaxHighlighting.xshd";
+            ApplyHighlighting(themeName);
+            ApplyThemeColors();
+        });
 
-            using var stream = assembly.GetManifestResourceStream(resourceName);
-            if (stream is null) return null;
-
-            using var reader = new System.Xml.XmlTextReader(stream);
-            return HighlightingLoader.Load(reader, HighlightingManager.Instance);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private void ApplyHighlighting(string? themeName) =>
+        XmlEditor.SyntaxHighlighting = XmlHighlightingProvider.ForThemeOrDefault(themeName);
 
     private void IncreaseFontSize_Click(object? sender, RoutedEventArgs e)
     {

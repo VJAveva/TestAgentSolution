@@ -72,7 +72,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\XmlSyntaxHighlighting.xshd" />
+    <!-- Per-theme WatchList XML highlighting; picked by XmlHighlightingProvider on theme change. -->
+    <EmbeddedResource Include="Resources\WatchListXml.Dark.xshd" />
+    <EmbeddedResource Include="Resources\WatchListXml.Light.xshd" />
+    <EmbeddedResource Include="Resources\WatchListXml.HighContrast.xshd" />
     <EmbeddedResource Include="Resources\chart.umd.min.js" />
   </ItemGroup>
 

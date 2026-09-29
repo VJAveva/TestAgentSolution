@@ -54,7 +54,11 @@ public sealed partial class MainViewModel
     private void AddActionToGroup()
     {
         if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
-        AddChild(SelectedNode, new ActionConfig { Type = ActionType.RunCommand, Command = "cmd", Parameters = "/c echo hello" });
+        var action = _suggestions.NewActionDefaults(ActionType.RunCommand);
+        action.Parameters = "/c echo hello";
+        Services.WatchFieldSuggestions.ApplyInstallTimeoutIfDetected(action);
+        AddChild(SelectedNode, action);
+        QueueValidation();
     }
 
     [RelayCommand]

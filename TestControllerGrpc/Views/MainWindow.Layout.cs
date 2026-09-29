@@ -259,26 +259,4 @@ public partial class MainWindow : Window
                 MainContentGrid.RowDefinitions[0].MinHeight = mainRowMinHeight;
         }
     }
-
-    private void SetupInlineFolding()
-    {
-        if (_inlineEditor is null) return;
-        if (_inlineFoldingManager is not null)
-        {
-            FoldingManager.Uninstall(_inlineFoldingManager);
-            _inlineFoldingManager = null;
-        }
-        _inlineFoldingManager = FoldingManager.Install(_inlineEditor.TextArea);
-        _inlineFoldingStrategy = new XmlFoldingStrategy();
-        UpdateInlineFolding();
-    }
-
-    private void UpdateInlineFolding()
-    {
-        if (_inlineFoldingManager is not null && _inlineFoldingStrategy is not null && _inlineEditor is not null)
-        {
-            try { _inlineFoldingStrategy.UpdateFoldings(_inlineFoldingManager, _inlineEditor.Document); }
-            catch (Exception) { /* XML parse errors expected during mid-edit � folding will retry on next keystroke */ }
-        }
-    }
 }

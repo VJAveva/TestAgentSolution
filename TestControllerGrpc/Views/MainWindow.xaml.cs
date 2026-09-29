@@ -25,11 +25,6 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm;
     private readonly Services.CapabilityChecker _capabilityChecker;
 
-    // ?? Inline AvalonEdit editor ?????????????????????????????????????
-    private TextEditor? _inlineEditor;
-    private FoldingManager? _inlineFoldingManager;
-    private XmlFoldingStrategy? _inlineFoldingStrategy;
-
     // ?? Drag-and-drop state ??????????????????????????????????????
     private Point _dragStartPoint;
     private TreeNodeViewModel? _draggedNode;
@@ -102,8 +97,6 @@ public partial class MainWindow : Window
         WatchListTreeView.DragOver += OnTreeDragOver;
         WatchListTreeView.Drop += OnTreeDrop;
 
-        // ?? Inline AvalonEdit setup ?????????????????????????
-        SetupInlineXmlEditor();
         _vm.PropertyChanged += OnViewModelPropertyChanged;
 
         // ?? Keyboard shortcut support ????????????????????????
@@ -398,58 +391,9 @@ public partial class MainWindow : Window
             _vm.SelectedTemplateNode = node;
     }
 
-    // ???????????????????????????????????????????????????????????????
-    // FEATURE 1: INLINE AVLONEDIT XML EDITOR
-    // ???????????????????????????????????????????????????????????????
-
-    private void SetupInlineXmlEditor()
-    {
-        _inlineEditor = new TextEditor
-        {
-            SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("XML"),
-            ShowLineNumbers = true,
-            FontFamily = new FontFamily("Consolas"),
-            FontSize = 12,
-            WordWrap = false,
-            Background = Brushes.Transparent,
-            Foreground = (Brush)FindResource("TextP"),
-            LineNumbersForeground = (Brush)FindResource("TextS"),
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
-        _inlineEditor.Options.EnableHyperlinks = false;
-        _inlineEditor.Options.ConvertTabsToSpaces = true;
-        _inlineEditor.Options.IndentationSize = 2;
-        _inlineEditor.Options.HighlightCurrentLine = true;
-
-        _inlineEditor.TextChanged += (_, _) =>
-        {
-            if (_vm.InlineXmlEditorText != _inlineEditor.Text)
-                _vm.InlineXmlEditorText = _inlineEditor.Text;
-            UpdateInlineFolding();
-        };
-
-        InlineXmlEditorHost.Child = _inlineEditor;
-    }
-
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.IsInlineXmlEditorVisible))
-        {
-            if (_vm.IsInlineXmlEditorVisible && _inlineEditor is not null)
-            {
-                _inlineEditor.Text = _vm.InlineXmlEditorText;
-                SetupInlineFolding();
-                Dispatcher.InvokeAsync(() => _inlineEditor.Focus(),
-                    System.Windows.Threading.DispatcherPriority.Background);
-            }
-        }
-        else if (e.PropertyName == nameof(MainViewModel.InlineXmlEditorText))
-        {
-            if (_inlineEditor is not null && _inlineEditor.Text != _vm.InlineXmlEditorText)
-                _inlineEditor.Text = _vm.InlineXmlEditorText;
-        }
-        else if (e.PropertyName == nameof(MainViewModel.IsAgentPanePinned))
+        if (e.PropertyName == nameof(MainViewModel.IsAgentPanePinned))
         {
             NotePaneIntent();
             ApplyAgentPaneLayout(_vm.IsAgentPanePinned);

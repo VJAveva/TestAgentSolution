@@ -165,7 +165,6 @@ public sealed class ActionConfig : IActionNode, ISkippableNode
     {
         if (Type == ActionType.SendMail)
             return !string.IsNullOrEmpty(To) ? $"Email: {To.Split(',')[0].Trim()}" : "SendMail";
-
         var cmd = Command;
         if (string.IsNullOrEmpty(cmd)) return Type.ToString();
 
@@ -226,6 +225,22 @@ public sealed class ActionConfig : IActionNode, ISkippableNode
     public string? Comment { get; set; }
     public DateTimeOffset? SkippedAtUtc { get; set; }
     public string? SkippedBy { get; set; }
+
+    /// <summary>
+    /// Field-for-field copy with a fresh <see cref="NodeId"/>.
+    /// </summary>
+    /// <remarks>
+    /// MemberwiseClone rather than an explicit field list, so a newly added property is copied
+    /// automatically; every member is a value type or an immutable string, so shallow is enough.
+    /// The NodeId MUST differ - it is how progress events are matched to tree nodes within a run,
+    /// so two copies sharing one id would report against the same node.
+    /// </remarks>
+    public ActionConfig Clone()
+    {
+        var copy = (ActionConfig)MemberwiseClone();
+        copy.NodeId = Guid.NewGuid().ToString("N");
+        return copy;
+    }
 }
 
 // =============================================================================

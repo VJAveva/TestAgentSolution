@@ -31,14 +31,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IVocabularyMonitor _vocabMonitor;
     private readonly IFileWatcherManager _watcherManager;
     private readonly IActionPipelineExecutor _executor;
-    private readonly IAgentGrpcDispatcher _dispatcher;
-    private readonly ExecutionSessionManager _sessionManager;
+    private readonly IAgentGrpcDispatcher _dispatcher;    private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<MainViewModel> _logger;
     private readonly IAppLogger _appLogger;
     private readonly IEventAggregator _events;
     private readonly AgentLockManager _lockManager;
     private readonly TestControllerGrpc.Core.Maintenance.IMaintenanceStateStore? _maintenanceState;
     private readonly TestControllerGrpc.Core.Maintenance.IFleetMaintenanceService? _fleetMaintenance;
+    private readonly TestControllerGrpc.Core.Maintenance.INodeUpdateStatusStore? _updateStatus;
     private readonly HealthThresholdSettings _healthThresholds;
     private readonly TestController.Api.Services.PipelineAuthorizationGuard _pipelineGuard;
     private readonly Services.AuthClient _authClient;
@@ -76,13 +76,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isXmlEditorOpen;
     [ObservableProperty] private string _xmlEditorText = "";
     [ObservableProperty] private string _xmlEditorStatus = "";
-
-    // ── Inline AvalonEdit panel state (Feature 1) ───────────────────
-    [ObservableProperty] private bool _isInlineXmlEditorVisible;
-    [ObservableProperty] private string _inlineXmlEditorText = "";
-    [ObservableProperty] private string _inlineXmlEditorStatus = "";
-    /// <summary>"WatchList" or "WatchItem" — determines what's being edited inline.</summary>
-    [ObservableProperty] private string _inlineXmlEditorScope = "";
 
     // ── Execution state ─────────────────────────────────────────────
     [ObservableProperty] private bool _isExecuting;
@@ -374,6 +367,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _lockRegistry = lockRegistry;
         _maintenanceState = maintenanceState;
         _fleetMaintenance = fleetMaintenance;
+        _updateStatus = updateStatus;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher, fleetMaintenance, _maintenanceState, maintenanceStore,
@@ -411,6 +405,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             e => OnAgentSelfUnregistered(e.AgentName)));
         _subscriptions.Add(events.Subscribe<AgentHeartbeatEvent>(
             e => OnAgentHeartbeat(e.AgentName, e.State, e.Metrics)));
+
+        InitializeSmartEdit();
 
         // Subscribe to lock changes for admin display refresh
         _subscriptions.Add(events.Subscribe<AgentLocksChangedEvent>(_ =>
@@ -700,6 +696,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        DisposeSmartEdit();
         _vocabMonitor.ConfigReloaded -= OnConfigReloaded;
         _executor.LogEntry -= OnLogEntry;
         _executor.NodeProgress -= OnNodeProgress;
@@ -891,6 +888,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
     {
+        TrackNodeEditsForValidation(value);
         if (value is null) return;
 
         ActiveEditNode = value;

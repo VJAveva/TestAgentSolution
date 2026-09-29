@@ -119,9 +119,6 @@ public partial class MainWindow : Window
 
         Loaded -= OnWindowLoaded;
 
-        if (_inlineFoldingManager is not null)
-            FoldingManager.Uninstall(_inlineFoldingManager);
-
         _vm.Dispose();
         base.OnClosed(e);
     }

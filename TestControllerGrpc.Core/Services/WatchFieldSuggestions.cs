@@ -78,9 +78,28 @@ public sealed class WatchFieldSuggestions
     /// <summary>Default From address for new SendMail actions (controller appsettings).</summary>
     public string DefaultMailFrom { get; set; } = "wwapps@magellandev2000.dev.wonderware.com";
 
+    /// <summary>Timeout (seconds) for an action detected as an install.</summary>
+    public const int InstallTimeoutSeconds = 3600;
+
+    /// <summary>Timeout (seconds) for every other command action.</summary>
+    public const int DefaultTimeoutSeconds = 600;
+
+    /// <summary>Poll interval in MILLISECONDS (60 s). Timeout is in seconds - the units differ.</summary>
+    public const int DefaultPollIntervalMs = 60_000;
+
+    /// <summary>
+    /// True when the action looks like a build install. Parameters is checked too: installs are
+    /// normally "cmd" with the actual script in Parameters, so Command alone misses them.
+    /// </summary>
+    public static bool LooksLikeInstall(string? tag, string? command, string? parameters) =>
+        Mentions(tag) || Mentions(command) || Mentions(parameters);
+
+    private static bool Mentions(string? value) =>
+        value is not null && value.Contains("install", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Sensible defaults when a new action node is created. Note PollInterval is
-    /// in milliseconds (model default 1000) and Timeout is in seconds.
+    /// in milliseconds and Timeout is in seconds.
     /// </summary>
     public ActionConfig NewActionDefaults(ActionType type) => type switch
     {
@@ -88,14 +107,16 @@ public sealed class WatchFieldSuggestions
         {
             Type = type,
             Command = "cmd",
-            Timeout = 360,
-            PollInterval = 1000,
+            Timeout = DefaultTimeoutSeconds,
+            PollInterval = DefaultPollIntervalMs,
             FailAndContinue = false,
         },
         ActionType.RunCommand => new ActionConfig
         {
             Type = type,
             Command = "cmd",
+            Timeout = DefaultTimeoutSeconds,
+            PollInterval = DefaultPollIntervalMs,
             FailAndContinue = true,
         },
         ActionType.SendMail => new ActionConfig
@@ -105,4 +126,16 @@ public sealed class WatchFieldSuggestions
         },
         _ => new ActionConfig { Type = type },
     };
+
+    /// <summary>
+    /// Re-applies the timeout default once the action's text is known, so an install gets the
+    /// long timeout. Only touches an action still sitting on the non-install default.
+    /// </summary>
+    public static void ApplyInstallTimeoutIfDetected(ActionConfig action)
+    {
+        if (action.Type is not (ActionType.RunCommand or ActionType.RunRemoteCommand)) return;
+        if (action.Timeout != DefaultTimeoutSeconds) return;
+        if (LooksLikeInstall(action.Tag, action.Command, action.Parameters))
+            action.Timeout = InstallTimeoutSeconds;
+    }
 }

@@ -7,6 +7,7 @@
         xmlns:aw="clr-namespace:TestControllerGrpc.Views.AgentWorkspace"
         xmlns:panels="clr-namespace:TestControllerGrpc.Views.Panels"
         xmlns:controls="clr-namespace:TestControllerGrpc.Controls"
+        xmlns:behaviors="clr-namespace:TestControllerGrpc.Views.Behaviors"
         Title="TestController  -  WatchList Editor"
         Height="900" Width="1400" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
@@ -2302,8 +2303,27 @@
                         </DockPanel>
                     </Border>
                     <Border DockPanel.Dock="Bottom" Style="{DynamicResource PanelFooterBorder}" Padding="12,6">
-                        <Button Content="Apply Changes" Style="{StaticResource Btn}" HorizontalAlignment="Left"
-                                Command="{Binding DataContext.ApplyChangesCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Left" Content="Apply Changes" Style="{StaticResource Btn}" HorizontalAlignment="Left"
+                                    Command="{Binding DataContext.ApplyChangesCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                            <!-- Debounced WatchListValidator.Analyze result; Errors block Save, Warnings do not. -->
+                            <TextBlock Text="{Binding DataContext.ValidationSummary, RelativeSource={RelativeSource AncestorType=Window}}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis"
+                                       AutomationProperties.Name="Validation summary"
+                                       ToolTipService.ShowOnDisabled="True">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.HasBlockingErrors, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                <Setter Property="FontWeight" Value="Bold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DockPanel>
                     </Border>
                     <!-- Content area: watermark + properties (overlapped) -->
                     <Grid>
@@ -2577,9 +2597,12 @@
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunCommand|RunRemoteCommand}">
                                     <TextBlock Text="COMMAND SETTINGS" Style="{StaticResource Sec}" />
                                     <Label Content="COMMAND" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="COMMAND" />
+                                    <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"
+                                             behaviors:TokenCompletionBehavior.Source="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                             AutomationProperties.Name="COMMAND" />
                                     <Label Content="PARAMETERS" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding Parameters, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"
+                                             behaviors:TokenCompletionBehavior.Source="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                              TextWrapping="Wrap" AcceptsReturn="True" Height="52" VerticalScrollBarVisibility="Auto"  AutomationProperties.Name="PARAMETERS" />
                                     <Label Content="RESOLVED PARAMETERS" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding ResolvedParameters, Mode=OneWay}" Style="{StaticResource Fld}" FontFamily="Consolas"
@@ -2653,7 +2676,19 @@
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunRemoteCommand}">
                                     <TextBlock Text="REMOTE AGENT" Style="{StaticResource Sec}" />
                                     <Label Content="AGENT NAME" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding AgentName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"  AutomationProperties.Name="AGENT NAME" />
+                                    <!-- Editable: AgentName may be a [Token] resolved from the parameter file. -->
+                                    <ComboBox IsEditable="True"
+                                              Text="{Binding AgentName, UpdateSourceTrigger=PropertyChanged}"
+                                              ItemsSource="{Binding DataContext.AgentChoices, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              DisplayMemberPath="Display"
+                                              SelectedValuePath="Name"
+                                              Style="{StaticResource Cmb}"
+                                              ToolTip="Registered agents with live status. A [Token] name is also valid."
+                                              AutomationProperties.Name="AGENT NAME" />
+                                    <Button Content="Apply to agents..." Style="{StaticResource SmBtn}" HorizontalAlignment="Left" Margin="0,4"
+                                            Command="{Binding DataContext.ApplyActionToAgentsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ToolTip="Copy this action once per selected agent into a new Parallel group"
+                                            AutomationProperties.Name="Apply to agents" />
                                     <Label Content="RESOLVED AGENT NAME" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding ResolvedAgentName, Mode=OneWay}" Style="{StaticResource Fld}"
                                              IsReadOnly="True" Foreground="{DynamicResource AccGreen}"
@@ -2783,7 +2818,12 @@
                             <!-- ===== Ref ===== -->
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Ref, FallbackValue=Collapsed}">
                                 <Label Content="TEMPLATE ID" Style="{StaticResource Lbl}" />
-                                <TextBox Text="{Binding TemplateID, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"  AutomationProperties.Name="TEMPLATE ID" />
+                                <!-- Editable so a template that is not loaded yet can still be typed. -->
+                                <ComboBox IsEditable="True"
+                                          Text="{Binding TemplateID, UpdateSourceTrigger=PropertyChanged}"
+                                          ItemsSource="{Binding DataContext.TemplateIds, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          Style="{StaticResource Cmb}"
+                                          AutomationProperties.Name="TEMPLATE ID" />
                                 <TextBlock TextWrapping="Wrap" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" Margin="0,4">
                                     <Run Text="ⓘ" FontWeight="Bold" />
                                     <Run Text=" This node expands to the children of the referenced Template at execution time." />
@@ -2825,39 +2865,6 @@
                                 </Grid>
                             </DockPanel>
                         </Border>
-
-            <!-- ═══════════════════════════════════════════════════════ -->
-            <!-- INLINE XML EDITOR PANEL (Col 2, Row 0): overlays center panel -->
-            <!-- ═══════════════════════════════════════════════════════ -->
-            <Border Grid.Column="2" Grid.Row="0" Style="{DynamicResource PanelBorder}"
-                    BorderBrush="{DynamicResource Accent}" BorderThickness="2"
-                    Visibility="{Binding IsInlineXmlEditorVisible, Converter={StaticResource BoolVis}}">
-                <DockPanel>
-                    <Border DockPanel.Dock="Top" Style="{DynamicResource PanelHeaderBorder}" Padding="12,8">
-                        <DockPanel>
-                            <TextBlock FontSize="{StaticResource FontSize14}" FontWeight="Bold" Foreground="{DynamicResource Accent}">
-                                <Run Text="XML Editor" />
-                                <Run Text=" — " Foreground="{DynamicResource TextS}" />
-                                <Run Text="{Binding InlineXmlEditorScope, Mode=OneWay}" Foreground="{DynamicResource AccMauve}" />
-                            </TextBlock>
-                            <Button DockPanel.Dock="Right" Content="✕ Close" Style="{StaticResource SmBtn}" HorizontalAlignment="Right"
-                                    Background="{DynamicResource DangerBtnBg}" Foreground="{DynamicResource AccRed}"
-                                    Command="{Binding ToggleInlineXmlEditorCommand}" ToolTip="Close inline XML editor" />
-                        </DockPanel>
-                    </Border>
-                    <Border DockPanel.Dock="Bottom" Style="{DynamicResource PanelFooterBorder}" Padding="12,6">
-                        <DockPanel>
-                            <Button Content="Apply XML" Style="{StaticResource Btn}" HorizontalAlignment="Left"
-                                    Command="{Binding ApplyInlineXmlCommand}" />
-                            <TextBlock Text="{Binding InlineXmlEditorStatus}" FontSize="{StaticResource FontSize10}" FontFamily="Consolas"
-                                       Foreground="{DynamicResource AccYellow}" VerticalAlignment="Center" Margin="12,0,0,0"
-                                       TextTrimming="CharacterEllipsis" />
-                        </DockPanel>
-                    </Border>
-                    <!-- AvalonEdit host — instantiated in code-behind -->
-                    <Border x:Name="InlineXmlEditorHost" Background="{DynamicResource FieldBg}" Margin="4" />
-                </DockPanel>
-            </Border>
 
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- VERTICAL SPLITTER: Center | Right                      -->

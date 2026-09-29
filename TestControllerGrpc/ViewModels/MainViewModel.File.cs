@@ -41,7 +41,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSaveVocabulary))]
     private void SaveVocabulary()
     {
         if (string.IsNullOrEmpty(VocabFilePath)) { SaveVocabularyAs(); return; }
@@ -53,7 +53,7 @@ public sealed partial class MainViewModel
             // the actual agent names instead of [Token] placeholders.
             ResolveAgentNamesInConfig(_config);
 
-            // Suppress the file-watcher reload — we're saving our own in-memory state
+            // Suppress the file-watcher reload ï¿½ we're saving our own in-memory state
             _vocabMonitor.SuppressNextReload();
 
             WatchListXmlParser.Save(_config, VocabFilePath);
@@ -99,7 +99,7 @@ public sealed partial class MainViewModel
 
             if (_sessionManager.HasAnyActiveExecution)
             {
-                // DIFFERENTIAL reload — preserve running watchers
+                // DIFFERENTIAL reload ï¿½ preserve running watchers
                 _config = config;
                 _executor.LoadTemplates(config.Templates);
                 _watcherManager.ApplyDiff(config.WatchItems);
@@ -117,18 +117,18 @@ public sealed partial class MainViewModel
                 });
 
                 IsDirty = false;
-                AddLog($"Refreshed (differential — {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
+                AddLog($"Refreshed (differential ï¿½ {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
                     LogSeverity.Success);
             }
             else
             {
-                // FULL reload — no executions running
+                // FULL reload ï¿½ no executions running
                 ApplyConfig(config);
                 IsDirty = false;
                 AddLog($"Refreshed: {VocabFilePath}", LogSeverity.Success);
             }
 
-            StatusMessage = $"Refreshed — {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
+            StatusMessage = $"Refreshed ï¿½ {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
         }
         catch (Exception ex)
         {

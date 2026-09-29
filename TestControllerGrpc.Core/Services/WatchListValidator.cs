@@ -172,7 +172,12 @@ public static class WatchListValidator
     /// Full analysis returning severity-tagged issues. Errors mirror
     /// <see cref="Validate"/>; warnings add the builder's advisory rules.
     /// </summary>
-    public static IReadOnlyList<ValidationIssue> Analyze(WatchListConfig config)
+    /// <param name="knownAgents">
+    /// Live agent roster. When supplied, a RunRemoteCommand naming an agent outside it is flagged.
+    /// Trailing-optional so existing callers keep compiling; null means "roster unknown, do not judge".
+    /// </param>
+    public static IReadOnlyList<ValidationIssue> Analyze(
+        WatchListConfig config, IReadOnlyCollection<string>? knownAgents = null)
     {
         // Reuse the single source of truth for blocking errors, then layer warnings.
         var issues = Validate(config)
@@ -182,8 +187,57 @@ public static class WatchListValidator
         foreach (var wi in config.WatchItems)
             AnalyzeWatchItemWarnings(wi, issues);
 
+        if (knownAgents is { Count: > 0 })
+            AnalyzeAgentNames(config, knownAgents, issues);
+
         return issues;
     }
+
+    /// <summary>
+    /// Flags RunRemoteCommand actions targeting an agent that is not registered.
+    /// </summary>
+    /// <remarks>
+    /// A tokenised name (<c>[_Agent1]</c>) resolves at run time from the parameter file, so it cannot
+    /// be checked here and must never be flagged - doing so would light up every templated pipeline.
+    /// </remarks>
+    private static void AnalyzeAgentNames(
+        WatchListConfig config, IReadOnlyCollection<string> knownAgents, List<ValidationIssue> issues)
+    {
+        var roster = new HashSet<string>(knownAgents, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var wi in config.WatchItems)
+            foreach (var ev in wi.Events)
+                WalkForAgents(ev.Children, $"WatchItem[{wi.Tag}]/Event[{ev.Type}]", roster, issues);
+
+        foreach (var t in config.Templates)
+            WalkForAgents(t.Children, $"Template[{t.ID}]", roster, issues);
+    }
+
+    private static void WalkForAgents(
+        IEnumerable<IActionNode> nodes, string path,
+        HashSet<string> roster, List<ValidationIssue> issues)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionGroupConfig ag:
+                    WalkForAgents(ag.Children, $"{path}/ActionGroup[{ag.Tag}]", roster, issues);
+                    break;
+
+                case ActionConfig a when a.Type == ActionType.RunRemoteCommand:
+                    var name = a.AgentName?.Trim() ?? "";
+                    if (name.Length == 0 || ContainsToken(name) || roster.Contains(name))
+                        break;
+                    issues.Add(new(WatchIssueSeverity.Error, $"{path}/Action[{a.Tag}]",
+                        $"Agent '{name}' is not a registered agent.",
+                        $"Pick one of: {string.Join(", ", roster.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))}"));
+                    break;
+            }
+        }
+    }
+
+    private static bool ContainsToken(string value) => value.Contains('[') && value.Contains(']');
 
     private static void AnalyzeWatchItemWarnings(WatchItemConfig wi, List<ValidationIssue> issues)
     {

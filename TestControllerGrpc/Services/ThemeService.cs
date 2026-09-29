@@ -11,6 +11,20 @@ public static class ThemeService
 {
     public static readonly string[] AvailableThemes = ["Dark", "Light", "High Contrast"];
 
+    /// <summary>The theme last applied. Matches the default merged in App.xaml until ApplyTheme runs.</summary>
+    public static string CurrentTheme { get; private set; } = "Dark";
+
+    /// <summary>
+    /// Raised after a theme has been applied, with the new theme name.
+    /// </summary>
+    /// <remarks>
+    /// For anything a ResourceDictionary swap cannot reach - notably AvalonEdit, whose syntax
+    /// highlighting is a frozen object graph rather than a DynamicResource lookup. Subscribers are
+    /// static-rooted, so a Window MUST unsubscribe when it closes or it is leaked for the process
+    /// lifetime.
+    /// </remarks>
+    public static event Action<string>? ThemeChanged;
+
     /// <summary>
     /// Applies the named theme by loading its ResourceDictionary and replacing
     /// the current theme dictionary in Application.Resources.
@@ -37,5 +51,8 @@ public static class ThemeService
 
         // Flush rasterized SVG icon cache so icons re-render with new theme colors
         SvgIconHelper.ClearCache();
+
+        CurrentTheme = themeName;
+        ThemeChanged?.Invoke(themeName);
     }
 }

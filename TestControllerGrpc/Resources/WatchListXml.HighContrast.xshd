@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WatchList XML highlighting - HIGH CONTRAST.
+
+  Every node colour MIRRORS the tree tag brushes in Themes/HighContrastTheme.xaml, so the same node
+  reads the same colour in the tree and in the XML view. Do not hand-tune a value here:
+  change the theme brush and follow it. Pinned by TestControllerGrpc.Tests/Ui/XmlHighlightingTests.
+
+  NOTE: high contrast deliberately uses a tiny saturated palette, so some pairs collide exactly as
+  they already do in the tree - RunCommand shares cyan with Sequential, RunRemoteCommand shares
+  magenta with Parallel, SendMail shares yellow with Event, and Ref is plain white. That is the
+  theme's intent, not drift; the shape of the element still disambiguates.
+-->
+<SyntaxDefinition name="WatchListXml.HighContrast"
+                  xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+
+  <!-- Structure / chrome -->
+  <Color name="Comment"        foreground="#999999" fontStyle="italic" />  <!-- TextDimBrush -->
+  <Color name="CData"          foreground="#FFFFFF" />                     <!-- TextDefaultBrush -->
+  <Color name="DocType"        foreground="#CCCCCC" />                     <!-- TextMutedBrush -->
+  <Color name="XmlDeclaration" foreground="#CCCCCC" />                     <!-- TextMutedBrush -->
+  <Color name="Punctuation"    foreground="#CCCCCC" />                     <!-- TextMutedBrush -->
+  <Color name="AttributeName"  foreground="#CCCCCC" />                     <!-- TextMutedBrush -->
+  <Color name="AttributeValue" foreground="#FFFFFF" />                     <!-- TextDefaultBrush -->
+  <Color name="Entity"         foreground="#FFFFFF" />                     <!-- TextDefaultBrush -->
+  <Color name="BrokenEntity"   foreground="#FF1F1F" />                     <!-- AccRed -->
+
+  <!-- Node types - must equal the tree (TreeViewSpec.xaml) -->
+  <Color name="NodeRoot"       foreground="#00FFFF" fontWeight="bold" />   <!-- CRunBrush    WatchList/WatchItem -->
+  <Color name="NodeEvent"      foreground="#FFFF00" fontWeight="bold" />   <!-- CEventBrush  Event -->
+  <Color name="NodeGroupSeq"   foreground="#00FFFF" fontWeight="bold" />   <!-- CSeqBrush    ActionGroup Sequential -->
+  <Color name="NodeGroupPar"   foreground="#FF00FF" fontWeight="bold" />   <!-- CParBrush    ActionGroup Parallel -->
+  <Color name="NodeInitialize" foreground="#00FF00" fontWeight="bold" />   <!-- CInitBrush   Initialize -->
+  <Color name="NodeRef"        foreground="#FFFFFF" fontWeight="bold" />   <!-- CRefBrush    Ref/Template -->
+  <Color name="ActionRun"      foreground="#00FFFF" fontWeight="bold" />   <!-- CRunBrush    RunCommand -->
+  <Color name="ActionRemote"   foreground="#FF00FF" fontWeight="bold" />   <!-- CRemoteBrush RunRemoteCommand -->
+  <Color name="ActionMail"     foreground="#FFFF00" fontWeight="bold" />   <!-- CEmailBrush  SendMail -->
+
+  <!-- Value semantics -->
+  <Color name="Token"          foreground="#00FF00" fontWeight="bold" />   <!-- CInitBrush -->
+  <Color name="SecretValue"    foreground="#FF1F1F" fontWeight="bold" />   <!-- AccRed -->
+
+  <RuleSet>
+    <Span color="Comment" multiline="true">
+      <Begin>&lt;!--</Begin>
+      <End>--&gt;</End>
+    </Span>
+
+    <Span color="CData" multiline="true">
+      <Begin>&lt;!\[CDATA\[</Begin>
+      <End>]]&gt;</End>
+    </Span>
+
+    <Span color="DocType" multiline="true">
+      <Begin>&lt;!DOCTYPE</Begin>
+      <End>&gt;</End>
+    </Span>
+
+    <Span color="XmlDeclaration" multiline="true">
+      <Begin>&lt;\?</Begin>
+      <End>\?&gt;</End>
+    </Span>
+
+    <Span color="Punctuation" multiline="true">
+      <Begin>&lt;</Begin>
+      <End>&gt;</End>
+      <RuleSet>
+        <!--
+          Secret attributes first: the Begin starts at the ATTRIBUTE NAME so this span is leftmost
+          and beats the generic value span below. AvalonEdit paints the begin marker with the span
+          colour, so the whole Password="..." renders red rather than the value alone - deliberate,
+          it makes a short secret as obvious as a long one.
+          Fragment list mirrors WatchListController.SecretKeyFragments.
+        -->
+        <Span color="SecretValue" multiline="false">
+          <Begin>(?i)[\w.\-]*(?:password|passwd|pwd|secret|token|apikey|api_key|credential)[\w.\-]*\s*=\s*"</Begin>
+          <End>"</End>
+        </Span>
+
+        <Span color="AttributeValue" multiline="true">
+          <Begin>"</Begin>
+          <End>"</End>
+          <RuleSet>
+            <Rule color="Token">\[\w+\]</Rule>
+          </RuleSet>
+        </Span>
+        <Span color="AttributeValue" multiline="true">
+          <Begin>'</Begin>
+          <End>'</End>
+          <RuleSet>
+            <Rule color="Token">\[\w+\]</Rule>
+          </RuleSet>
+        </Span>
+
+        <!--
+          Element names. The discriminated variants MUST precede their default: alternatives are
+          tried in order at the same offset, so ActionGroup-Parallel has to be offered first or the
+          Sequential rule always wins. [^>]* keeps each lookahead inside the current element.
+        -->
+        <Rule color="NodeGroupPar">\bActionGroup\b(?=[^&gt;]*ExecutionType\s*=\s*"Parallel")</Rule>
+        <Rule color="NodeGroupSeq">\bActionGroup\b</Rule>
+
+        <Rule color="ActionRemote">\bAction\b(?=[^&gt;]*Type\s*=\s*"RunRemoteCommand")</Rule>
+        <Rule color="ActionMail">\bAction\b(?=[^&gt;]*Type\s*=\s*"SendMail")</Rule>
+        <Rule color="ActionRun">\bAction\b</Rule>
+
+        <Rule color="NodeEvent">\bEvent\b</Rule>
+        <Rule color="NodeInitialize">\bInitialize\b</Rule>
+        <Rule color="NodeRef">\b(?:Templates|Template|Ref)\b</Rule>
+        <Rule color="NodeRoot">\b(?:WatchList|WatchItem)\b</Rule>
+
+        <Rule color="AttributeName">[\d\w_\-\.]+(?=(\s*=))</Rule>
+        <Rule color="Punctuation">[?/]</Rule>
+      </RuleSet>
+    </Span>
+
+    <Rule color="Entity">&amp;\w+;</Rule>
+    <Rule color="BrokenEntity">&amp;\w+[^\w;]</Rule>
+  </RuleSet>
+</SyntaxDefinition>
