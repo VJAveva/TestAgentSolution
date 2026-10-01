@@ -28,6 +28,9 @@ public sealed partial class MainViewModel
         LoadTokensFromConfig(_config);
         ActiveWatchers = _watcherManager.ActiveWatcherCount;
         RefreshPipelinePermissions();
+        // Skip origin is a traversal result, so it only exists once the tree does.
+        foreach (var root in TreeRoots) root.RecomputeSkipOrigins(SkipState.NotSkipped);
+        foreach (var root in TemplateRoots) root.RecomputeSkipOrigins(SkipState.NotSkipped);
     }
 
     // ?? Tree search ????????????????????????????????????????????????
@@ -184,6 +187,8 @@ public sealed partial class MainViewModel
             try
             {
                 RebuildAllTrees();
+                // Templates arrive with the config, which loads after the view model is built.
+                RefreshTemplateIds();
                 StatusMessage = $"{config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
             }
             catch (Exception ex)
@@ -396,11 +401,17 @@ public sealed partial class MainViewModel
         RebuildTemplateIds();
     }
 
-    public void SetNodeSkip(TreeNodeViewModel node, bool skip)
+    /// <summary>
+    /// Skip state is shown on the row itself, so there is deliberately no status-bar message here - the tree
+    /// is the feedback.
+    /// </summary>
+    public void SetNodeSkip(TreeNodeViewModel node, bool skip, string? reason = null)
     {
-        if (node.ModelObject is not ISkippableNode skippable) return;
-        skippable.Skip = skip;
-        StatusMessage = skip ? $"Skipped '{node.DisplayText}'" : $"Enabled '{node.DisplayText}'";
+        if (node.ModelObject is not ISkippableNode) return;
+
+        // Set the reason first: OnSkipChanged triggers the cascade that paints the row.
+        node.SkipReason = skip ? reason ?? "" : "";
+        node.Skip = skip;
     }
 
     private void OnConfigReloaded(WatchListConfig config)

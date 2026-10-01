@@ -1,4 +1,6 @@
 
+using System.Globalization;
+using System.IO;
 using System.Xml.Linq;
 using TestControllerGrpc.Models;
 
@@ -142,8 +144,69 @@ public static class WatchListXmlParser
 
     // ── Write ──────────────────────────────────────────────────────────
 
+    /// <summary>How many timestamped backups of a WatchList file are retained.</summary>
+    public const int BackupsToKeep = 10;
+
+    /// <summary>Suffix pattern for the rolling backups written by <see cref="Save"/>.</summary>
+    internal const string BackupSuffixFormat = ".bak-yyyyMMdd-HHmmss";
+
+    /// <summary>
+    /// Copies the current file aside as <c>&lt;name&gt;.bak-yyyyMMdd-HHmmss</c> and prunes to the newest
+    /// <see cref="BackupsToKeep"/>.
+    /// </summary>
+    /// <remarks>
+    /// There is no undo in the editor, so the pre-save copy is the only way back from a bad edit.
+    /// Failure here must never block the save - losing a backup is bad, losing the user's work is worse.
+    /// </remarks>
+    public static string? BackupExisting(string filePath, int keep = BackupsToKeep)
+    {
+        try
+        {
+            if (!File.Exists(filePath)) return null;
+
+            var dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
+            if (string.IsNullOrEmpty(dir)) return null;
+
+            var name = Path.GetFileName(filePath);
+            var backup = Path.Combine(dir,
+                name + DateTime.Now.ToString(BackupSuffixFormat, CultureInfo.InvariantCulture));
+
+            // Same-second saves would collide; make the name unique rather than clobber a backup.
+            var attempt = 1;
+            while (File.Exists(backup) && attempt < 100)
+                backup = Path.Combine(dir,
+                    name + DateTime.Now.ToString(BackupSuffixFormat, CultureInfo.InvariantCulture) + $"-{attempt++}");
+
+            File.Copy(filePath, backup, overwrite: false);
+            PruneBackups(dir, name, keep);
+            return backup;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static void PruneBackups(string dir, string name, int keep)
+    {
+        if (keep < 0) keep = 0;
+
+        var stale = new DirectoryInfo(dir)
+            .GetFiles(name + ".bak-*")
+            .OrderByDescending(f => f.LastWriteTimeUtc)
+            .Skip(keep);
+
+        foreach (var f in stale)
+        {
+            try { f.Delete(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* next save retries */ }
+        }
+    }
+
     public static void Save(WatchListConfig config, string filePath)
     {
+        BackupExisting(filePath);
+
         var root = new XElement("WatchList");
 
         if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))

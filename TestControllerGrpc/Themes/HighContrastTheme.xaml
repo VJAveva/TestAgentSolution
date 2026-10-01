@@ -160,6 +160,9 @@
     <SolidColorBrush x:Key="PillEmlBg"          Color="#FF333300" />
     <SolidColorBrush x:Key="PillInitBg"         Color="#FF003300" />
     <SolidColorBrush x:Key="PillRefBg"          Color="#FF222222" />
+    <!-- Skip: HC cannot rely on colour alone, so the row also carries a glyph; keep max contrast here. -->
+    <SolidColorBrush x:Key="PillSkipBg"         Color="#FF333300" />
+    <SolidColorBrush x:Key="CSkipBrush"         Color="#FFFFFF00" />
     <SolidColorBrush x:Key="PillAssignedBg"     Color="#FF003300" />
     <SolidColorBrush x:Key="PillAssignedFg"     Color="#FF00FF00" />
     <SolidColorBrush x:Key="PillViewOnlyBg"     Color="#FF222222" />

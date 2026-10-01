@@ -291,6 +291,12 @@
                                 <Setter Property="Foreground" Value="{DynamicResource SFailedBrush}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </DataTrigger>
+                            <!-- Last, so a skipped node never reads as failed or strong: later triggers win. -->
+                            <DataTrigger Binding="{Binding IsSkippedAnyway}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
+                                <Setter Property="FontStyle" Value="Italic" />
+                                <Setter Property="FontWeight" Value="Normal" />
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </TextBlock.Style>
@@ -443,6 +449,66 @@
                     <TextBlock Text="REF" Style="{StaticResource TreePillText}"
                                Foreground="{DynamicResource CRefBrush}" />
                 </Border>
+
+                <!-- ── Skip: pill on the node that owns the decision, plain label on its descendants ── -->
+                <Border Background="{DynamicResource PillSkipBg}">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource TreePillStyle}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSkippedExplicit}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel Orientation="Horizontal">
+                        <!-- HighContrast cannot rely on the amber alone, so the glyph carries the meaning too. -->
+                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource FontSize9}"
+                                   VerticalAlignment="Center" Margin="0,0,3,0"
+                                   Foreground="{DynamicResource CSkipBrush}" />
+                        <TextBlock Text="SKIPPED" Style="{StaticResource TreePillText}"
+                                   Foreground="{DynamicResource CSkipBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="260"
+                           TextTrimming="CharacterEllipsis"
+                           FontSize="{DynamicResource FontSize9}" FontStyle="Italic"
+                           Foreground="{DynamicResource CSkipBrush}"
+                           Text="{Binding SkipReason}"
+                           ToolTip="{Binding SkipReason}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsSkippedExplicit}" Value="True" />
+                                        <Condition Binding="{Binding HasSkipReason}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock Text="via parent" VerticalAlignment="Center" Margin="6,0,0,0"
+                           FontSize="{DynamicResource FontSize9}" FontStyle="Italic"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           ToolTip="{Binding SkipBlame, StringFormat='Skipped by {0}'}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSkippedByParent}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
 
             </StackPanel>
 
@@ -655,6 +721,9 @@
                             <Binding Path="Children.Count" />
                             <Binding Path="NodeKind" />
                             <Binding />
+                            <!-- Children.Count does not change when a child is skipped, so bind the count
+                                 itself or the badge never refreshes. -->
+                            <Binding Path="SkippedChildCount" />
                         </MultiBinding>
                     </TextBlock.Text>
                     <TextBlock.Style>
@@ -742,9 +811,16 @@
                                 Background="Transparent"
                                 Padding="0,0,8,0" Height="26"
                                 CornerRadius="4" SnapsToDevicePixels="True">
-                            <ContentPresenter x:Name="PART_Header" ContentSource="Header"
-                                              VerticalAlignment="Center"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            <Grid>
+                                <!-- Border cannot render a dashed edge, so the skip rail is a Line. -->
+                                <Line x:Name="SkipRail" X1="1" Y1="3" X2="1" Y2="23"
+                                      Stroke="{DynamicResource CSkipBrush}" StrokeThickness="2"
+                                      StrokeDashArray="1.6 1.4" HorizontalAlignment="Left"
+                                      Visibility="Collapsed" />
+                                <ContentPresenter x:Name="PART_Header" ContentSource="Header"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            </Grid>
                         </Border>
 
                         <!-- Children container with vertical guide rail -->
@@ -781,6 +857,12 @@
                         <!-- Dim row for ViewOnly pipelines -->
                         <DataTrigger Binding="{Binding PipelinePermission}" Value="{x:Static vm:PipelinePermissionState.ViewOnly}">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.7" />
+                        </DataTrigger>
+                        <!-- Skipped rows carry the rail whether the flag is theirs or an ancestor's. -->
+                        <DataTrigger Binding="{Binding IsSkippedAnyway}" Value="True">
+                            <Setter TargetName="SkipRail" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Bd" Property="Padding" Value="6,0,8,0" />
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.75" />
                         </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

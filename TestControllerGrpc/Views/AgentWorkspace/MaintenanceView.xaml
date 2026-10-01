@@ -55,6 +55,24 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Bottom margin matters: without it the cards touch once the panel is narrow enough to wrap. -->
+        <Style x:Key="UpdateKpiCard" TargetType="Border">
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+        <Style x:Key="UpdateKpiValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource FontSize16}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="UpdateKpiLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
     </UserControl.Resources>
 
     <DockPanel>
@@ -91,17 +109,58 @@
                                Foreground="{DynamicResource TextP}"/>
                 </Expander.Header>
                 <StackPanel Margin="0,6,0,0">
-                    <DockPanel Margin="0,0,0,6">
-                        <Button DockPanel.Dock="Right" Content="Reboot all ready" Padding="10,4" FontSize="{StaticResource FontSize9}"
-                                Cursor="Hand" VerticalAlignment="Center"
-                                Command="{Binding Updates.RebootAllReadyCommand}"
-                                IsEnabled="{Binding Updates.CanRebootAllReady}"
-                                ToolTip="Queues a reboot for every node reporting Reboot required that is not draining."
-                                Background="{DynamicResource StatusRebootBg}" Foreground="{DynamicResource StatusRebootFg}"
-                                BorderBrush="{DynamicResource StatusRebootFg}" BorderThickness="1"/>
-                        <!-- At 50+ nodes the grid is unreadable unbounded: filter first. Docked beside the
-                             cards rather than on its own row, which cost a whole row of height. -->
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <!-- One wrapping row holding two groups: the cards, then the filter + action cluster.
+                         This was a DockPanel, which gives docked children their width FIRST and leaves the
+                         cards the remainder - in a narrow pane that collapsed them into a single column. -->
+                    <WrapPanel>
+                        <!-- ItemWidth keeps every card the same width so wrapped rows line up as columns. -->
+                        <WrapPanel ItemWidth="112" VerticalAlignment="Top">
+                            <Border Style="{StaticResource UpdateKpiCard}"
+                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.ReportingCount}" Style="{StaticResource UpdateKpiValue}"
+                                               Foreground="{DynamicResource TextP}"/>
+                                    <TextBlock Text="agents reporting" Style="{StaticResource UpdateKpiLabel}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource UpdateKpiCard}"
+                                    Background="{DynamicResource StatusRebootBg}" BorderBrush="{DynamicResource StatusRebootFg}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.RebootRequiredCount}" Style="{StaticResource UpdateKpiValue}"
+                                               Foreground="{DynamicResource StatusRebootFg}"/>
+                                    <TextBlock Text="reboot required" Style="{StaticResource UpdateKpiLabel}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource UpdateKpiCard}"
+                                    Background="{DynamicResource StatusRunningBg}" BorderBrush="{DynamicResource StatusRunningFg}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.PendingCount}" Style="{StaticResource UpdateKpiValue}"
+                                               Foreground="{DynamicResource Accent}"/>
+                                    <TextBlock Text="updates pending" Style="{StaticResource UpdateKpiLabel}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource UpdateKpiCard}"
+                                    Background="{DynamicResource StatusWarningBg}" BorderBrush="{DynamicResource StatusWarningFg}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.ScanUnknownCount}" Style="{StaticResource UpdateKpiValue}"
+                                               Foreground="{DynamicResource StatusWarningFg}"/>
+                                    <TextBlock Text="scan not proven" Style="{StaticResource UpdateKpiLabel}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource UpdateKpiCard}"
+                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Updates.FailedCount}" Style="{StaticResource UpdateKpiValue}"
+                                               Foreground="{DynamicResource AccRed}"/>
+                                    <TextBlock Text="install failed" Style="{StaticResource UpdateKpiLabel}"/>
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+
+                        <!-- At 50+ nodes the grid is unreadable unbounded: filter first. Filter and action
+                             travel together so they wrap onto their own line as a unit. Top-aligned with a
+                             nudge so they sit level with the first row of cards however the panel wraps. -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Top" Margin="0,8,0,6">
                             <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize9}" Margin="0,0,6,0"
                                        Foreground="{DynamicResource TextS}" Text="Show"/>
                             <ComboBox Width="150" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center"
@@ -110,53 +169,18 @@
                                       SelectedValuePath="Value"
                                       SelectedValue="{Binding Updates.RowFilter, Mode=TwoWay}"
                                       ToolTip="Narrow the grid to the agents that need action" AutomationProperties.Name="Show" />
-                            <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize9}" Margin="8,0,0,0"
+                            <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSize9}" Margin="8,0,10,0"
                                        Foreground="{DynamicResource TextS}"
                                        Text="{Binding Updates.FilterSummary}"/>
+                            <Button Content="Reboot all ready" Padding="10,4" FontSize="{StaticResource FontSize9}"
+                                    Cursor="Hand" VerticalAlignment="Center"
+                                    Command="{Binding Updates.RebootAllReadyCommand}"
+                                    IsEnabled="{Binding Updates.CanRebootAllReady}"
+                                    ToolTip="Queues a reboot for every node reporting Reboot required that is not draining."
+                                    Background="{DynamicResource StatusRebootBg}" Foreground="{DynamicResource StatusRebootFg}"
+                                    BorderBrush="{DynamicResource StatusRebootFg}" BorderThickness="1"/>
                         </StackPanel>
-                        <WrapPanel>
-                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Updates.ReportingCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextP}"/>
-                                    <TextBlock Text="agents reporting" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="{DynamicResource StatusRebootBg}" BorderBrush="{DynamicResource StatusRebootFg}" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Updates.RebootRequiredCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource StatusRebootFg}"/>
-                                    <TextBlock Text="reboot required" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="{DynamicResource StatusRunningBg}" BorderBrush="{DynamicResource StatusRunningFg}" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Updates.PendingCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Accent}"/>
-                                    <TextBlock Text="updates pending" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="{DynamicResource StatusWarningBg}" BorderBrush="{DynamicResource StatusWarningFg}" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Updates.ScanUnknownCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource StatusWarningFg}"/>
-                                    <TextBlock Text="scan not proven" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Margin="0,0,6,0" Padding="8,5" CornerRadius="4"
-                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Updates.FailedCount}" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource AccRed}"/>
-                                    <TextBlock Text="install failed" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                </StackPanel>
-                            </Border>
-                        </WrapPanel>
-                    </DockPanel>
+                    </WrapPanel>
 
                     <DataGrid ItemsSource="{Binding Updates.FilteredRows}" MaxHeight="420"
                               AutoGenerateColumns="False" IsReadOnly="True"

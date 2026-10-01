@@ -162,6 +162,9 @@
     <SolidColorBrush x:Key="PillEmlBg"          Color="#24F5A623" />
     <SolidColorBrush x:Key="PillInitBg"         Color="#245DD0A8" />
     <SolidColorBrush x:Key="PillRefBg"          Color="#29A8ACB5" />
+    <!-- Skip: amber, and distinct from the Pill*Bg family so a skipped node reads as state, not node type. -->
+    <SolidColorBrush x:Key="PillSkipBg"         Color="#3D2E0A" />
+    <SolidColorBrush x:Key="CSkipBrush"         Color="#FFF59E0B" />
 
     <!-- Pipeline permission pills -->
     <SolidColorBrush x:Key="PillAssignedBg"     Color="#245DD0A8" />

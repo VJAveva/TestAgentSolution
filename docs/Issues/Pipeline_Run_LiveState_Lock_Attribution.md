@@ -50,6 +50,26 @@ The locking/notification subsystem has known gaps; confirm the wiring, then prop
 
 ## Part 2 — Relay / push (`ControllerEventRelayService`)  [the deferred plumbing]
 
+### R1-01 (backlog, NOT fixed) — no per-action execution status appears in the WPF tree
+
+Measured 2026-10-01 on the dev box. This is **display only** — the runs themselves succeed.
+
+- Symptom: after a run, the WatchItem/root rows show a status glyph, but **every action row stays blank** —
+  no Running, no Success, no Skipped.
+- Reproduced on **both** trigger paths: `POST /api/execution/trigger/{tag}` (202, run completes) and a
+  `*.trigger` file dropped into the WatchItem's watch folder. The tree was polled every 350 ms for the whole
+  run, so this is not a transient-status timing artifact — the status is never observed at all.
+- **Not** the two-DI-container split: the file watcher lives in the WPF process, so that path raises its
+  events on the same container the tree binds to, and it behaves identically.
+- **Not** `TreeNodeViewModel.FindByModel`: it already matches on `NodeId`, so snapshot clones resolve.
+- Cause still unknown. Candidates to check next: whether `NodeProgress` is raised for action nodes on the
+  WatchItem-trigger path at all, and whether the status element in the action-row template is actually bound
+  (the root rows use a different element, and only those render).
+- Affects **every** status equally, not just `Skipped`, so it is independent of the node-level skip feature.
+- Trap for whoever picks this up: a WatchItem whose `Path` does not exist fails the run before any action
+  dispatches, which produces the same blank-rows symptom for an entirely different reason. Create the watch
+  folder first.
+
 Push Controller events to **both** delivery targets, live:
 
 - **WPF UI (in-process):** ensure web-origin runs raise the same events the WPF view-models already bind to (`LockStateService` + the tree / Execution Dashboard / Agent Fleet VMs). If they aren't raised for web-origin runs today, raise them.

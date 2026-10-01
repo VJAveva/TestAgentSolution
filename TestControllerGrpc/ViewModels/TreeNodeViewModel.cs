@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -91,6 +92,110 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ResolvedAgentName));
     }
+
+    // ── Skip state ────────────────────────────────────────────────
+    // Skip lives on the model (ISkippableNode); these mirror it so the row can bind. SkipOrigin is NOT on the
+    // model by design - it is a traversal result, so it is recomputed top-down whenever the flag changes.
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSkippedAnyway))]
+    private bool _skip;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSkipReason))]
+    private string _skipReason = "";
+
+    /// <summary>Keeps the reason label out of the row when the user skipped without typing one.</summary>
+    public bool HasSkipReason => !string.IsNullOrWhiteSpace(SkipReason);
+
+    /// <summary>Explicit = this node carries the flag; Inherited = an ancestor does.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSkippedAnyway))]
+    [NotifyPropertyChangedFor(nameof(IsSkippedExplicit))]
+    [NotifyPropertyChangedFor(nameof(IsSkippedByParent))]
+    private SkipOrigin _skipOrigin = SkipOrigin.None;
+
+    /// <summary>True for an explicitly skipped node AND for everything beneath it.</summary>
+    public bool IsSkippedAnyway => SkipOrigin != SkipOrigin.None;
+
+    /// <summary>Carries the pill and the reason. Bound as a bool so XAML needs no cross-assembly enum ref.</summary>
+    public bool IsSkippedExplicit => SkipOrigin == SkipOrigin.Explicit;
+
+    /// <summary>Dimmed and labelled "via parent", but deliberately no pill - only one node owns the decision.</summary>
+    public bool IsSkippedByParent => SkipOrigin == SkipOrigin.Inherited;
+
+    /// <summary>Skipped children counted for the parent's "N actions - X skipped" meta.</summary>
+    public int SkippedChildCount => Children.Count(c => c.IsSkippedAnyway);
+
+    private bool _syncingSkipFromModel;
+
+    partial void OnSkipChanged(bool value)
+    {
+        if (_syncingSkipFromModel) return;
+        if (ModelObject is ISkippableNode skippable)
+            skippable.Skip = value;
+        RootOf(this).RecomputeSkipOrigins(SkipState.NotSkipped);
+    }
+
+    partial void OnSkipReasonChanged(string value)
+    {
+        if (_syncingSkipFromModel) return;
+        if (ModelObject is ISkippableNode skippable)
+            skippable.SkipReason = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static TreeNodeViewModel RootOf(TreeNodeViewModel node)
+    {
+        while (node.Parent is { } p) node = p;
+        return node;
+    }
+
+    /// <summary>
+    /// Walks the subtree stamping <see cref="SkipOrigin"/>, reusing <see cref="SkipEvaluator.Descend"/> so the
+    /// tree and the executor can never disagree about who is responsible for a skip.
+    /// </summary>
+    public void RecomputeSkipOrigins(SkipState inherited)
+    {
+        var skippable = ModelObject as ISkippableNode;
+
+        SkipState state =
+            inherited.IsSkipped ? inherited
+            : skippable is { Skip: true } ? new SkipState(SkipOrigin.Explicit, skippable.SkipReason, null)
+            : SkipState.NotSkipped;
+
+        SkipOrigin = state.Origin;
+        if (skippable is not null)
+        {
+            // Mirror the model without re-entering the cascade this call is already performing.
+            _syncingSkipFromModel = true;
+            try
+            {
+                Skip = skippable.Skip;
+                SkipReason = skippable.SkipReason ?? "";
+            }
+            finally { _syncingSkipFromModel = false; }
+        }
+        SkipBlame = state.SkippedByNode ?? "";
+
+        SkipState childInherited = skippable is null
+            ? state
+            : SkipEvaluator.Descend(state, skippable, DescribeForBlame());
+
+        foreach (var child in Children)
+            child.RecomputeSkipOrigins(childInherited);
+
+        OnPropertyChanged(nameof(SkippedChildCount));
+    }
+
+    /// <summary>Label of the ancestor that must be un-skipped; empty when this node is the one.</summary>
+    [ObservableProperty] private string _skipBlame = "";
+
+    private string DescribeForBlame() => NodeKind switch
+    {
+        NodeKinds.ActionGroup => $"group '{Tag}'",
+        NodeKinds.Action      => $"action '{Tag}'",
+        _                     => string.IsNullOrWhiteSpace(Tag) ? NodeKind : $"'{Tag}'",
+    };
 
     /// <summary>Auto-sync IsEnabled toggle back to the model (e.g. WatchItemConfig.IsEnabled).</summary>
     [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
@@ -198,6 +303,15 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 StatusColor = "#FF9399B2"; // Gray
                 StatusTooltip = "Cancelled";
                 break;
+            case "Skipped":
+                // Grey, never red: a skipped node is a deliberate choice, not a failure.
+                StatusSymbol = "\u2212";  // − (matches ActionPillVM)
+                StatusColor = "#FF9399B2"; // Gray
+                StatusTooltip = string.IsNullOrWhiteSpace(SkipReason)
+                    ? "Skipped"
+                    : $"Skipped: {SkipReason}";
+                FailureMessage = "";
+                break;
             default: // Idle
                 StatusSymbol = "";
                 StatusColor = "Transparent";
@@ -232,9 +346,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     }
 
     /// <summary>Recursively set status on this node and all descendants.</summary>
+    /// <remarks>
+    /// Callers paint a whole subtree "Running" optimistically before dispatch. A skipped node is never going
+    /// to run, so it must not be given a spinner - it reports Skipped from the outset instead.
+    /// </remarks>
     public void SetStatusRecursive(string status)
     {
-        ExecutionStatus = status;
+        ExecutionStatus = status == "Running" && IsSkippedAnyway ? "Skipped" : status;
         foreach (var c in Children) c.SetStatusRecursive(status);
     }
 
@@ -273,6 +391,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         var hasRunning = false;
         var hasSuccess = false;
         var hasCancelled = false;
+        var hasSkipped = false;
 
         foreach (var child in parent.Children)
         {
@@ -282,6 +401,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 case "Running": hasRunning = true; break;
                 case "Success": hasSuccess = true; break;
                 case "Cancelled": hasCancelled = true; break;
+                case "Skipped": hasSkipped = true; break;
             }
         }
 
@@ -291,6 +411,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         if (hasCancelled && hasSuccess) return "PartialFailure";
         if (hasCancelled) return "Cancelled";
         if (hasSuccess) return "Success";
+        // Only when nothing ran: a skipped sibling must never downgrade a successful group, but without
+        // this a skipped group would be reset to Idle by its own children propagating up.
+        if (hasSkipped) return "Skipped";
         return "Idle";
     }
 

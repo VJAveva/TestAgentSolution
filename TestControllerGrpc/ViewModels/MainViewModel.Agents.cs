@@ -411,6 +411,8 @@ public sealed partial class MainViewModel
                 AddLog($"{LogIcons.Success} Agent self-registered: {name} {LogIcons.Arrow} {address}", LogSeverity.Success);
             }
             RefreshAgentStatusSummary();
+            // Agents register after the view model is built, so the smart-edit roster starts empty.
+            RefreshAgentChoices();
         });
     }
 
@@ -427,6 +429,7 @@ public sealed partial class MainViewModel
             }
             AddLog($"{LogIcons.Warning} Agent unregistered: {name}", LogSeverity.Warning);
             RefreshAgentStatusSummary();
+            RefreshAgentChoices();
         });
     }
 

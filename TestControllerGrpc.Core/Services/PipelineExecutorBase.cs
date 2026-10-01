@@ -81,6 +81,12 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task<bool> ExecuteGroupAsync(
         ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        if (BlockedBySkip(group, $"ActionGroup '{group.Tag}'"))
+        {
+            MarkSubtreeSkipped(group, null);
+            return true;
+        }
+
         Log("ActionGroup",
             $"[{group.Tag}] Mode={group.ExecutionType}, FailAndContinue={group.FailAndContinue}");
 
@@ -94,6 +100,12 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task<bool> ExecuteSingleActionAsync(
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        if (BlockedBySkip(action, $"Action '{action.ResolvedTag}'"))
+        {
+            OnNodeProgress(action, "Skipped");
+            return true;
+        }
+
         OnNodeProgress(action, "Running");
         bool success;
         try
@@ -153,6 +165,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task ExecuteEventTrackedAsync(
         string watchItemTag, EventConfig evt, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        // Checked before the session exists so a skipped event does not open a session or take a lock.
+        if (BlockedBySkip(evt, $"Event '{evt.Type}'"))
+        {
+            foreach (IActionNode child in evt.Children) MarkSubtreeSkipped(child, null);
+            return;
+        }
+
         // Snapshot isolation: clone the action tree so hot-reloads don't mutate in-flight nodes.
         var snapshotChildren = evt.Children.Select(DeepCloneNode).ToList();
         // Use the caller's sessionId if provided (e.g. from WebApi controller).
@@ -220,6 +239,12 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task<bool> ExecuteGroupTrackedAsync(
         string watchItemTag, ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        if (BlockedBySkip(group, $"ActionGroup '{group.Tag}'"))
+        {
+            MarkSubtreeSkipped(group, null);
+            return true;
+        }
+
         var snapshotChildren = group.Children.Select(DeepCloneNode).ToList();
         var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
 
@@ -258,6 +283,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task<bool> ExecuteSingleActionTrackedAsync(
         string watchItemTag, ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        // "Execute Action" on a skipped row reaches here directly, bypassing the per-node gate.
+        if (BlockedBySkip(action, $"Action '{action.ResolvedTag}'"))
+        {
+            OnNodeProgress(action, "Skipped");
+            return true;
+        }
+
         var clonedAction = (ActionConfig)DeepCloneNode(action);
         var callerSessionId = !string.IsNullOrEmpty(ctx.SessionId) ? ctx.SessionId : null;
 
@@ -366,6 +398,16 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     protected async Task<bool> ExecuteNodeAsync(
         IActionNode node, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        // The untracked path must gate too, or whether a node is skipped would depend on which entry
+        // point the caller happened to use.
+        if (node is ISkippableNode skippable &&
+            !SkipGate.Evaluate(skippable, SkipState.NotSkipped).ShouldRun)
+        {
+            Log("Skip", DescribeSkip(node, skippable));
+            MarkSubtreeSkipped(node, null);
+            return true;
+        }
+
         OnNodeProgress(node, "Running");
         bool success;
         try
@@ -442,10 +484,24 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         return true;
     }
 
+    /// <summary>Stateless, so a shared instance avoids threading a dependency through three executors.</summary>
+    private static readonly IExecutionGate SkipGate = new ExecutionGate();
+
     protected async Task<bool> ExecuteNodeTrackedAsync(
         IActionNode node, PipelineExecutionContext ctx,
         ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
+        // A skipped subtree is never entered, so by construction nothing here can inherit a skip; the gate
+        // still owns the rule so the executor and the pre-run manifest can never disagree.
+        if (node is ISkippableNode skippable &&
+            !SkipGate.Evaluate(skippable, SkipState.NotSkipped).ShouldRun)
+        {
+            Log("Skip", DescribeSkip(node, skippable));
+            MarkSubtreeSkipped(node, session);
+            // Skipped is not failure: returning false would abort the sequence under FailAndContinue=false.
+            return true;
+        }
+
         OnNodeProgress(node, "Running");
         PublishContainerProgress(node, session, "Running");
         bool success;
@@ -477,6 +533,47 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         OnNodeProgress(node, success ? "Success" : "Failed");
         PublishContainerProgress(node, session, success ? "Success" : "Failed");
         return success;
+    }
+
+    /// <summary>One log line per skipped node, naming the node the user has to un-skip.</summary>
+    private static string DescribeSkip(IActionNode node, ISkippableNode skippable)
+    {
+        var label = node switch
+        {
+            ActionGroupConfig g => $"ActionGroup '{g.Tag}'",
+            ActionConfig a      => $"Action '{(!string.IsNullOrWhiteSpace(a.Tag) ? a.Tag : a.Command)}'",
+            RefConfig r         => $"Ref '{r.TemplateID}'",
+            _                   => node.GetType().Name,
+        };
+        return $"{label} skipped \u2014 {ReasonOf(skippable)}";
+    }
+
+    private static string ReasonOf(ISkippableNode node)
+        => string.IsNullOrWhiteSpace(node.SkipReason) ? "no reason given" : node.SkipReason!;
+
+    /// <summary>
+    /// Entry-point guard. The per-node gate only ever sees CHILDREN, so a public call that targets a skipped
+    /// node directly - "Execute Action" on a skipped row, or executing a skipped group or event - would run it.
+    /// </summary>
+    private bool BlockedBySkip(ISkippableNode node, string label)
+    {
+        if (SkipGate.Evaluate(node, SkipState.NotSkipped).ShouldRun) return false;
+        Log("Skip", $"{label} skipped \u2014 {ReasonOf(node)}");
+        return true;
+    }
+
+    /// <summary>
+    /// Descendants of a skipped group never reach the gate, so their status is stamped here instead -
+    /// otherwise they would sit at Idle for the whole run and read as "never reached".
+    /// </summary>
+    private void MarkSubtreeSkipped(IActionNode node, ExecutionSession? session)
+    {
+        OnNodeProgress(node, "Skipped");
+        if (session is not null) PublishContainerProgress(node, session, "Skipped");
+
+        if (node is ActionGroupConfig group)
+            foreach (IActionNode child in group.Children)
+                MarkSubtreeSkipped(child, session);
     }
 
     /// <summary>
@@ -689,33 +786,33 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     // ?? Deep clone for snapshot isolation ??????????????????????????????
 
+    /// <remarks>
+    /// Actions clone via <see cref="ActionConfig.Clone"/> (MemberwiseClone) rather than a field list: the old
+    /// hand-written copy silently dropped every property nobody remembered to add - which is exactly how
+    /// <c>Skip</c> was lost, letting a skipped action run. NodeId is restored afterwards because progress
+    /// events match tree nodes by it, so the snapshot must keep the original's id.
+    /// </remarks>
     protected static IActionNode DeepCloneNode(IActionNode node) => node switch
     {
-        ActionConfig a => new ActionConfig
-        {
-            NodeId = a.NodeId,
-            Type = a.Type, AgentName = a.AgentName,
-            Command = a.Command, Parameters = a.Parameters,
-            Timeout = a.Timeout, PollInterval = a.PollInterval,
-            FailAndContinue = a.FailAndContinue, IsReboot = a.IsReboot,
-            Order = a.Order, Tag = a.Tag,
-            UserName = a.UserName, Password = a.Password,
-            From = a.From, To = a.To, Title = a.Title, Body = a.Body,
-            Attachment = a.Attachment, Embed = a.Embed, LargeFilesShare = a.LargeFilesShare,
-            MaxRetries = a.MaxRetries, RetryDelaySeconds = a.RetryDelaySeconds,
-            RetryBackoff = a.RetryBackoff, RetryOnExitCodes = a.RetryOnExitCodes,
-            CompletionCheckCommand = a.CompletionCheckCommand,
-            CompletionPollIntervalSeconds = a.CompletionPollIntervalSeconds,
-        },
+        ActionConfig a => CloneAction(a),
         ActionGroupConfig g => new ActionGroupConfig
         {
             NodeId = g.NodeId,
             Tag = g.Tag, ExecutionType = g.ExecutionType,
             FailAndContinue = g.FailAndContinue,
+            Skip = g.Skip, SkipReason = g.SkipReason, Comment = g.Comment,
+            SkippedAtUtc = g.SkippedAtUtc, SkippedBy = g.SkippedBy,
             Children = g.Children.Select(DeepCloneNode).ToList()
         },
         InitializeConfig i => new InitializeConfig { NodeId = i.NodeId, Tag = i.Tag, ParameterFile = i.ParameterFile },
         RefConfig r => new RefConfig { NodeId = r.NodeId, TemplateID = r.TemplateID },
         _ => node
     };
+
+    private static ActionConfig CloneAction(ActionConfig a)
+    {
+        var copy = a.Clone();
+        copy.NodeId = a.NodeId;
+        return copy;
+    }
 }

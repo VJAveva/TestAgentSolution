@@ -26,24 +26,14 @@ public partial class MainWindow : Window
     // FEATURE 2A: CONTEXT MENUS (built in code-behind)
     // ???????????????????????????????????????????????????????????????
 
-    // ?? Context menu caches (rebuilt only when node kind changes) ???
-    private string? _lastWatchListContextMenuNodeKind;
-    private ContextMenu? _cachedWatchListContextMenu;
-    private string? _lastTemplateContextMenuNodeKind;
-    private ContextMenu? _cachedTemplateContextMenu;
+    // Menus are rebuilt on every open. They were cached per NodeKind, but several items reflect the state of
+    // THIS node (skip/include, enabled, permissions), so a cached menu showed a sibling's state - and caching
+    // by node identity would still go stale after toggling skip on that same node.
 
     private void OnWatchListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var node = WatchListTreeView.SelectedItem as TreeNodeViewModel;
-        var nodeKind = node?.NodeKind;
-        // Always rebuild for WatchItem (IsEnabled toggle is node-specific)
-        if (nodeKind != _lastWatchListContextMenuNodeKind || _cachedWatchListContextMenu is null
-            || nodeKind is "WatchItem")
-        {
-            _cachedWatchListContextMenu = BuildWatchListContextMenu(node);
-            _lastWatchListContextMenuNodeKind = nodeKind;
-        }
-        WatchListTreeView.ContextMenu = _cachedWatchListContextMenu;
+        WatchListTreeView.ContextMenu = BuildWatchListContextMenu(node);
     }
 
     private ContextMenu BuildWatchListContextMenu(TreeNodeViewModel? node)
@@ -97,16 +87,7 @@ public partial class MainWindow : Window
         }
         if (node.NodeKind is "ActionGroup" or "Action")
         {
-            var skippable = node.ModelObject as ISkippableNode;
-            var skipItem = new MenuItem
-            {
-                Header = "Skip evaluator",
-                IsCheckable = true,
-                IsChecked = skippable?.Skip == true,
-                ToolTip = "Skip this node during execution",
-            };
-            skipItem.Click += (_, _) => _vm.SetNodeSkip(node, skipItem.IsChecked);
-            menu.Items.Add(skipItem);
+            AddSkipMenuItem(menu, node);
             menu.Items.Add(new Separator());
         }
 
@@ -232,13 +213,7 @@ public partial class MainWindow : Window
     private void OnTemplateContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var node = TemplateTreeView.SelectedItem as TreeNodeViewModel;
-        var nodeKind = node?.NodeKind;
-        if (nodeKind != _lastTemplateContextMenuNodeKind || _cachedTemplateContextMenu is null)
-        {
-            _cachedTemplateContextMenu = BuildTemplateContextMenu(node);
-            _lastTemplateContextMenuNodeKind = nodeKind;
-        }
-        TemplateTreeView.ContextMenu = _cachedTemplateContextMenu;
+        TemplateTreeView.ContextMenu = BuildTemplateContextMenu(node);
     }
 
     private ContextMenu BuildTemplateContextMenu(TreeNodeViewModel? node)
@@ -336,18 +311,41 @@ public partial class MainWindow : Window
         return menu;
     }
 
+    /// <summary>
+    /// Skip and include are separate commands rather than one checkable item: skipping asks for a reason,
+    /// including clears it, and a checkbox cannot express that asymmetry.
+    /// </summary>
     private void AddSkipMenuItem(ContextMenu menu, TreeNodeViewModel node)
     {
-        var skippable = node.ModelObject as ISkippableNode;
-        var skipItem = new MenuItem
+        if (node.ModelObject is not ISkippableNode skippable) return;
+
+        if (skippable.Skip)
         {
-            Header = "Skip evaluator",
-            IsCheckable = true,
-            IsChecked = skippable?.Skip == true,
-            ToolTip = "Skip this node during execution",
+            var include = new MenuItem
+            {
+                Header = "Include again",
+                ToolTip = "Run this node again and clear its skip reason",
+            };
+            include.Click += (_, _) => _vm.SetNodeSkip(node, false);
+            menu.Items.Add(include);
+            return;
+        }
+
+        var skip = new MenuItem
+        {
+            Header = "Skip this node...",
+            ToolTip = "Skip this node and everything under it during execution",
         };
-        skipItem.Click += (_, _) => _vm.SetNodeSkip(node, skipItem.IsChecked);
-        menu.Items.Add(skipItem);
+        skip.Click += (_, _) =>
+        {
+            var dialog = new Dialogs.SkipReasonDialog(node.DisplayText, skippable.SkipReason)
+            {
+                Owner = this,
+            };
+            if (dialog.ShowDialog() == true)
+                _vm.SetNodeSkip(node, true, dialog.Reason);
+        };
+        menu.Items.Add(skip);
     }
 
     private static bool CanShowMoveItems(TreeNodeViewModel node)

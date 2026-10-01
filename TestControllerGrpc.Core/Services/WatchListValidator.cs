@@ -278,6 +278,12 @@ public static class WatchListValidator
                         issues.Add(new(WatchIssueSeverity.Warning, groupCtx,
                             "ActionGroup is empty (no actions). It will do nothing.",
                             "Add an action or remove the group."));
+                    // A group that still has children but skips every one of them is almost always a
+                    // half-finished edit: skipping the group itself says the same thing far more clearly.
+                    else if (group.Children.All(IsSkipped))
+                        issues.Add(new(WatchIssueSeverity.Warning, groupCtx,
+                            $"Every child of this ActionGroup is skipped ({group.Children.Count}), so the group does nothing.",
+                            "Skip the group itself, or include at least one child again."));
                     AnalyzeChildrenWarnings(group.Children, groupCtx, issues);
                     break;
 
@@ -288,6 +294,10 @@ public static class WatchListValidator
             }
         }
     }
+
+    /// <summary>A Ref cannot be skipped (it is not an <see cref="ISkippableNode"/>), so it never counts.</summary>
+    private static bool IsSkipped(IActionNode node)
+        => node is ISkippableNode { Skip: true };
 
     private static void AnalyzeActionWarnings(
         ActionConfig action, string context, List<ValidationIssue> issues)

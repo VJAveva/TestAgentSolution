@@ -398,9 +398,21 @@ public sealed class PluralizeActionsConverter : IValueConverter, IMultiValueConv
         return nodeKind switch
         {
             "WatchList" => FormatWatchListBadge(count, values.Length > 2 ? values[2] : null),
-            "ActionGroup" or "Event" => $"{count} {(count == 1 ? "action" : "actions")}",
+            "ActionGroup" or "Event" => FormatActionBadge(count, values.Length > 2 ? values[2] : null),
             _ => $"{count} {(count == 1 ? "item" : "items")}",
         };
+    }
+
+    /// <summary>Surfaces skipped children on the parent so a collapsed group still shows work is disabled.</summary>
+    private static string FormatActionBadge(int count, object? nodeVm)
+    {
+        var text = $"{count} {(count == 1 ? "action" : "actions")}";
+        if (nodeVm is TestControllerGrpc.ViewModels.TreeNodeViewModel node)
+        {
+            var skipped = node.SkippedChildCount;
+            if (skipped > 0) text += $" \u00B7 {skipped} skipped";
+        }
+        return text;
     }
 
     private static string FormatWatchListBadge(int testCount, object? nodeVm)
