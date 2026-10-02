@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using TestControllerGrpc.Models;
@@ -77,71 +78,119 @@ public class BuildReportHtmlGenerator
 
     // ?? Shared CSS blocks ???????????????????????????????????????????
 
-    private static string DarkThemeBase() => """
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0F1629; color: #E2E8F0; margin: 0; padding: 20px; }
-        .card { background: #1A2238; border-radius: 8px; padding: 16px; margin: 8px 0; }
+    /// <summary>Maps a <c>ThemeService</c> theme name onto the <c>data-theme</c> token used by the stylesheet.</summary>
+    internal static string ThemeToken(string? theme) => theme switch
+    {
+        "Dark" => "dark",
+        "High Contrast" => "contrast",
+        _ => "light",
+    };
+
+    /// <summary>
+    /// Themed base for the browser-viewed trend report. Unlike the e-mail paths this may use custom
+    /// properties and flexbox, so one stylesheet serves all three themes by swapping variables.
+    /// </summary>
+    private static string ThemedBase() => $$"""
+        :root {
+          --bg: {{EmailPalette.PageBg}}; --surface: {{EmailPalette.Surface}}; --surface-alt: {{EmailPalette.SurfaceAlt}};
+          --border: {{EmailPalette.Border}}; --grid: {{EmailPalette.Divider}};
+          --text: {{EmailPalette.Text}}; --text-2: {{EmailPalette.TextSecondary}}; --text-3: {{EmailPalette.TextTertiary}};
+          --accent: {{EmailPalette.Accent}}; --pass: {{EmailPalette.Success}}; --warn: {{EmailPalette.Warning}}; --fail: {{EmailPalette.Danger}};
+        }
+        html[data-theme="dark"] {
+          --bg: #0F1629; --surface: #1A2238; --surface-alt: #1E293B; --border: #1E293B; --grid: #334155;
+          --text: #E2E8F0; --text-2: #94A3B8; --text-3: #64748B;
+          --accent: #60A5FA; --pass: #10B981; --warn: #F59E0B; --fail: #EF4444;
+        }
+        html[data-theme="contrast"] {
+          --bg: #000000; --surface: #000000; --surface-alt: #1F1F1F; --border: #FFFFFF; --grid: #FFFFFF;
+          --text: #FFFFFF; --text-2: #FFFFFF; --text-3: #FFFFFF;
+          --accent: #FFFF00; --pass: #00FF00; --warn: #FFFF00; --fail: #FF6666;
+        }
+        body { font-family: {{EmailPalette.FontStack}}; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 8px 0; }
+        h2 { color: var(--accent); margin-bottom: 4px; }
+        h3 { color: var(--text-2); margin: 24px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+        .sub { color: var(--text-3); font-size: 12px; margin-bottom: 16px; }
         table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-        th { background: #1E293B; color: #94A3B8; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }
-        td { padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; }
-        tr:hover { background: #1E293B; }
-        .fail { color: #EF4444; font-weight: 600; }
-        .pass { color: #10B981; }
-        .warn { color: #F59E0B; }
-        svg text { font-family: 'Segoe UI', Arial, sans-serif; }
-        """;
-
-    private static string KpiCss() => """
+        th { background: var(--surface-alt); color: var(--text-2); text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }
+        td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .fail { color: var(--fail); font-weight: 600; }
+        .pass { color: var(--pass); }
+        .warn { color: var(--warn); }
+        .muted { color: var(--text-3); }
+        .good-bg { background: var(--pass); } .warn-bg { background: var(--warn); } .bad-bg { background: var(--fail); }
+        .health-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }
+        .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 12px 0; }
         .kpi-row { display: flex; gap: 16px; margin: 16px 0; }
-        .kpi-card { flex: 1; background: #1A2238; border-radius: 10px; padding: 20px 24px; text-align: center; border: 1px solid #1E293B; }
+        .kpi-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; text-align: center; }
         .kpi-value { font-size: 32px; font-weight: 800; line-height: 1.1; }
-        .kpi-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; }
-        .kpi-sub { font-size: 11px; color: #64748B; margin-top: 4px; }
+        .kpi-label { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; }
+        .kpi-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+        svg text { font-family: {{EmailPalette.FontStack}}; }
+        /* Print is always light: a dark surface prints as a solid block of toner. The attribute selectors
+           are needed to outrank html[data-theme=...], which has higher specificity than :root alone. */
+        @media print {
+          html, html[data-theme="dark"], html[data-theme="contrast"] {
+            --bg: #FFFFFF; --surface: #FFFFFF; --surface-alt: {{EmailPalette.SurfaceAlt}};
+            --border: {{EmailPalette.Border}}; --grid: {{EmailPalette.Divider}};
+            --text: {{EmailPalette.Text}}; --text-2: {{EmailPalette.TextSecondary}}; --text-3: {{EmailPalette.TextTertiary}};
+            --accent: {{EmailPalette.Accent}}; --pass: {{EmailPalette.Success}}; --warn: {{EmailPalette.Warning}}; --fail: {{EmailPalette.Danger}};
+          }
+          .card, .kpi-card, .chart-container { break-inside: avoid; }
+        }
         """;
 
-    private static string StatsCss() => """
-        .stats { display: flex; gap: 12px; margin: 12px 0; }
-        .stat { background: #1A2238; border-radius: 8px; padding: 12px 20px; text-align: center; flex: 1; }
-        .stat .num { font-size: 28px; font-weight: bold; }
-        .stat .lbl { font-size: 11px; color: #94A3B8; margin-top: 4px; }
-        """;
-
-    private static string DetailTableCss() => """
-        .detail-table { width: 100%; border-collapse: collapse; }
-        .detail-table th { background: #0F1629; color: #94A3B8; text-align: left; padding: 10px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #334155; }
-        .detail-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #1E293B; }
-        .detail-table tr:hover { background: #263350 !important; }
-        .row-even { background: #1A2238; }
-        .row-odd { background: #151D30; }
-        .build-short { cursor: default; border-bottom: 1px dotted #64748B; }
-        .fail-link { cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
-        .fail-link:hover { text-decoration: underline; }
+    /// <summary>
+    /// Fluent light base for the e-mail paths. No flexbox, grid or CSS variables: Outlook's Word renderer
+    /// ignores all three, so those paths lay out with tables and inline styles only.
+    /// </summary>
+    private static string FluentLightBase() => $$"""
+        body { font-family: {{EmailPalette.FontStack}}; background: {{EmailPalette.PageBg}}; color: {{EmailPalette.Text}}; margin: 0; padding: 20px; }
+        .card { background: {{EmailPalette.Surface}}; border: 1px solid {{EmailPalette.Border}}; border-radius: 8px; padding: 16px; margin: 8px 0; }
+        h2 { color: {{EmailPalette.Text}}; }
+        h3 { color: {{EmailPalette.TextSecondary}}; margin: 0 0 8px; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        th { background: {{EmailPalette.SurfaceAlt}}; color: {{EmailPalette.TextSecondary}}; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; }
+        td { padding: 8px 12px; border-bottom: 1px solid {{EmailPalette.Border}}; font-size: 13px; }
+        .fail { color: {{EmailPalette.Danger}}; font-weight: 600; }
+        .pass { color: {{EmailPalette.Success}}; }
+        .warn { color: {{EmailPalette.Warning}}; }
+        .good-bg { background: {{EmailPalette.Success}}; }
+        .warn-bg { background: {{EmailPalette.Warning}}; }
+        .bad-bg { background: {{EmailPalette.Danger}}; }
+        .health-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }
+        .stat-cell { background: {{EmailPalette.Surface}}; border: 1px solid {{EmailPalette.Border}}; border-radius: 8px; padding: 12px 20px; text-align: center; }
+        .stat-cell .num { font-size: 28px; font-weight: bold; }
+        .stat-cell .lbl { font-size: 11px; color: {{EmailPalette.TextSecondary}}; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
         """;
 
     private static void AppendFooter(StringBuilder sb)
     {
-        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:20px'>Generated {Timestamp()} by TestController</p>");
+        sb.AppendLine($"<p style='font-size:11px;color:{EmailPalette.TextTertiary};margin-top:20px'>Generated {Timestamp()} by TestController</p>");
         sb.AppendLine("</body></html>");
     }
 
-    // ?? Stat KPI row helper ?????????????????????????????????????????
+    // -- Stat KPI row helper ------------------------------------------------
 
+    /// <summary>Table-based stat row; the flex version renders as a single stacked column in Outlook.</summary>
     private static void AppendStatCards(StringBuilder sb, int total, int passed, int failed, int timeout)
     {
-        sb.AppendLine("<div class='stats'>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#60A5FA'>{total}</div><div class='lbl'>Total</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#10B981'>{passed}</div><div class='lbl'>Passed</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#EF4444'>{failed}</div><div class='lbl'>Failed</div></div>");
-        sb.AppendLine($"<div class='stat'><div class='num' style='color:#F59E0B'>{timeout}</div><div class='lbl'>Timeout</div></div>");
-        sb.AppendLine("</div>");
+        sb.AppendLine("<table role='presentation' cellpadding='0' cellspacing='8' style='width:100%;table-layout:fixed;border-collapse:separate;margin:16px 0'><tr>");
+        sb.AppendLine($"<td class='stat-cell'><div class='num' style='color:{EmailPalette.Accent}'>{total}</div><div class='lbl'>Total</div></td>");
+        sb.AppendLine($"<td class='stat-cell'><div class='num' style='color:{EmailPalette.Success}'>{passed}</div><div class='lbl'>Passed</div></td>");
+        sb.AppendLine($"<td class='stat-cell'><div class='num' style='color:{EmailPalette.Danger}'>{failed}</div><div class='lbl'>Failed</div></td>");
+        sb.AppendLine($"<td class='stat-cell'><div class='num' style='color:{EmailPalette.Warning}'>{timeout}</div><div class='lbl'>Timeout</div></td>");
+        sb.AppendLine("</tr></table>");
     }
 
     // ?? Health color helper ?????????????????????????????????????????
 
     private static string HealthToColor(HealthStatus health) => health switch
     {
-        HealthStatus.Good => "#10B981",
-        HealthStatus.Warning => "#F59E0B",
-        _ => "#EF4444",
+        HealthStatus.Good => EmailPalette.Success,
+        HealthStatus.Warning => EmailPalette.Warning,
+        _ => EmailPalette.Danger,
     };
 
     private static string HealthToCssClass(HealthStatus health) => health switch
@@ -301,16 +350,13 @@ function navigateFail(dir){
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
         sb.AppendLine("<style>");
-        sb.AppendLine(DarkThemeBase());
-        sb.AppendLine(StatsCss());
-        sb.AppendLine(KpiCss());
-        sb.AppendLine(DetailTableCss());
-        sb.AppendLine(".health-bar { border-radius: 6px; height: 36px; display: flex; align-items: center; padding: 0 16px; font-weight: bold; font-size: 16px; color: #fff; }");
-        sb.AppendLine(".badge-crit { display:inline-block; background:#7F1D1D; color:#FCA5A5; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px; }");
+        sb.AppendLine(FluentLightBase());
+        sb.AppendLine($".health-bar {{ border-radius: 6px; height: 36px; line-height: 36px; padding: 0 16px; font-weight: bold; font-size: 16px; color: #fff; }}");
+        sb.AppendLine($".badge-crit {{ display:inline-block; background:{EmailPalette.DangerBg}; color:{EmailPalette.Danger}; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px; }}");
         sb.AppendLine("</style></head><body>");
 
         sb.AppendLine($"<h2>Build Results: {node.BuildNumber}</h2>");
-        sb.AppendLine($"<div class='health-bar' style='background:{healthBg}'>{node.PassRate:F1}% � {node.Health}</div>");
+        sb.AppendLine($"<div class='health-bar' style='background:{healthBg}'>{node.PassRate:F1}%{EmailPalette.SubjectSeparator}{node.Health}</div>");
 
         AppendStatCards(sb, node.TotalTests, node.PassedTests, node.FailedTests, node.TimeoutTests);
 
@@ -350,13 +396,7 @@ function navigateFail(dir){
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
         sb.AppendLine("<style>");
-        sb.AppendLine(DarkThemeBase());
-        sb.AppendLine(StatsCss());
-        sb.AppendLine(KpiCss());
-        sb.AppendLine(DetailTableCss());
-        sb.AppendLine("h2 { color: #60A5FA; } h3 { color: #94A3B8; margin: 0 0 8px; font-size: 14px; }");
-        sb.AppendLine(".good-bg { background: #10B981; } .warn-bg { background: #F59E0B; } .bad-bg { background: #EF4444; }");
-        sb.AppendLine(".health-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }");
+        sb.AppendLine(FluentLightBase());
         sb.AppendLine("</style></head><body>");
 
         sb.AppendLine($"<h2>All Builds Summary ({builds.Count} builds)</h2>");
@@ -385,20 +425,14 @@ function navigateFail(dir){
     // Trend Report HTML
     // ???????????????????????????????????????????????????????????????
 
-    public string GenerateTrendHtml(TrendReport trend)
+    /// <param name="theme">A <c>ThemeService</c> theme name; the report follows the app rather than fixing a palette.</param>
+    public string GenerateTrendHtml(TrendReport trend, string? theme = null)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine($"<title>Trend Report � {trend.Builds.Count} Builds</title>");
+        sb.AppendLine($"<!DOCTYPE html><html lang='en' data-theme='{ThemeToken(theme)}'><head><meta charset='utf-8'/>");
+        sb.AppendLine($"<title>Trend Report{EmailPalette.SubjectSeparator}{trend.Builds.Count} Builds</title>");
         sb.AppendLine("<style>");
-        sb.AppendLine(DarkThemeBase());
-        sb.AppendLine(KpiCss());
-        sb.AppendLine("h2 { color: #89B4FA; margin-bottom: 4px; }");
-        sb.AppendLine("h3 { color: #94A3B8; margin: 24px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }");
-        sb.AppendLine(".sub { color: #64748B; font-size: 12px; margin-bottom: 16px; }");
-        sb.AppendLine(".good-bg { background: #10B981; } .warn-bg { background: #F59E0B; } .bad-bg { background: #EF4444; }");
-        sb.AppendLine(".health-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }");
-        sb.AppendLine(".chart-container { background: #1A2238; border-radius: 8px; padding: 20px; margin: 12px 0; }");
+        sb.AppendLine(ThemedBase());
         sb.AppendLine("</style></head><body>");
 
         sb.AppendLine("<h2>Trend Report</h2>");
@@ -418,10 +452,10 @@ function navigateFail(dir){
 
         // KPIs
         sb.AppendLine("<div class='kpi-row'>");
-        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#60A5FA'>{trend.Builds.Count}</div><div class='kpi-label'>Builds</div></div>");
-        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#E2E8F0'>{trend.Builds.Sum(b => b.TotalTests):N0}</div><div class='kpi-label'>Total Tests</div></div>");
-        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#10B981'>{avgPassRate:F1}%</div><div class='kpi-label'>Avg Pass Rate</div></div>");
-        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#EF4444'>{totalFailed:N0}</div><div class='kpi-label'>Total Failures</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:var(--accent)'>{trend.Builds.Count}</div><div class='kpi-label'>Builds</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:var(--text)'>{trend.Builds.Sum(b => b.TotalTests):N0}</div><div class='kpi-label'>Total Tests</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:var(--pass)'>{avgPassRate:F1}%</div><div class='kpi-label'>Avg Pass Rate</div></div>");
+        sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:var(--fail)'>{totalFailed:N0}</div><div class='kpi-label'>Total Failures</div></div>");
         sb.AppendLine("</div>");
 
         // SVG Chart
@@ -436,7 +470,7 @@ function navigateFail(dir){
             var rateClass = GetRateClass(b.PassRate);
             var healthBg = HealthToCssClass(b.Health);
             sb.AppendLine($"<tr><td><strong>{Enc(b.BuildNumber)}</strong></td>" +
-                           $"<td style='color:#64748B'>{b.Date:yyyy-MM-dd HH:mm}</td>" +
+                           $"<td class='muted'>{b.Date:yyyy-MM-dd HH:mm}</td>" +
                            $"<td>{b.TotalTests}</td>" +
                            $"<td class='pass'>{b.PassedTests}</td>" +
                            $"<td class='{(b.FailedTests > 0 ? "fail" : "")}'>{b.FailedTests}</td>" +
@@ -450,17 +484,195 @@ function navigateFail(dir){
         if (bestBuild is not null && worstBuild is not null)
         {
             sb.AppendLine("<div class='kpi-row'>");
-            sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#10B981'>{bestBuild.PassRate:F1}%</div><div class='kpi-label'>Best Build</div><div class='kpi-sub'>{Enc(bestBuild.BuildNumber)} ({bestBuild.Date:yyyy-MM-dd})</div></div>");
-            sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:#EF4444'>{worstBuild.PassRate:F1}%</div><div class='kpi-label'>Worst Build</div><div class='kpi-sub'>{Enc(worstBuild.BuildNumber)} ({worstBuild.Date:yyyy-MM-dd})</div></div>");
+            sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:var(--pass)'>{bestBuild.PassRate:F1}%</div><div class='kpi-label'>Best Build</div><div class='kpi-sub'>{Enc(bestBuild.BuildNumber)} ({bestBuild.Date:yyyy-MM-dd})</div></div>");
+            sb.AppendLine($"<div class='kpi-card'><div class='kpi-value' style='color:var(--fail)'>{worstBuild.PassRate:F1}%</div><div class='kpi-label'>Worst Build</div><div class='kpi-sub'>{Enc(worstBuild.BuildNumber)} ({worstBuild.Date:yyyy-MM-dd})</div></div>");
             sb.AppendLine("</div>");
         }
 
         AppendPeriodTable(sb, "Weekly Summary", "Week", trend.WeeklySummaries);
         AppendPeriodTable(sb, "Monthly Summary", "Month", trend.MonthlySummaries);
 
-        sb.AppendLine($"<p style='font-size:11px;color:#64748B;margin-top:24px'>Generated {Timestamp()} by TestController</p>");
+        sb.AppendLine($"<p class='sub' style='margin-top:24px'>Generated {Timestamp()} by TestController</p>");
         sb.AppendLine("</body></html>");
         return sb.ToString();
+    }
+
+    // ???????????????????????????????????????????????????????????????
+    // Trend Report e-mail (Outlook-safe)
+    // ???????????????????????????????????????????????????????????????
+
+    /// <summary>
+    /// The trend report as mailable HTML. A separate renderer from <see cref="GenerateTrendHtml"/> rather than
+    /// a flag on it, because the browser version relies on three things Outlook's Word renderer does not
+    /// implement: custom properties, flexbox, and inline SVG - the chart would render as nothing at all.
+    /// Here the chart becomes proportional table cells, which every mail client can draw.
+    /// </summary>
+    public string GenerateTrendEmailHtml(TrendReport trend)
+    {
+        ArgumentNullException.ThrowIfNull(trend);
+
+        var sb = new StringBuilder(16_384);
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
+        sb.AppendLine($"<title>Trend Report{EmailPalette.SubjectSeparator}{trend.Builds.Count} Builds</title>");
+        sb.AppendLine("<!--[if mso]><style>table, td, div, p { font-family:'Segoe UI',Calibri,Arial,sans-serif !important; }</style><![endif]-->");
+        sb.AppendLine("</head>");
+        sb.Append($"<body style=\"margin:0;padding:24px;background:{EmailPalette.PageBg};font-family:{EmailPalette.FontStack};\">");
+        sb.Append("<table role=\"presentation\" width=\"760\" cellpadding=\"0\" cellspacing=\"0\" align=\"center\" ")
+          .Append($"style=\"background:{EmailPalette.Surface};border-radius:12px;border:1px solid {EmailPalette.Divider};\">");
+
+        sb.Append($"<tr><td style=\"padding:20px 24px 0;\"><h2 style=\"margin:0;font-size:20px;color:{EmailPalette.Text};\">Trend Report</h2>")
+          .Append($"<p style=\"margin:4px 0 0;font-size:12px;color:{EmailPalette.TextSecondary};\">")
+          .Append($"{trend.Builds.Count} build(s) analyzed{EmailPalette.SubjectSeparator}Generated {Timestamp()}</p></td></tr>");
+
+        if (trend.Builds.Count == 0)
+        {
+            sb.Append($"<tr><td style=\"padding:24px;font-size:13px;color:{EmailPalette.TextSecondary};\">")
+              .Append("No build data available for trend analysis.</td></tr></table></body></html>");
+            return sb.ToString();
+        }
+
+        var totalFailed = trend.Builds.Sum(b => b.FailedTests);
+        var avgPassRate = trend.Builds.Average(b => b.PassRate);
+        var bestBuild = trend.Builds.MaxBy(b => b.PassRate);
+        var worstBuild = trend.Builds.MinBy(b => b.PassRate);
+
+        sb.Append("<tr><td style=\"padding:16px 24px 0;\">");
+        AppendEmailKpiRow(sb,
+            (trend.Builds.Count.ToString("N0", CultureInfo.InvariantCulture), "Builds", EmailPalette.Accent, ""),
+            (trend.Builds.Sum(b => b.TotalTests).ToString("N0", CultureInfo.InvariantCulture), "Total Tests", EmailPalette.Text, ""),
+            ($"{avgPassRate:F1}%", "Avg Pass Rate", RateColour(avgPassRate), ""),
+            (totalFailed.ToString("N0", CultureInfo.InvariantCulture), "Total Failures", totalFailed > 0 ? EmailPalette.Danger : EmailPalette.Success, ""));
+        sb.Append("</td></tr>");
+
+        AppendEmailBarChart(sb, trend.Builds);
+        AppendEmailBuildTable(sb, trend.Builds);
+
+        if (bestBuild is not null && worstBuild is not null)
+        {
+            sb.Append("<tr><td style=\"padding:0 24px;\">");
+            AppendEmailKpiRow(sb,
+                ($"{bestBuild.PassRate:F1}%", "Best Build", EmailPalette.Success, bestBuild.BuildNumber),
+                ($"{worstBuild.PassRate:F1}%", "Worst Build", EmailPalette.Danger, worstBuild.BuildNumber));
+            sb.Append("</td></tr>");
+        }
+
+        AppendEmailPeriodTable(sb, "Weekly Summary", "Week", trend.WeeklySummaries);
+        AppendEmailPeriodTable(sb, "Monthly Summary", "Month", trend.MonthlySummaries);
+
+        sb.Append($"<tr><td style=\"padding:8px 24px 20px;font-size:11px;color:{EmailPalette.TextTertiary};\">")
+          .Append($"Generated {Timestamp()} by TestController</td></tr>");
+        sb.Append("</table></body></html>");
+        return sb.ToString();
+    }
+
+    /// <summary>Subject for the trend e-mail; ASCII separators only.</summary>
+    public static string BuildTrendSubject(TrendReport trend)
+    {
+        ArgumentNullException.ThrowIfNull(trend);
+        if (trend.Builds.Count == 0)
+            return "Trend Report" + EmailPalette.SubjectSeparator + "no builds analyzed";
+
+        var avg = trend.Builds.Average(b => b.PassRate);
+        var sep = EmailPalette.SubjectSeparator;
+        return $"Trend Report{sep}{trend.Builds.Count} builds{sep}{avg:F1}% avg pass rate";
+    }
+
+    private string RateColour(double rate) =>
+        rate > GoodThreshold ? EmailPalette.Success : rate >= WarningThreshold ? EmailPalette.Warning : EmailPalette.Danger;
+
+    private static void AppendEmailKpiRow(StringBuilder sb, params (string Value, string Label, string Colour, string Sub)[] cells)
+    {
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"8\" ")
+          .Append("style=\"table-layout:fixed;border-collapse:separate;\"><tr>");
+        foreach (var (value, label, colour, sub) in cells)
+        {
+            sb.Append($"<td align=\"center\" style=\"background:{EmailPalette.Surface};border:1px solid {EmailPalette.Border};")
+              .Append("border-radius:8px;padding:14px 10px;\">")
+              .Append($"<div style=\"font-size:26px;font-weight:bold;color:{colour};line-height:1.1;\">{WebUtility.HtmlEncode(value)}</div>")
+              .Append($"<div style=\"font-size:10px;color:{EmailPalette.TextSecondary};text-transform:uppercase;")
+              .Append($"letter-spacing:1px;margin-top:4px;\">{WebUtility.HtmlEncode(label)}</div>");
+            // Build numbers are case-sensitive, so they must not inherit the label's uppercase transform.
+            if (!string.IsNullOrEmpty(sub))
+                sb.Append($"<div style=\"font-size:11px;color:{EmailPalette.TextTertiary};margin-top:3px;\">{WebUtility.HtmlEncode(sub)}</div>");
+            sb.Append("</td>");
+        }
+        sb.Append("</tr></table>");
+    }
+
+    /// <summary>Pass rate as proportional table cells; inline SVG renders as nothing in Outlook.</summary>
+    private void AppendEmailBarChart(StringBuilder sb, List<BuildTrendEntry> builds)
+    {
+        sb.Append($"<tr><td style=\"padding:16px 24px 0;\"><h3 style=\"margin:0 0 8px;font-size:13px;")
+          .Append($"text-transform:uppercase;letter-spacing:1px;color:{EmailPalette.TextSecondary};\">Pass Rate Over Time</h3>");
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">");
+
+        foreach (var b in builds)
+        {
+            var pct = (int)Math.Round(Math.Clamp(b.PassRate, 0, 100));
+            var colour = RateColour(b.PassRate);
+            sb.Append($"<tr><td width=\"190\" style=\"padding:3px 8px 3px 0;font-size:11px;color:{EmailPalette.TextSecondary};")
+              .Append($"white-space:nowrap;\">{Enc(b.BuildNumber)}</td><td style=\"padding:3px 0;\">");
+            sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
+            if (pct > 0)
+                sb.Append($"<td width=\"{pct}%\" style=\"background:{colour};height:10px;font-size:0;line-height:0;border-radius:5px 0 0 5px;\">&nbsp;</td>");
+            if (pct < 100)
+                sb.Append($"<td style=\"background:{EmailPalette.Border};height:10px;font-size:0;line-height:0;border-radius:0 5px 5px 0;\">&nbsp;</td>");
+            sb.Append("</tr></table></td>");
+            sb.Append($"<td width=\"54\" align=\"right\" style=\"padding:3px 0 3px 8px;font-size:11px;font-weight:bold;color:{colour};\">{b.PassRate:F1}%</td></tr>");
+        }
+
+        sb.Append("</table></td></tr>");
+    }
+
+    private void AppendEmailBuildTable(StringBuilder sb, List<BuildTrendEntry> builds)
+    {
+        sb.Append($"<tr><td style=\"padding:16px 24px 0;\"><h3 style=\"margin:0 0 8px;font-size:13px;")
+          .Append($"text-transform:uppercase;letter-spacing:1px;color:{EmailPalette.TextSecondary};\">Build Breakdown</h3>");
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\">");
+        sb.Append($"<tr style=\"background:{EmailPalette.SurfaceAlt};\">");
+        foreach (var (head, align) in new[] { ("Build", "left"), ("Date", "left"), ("Total", "right"), ("Passed", "right"), ("Failed", "right"), ("Pass Rate", "right"), ("Health", "left") })
+            sb.Append($"<th align=\"{align}\" style=\"padding:7px 10px;font-size:10px;text-transform:uppercase;color:{EmailPalette.TextSecondary};\">{head}</th>");
+        sb.Append("</tr>");
+
+        foreach (var b in builds)
+        {
+            var colour = RateColour(b.PassRate);
+            sb.Append($"<tr><td style=\"padding:7px 10px;font-size:12px;border-bottom:1px solid {EmailPalette.Border};\"><strong>{Enc(b.BuildNumber)}</strong></td>")
+              .Append($"<td style=\"padding:7px 10px;font-size:12px;color:{EmailPalette.TextSecondary};border-bottom:1px solid {EmailPalette.Border};\">{b.Date:yyyy-MM-dd HH:mm}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;border-bottom:1px solid {EmailPalette.Border};\">{b.TotalTests:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;color:{EmailPalette.Success};border-bottom:1px solid {EmailPalette.Border};\">{b.PassedTests:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;color:{(b.FailedTests > 0 ? EmailPalette.Danger : EmailPalette.TextSecondary)};border-bottom:1px solid {EmailPalette.Border};\">{b.FailedTests:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;font-weight:bold;color:{colour};border-bottom:1px solid {EmailPalette.Border};\">{b.PassRate:F1}%</td>")
+              .Append($"<td style=\"padding:7px 10px;border-bottom:1px solid {EmailPalette.Border};\">")
+              .Append($"<span style=\"display:inline-block;padding:2px 10px;border-radius:10px;color:#fff;font-size:10px;font-weight:bold;background:{HealthToColor(b.Health)};\">{b.Health}</span></td></tr>");
+        }
+
+        sb.Append("</table></td></tr>");
+    }
+
+    private static void AppendEmailPeriodTable(StringBuilder sb, string title, string periodLabel, List<PeriodSummary> summaries)
+    {
+        if (summaries.Count == 0) return;
+
+        sb.Append($"<tr><td style=\"padding:16px 24px 0;\"><h3 style=\"margin:0 0 8px;font-size:13px;")
+          .Append($"text-transform:uppercase;letter-spacing:1px;color:{EmailPalette.TextSecondary};\">{WebUtility.HtmlEncode(title)}</h3>");
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\">");
+        sb.Append($"<tr style=\"background:{EmailPalette.SurfaceAlt};\">");
+        foreach (var (head, align) in new[] { (periodLabel, "left"), ("Builds", "right"), ("Total Tests", "right"), ("Passed", "right"), ("Failed", "right"), ("Avg Pass Rate", "right") })
+            sb.Append($"<th align=\"{align}\" style=\"padding:7px 10px;font-size:10px;text-transform:uppercase;color:{EmailPalette.TextSecondary};\">{WebUtility.HtmlEncode(head)}</th>");
+        sb.Append("</tr>");
+
+        foreach (var s in summaries)
+        {
+            sb.Append($"<tr><td style=\"padding:7px 10px;font-size:12px;border-bottom:1px solid {EmailPalette.Border};\">{WebUtility.HtmlEncode(s.Period)}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;border-bottom:1px solid {EmailPalette.Border};\">{s.BuildCount:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;border-bottom:1px solid {EmailPalette.Border};\">{s.TotalTests:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;color:{EmailPalette.Success};border-bottom:1px solid {EmailPalette.Border};\">{s.TotalPassed:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;color:{(s.TotalFailed > 0 ? EmailPalette.Danger : EmailPalette.TextSecondary)};border-bottom:1px solid {EmailPalette.Border};\">{s.TotalFailed:N0}</td>")
+              .Append($"<td align=\"right\" style=\"padding:7px 10px;font-size:12px;font-weight:bold;border-bottom:1px solid {EmailPalette.Border};\">{s.AvgPassRate:F1}%</td></tr>");
+        }
+
+        sb.Append("</table></td></tr>");
     }
 
     private void AppendPassRateChart(StringBuilder sb, List<BuildTrendEntry> builds)
@@ -478,15 +690,15 @@ function navigateFail(dir){
         for (int pct = 0; pct <= 100; pct += 25)
         {
             var y = padT + plotH - (plotH * pct / 100.0);
-            sb.AppendLine($"<line x1='{padL}' y1='{y:F1}' x2='{padL + plotW}' y2='{y:F1}' stroke='#334155' stroke-width='1' />");
-            sb.AppendLine($"<text x='{padL - 6}' y='{y + 4:F1}' fill='#64748B' font-size='10' text-anchor='end'>{pct}%</text>");
+            sb.AppendLine($"<line x1='{padL}' y1='{y:F1}' x2='{padL + plotW}' y2='{y:F1}' style='stroke:var(--grid)' stroke-width='1' />");
+            sb.AppendLine($"<text x='{padL - 6}' y='{y + 4:F1}' style='fill:var(--text-3)' font-size='10' text-anchor='end'>{pct}%</text>");
         }
 
         // Threshold lines
         var goodY = padT + plotH - (plotH * GoodThreshold / 100.0);
         var warnY = padT + plotH - (plotH * WarningThreshold / 100.0);
-        sb.AppendLine($"<line x1='{padL}' y1='{goodY:F1}' x2='{padL + plotW}' y2='{goodY:F1}' stroke='#10B981' stroke-width='1' stroke-dasharray='6,4' opacity='0.5' />");
-        sb.AppendLine($"<line x1='{padL}' y1='{warnY:F1}' x2='{padL + plotW}' y2='{warnY:F1}' stroke='#F59E0B' stroke-width='1' stroke-dasharray='6,4' opacity='0.5' />");
+        sb.AppendLine($"<line x1='{padL}' y1='{goodY:F1}' x2='{padL + plotW}' y2='{goodY:F1}' style='stroke:var(--pass)' stroke-width='1' stroke-dasharray='6,4' opacity='0.5' />");
+        sb.AppendLine($"<line x1='{padL}' y1='{warnY:F1}' x2='{padL + plotW}' y2='{warnY:F1}' style='stroke:var(--warn)' stroke-width='1' stroke-dasharray='6,4' opacity='0.5' />");
 
         // Polyline
         var points = new List<string>();
@@ -495,20 +707,23 @@ function navigateFail(dir){
             var (x, y) = PlotPoint(builds[i].PassRate, i, count, padL, padT, plotW, plotH);
             points.Add($"{x:F1},{y:F1}");
         }
-        sb.AppendLine($"<polyline points='{string.Join(" ", points)}' fill='none' stroke='#89B4FA' stroke-width='2.5' stroke-linejoin='round' />");
+        sb.AppendLine($"<polyline points='{string.Join(" ", points)}' fill='none' style='stroke:var(--accent)' stroke-width='2.5' stroke-linejoin='round' />");
 
         // Dots & X-axis labels
         for (int i = 0; i < count; i++)
         {
             var b = builds[i];
             var (x, y) = PlotPoint(b.PassRate, i, count, padL, padT, plotW, plotH);
-            var dotColor = b.PassRate > GoodThreshold ? "#10B981" : b.PassRate >= WarningThreshold ? "#F59E0B" : "#EF4444";
-            sb.AppendLine($"<circle cx='{x:F1}' cy='{y:F1}' r='4' fill='{dotColor}' />");
+            var dotVar = b.PassRate > GoodThreshold ? "--pass" : b.PassRate >= WarningThreshold ? "--warn" : "--fail";
+            sb.AppendLine($"<circle cx='{x:F1}' cy='{y:F1}' r='4' style='fill:var({dotVar})'>" +
+                          $"<title>{Enc(b.BuildNumber)} - {b.PassRate:F1}%</title></circle>");
 
             if (count <= 15 || i % Math.Max(1, count / 10) == 0 || i == count - 1)
             {
-                var label = b.BuildNumber.Length > 12 ? b.BuildNumber[..12] : b.BuildNumber;
-                sb.AppendLine($"<text x='{x:F1}' y='{chartH - 4}' fill='#64748B' font-size='9' text-anchor='middle'>{Enc(label)}</text>");
+                // Build numbers share a long prefix, so the tail is what distinguishes them.
+                var label = b.BuildNumber.Length > 12 ? "\u2026" + b.BuildNumber[^11..] : b.BuildNumber;
+                sb.AppendLine($"<text x='{x:F1}' y='{chartH - 4}' style='fill:var(--text-3)' font-size='9' text-anchor='middle'>" +
+                              $"{Enc(label)}<title>{Enc(b.BuildNumber)}</title></text>");
             }
         }
 

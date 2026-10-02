@@ -33,9 +33,9 @@ deploy\deploy-controller.bat <ControllerNode> [GrpcPort] [PublishDir]
 ```
 
 **Parameters:**
-- `ControllerNode` � Machine name or IP *(required)*
-- `GrpcPort` � Controller gRPC port *(default: 5100)*
-- `PublishDir` � Local publish output folder *(default: publish\controller)*
+- `ControllerNode` - Machine name or IP *(required)*
+- `GrpcPort` - Controller gRPC port *(default: 5100)*
+- `PublishDir` - Local publish output folder *(default: publish\controller)*
 
 **Example:**
 ```bat
@@ -53,11 +53,11 @@ deploy\deploy-agent.bat <AgentNode> <ControllerNode> [AgentPort] [ControllerPort
 ```
 
 **Parameters:**
-- `AgentNode` � Agent machine name or IP *(required)*
-- `ControllerNode` � Controller machine name or IP *(required)*
-- `AgentPort` � Agent gRPC port *(default: 5200)*
-- `ControllerPort` � Controller gRPC port *(default: 5100)*
-- `PublishDir` � Local publish output folder *(default: publish\agent)*
+- `AgentNode` - Agent machine name or IP *(required)*
+- `ControllerNode` - Controller machine name or IP *(required)*
+- `AgentPort` - Agent gRPC port *(default: 5200)*
+- `ControllerPort` - Controller gRPC port *(default: 5100)*
+- `PublishDir` - Local publish output folder *(default: publish\agent)*
 
 **Example:**
 ```bat
@@ -168,4 +168,37 @@ scan — rather than inferring it from length.
 
 **Until then:** never let the size verdict decide whether to ship. Verify with a marker scan for a string the
 change must introduce, or chain hashes `tested build -> staged -> deployed`.
+
+### Repair the remaining user-visible U+FFFD corruption
+
+A repo-wide sweep on 2026-10-02 found the Unicode replacement character `U+FFFD` in **46 files**. It is never
+typed deliberately — it is what a character decays into when a file is read as one encoding and written back
+as another — so every occurrence is corruption from a past round-trip.
+
+The e-mail styling work cleared 6 files; `SourceEncodingTests` now pins the rest at a baseline of **393
+matches** so the count can only go down, and holds those 6 at a hard zero.
+
+Classified by where the damage sits (C# files only):
+
+| Where | Count | Ships to a user? |
+|---|---|---|
+| Comment lines (section-divider rules) | 149 | No - cosmetic, safe to defer |
+| **Code lines (string literals)** | **95** | **Yes** |
+
+The code-line hits are the ones worth fixing. Known clusters:
+
+| File | Hits | Example (the corrupt byte shown as `<?>`) |
+|---|---|---|
+| `TestAgentGrpc/Services/ReportGenerator.cs` | 6 | `<title>Execution Report <?> {agent}</title>` |
+| `TestAgentGrpc/UI/ConnectionDetailForm.cs` | 6 | placeholder dashes, `"Running<?>"` |
+| `TestController.Api/Services/LockRecoveryService.cs` | 6 | `"{Agent}: BUSY <?> lock validated"` |
+| `TestAgentDisplay/ViewModels/AuditTimelineViewModel.cs` | 6 | `summary += $" <?> {e.Command}"` |
+| `TestController.Api/Controllers/ExecutionController.cs` | 2 | `"Cannot start '{tag}' <?> {n} agent(s) are locked"` |
+
+**Severity: cosmetic but customer-facing.** These render as a black-diamond question mark in report titles,
+WPF labels and log lines.
+
+**Suggested fix:** repair in per-project batches, lowering `ReplacementCharBaseline` in the same commit. Write
+the replacement as an escape (`\u2014`, `\u2026`, `\u2022`) rather than a literal, so it cannot decay again.
+Prefer plain ASCII `-` in comments.
 

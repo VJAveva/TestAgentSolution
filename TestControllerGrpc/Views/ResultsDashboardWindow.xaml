@@ -230,6 +230,13 @@
                                     <TextBlock Text="Trends" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                 </StackPanel>
                             </Button>
+                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding SendTrendReportCommand}"
+                                    ToolTip="Email the trend report to the configured recipients">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE724;" Foreground="{DynamicResource AccMauve}" />
+                                    <TextBlock Text="Mail Trends" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Button>
                             <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding DetectConsecutiveFailuresCommand}"
                                     ToolTip="Scan for tests failing across consecutive builds">
                                 <StackPanel HorizontalAlignment="Center">

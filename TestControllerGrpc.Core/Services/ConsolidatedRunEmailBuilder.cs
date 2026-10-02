@@ -16,22 +16,23 @@ public sealed record ConsolidatedRunEmailLinks(
 /// </summary>
 public static class ConsolidatedRunEmailBuilder
 {
-    private const string Ink = "#1c2430";
-    private const string Muted = "#5a6472";
-    private const string Faint = "#8a94a3";
-    private const string Line = "#eef1f5";
-    private const string Blue = "#1f6feb";
-    private const string PassFg = "#1a9c62";
-    private const string PassBg = "#e6f6ee";
-    private const string FailFg = "#c0392b";
-    private const string FailBg = "#fdecea";
+    private const string Ink = EmailPalette.Text;
+    private const string Muted = EmailPalette.TextSecondary;
+    private const string Faint = EmailPalette.TextTertiary;
+    private const string Line = EmailPalette.Border;
+    private const string Blue = EmailPalette.Accent;
+    private const string PassFg = EmailPalette.Success;
+    private const string PassBg = EmailPalette.SuccessBg;
+    private const string FailFg = EmailPalette.Danger;
+    private const string FailBg = EmailPalette.DangerBg;
 
     /// <summary>Subject line: verdict first so a failure is visible in a notification preview.</summary>
     public static string BuildSubject(ConsolidatedRunReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
-        var build = string.IsNullOrWhiteSpace(report.BuildNumber) ? "" : $" \u00b7 {report.BuildNumber}";
-        return $"[{report.Verdict}] {report.PipelineTag}{build} \u2014 {report.Headline}";
+        var sep = EmailPalette.SubjectSeparator;
+        var build = string.IsNullOrWhiteSpace(report.BuildNumber) ? "" : $"{sep}{report.BuildNumber}";
+        return $"[{report.Verdict}] {report.PipelineTag}{build}{sep}{report.Headline}";
     }
 
     public static string BuildHtml(ConsolidatedRunReport report, ConsolidatedRunEmailLinks? links = null)
@@ -40,10 +41,10 @@ public static class ConsolidatedRunEmailBuilder
         links ??= new ConsolidatedRunEmailLinks();
 
         var sb = new StringBuilder(16_384);
-        sb.Append("<html><body style=\"margin:0;padding:24px;background:#e9edf2;")
-          .Append("font-family:'Segoe UI',Arial,sans-serif;\">")
+        sb.Append($"<html><body style=\"margin:0;padding:24px;background:{EmailPalette.PageBg};")
+          .Append($"font-family:{EmailPalette.FontStack};\">")
           .Append("<table role=\"presentation\" width=\"760\" cellpadding=\"0\" cellspacing=\"0\" align=\"center\" ")
-          .Append("style=\"background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dfe4ea;\">");
+          .Append($"style=\"background:{EmailPalette.Surface};border-radius:12px;overflow:hidden;border:1px solid {EmailPalette.Divider};\">");
 
         AppendHeader(sb, report);
         AppendVerdictStrip(sb, report);

@@ -164,4 +164,19 @@ public class ConsolidatedRunEmailBuilderTests
 
         Assert.StartsWith("[PASSED]", ConsolidatedRunEmailBuilder.BuildSubject(report), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildSubject_Should_BeAscii_When_SeparatingFields()
+    {
+        var report = ConsolidatedRunReportBuilder.Build(Session(
+            Act("warmgr", ActionOutcome.Failed, "PHASE 1 / Pool")));
+
+        var subject = ConsolidatedRunEmailBuilder.BuildSubject(report);
+
+        // En/em dashes and middots arrive mojibaked in clients that mislabel the subject's charset.
+        var nonAscii = subject.Where(c => c > 0x7F).Distinct().ToArray();
+        Assert.True(nonAscii.Length == 0,
+            $"Subject carries non-ASCII: {string.Join(", ", nonAscii.Select(c => $"U+{(int)c:X4}"))} in '{subject}'");
+        Assert.Contains(EmailPalette.SubjectSeparator, subject, StringComparison.Ordinal);
+    }
 }

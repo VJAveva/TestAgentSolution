@@ -28,7 +28,7 @@ public static class ResultsEndpoints
         return group;
     }
 
-    /// <summary>GET /api/results/export/{buildNumber}?format=html|csv � download report.</summary>
+    /// <summary>GET /api/results/export/{buildNumber}?format=html|csv - download report.</summary>
     private static IResult ExportBuildReport(
         string buildNumber,
         HttpContext context,
@@ -124,7 +124,7 @@ public static class ResultsEndpoints
                     !string.IsNullOrWhiteSpace(config.FromAddress)
                         ? config.FromAddress
                         : "testcontroller@noreply.local"),
-                Subject = $"Build Results: {request.BuildNumber} � {node.PassRate:F1}% pass rate",
+                    Subject = $"Build Results: {request.BuildNumber}{EmailPalette.SubjectSeparator}{node.PassRate:F1}% pass rate",
                 Body = html,
                 IsBodyHtml = true
             };
