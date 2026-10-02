@@ -32,6 +32,20 @@ public interface IMachineRebootOperation
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Installs Windows updates on one node: Precheck -> Quarantine -> Search -> Install -> RebootWait -> Verify.
+/// Touches no snapshot, so nothing it does is irreversible. The same quarantine-on-failure rule applies from
+/// Quarantine onwards.
+/// </summary>
+public interface IMachineUpdateOperation
+{
+    Task<MaintenanceOperation> ExecuteAsync(
+        MaintenanceOperation operation,
+        InstallUpdatesRequest request,
+        IProgress<MaintenanceProgress> progress,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>The fleet-facing façade every front door calls. Owns the set of in-flight operations and raises
 /// progress / completion so hosts can project it (WPF binding, SignalR broadcast).</summary>
 public interface IFleetMaintenanceService
@@ -44,6 +58,13 @@ public interface IFleetMaintenanceService
 
     /// <summary>Queue a reboot; returns the new operation id. Does not block on completion.</summary>
     Task<Guid> StartRebootAsync(RebootRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Queue a Windows Update install; returns the new operation id. Does not block on completion.
+    /// Default implementation throws, so existing fakes and mocks keep compiling.
+    /// </summary>
+    Task<Guid> StartInstallUpdatesAsync(InstallUpdatesRequest request, CancellationToken cancellationToken)
+        => throw new NotSupportedException("This host does not support update installs.");
 
     /// <summary>Request cancellation at the next phase boundary. Returns false if the operation is unknown or
     /// already past the point of no return.</summary>

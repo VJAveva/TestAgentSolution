@@ -50,25 +50,43 @@ The locking/notification subsystem has known gaps; confirm the wiring, then prop
 
 ## Part 2 — Relay / push (`ControllerEventRelayService`)  [the deferred plumbing]
 
-### R1-01 (backlog, NOT fixed) — no per-action execution status appears in the WPF tree
+### R1-01 (RESOLVED 2026-10-02) — per-action execution status was rendered off-screen in the WPF tree
 
-Measured 2026-10-01 on the dev box. This is **display only** — the runs themselves succeed.
+Root cause found 2026-10-02. **The status was never lost** — it was set on the view model and rendered
+correctly, just outside the horizontal viewport. This was display-only; runs were always unaffected.
 
-- Symptom: after a run, the WatchItem/root rows show a status glyph, but **every action row stays blank** —
-  no Running, no Success, no Skipped.
-- Reproduced on **both** trigger paths: `POST /api/execution/trigger/{tag}` (202, run completes) and a
-  `*.trigger` file dropped into the WatchItem's watch folder. The tree was polled every 350 ms for the whole
-  run, so this is not a transient-status timing artifact — the status is never observed at all.
-- **Not** the two-DI-container split: the file watcher lives in the WPF process, so that path raises its
-  events on the same container the tree binds to, and it behaves identically.
-- **Not** `TreeNodeViewModel.FindByModel`: it already matches on `NodeId`, so snapshot clones resolve.
-- Cause still unknown. Candidates to check next: whether `NodeProgress` is raised for action nodes on the
-  WatchItem-trigger path at all, and whether the status element in the action-row template is actually bound
-  (the root rows use a different element, and only those render).
-- Affects **every** status equally, not just `Skipped`, so it is independent of the node-level skip feature.
-- Trap for whoever picks this up: a WatchItem whose `Path` does not exist fails the run before any action
-  dispatches, which produces the same blank-rows symptom for an entirely different reason. Create the watch
-  folder first.
+- CAUSE: every column in `WatchTreeSpecTemplate` (`Views/Styles/TreeViewSpec.xaml`) is `Width="Auto"`,
+  deliberately — the label takes its natural width so deep rows stay readable and the tree scrolls
+  horizontally instead of ellipsising names. The TreeView sets
+  `ScrollViewer.HorizontalScrollBarVisibility="Auto"` (`MainWindow.xaml`), so rows are measured at
+  **infinite width** and nothing ever compresses them. The status indicator sat in **column 5**, after
+  the label, pills and file pill.
+- So a row's glyph position is `indent + dot + icon + label + pills`. Root/WatchItem rows have a short
+  label and shallow indent, so their glyph lands inside the pane and **was** visible. Action rows carry
+  the deepest indent plus the longest label in the tree (`FormatActionLabel` caps at **100 characters**),
+  pushing the glyph hundreds of pixels past the right edge of a ~300px pane.
+- That is the whole of the reported asymmetry — "root rows show a glyph, every action row stays blank" —
+  and it explains why it affected every status equally, on both trigger paths, and why polling every
+  350 ms never saw it: no amount of polling reveals a pixel that is off-screen.
+- FIX: the status indicator moved to **column 1**, immediately after the status dot and before the icon
+  and label. The label column stays `Auto` (star-sizing it was tried before and reverted — it forces
+  names into ellipses). A `Skipped` trigger was added at the same time: the glyph group had triggers for
+  Running/Success/Failed/PartialFailure/Cancelled but **none for Skipped**, so skipped nodes rendered no
+  glyph even once in view. It is a grey `−` (`TextDimBrush`), never red — a skip is a deliberate choice,
+  not a failure — and the indicator carries `StatusTooltip`, which already includes the skip reason.
+- GUARD: `TestControllerGrpc.Tests/Ui/TreeStatusGlyphLayoutTests.cs` — one structural test (the status
+  column index must be lower than the label's) plus a real STA layout measurement that arranges an action
+  row at 120px indent inside a 300px pane and asserts the glyph's right edge stays within it, for
+  Running/Success/Failed/Skipped. Red-proved: moving the glyph back to column 5 fails all 5.
+
+**Two diagnoses recorded here earlier were wrong and are retained as negative results:** the
+two-DI-container split (disproved by the file-watcher path behaving identically) and
+`TreeNodeViewModel.FindByModel` / `NodeId` matching. Also checked and cleared while hunting this:
+`NodeProgress` *is* raised for action nodes on the tracked path (`PipelineExecutorBase` L505/L533);
+there is a single `IActionPipelineExecutor` singleton shared by the watcher, view model and WebApi host;
+`WatchListRoot` is `TreeRoots[0]`; `MainViewModel` is a singleton; and the view model and file watcher
+share one `WatchListConfig` instance via `IVocabularyMonitor.CurrentConfig`. The lesson: the chain was
+sound at every link, because the defect was never in the chain.
 
 Push Controller events to **both** delivery targets, live:
 

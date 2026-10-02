@@ -14,6 +14,7 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
 
     private readonly IMachineRevertOperation _revertOperation;
     private readonly IMachineRebootOperation _rebootOperation;
+    private readonly IMachineUpdateOperation? _updateOperation;
     private readonly IAgentGrpcDispatcher _dispatcher;
     private readonly AgentLockManager _lockManager;
     private readonly IMaintenanceStateStore _stateStore;
@@ -39,10 +40,12 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
         IMaintenanceStateStore stateStore,
         IMaintenanceOperationStore operationStore,
         IUpdatePolicyStore policy,
-        IAppLogger logger)
+        IAppLogger logger,
+        IMachineUpdateOperation? updateOperation = null)
     {
         _revertOperation = revertOperation;
         _rebootOperation = rebootOperation;
+        _updateOperation = updateOperation;
         _dispatcher = dispatcher;
         _lockManager = lockManager;
         _stateStore = stateStore;
@@ -140,11 +143,46 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
         return Task.FromResult(operation.Id);
     }
 
+    public Task<Guid> StartInstallUpdatesAsync(InstallUpdatesRequest request, CancellationToken cancellationToken)
+    {
+        if (_updateOperation is null)
+            throw new NotSupportedException("This host has no update operation registered.");
+
+        var operation = new MaintenanceOperation
+        {
+            Id = Guid.NewGuid(),
+            NodeId = request.NodeId,
+            Kind = MaintenanceKind.InstallUpdates,
+            State = MaintenanceOperationState.Queued,
+            TriggerSource = request.TriggerSource,
+            TriggeredBy = request.TriggeredBy,
+            Reason = request.Reason,
+            StartedUtc = DateTimeOffset.UtcNow,
+        };
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var running = new RunningOperation(operation, cts)
+        {
+            Execute = (op, prog, ct) => _updateOperation.ExecuteAsync(op, request, prog, ct),
+        };
+
+        if (!_active.TryAdd(request.NodeId, running))
+        {
+            cts.Dispose();
+            var existing = _active.TryGetValue(request.NodeId, out var current) ? current.Operation.Id : Guid.Empty;
+            throw new MaintenanceInProgressException(request.NodeId, existing);
+        }
+
+        EnqueueOrStart(request.NodeId, running);
+        return Task.FromResult(operation.Id);
+    }
+
     /// <summary>Cap for a kind, or <see cref="int.MaxValue"/> when the kind is not throttled.</summary>
     private int CapFor(MaintenanceKind kind) => kind switch
     {
         MaintenanceKind.Reboot => Math.Max(1, _policy.Current.MaxConcurrentReboots),
         MaintenanceKind.GoldenImageRefresh => Math.Max(1, _policy.Current.MaxConcurrentRefreshes),
+        MaintenanceKind.InstallUpdates => Math.Max(1, _policy.Current.MaxConcurrentUpdates),
         _ => int.MaxValue,
     };
 

@@ -25,6 +25,7 @@ public static class FleetMaintenanceExtensions
         services.AddSingleton<IMaintenanceOperationStore, MaintenanceOperationStore>();
         services.AddSingleton<IMachineRevertOperation, MachineRevertOperation>();
         services.AddSingleton<IMachineRebootOperation, MachineRebootOperation>();
+        services.AddSingleton<IMachineUpdateOperation, MachineUpdateOperation>();
         services.AddSingleton<IFleetMaintenanceService, FleetMaintenanceService>();
         services.AddSingleton(sp => BuildVirtualizationProvider(sp, configuration));
 

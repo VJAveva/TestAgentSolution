@@ -2769,6 +2769,7 @@
                                           CanUserSortColumns="False"
                                           HeadersVisibility="Column"
                                           GridLinesVisibility="Horizontal"
+                                          HorizontalGridLinesBrush="{DynamicResource Bdr}"
                                           Background="Transparent"
                                           Foreground="{DynamicResource TextP}"
                                           BorderThickness="1"
@@ -2777,13 +2778,70 @@
                                           AlternatingRowBackground="{DynamicResource InfoBoxBg}"
                                           MaxHeight="200"
                                           Margin="0,0,0,4">
+                                    <DataGrid.Resources>
+                                        <!-- A DataGridColumn is not a FrameworkElement, so a DynamicResource set
+                                             on the column never sees a theme swap. These styles are applied to
+                                             real in-tree elements, where the lookup does track the theme. -->
+                                        <Style x:Key="ParamCellText" TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                            <Setter Property="FontFamily" Value="{StaticResource FontMono}" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize11}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                        </Style>
+                                        <Style x:Key="ParamCellEditor" TargetType="TextBox">
+                                            <Setter Property="Background" Value="{DynamicResource FieldBg}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                            <Setter Property="CaretBrush" Value="{DynamicResource TextP}" />
+                                            <Setter Property="BorderThickness" Value="0" />
+                                            <Setter Property="FontFamily" Value="{StaticResource FontMono}" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize11}" />
+                                            <Setter Property="Padding" Value="4,2" />
+                                        </Style>
+                                    </DataGrid.Resources>
+                                    <DataGrid.ColumnHeaderStyle>
+                                        <Style TargetType="DataGridColumnHeader">
+                                            <Setter Property="Background" Value="{DynamicResource BgPanel}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Setter Property="Padding" Value="6,3" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Bdr}" />
+                                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                                        </Style>
+                                    </DataGrid.ColumnHeaderStyle>
+                                    <DataGrid.CellStyle>
+                                        <Style TargetType="DataGridCell">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                            <Setter Property="Background" Value="Transparent" />
+                                            <Setter Property="BorderThickness" Value="0" />
+                                            <Setter Property="Padding" Value="6,3" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="DataGridCell">
+                                                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter VerticalAlignment="Center" />
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource SelectedItemBg}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGrid.CellStyle>
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Key" Width="*"
                                             Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
-                                            Foreground="{DynamicResource TextP}" />
+                                            ElementStyle="{StaticResource ParamCellText}"
+                                            EditingElementStyle="{StaticResource ParamCellEditor}" />
                                         <DataGridTextColumn Header="Value" Width="2*"
                                             Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                            Foreground="{DynamicResource TextP}" />
+                                            ElementStyle="{StaticResource ParamCellText}"
+                                            EditingElementStyle="{StaticResource ParamCellEditor}" />
                                         <DataGridTemplateColumn Header="" Width="30">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>

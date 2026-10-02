@@ -161,7 +161,7 @@
                 </DataGrid.RowStyle>
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Key" Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
-                                        Width="200" Foreground="{DynamicResource TextP}">
+                                        Width="200">
                         <DataGridTextColumn.EditingElementStyle>
                             <Style TargetType="TextBox">
                                 <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
@@ -171,7 +171,7 @@
                         </DataGridTextColumn.EditingElementStyle>
                     </DataGridTextColumn>
                     <DataGridTextColumn Header="Value" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                        Width="*" Foreground="{DynamicResource TextP}">
+                                        Width="*">
                         <DataGridTextColumn.EditingElementStyle>
                             <Style TargetType="TextBox">
                                 <Setter Property="Background" Value="{DynamicResource BgPanel}"/>

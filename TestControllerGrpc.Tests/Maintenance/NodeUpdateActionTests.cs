@@ -16,6 +16,10 @@ public class NodeUpdateActionTests
     private const string Node = "JVGR2";
 
     private static FleetUpdatesVM Build(Mock<INodeUpdateInstaller> installer, params string[] agents)
+        => Build(installer, null, agents);
+
+    private static FleetUpdatesVM Build(
+        Mock<INodeUpdateInstaller> installer, Mock<IFleetMaintenanceService>? maintenance, params string[] agents)
     {
         var dispatcher = new Mock<IAgentGrpcDispatcher>();
         dispatcher.SetupGet(d => d.RegisteredAgents).Returns(agents.Length == 0 ? [Node] : agents);
@@ -28,7 +32,16 @@ public class NodeUpdateActionTests
             dispatcher.Object,
             Dispatcher.CurrentDispatcher,
             store: store.Object,
+            maintenance: maintenance?.Object,
             installer: installer.Object);
+    }
+
+    private static Mock<IFleetMaintenanceService> Maintenance()
+    {
+        var m = new Mock<IFleetMaintenanceService>();
+        m.Setup(s => s.StartInstallUpdatesAsync(It.IsAny<InstallUpdatesRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Guid.NewGuid());
+        return m;
     }
 
     private static Mock<INodeUpdateInstaller> Installer(
@@ -103,29 +116,45 @@ public class NodeUpdateActionTests
     }
 
     [Fact]
-    public async Task SecondClick_Should_Install_When_UpdatesAreAvailable()
+    public async Task SecondClick_Should_StartAMaintenanceOperation_When_UpdatesAreAvailable()
     {
-        var installer = Installer(
-            search: new UpdateSearchResult(true, 2, ["A", "B"]),
-            install: new UpdateInstallResult(true, 2, 0, RebootRequired: true));
-        var vm = Build(installer);
+        // The whole point of slice 1: installing goes through an OPERATION, never straight to the installer.
+        // A direct call sets no maintenance state, takes no slot and leaves no row for crash recovery.
+        var installer = Installer(search: new UpdateSearchResult(true, 2, ["A", "B"]));
+        var maintenance = Maintenance();
+        var vm = Build(installer, maintenance);
 
         await vm.UpdateActionCommand.ExecuteAsync(Node);   // check
         await vm.UpdateActionCommand.ExecuteAsync(Node);   // install
 
-        var action = vm.ActionFor(Node);
-        installer.Verify(i => i.InstallAsync(Node, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(NodeUpdateActionState.Done, action.State);
-        Assert.True(action.RebootRequired);
-        Assert.Contains("reboot is required", action.Detail);
+        maintenance.Verify(s => s.StartInstallUpdatesAsync(
+            It.Is<InstallUpdatesRequest>(r => r.NodeId == Node), It.IsAny<CancellationToken>()), Times.Once);
+        installer.Verify(i => i.InstallAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(NodeUpdateActionState.Installing, vm.ActionFor(Node).State);
     }
 
     [Fact]
-    public async Task Install_Should_ShowRetryableError_When_InstallFails()
+    public async Task Install_Should_ReportUnsupported_When_NoMaintenanceServiceIsConfigured()
     {
-        var vm = Build(Installer(
-            search: new UpdateSearchResult(true, 1, ["A"]),
-            install: UpdateInstallResult.Failed("2 update(s) failed to install.")));
+        // Without the service there is no safe way to install, so the button must refuse rather than
+        // fall back to the old unguarded path.
+        var installer = Installer(search: new UpdateSearchResult(true, 1, ["A"]));
+        var vm = Build(installer);
+
+        await vm.UpdateActionCommand.ExecuteAsync(Node);
+        await vm.UpdateActionCommand.ExecuteAsync(Node);
+
+        Assert.Equal(NodeUpdateActionState.Unsupported, vm.ActionFor(Node).State);
+        installer.Verify(i => i.InstallAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Install_Should_ShowRetryableError_When_TheNodeAlreadyHasAnOperation()
+    {
+        var maintenance = Maintenance();
+        maintenance.Setup(s => s.StartInstallUpdatesAsync(It.IsAny<InstallUpdatesRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new MaintenanceInProgressException(Node, Guid.NewGuid()));
+        var vm = Build(Installer(search: new UpdateSearchResult(true, 1, ["A"])), maintenance);
 
         await vm.UpdateActionCommand.ExecuteAsync(Node);
         await vm.UpdateActionCommand.ExecuteAsync(Node);
@@ -133,7 +162,7 @@ public class NodeUpdateActionTests
         var action = vm.ActionFor(Node);
         Assert.Equal(NodeUpdateActionState.Error, action.State);
         Assert.True(action.CanAct);                        // the operator can retry
-        Assert.Contains("failed to install", action.Detail);
+        Assert.Contains("maintenance operation", action.Detail);
     }
 
     [Fact]

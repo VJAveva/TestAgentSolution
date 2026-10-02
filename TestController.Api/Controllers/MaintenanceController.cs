@@ -259,8 +259,9 @@ public class MaintenanceController : ControllerBase
             SuppressionWindow = Seconds(req.SuppressionWindowSeconds, current.SuppressionWindow),
             CoalescingWindow = Seconds(req.CoalescingWindowSeconds, current.CoalescingWindow),
             MaxConcurrentReboots = req.MaxConcurrentReboots is > 0 ? req.MaxConcurrentReboots.Value : current.MaxConcurrentReboots,
-            // Not on the request DTO yet; carried forward so a policy save cannot silently reset it.
+            // Not on the request DTO yet; carried forward so a policy save cannot silently reset them.
             MaxConcurrentRefreshes = current.MaxConcurrentRefreshes,
+            MaxConcurrentUpdates = current.MaxConcurrentUpdates,
         };
 
         _policy.Update(updated);

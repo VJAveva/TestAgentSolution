@@ -97,13 +97,16 @@
             </Grid.ToolTip>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" /> <!-- Status dot -->
+                <!-- Status glyph must stay LEFT of the label. Every column here is Auto and the tree
+                     scrolls horizontally, so anything placed after the label is pushed far off-screen
+                     on deep action rows - that was R1-01. -->
+                <ColumnDefinition Width="Auto" /> <!-- Status glyph -->
                 <ColumnDefinition Width="Auto" /> <!-- Icon -->
                 <!-- Auto, not star: the label takes its natural width so deep rows stay readable and
                      the tree scrolls horizontally instead of squeezing names down to an ellipsis. -->
                 <ColumnDefinition Width="Auto" /> <!-- Label -->
                 <ColumnDefinition Width="Auto" /> <!-- Pill(s) -->
                 <ColumnDefinition Width="Auto" /> <!-- File pill -->
-                <ColumnDefinition Width="Auto" /> <!-- Status spinner -->
                 <ColumnDefinition Width="Auto" /> <!-- Lock badge -->
                 <ColumnDefinition Width="Auto" /> <!-- Permission pill -->
                 <ColumnDefinition Width="Auto" /> <!-- Spacer -->
@@ -186,8 +189,8 @@
                 </TextBlock.Style>
             </TextBlock>
 
-            <!-- ── Column 1: Material Icon (13px) ── -->
-            <mi:MaterialIcon Grid.Column="1" Width="13" Height="13"
+            <!-- ── Column 2: Material Icon (13px) ── -->
+            <mi:MaterialIcon Grid.Column="2" Width="13" Height="13"
                              Margin="0,0,5,0" VerticalAlignment="Center">
                 <mi:MaterialIcon.Style>
                     <Style TargetType="mi:MaterialIcon">
@@ -254,7 +257,7 @@
             </mi:MaterialIcon>
 
             <!-- ── Column 2: Label ── -->
-            <TextBlock Grid.Column="2" VerticalAlignment="Center">
+            <TextBlock Grid.Column="3" VerticalAlignment="Center">
                 <TextBlock.Text>
                     <MultiBinding Converter="{StaticResource ActionLabelConv}">
                         <Binding Path="Tag" />
@@ -303,7 +306,7 @@
             </TextBlock>
 
             <!-- ── Column 3: Type Pills ── -->
-            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
 
                 <!-- Event Trigger pill: EVT -->
                 <Border>
@@ -512,8 +515,8 @@
 
             </StackPanel>
 
-            <!-- ── Column 4: Script/Subject File Pill (Action nodes only) ── -->
-            <Border Grid.Column="4">
+            <!-- ── Column 5: Script/Subject File Pill (Action nodes only) ── -->
+            <Border Grid.Column="5">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource FilePillBorder}">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -544,8 +547,10 @@
                 </TextBlock>
             </Border>
 
-            <!-- ── Column 5: Status Indicator (spinner for Running, glyphs for terminal) ── -->
-            <Grid Grid.Column="5" Width="14" Height="14" Margin="6,0,0,0" VerticalAlignment="Center">
+            <!-- ── Column 1: Status Indicator (spinner for Running, glyphs for terminal) ──
+                 Declared here out of visual order; Grid.Column, not markup order, sets the position. -->
+            <Grid Grid.Column="1" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
+                  Background="Transparent" ToolTip="{Binding StatusTooltip}">
                 <!-- Running: spinning icon -->
                 <mi:MaterialIcon Kind="Loading" Width="12" Height="12"
                                  Foreground="{DynamicResource SRunningBrush}"
@@ -630,6 +635,22 @@
                         </Style>
                     </mi:MaterialIcon.Style>
                 </mi:MaterialIcon>
+                <!-- Skipped: grey minus. Never red - a skipped node is a deliberate choice, not a failure. -->
+                <TextBlock Text="&#x2212;" FontWeight="Bold"
+                           FontSize="{StaticResource FontSize12}"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="Skipped">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Grid>
 
             <!-- ── Column 6: Lock Badge (Phase 3b) ── -->

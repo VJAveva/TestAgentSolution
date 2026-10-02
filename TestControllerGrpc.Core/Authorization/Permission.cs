@@ -30,5 +30,8 @@ public enum Permission
     // Appended, never reordered: audit rows persist this enum.
     CodeChurn_View,
     CodeChurn_Export,
-    ReportCard_View
+    ReportCard_View,
+
+    /// <summary>Install Windows updates on a fleet node. Administrator only - it patches a live machine.</summary>
+    Fleet_InstallUpdates
 }

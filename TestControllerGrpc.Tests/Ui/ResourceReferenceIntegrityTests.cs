@@ -121,6 +121,38 @@ public sealed class ResourceReferenceIntegrityTests
             $"These keys are now defined and must be removed from KnownUnresolved: {string.Join(", ", nowDefined)}");
     }
 
+    /// <summary>
+    /// A DataGridColumn is a DependencyObject, not a FrameworkElement, so it never joins the visual or
+    /// logical tree. A theme swap is propagated by walking that tree, so a DynamicResource set on a column
+    /// resolves once and then never updates - the column keeps the brush from whichever theme was loaded
+    /// when it was first realised while the rest of the window repaints. Put the brush on
+    /// ElementStyle/EditingElementStyle or CellStyle, which are applied to real in-tree elements.
+    /// </summary>
+    [Fact]
+    public void NoDataGridColumn_Should_CarryADynamicResourceBrush()
+    {
+        // Opening tag only: a DynamicResource inside a nested CellTemplate is fine, because that
+        // content IS instantiated in the tree.
+        var openingTag = new Regex(@"<DataGrid\w*Column\b[^>]*>", RegexOptions.Singleline);
+        var offenders = new List<string>();
+
+        foreach (var file in AllXaml())
+        {
+            var text = File.ReadAllText(file);
+            foreach (Match m in openingTag.Matches(text))
+            {
+                if (!m.Value.Contains("{DynamicResource", StringComparison.Ordinal)) continue;
+                var line = text.Take(m.Index).Count(c => c == '\n') + 1;
+                offenders.Add($"    {Path.GetFileName(file)}:{line}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            $"{offenders.Count} DataGridColumn(s) set a brush via DynamicResource, which will not survive a " +
+            $"theme change. Move it to ElementStyle/CellStyle:{Environment.NewLine}" +
+            string.Join(Environment.NewLine, offenders));
+    }
+
     [Fact]
     public void Report_ResourceUsageShape()
     {

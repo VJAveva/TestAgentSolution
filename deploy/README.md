@@ -135,3 +135,37 @@ This will:
 - Both applications require an **interactive desktop session** (Controller is WPF, Agent is WinForms system tray). They cannot run as headless Windows Services without modification.
 - For automated startup, create a **Scheduled Task** on each node that runs the `.exe` at logon in an interactive session.
 - To switch to **self-contained** deployment (no runtime required on target), change `--self-contained false` to `--self-contained true` in the batch files.
+
+## Backlog
+
+### Invoke-Patch should classify "changed" by hash, not by file size
+
+`Invoke-Patch.ps1` already compares SHA256 to decide *whether* a file differs, but then uses **file size** to
+decide whether the difference is meaningful:
+
+```powershell
+# Invoke-Patch.ps1 ~L188
+$reason = 'changed'
+if ($dstItem.Length -eq $file.Length) { $reason = 'rebuilt' }   # "MVID churn"
+```
+
+The premise in the comment — *"Identical size means recompiled, not behaviour changed"* — is false. Plenty of
+real changes preserve byte length, and it has now misreported **three** times:
+
+| Date | File | Script said | Actually carried |
+|---|---|---|---|
+| 2026-10-01 | `TestControllerGrpc.dll` | "same size, MVID churn" | 114 lines of changed XAML + 5 lines of C# |
+| 2026-10-02 | `TestControllerGrpc.dll` | "No real content changes detected" | the R1-01 status-glyph fix (`Grid.Column="5"`→`"1"` is the same byte count) |
+| 2026-10-02 | `TestController.Api.dll` | "same size, MVID churn" | `MaxConcurrentUpdates` + `IMachineUpdateOperation` (verified staged-True / deployed-False by marker scan) |
+
+**Severity: reporting only.** Both buckets are copied, so no deploy has ever shipped the wrong bits. The risk is
+a human reading "No real content changes detected" and concluding a fix did not need to ship, or skipping
+verification.
+
+**Suggested fix:** drop the size heuristic. Report every hash difference as `changed`, and if an "unchanged
+source" signal is still wanted, get it honestly — compare the assembly MVID, or diff a metadata/BAML string
+scan — rather than inferring it from length.
+
+**Until then:** never let the size verdict decide whether to ship. Verify with a marker scan for a string the
+change must introduce, or chain hashes `tested build -> staged -> deployed`.
+

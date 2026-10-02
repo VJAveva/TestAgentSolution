@@ -62,6 +62,28 @@ public sealed record RebootRequest
     public string? Reason { get; init; }
 }
 
+/// <summary>
+/// Everything needed to install Windows updates on one node. Deliberately has no ForceIfBusy: a patch run must
+/// never pre-empt a pipeline, so a busy or reserved node is refused at precheck rather than overridden.
+/// </summary>
+public sealed record InstallUpdatesRequest
+{
+    public required string NodeId { get; init; }
+
+    /// <summary>Seconds passed to <c>shutdown /r /t</c> when the installer reports a reboot is required.</summary>
+    public int RebootDelaySeconds { get; init; } = 5;
+
+    /// <summary>How long to wait for the agent to reconnect after a post-install reboot.</summary>
+    public TimeSpan AgentWaitTimeout { get; init; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>How long to wait for a fresh posture report before declaring the node unverified.</summary>
+    public TimeSpan PostureTimeout { get; init; } = TimeSpan.FromMinutes(3);
+
+    public required MaintenanceTriggerSource TriggerSource { get; init; }
+    public string? TriggeredBy { get; init; }
+    public string? Reason { get; init; }
+}
+
 /// <summary>A single progress tick emitted through <see cref="IProgress{T}"/> during a revert.</summary>
 public sealed record MaintenanceProgress(
     Guid OperationId,

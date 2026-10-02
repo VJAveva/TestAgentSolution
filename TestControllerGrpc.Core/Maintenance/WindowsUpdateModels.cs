@@ -102,6 +102,10 @@ public sealed record UpdatePolicy
     /// revert-patch-snapshot cycle, so this is a hypervisor budget, not just a fleet-availability one.</summary>
     public int MaxConcurrentRefreshes { get; init; } = 1;
 
+    /// <summary>Update installs running at once. One by design: a patch run takes a node out of rotation, and
+    /// patching a whole pool simultaneously is how a fleet goes dark.</summary>
+    public int MaxConcurrentUpdates { get; init; } = 1;
+
     /// <summary>True when <paramref name="at"/> falls inside the configured window (or no window is set).
     /// A window whose end is before its start wraps past midnight.</summary>
     public bool IsWithinAutoRebootWindow(DateTimeOffset at)

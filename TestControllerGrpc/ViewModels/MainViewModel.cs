@@ -190,9 +190,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _isLogPaused;
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
-    // Collapsed on first run: the strip still carries counts and the latest line, and the panes
-    // get the height back. RestoreLayout overrides this for anyone with a saved layout.
-    [ObservableProperty] private bool _isLogCollapsed = true;
+    // Expanded on first run: a new user has no saved layout and the collapsed strip read as the log
+    // being missing. RestoreLayout overrides this for anyone with a saved layout.
+    [ObservableProperty] private bool _isLogCollapsed;
 
     [ObservableProperty] private string _latestLogLine = "";
 
@@ -371,7 +371,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher, fleetMaintenance, _maintenanceState, maintenanceStore,
-            updateStatus, fleetNotifications, updatePolicy, updateInstaller);
+            updateStatus, fleetNotifications, updatePolicy, updateInstaller, _capabilityChecker);
 
         // Mirror fleet-maintenance (revert / reboot) activity into the main execution log.
         if (_fleetMaintenance is not null)

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Core.Maintenance;
 using TestControllerGrpc.Services;
 
@@ -18,6 +19,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     private readonly IFleetNotificationService? _notifications;
     private readonly IFleetMaintenanceService? _maintenance;
     private readonly INodeUpdateInstaller? _installer;
+    private readonly CapabilityChecker? _capabilities;
 
     /// <summary>
     /// Keyed by agent, and deliberately NOT on the row: RebuildRows throws every row away on each status
@@ -89,7 +91,8 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         IFleetNotificationService? notifications = null,
         IFleetMaintenanceService? maintenance = null,
         UpdatePolicyStore? policy = null,
-        INodeUpdateInstaller? installer = null)
+        INodeUpdateInstaller? installer = null,
+        CapabilityChecker? capabilities = null)
     {
         _dispatcher = dispatcher;
         _uiDispatcher = uiDispatcher;
@@ -98,9 +101,11 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         _maintenance = maintenance;
         _policy = policy;
         _installer = installer;
+        _capabilities = capabilities;
 
         if (_store is not null) _store.Changed += OnStatusChanged;
         if (_notifications is not null) _notifications.NotificationsChanged += OnNotificationsChanged;
+        if (_maintenance is not null) _maintenance.OperationCompleted += OnMaintenanceCompleted;
 
         _rowsDebounce = new DispatcherTimer(DispatcherPriority.Background, uiDispatcher)
         {
@@ -328,6 +333,15 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
             return;
         }
 
+        // Installing patches a live machine, so it is Administrator-only. Checking updates stays open.
+        if (action.State == NodeUpdateActionState.Available
+            && _capabilities is not null
+            && !_capabilities.Can(Permission.Fleet_InstallUpdates))
+        {
+            action.Detail = "Installing updates requires the Administrator role.";
+            return;
+        }
+
         if (action.State == NodeUpdateActionState.Available)
             await InstallUpdatesAsync(nodeId, action).ConfigureAwait(true);
         else
@@ -371,29 +385,64 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
 
     private async Task InstallUpdatesAsync(string nodeId, NodeUpdateActionVM action)
     {
+        // Installs run as a maintenance OPERATION, never as a direct installer call: the operation is what sets
+        // MaintenanceState.Updating (so DispatchGate stops sending work), takes the one-per-node slot, honours the
+        // concurrency cap, and leaves a row crash recovery can find.
+        if (_maintenance is null)
+        {
+            action.Detail = "No maintenance service is configured on this controller.";
+            action.State = NodeUpdateActionState.Unsupported;
+            return;
+        }
+
         action.State = NodeUpdateActionState.Installing;
         try
         {
-            var result = await _installer!.InstallAsync(nodeId, CancellationToken.None).ConfigureAwait(true);
-            if (!result.Ok)
-            {
-                action.Detail = result.Error ?? "Update install failed.";
-                action.State = NodeUpdateActionState.Error;
-                return;
-            }
+            await _maintenance.StartInstallUpdatesAsync(
+                new InstallUpdatesRequest
+                {
+                    NodeId = nodeId,
+                    TriggerSource = MaintenanceTriggerSource.FleetPanel,
+                    TriggeredBy = Environment.UserName,
+                    Reason = "Install Windows updates from the Fleet panel",
+                },
+                CancellationToken.None).ConfigureAwait(true);
 
-            action.AvailableCount = 0;
-            action.RebootRequired = result.RebootRequired;
-            action.Detail = result.RebootRequired
-                ? $"Installed {result.InstalledCount} update(s). A reboot is required."
-                : $"Installed {result.InstalledCount} update(s).";
-            action.State = NodeUpdateActionState.Done;
+            action.Detail = "Update operation queued; the node is out of rotation until it finishes.";
+        }
+        catch (MaintenanceInProgressException)
+        {
+            action.Detail = "This node already has a maintenance operation in flight.";
+            action.State = NodeUpdateActionState.Error;
         }
         catch (Exception ex)
         {
             action.Detail = ex.Message;
             action.State = NodeUpdateActionState.Error;
         }
+    }
+
+    /// <summary>Settles the per-node action chip once the operation the UI started actually finishes.</summary>
+    private void OnMaintenanceCompleted(object? sender, MaintenanceOperation op)
+    {
+        if (op.Kind != MaintenanceKind.InstallUpdates) return;
+
+        _uiDispatcher.InvokeAsync(() =>
+        {
+            var action = ActionFor(op.NodeId);
+            if (op.State == MaintenanceOperationState.Succeeded)
+            {
+                action.AvailableCount = 0;
+                action.RebootRequired = false;
+                action.Detail = "Updates installed and the node was verified.";
+                action.State = NodeUpdateActionState.Done;
+            }
+            else
+            {
+                action.Detail = $"Update {op.State} at {op.FailurePhase ?? op.Phase}. The node is quarantined.";
+                action.State = NodeUpdateActionState.Error;
+            }
+        });
     }
 
     /// <summary>Patch Tuesday button: queues a reboot for every RebootRequired node that is not already draining (R19).</summary>
@@ -433,6 +482,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         _rowsDebounce.Stop();
         if (_store is not null) _store.Changed -= OnStatusChanged;
         if (_notifications is not null) _notifications.NotificationsChanged -= OnNotificationsChanged;
+        if (_maintenance is not null) _maintenance.OperationCompleted -= OnMaintenanceCompleted;
     }
 }
 
