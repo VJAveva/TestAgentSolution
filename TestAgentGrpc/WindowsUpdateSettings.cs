@@ -26,8 +26,11 @@ public sealed class WindowsUpdateSettings
     /// <summary>Grace period before the first scan, so startup work is not competing with it.</summary>
     public int StartupDelaySeconds { get; set; } = 20;
 
-    /// <summary>Hard timeout for the blocking WUApi search.</summary>
-    public int ScanTimeoutSeconds { get; set; } = 180;
+    /// <summary>
+    /// Hard timeout for the blocking WUApi search. 600s, not 180: an offline search on a node whose local
+    /// cache is stale (NoAutoUpdate=1) measured 287s on JVGR2, so the old budget timed out every poll.
+    /// </summary>
+    public int ScanTimeoutSeconds { get; set; } = 600;
 
     /// <summary>When false, skips the WUApi pending-update search and reports reboot-required only.</summary>
     public bool ScanPendingUpdates { get; set; } = true;

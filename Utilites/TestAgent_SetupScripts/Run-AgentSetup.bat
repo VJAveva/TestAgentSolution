@@ -2,7 +2,7 @@
 REM =====================================================================
 REM  TestAgent AGENT Node Setup - Batch Wrapper
 REM  Right-click -> "Run as administrator"
-REM  Target framework: .NET 10
+REM  Target framework: .NET 10 (runtime 10.0.12 or newer)
 REM =====================================================================
 setlocal EnableExtensions
 set "RC=1"
@@ -16,9 +16,12 @@ REM ============ EDIT THESE VALUES FOR YOUR ENVIRONMENT ============
 set "AGENT_PORT=5200"
 set "AGENT_NAME=%COMPUTERNAME%"
 set "CONTROLLER_ADDRESS=http://JVGR22:5100"
-set "INSTALL_DIR=C:\TestAgentSolution\Agent"
+REM Must match the real deployed path (fleet-inventory.json agentDefaults.sharePath).
+set "INSTALL_DIR=C:\TestAgentService"
 REM Set INSTALL_AS_SERVICE=1 only after the binaries are copied to INSTALL_DIR.
+REM The production fleet uses the scheduled task "TestAgentGrpc Interactive" instead.
 set "INSTALL_AS_SERVICE="
+REM Set TCSETUP_NOPAUSE=1 in the environment to skip the final pause (unattended use).
 REM ================================================================
 
 set "PS=%~dp0Setup-AgentNode.ps1"
@@ -61,5 +64,5 @@ goto :end
 
 :end
 echo.
-pause
+if not "%TCSETUP_NOPAUSE%"=="1" pause
 endlocal & exit /b %RC%

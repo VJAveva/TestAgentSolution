@@ -76,6 +76,7 @@ public static class RemoteCommandStreamRunner
         int exitCode = 0;
         string errorMessage = "";
         var stderrLines = new List<string>(StderrTailCapacity);
+        var stdoutFailures = new List<string>(StderrTailCapacity);
         bool receivedCompleted = false;
 
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -87,7 +88,15 @@ public static class RemoteCommandStreamRunner
             switch (evt.EventType)
             {
                 case ExecutionEventType.EventStdoutLine:
-                    outputReceived?.Invoke(agentName, SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty, "stdout");
+                    var stdoutLine = SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty;
+                    outputReceived?.Invoke(agentName, stdoutLine, "stdout");
+                    // Batch scripts report their own failures on stdout, so stderr alone cannot explain a failure.
+                    if (LooksLikeFailure(stdoutLine))
+                    {
+                        stdoutFailures.Add(stdoutLine);
+                        if (stdoutFailures.Count > StderrTailCapacity)
+                            stdoutFailures.RemoveAt(0);
+                    }
                     break;
                 case ExecutionEventType.EventStderrLine:
                     var stderrLine = SecurityRedactor.Redact(evt.OutputLine) ?? string.Empty;
@@ -132,16 +141,62 @@ public static class RemoteCommandStreamRunner
 
         // Synthesize a default error if exit was non-zero with no message.
         if (exitCode != 0 && string.IsNullOrEmpty(errorMessage))
-        {
-            errorMessage = stderrLines.Count > 0
-                ? $"Process exited with code {exitCode}. Last stderr: " +
-                  string.Join(" | ", stderrLines.TakeLast(5))
-                : $"Process exited with code {exitCode}. No error output captured. " +
-                  "Check if the process requires user interaction (security dialogs, UAC prompts).";
-        }
+            errorMessage = DescribeFailure(exitCode, stdoutFailures, stderrLines);
 
         return new RemoteCommandStreamResult(
             receivedCompleted, exitCode, errorMessage, stderrLines);
+    }
+
+    /// <summary>Markers a script or tool uses to announce its own failure on stdout.</summary>
+    private static readonly string[] FailureMarkers =
+        ["[FAIL]", "[ERROR]", "[FATAL]", "error:", "failed", "failure", "exception",
+         "access denied", "not found", "not recognized", "cannot ", "unable to"];
+
+    /// <summary>
+    /// Messages that are a side effect of HOW a script was written, not why it failed. The canonical case is
+    /// <c>echo F | xcopy</c>: when xcopy needs no prompt it exits without draining stdin, so <c>echo</c> is
+    /// killed writing to a closed pipe. It lands on stderr next to PASSING steps, so a blind stderr tail
+    /// reports it as the cause and buries the real one.
+    /// </summary>
+    private static readonly string[] BenignNoise =
+        ["the process tried to write to a nonexistent pipe"];
+
+    internal static bool LooksLikeFailure(string line) =>
+        !string.IsNullOrWhiteSpace(line) &&
+        FailureMarkers.Any(m => line.Contains(m, StringComparison.OrdinalIgnoreCase));
+
+    internal static bool IsBenignNoise(string line) =>
+        BenignNoise.Any(n => line.Contains(n, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Builds the operator-facing explanation. Ordering matters: a script's own <c>[FAIL]</c> lines on stdout
+    /// say what went wrong, whereas stderr often carries only incidental noise.
+    /// </summary>
+    internal static string DescribeFailure(
+        int exitCode, IReadOnlyList<string> stdoutFailures, IReadOnlyList<string> stderrLines)
+    {
+        var meaning = ExitCodeReference.Describe(exitCode);
+        var header = $"Exit code {exitCode} ({meaning}).";
+
+        var realStderr = stderrLines.Where(l => !IsBenignNoise(l)).ToList();
+
+        if (stdoutFailures.Count > 0)
+        {
+            var shown = stdoutFailures.TakeLast(5).ToList();
+            var more = stdoutFailures.Count > shown.Count ? $" (+{stdoutFailures.Count - shown.Count} earlier)" : "";
+            return $"{header} The command reported {stdoutFailures.Count} failure(s) on stdout{more}: " +
+                   string.Join(" | ", shown);
+        }
+
+        if (realStderr.Count > 0)
+            return $"{header} Last stderr: {string.Join(" | ", realStderr.TakeLast(5))}";
+
+        if (stderrLines.Count > 0)
+            return $"{header} The command printed no failure detail. stderr contained only incidental output " +
+                   $"({string.Join(" | ", stderrLines.TakeLast(2))}) - check the full stdout in the execution log.";
+
+        return $"{header} No output was captured. Check whether the process is waiting for user interaction " +
+               "(security dialog, UAC prompt) or whether the command path is correct.";
     }
 
     /// <summary>Builds the gRPC request DTO from a resolved <see cref="ActionConfig"/>.</summary>

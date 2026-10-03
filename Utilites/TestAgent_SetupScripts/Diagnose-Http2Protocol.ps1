@@ -14,16 +14,19 @@
       3  HTTP_1_1_REQUIRED confirmed (server speaks HTTP/1.1 only)
       4  Neither HTTP/1.1 nor HTTP/2 responded
 
+.EXAMPLE
+    .\Diagnose-Http2Protocol.ps1 -AgentHost JVGR1
+
 .NOTES
     Compatibility : Windows PowerShell 5.1 and PowerShell 7+ (ASCII-only)
-    Version       : 3.0  |  May 2026
+    Version       : 3.1  |  October 2026
 #>
 
 [CmdletBinding()]
 param(
     [string]$AgentHost       = "localhost",
     [int]   $AgentPort       = 5200,
-    [string]$AgentInstallDir = "C:\TestAgentSolution\Agent"
+    [string]$AgentInstallDir = "C:\TestAgentService"
 )
 
 $ErrorActionPreference = 'Continue'

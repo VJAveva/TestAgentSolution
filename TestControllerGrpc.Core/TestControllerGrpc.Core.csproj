@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TestController.WebApi.Tests" />
+    <InternalsVisibleTo Include="TestControllerGrpc.Tests" />
   </ItemGroup>
 
   <ItemGroup>

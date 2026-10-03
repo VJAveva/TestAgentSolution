@@ -2677,14 +2677,27 @@
                                     <TextBlock Text="REMOTE AGENT" Style="{StaticResource Sec}" />
                                     <Label Content="AGENT NAME" Style="{StaticResource Lbl}" />
                                     <!-- Editable: AgentName may be a [Token] resolved from the parameter file. -->
+                                    <!-- TextSearch.TextPath, NOT DisplayMemberPath: picking an item in an editable
+                                         ComboBox copies the DISPLAYED text into the edit box, and Text is bound to
+                                         AgentName - so a decorated "jvgr2  (free)" would be persisted and then fail
+                                         the dispatcher's registered-agent lookup. -->
                                     <ComboBox IsEditable="True"
                                               Text="{Binding AgentName, UpdateSourceTrigger=PropertyChanged}"
                                               ItemsSource="{Binding DataContext.AgentChoices, RelativeSource={RelativeSource AncestorType=Window}}"
-                                              DisplayMemberPath="Display"
-                                              SelectedValuePath="Name"
+                                              TextSearch.TextPath="Name"
                                               Style="{StaticResource Cmb}"
                                               ToolTip="Registered agents with live status. A [Token] name is also valid."
-                                              AutomationProperties.Name="AGENT NAME" />
+                                              AutomationProperties.Name="AGENT NAME">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                    <TextBlock Text="{Binding Status, StringFormat='({0})'}"
+                                                               Margin="8,0,0,0" Opacity="0.6" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                     <Button Content="Apply to agents..." Style="{StaticResource SmBtn}" HorizontalAlignment="Left" Margin="0,4"
                                             Command="{Binding DataContext.ApplyActionToAgentsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             ToolTip="Copy this action once per selected agent into a new Parallel group"

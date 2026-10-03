@@ -278,6 +278,127 @@ function Invoke-Robocopy {
 
 <#
 .SYNOPSIS
+    Does this leaf name match any preserve pattern?
+
+.DESCRIPTION
+    THE ONLY matcher for preserveFiles/preserveFolders. Pass 0 (Get-UnprotectedState) and the robocopy
+    /XF + /XD lists are driven from the same pattern array THROUGH THIS FUNCTION, so the two cannot
+    report different things.
+
+    They used to. Pass 0 compared with -contains (exact leaf match) while robocopy /XF matches wildcards,
+    so 'commandpolicy.json.bak-*' style entries were honoured by the copy and invisible to the check -
+    and anything the list did not name exactly was deleted while Pass 0 reported "no unprotected state".
+
+    -like is used because it is the closest PowerShell equivalent of robocopy's * / ? globbing. Do not
+    put character-class patterns ([a-z]) in the inventory: -like honours them and robocopy does not.
+#>
+function Test-IsPreserved {
+    param([string]$Name, [string[]]$Patterns)
+
+    foreach ($p in $Patterns) {
+        if ([string]::IsNullOrWhiteSpace($p)) { continue }
+        if ($Name -like $p) { return $true }
+    }
+    return $false
+}
+
+<#
+.SYNOPSIS
+    Every runtime assembly a build declares in its .deps.json must sit beside it.
+
+.DESCRIPTION
+    deps.json lists ONLY the assemblies the app carries itself. Anything the shared framework supplies is
+    deliberately absent from it - System.Text.Encoding.CodePages is the example that prompted this, where
+    NuGet records "(,10.0.32767]" meaning "provided by Microsoft.NETCore.App, never copy locally".
+
+    So this detects a truncated or half-copied payload, and NOTHING else. A framework assembly that fails
+    to load is invisible here by construction; Get-NodeRuntimes covers that case.
+#>
+function Get-MissingRuntimeAssemblies {
+    param([string]$Root, [string]$AppName)
+
+    $deps = Join-Path $Root "$AppName.deps.json"
+    if (-not (Test-Path $deps)) { return @{ Checked = 0; Missing = @(); Error = "$AppName.deps.json not found" } }
+
+    try { $j = Get-Content $deps -Raw | ConvertFrom-Json }
+    catch { return @{ Checked = 0; Missing = @(); Error = "deps.json unreadable: $($_.Exception.Message)" } }
+
+    $expected = [System.Collections.Generic.List[string]]::new()
+    foreach ($tgt in $j.targets.PSObject.Properties) {
+        foreach ($lib in $tgt.Value.PSObject.Properties) {
+            $rt = $lib.Value.runtime
+            if (-not $rt) { continue }
+            foreach ($asset in $rt.PSObject.Properties) {
+                $leaf = Split-Path $asset.Name -Leaf
+                if ($leaf -like '*.dll') { [void]$expected.Add($leaf) }
+            }
+        }
+    }
+
+    $unique = @($expected | Sort-Object -Unique)
+    $missing = @($unique | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
+    return @{ Checked = $unique.Count; Missing = $missing; Error = $null }
+}
+
+$script:TrackedFrameworks = @('Microsoft.NETCore.App', 'Microsoft.WindowsDesktop.App')
+
+<#
+.SYNOPSIS
+    Highest installed version of each shared framework on a node.
+.DESCRIPTION
+    Sorted as [version], never as text: "9.0.17" beats "10.0.12" alphabetically, which silently hides
+    every .NET 10 install behind a .NET 9 one.
+#>
+function Get-NodeRuntimes {
+    param([string]$Node)
+
+    $out = @{}
+    foreach ($fw in $script:TrackedFrameworks) {
+        $out[$fw] = $null
+        $root = "\\$Node\C$\Program Files\dotnet\shared\$fw"
+        if (-not (Test-Path $root)) { continue }
+
+        $vers = @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $parsed = $null
+            if ([version]::TryParse(($_.Name -replace '-.*$', ''), [ref]$parsed)) { $parsed }
+        })
+        if ($vers.Count -gt 0) { $out[$fw] = (@($vers | Sort-Object -Descending)[0]).ToString() }
+    }
+    return $out
+}
+
+<#
+.SYNOPSIS
+    The patch level the fleet agrees on, so a lone drifted node stands out.
+.DESCRIPTION
+    Most common version wins, ties go to the highest. An explicit "runtimeStandard" in the inventory
+    overrides this when the fleet should be pinned rather than inferred.
+#>
+function Get-RuntimeStandard {
+    param([string[]]$Nodes)
+
+    $seen = @{}
+    foreach ($fw in $script:TrackedFrameworks) { $seen[$fw] = [System.Collections.Generic.List[string]]::new() }
+
+    foreach ($n in ($Nodes | Sort-Object -Unique)) {
+        $r = Get-NodeRuntimes -Node $n
+        foreach ($fw in $script:TrackedFrameworks) {
+            if ($r[$fw]) { [void]$seen[$fw].Add($r[$fw]) }
+        }
+    }
+
+    $std = @{}
+    foreach ($fw in $script:TrackedFrameworks) {
+        $vals = @($seen[$fw])
+        if ($vals.Count -eq 0) { $std[$fw] = $null; continue }
+        $std[$fw] = (@($vals | Group-Object |
+            Sort-Object @{ Expression = { $_.Count } }, @{ Expression = { [version]$_.Name } } -Descending)[0]).Name
+    }
+    return $std
+}
+
+<#
+.SYNOPSIS
     Pre-flight: finds deployed files that /MIR would delete because they are absent from the payload.
 
 .DESCRIPTION
@@ -292,6 +413,9 @@ function Invoke-Robocopy {
     Anything reported here is either state that belongs in preserveFiles/preserveFolders, or a stale
     artifact that genuinely should go. Both are decisions a human should make deliberately, so this
     reports rather than blocks.
+
+    Matching goes through Test-IsPreserved, the same function that documents the /XF list - see there
+    for why exact-match here was a silent hole.
 #>
 function Get-UnprotectedState {
     param([string]$Remote, [string]$Source, [string[]]$PreserveFiles, [string[]]$PreserveFolders)
@@ -304,22 +428,21 @@ function Get-UnprotectedState {
         $payload[$f.FullName.Substring($sourceRoot.Length).TrimStart('\')] = $true
     }
 
-    $preservedFiles = @($PreserveFiles)   | ForEach-Object { $_.ToLowerInvariant() }
-    $preservedDirs  = @($PreserveFolders) | ForEach-Object { $_.ToLowerInvariant() }
-
     $orphans = [System.Collections.Generic.List[object]]::new()
     foreach ($f in Get-ChildItem $Remote -Recurse -File -ErrorAction SilentlyContinue) {
         $rel = $f.FullName.Substring($Remote.Length).TrimStart('\')
         if ($payload.ContainsKey($rel)) { continue }
 
-        $leaf = [IO.Path]::GetFileName($rel).ToLowerInvariant()
-        if ($preservedFiles -contains $leaf) { continue }
+        $leaf = [IO.Path]::GetFileName($rel)
+        if (Test-IsPreserved -Name $leaf -Patterns $PreserveFiles) { continue }
 
-        $topDir = ($rel -split '\\')[0].ToLowerInvariant()
-        if ($rel.Contains('\') -and $preservedDirs -contains $topDir) { continue }
+        $topDir = ($rel -split '\\')[0]
+        if ($rel.Contains('\') -and (Test-IsPreserved -Name $topDir -Patterns $PreserveFolders)) { continue }
 
-        # Config backups this script writes are disposable by design.
-        if ($leaf -like '*.bak-*') { continue }
+        # Only THIS run's config backup is disposable. A blanket '*.bak-*' skip used to live here and it
+        # hid every other tool's backups - Invoke-NodeCleanup.ps1 writes them too, and one was deleted
+        # by /MIR 20 seconds after it was taken while Pass 0 reported the node clean.
+        if ($leaf -like "*.bak-$stamp") { continue }
 
         $orphans.Add([pscustomobject]@{ Path = $rel; KB = [math]::Round($f.Length / 1KB, 1) })
     }
@@ -328,7 +451,7 @@ function Get-UnprotectedState {
 
 # -- per-node deployment -------------------------------------------------------
 function Deploy-Node {
-    param($Spec, $Patch, [hashtable]$Tokens, [string]$Kind)
+    param($Spec, $Patch, [hashtable]$Tokens, [string]$Kind, [hashtable]$RuntimeStandard)
 
     $node   = $Spec.Node
     $remote = "\\$node\$($Spec.SharePath)"
@@ -338,6 +461,7 @@ function Deploy-Node {
     $r = [ordered]@{
         Node = $node; Kind = $Kind; Result = 'PENDING'; Stopped = ''; Backup = ''
         FilesCopied = 0; ConfigChanges = @(); AtRisk = @(); Started = ''; Port = ''; Error = ''
+        Runtimes = ''; RuntimeDrift = @(); MissingAssemblies = @()
         StartedAt = (Get-Date).ToString('HH:mm:ss')
     }
     Write-Node "$node ($Kind)"
@@ -350,9 +474,14 @@ function Deploy-Node {
         $probe = Join-Path $remote $Spec.LockProbe
         $srcCount = (Get-ChildItem $source -Recurse -File).Count
 
+        # One list, two consumers: Pass 0 below and robocopy /XF + /XD in step 4. Never read
+        # $Spec.PreserveFiles directly after this point or the two can drift apart again.
+        $preserveFiles   = @($Spec.PreserveFiles)
+        $preserveFolders = @($Spec.PreserveFolders)
+
         # Pass 0: anything here is live state that /MIR will delete unless preserved.
         $atRisk = @(Get-UnprotectedState -Remote $remote -Source $source `
-                        -PreserveFiles $Spec.PreserveFiles -PreserveFolders $Spec.PreserveFolders)
+                        -PreserveFiles $preserveFiles -PreserveFolders $preserveFolders)
         $r.AtRisk = @($atRisk | ForEach-Object { "$($_.Path) ($($_.KB) KB)" })
         if ($atRisk.Count -gt 0) {
             Warn "$($atRisk.Count) deployed file(s) are NOT in the payload and NOT preserved - /MIR will DELETE them:"
@@ -362,6 +491,38 @@ function Deploy-Node {
         }
         else { Ok 'pre-flight: no unprotected state on the node' }
 
+        # Pass 0b: a truncated payload ships a broken app, so fail before touching the node.
+        $payload = Get-MissingRuntimeAssemblies -Root $source -AppName $Spec.ProcessName
+        if ($payload.Error) { Warn "payload deps check skipped: $($payload.Error)" }
+        elseif ($payload.Missing.Count -gt 0) {
+            throw ("payload incomplete - $($payload.Missing.Count) assembly(ies) declared in " +
+                   "$($Spec.ProcessName).deps.json are absent from $source : $($payload.Missing -join ', ')")
+        }
+        else { Ok "pre-flight: payload carries all $($payload.Checked) declared assemblies" }
+
+        # Pass 0c: framework drift. deps.json CANNOT catch this - framework assemblies are deliberately
+        # absent from it - so a node on an odd patch level fails at runtime instead, with a
+        # FileNotFoundException for something nobody ever referenced.
+        $rt = Get-NodeRuntimes -Node $node
+        $r.Runtimes = (($script:TrackedFrameworks | ForEach-Object {
+            $v = $rt[$_]
+            if ($v) { "$_=$v" } else { "$_=ABSENT" }
+        }) -join ', ')
+
+        $drift = @()
+        foreach ($fw in $script:TrackedFrameworks) {
+            $have = $rt[$fw]
+            $want = $RuntimeStandard[$fw]
+            if (-not $have) { $drift += "$fw NOT INSTALLED" }
+            elseif ($want -and $have -ne $want) { $drift += "$fw $have (fleet standard $want)" }
+        }
+        $r.RuntimeDrift = $drift
+        if ($drift.Count -gt 0) {
+            Warn "runtime drift: $($drift -join '; ')"
+            Warn '    a node off the fleet patch level can fail to load framework assemblies at runtime.'
+        }
+        else { Ok "runtime: $($r.Runtimes)" }
+
         # Report planned config edits even in dry-run.
         $planned = Invoke-ConfigPatch -ConfigPath $cfg -Patch $Patch -Tokens $Tokens -WhatIfOnly
         if ($planned.Error) { throw "appsettings.json $($planned.Error)" }
@@ -370,7 +531,7 @@ function Deploy-Node {
         if ($DryRun) {
             Step "would stop $($Spec.LaunchMode)"
             Step "would back up $remote"
-            Step "would copy $srcCount files (preserving: $($Spec.PreserveFiles -join ', '))"
+            Step "would copy $srcCount files (preserving: $($preserveFiles -join ', '))"
             if ($r.ConfigChanges) { $r.ConfigChanges | ForEach-Object { Step "config $_" } } else { Step 'config: no change needed' }
             Step 'would start and verify'
             $r.Result = 'DRY-RUN'; $r.FilesCopied = $srcCount
@@ -393,6 +554,11 @@ function Deploy-Node {
         }
 
         # 3. Backup
+        # This copies the whole deployed folder, orchestrator.db included. SQLite in WAL mode keeps
+        # committed data in orchestrator.db-wal until a checkpoint, so .db alone is STALE. The three
+        # files must travel together - which they do here, because the component is verified stopped
+        # above before the copy. Any NEW script that copies orchestrator.db must either stop the
+        # controller first or copy .db + -wal + -shm as a set.
         $bdir = Join-Path $backupRoot "$Kind-$node\$stamp"
         Step "backing up -> $bdir"
         New-Item -ItemType Directory -Path $bdir -Force | Out-Null
@@ -401,9 +567,18 @@ function Deploy-Node {
 
         # 4. Copy (config preserved)
         Step "copying $srcCount files"
-        $rc = Invoke-Robocopy -Source $source -Destination $remote -ExcludeFiles $Spec.PreserveFiles -ExcludeDirs $Spec.PreserveFolders -Mirror
+            $rc = Invoke-Robocopy -Source $source -Destination $remote -ExcludeFiles $preserveFiles -ExcludeDirs $preserveFolders -Mirror
         if ($rc -ge 8) { throw "robocopy failed with exit code $rc" }
         $r.FilesCopied = $srcCount; Ok 'binaries copied'
+
+        # Post-copy: prove the node now holds every assembly the build declares.
+        $onNode = Get-MissingRuntimeAssemblies -Root $remote -AppName $Spec.ProcessName
+        $r.MissingAssemblies = @($onNode.Missing)
+        if ($onNode.Error) { Warn "post-copy deps check skipped: $($onNode.Error)" }
+        elseif ($onNode.Missing.Count -gt 0) {
+            throw "post-copy verification failed - missing on node: $($onNode.Missing -join ', ')"
+        }
+        else { Ok "verified all $($onNode.Checked) declared assemblies on the node" }
 
         # 5. Patch
         if ($r.ConfigChanges.Count -gt 0) {
@@ -439,6 +614,7 @@ function Deploy-Node {
         $r.Result = if ($Spec.LaunchMode -eq 'ScheduledTask' -and $r.Started -ne 'Running') { 'WARN' }
                     elseif ($r.Port -like '*CLOSED*') { 'WARN' }
                     elseif ($r.AtRisk.Count -gt 0) { 'WARN' }   # state was deleted; say so loudly
+                    elseif ($r.RuntimeDrift.Count -gt 0) { 'WARN' }
                     else { 'SUCCESS' }
     }
     catch {
@@ -461,6 +637,7 @@ function Restore-Node {
     $bdir   = Join-Path $backupRoot "$Kind-$node\$BackupStamp"
     $r = [ordered]@{ Node = $node; Kind = $Kind; Result = 'PENDING'; Stopped = ''; Backup = $BackupStamp
                      FilesCopied = 0; ConfigChanges = @(); AtRisk = @(); Started = ''; Port = ''; Error = ''
+                     Runtimes = ''; RuntimeDrift = @(); MissingAssemblies = @()
                      StartedAt = (Get-Date).ToString('HH:mm:ss') }
     Write-Node "$node ($Kind) - ROLLBACK"
 
@@ -519,14 +696,23 @@ function Write-Report {
             (($r.AtRisk | ForEach-Object { [Web.HttpUtility]::HtmlEncode($_) }) -join '<br/>') + '</div>'
         } else { '' }
         $err = if ($r.Error) { '<div class="err">' + [Web.HttpUtility]::HtmlEncode($r.Error) + '</div>' } else { '' }
+        $drift = if ($r.RuntimeDrift) {
+            '<div class="err">RUNTIME DRIFT:<br/>' +
+            (($r.RuntimeDrift | ForEach-Object { [Web.HttpUtility]::HtmlEncode($_) }) -join '<br/>') + '</div>'
+        } else { '' }
+        $missing = if ($r.MissingAssemblies) {
+            '<div class="err">MISSING ASSEMBLIES:<br/>' +
+            (($r.MissingAssemblies | ForEach-Object { [Web.HttpUtility]::HtmlEncode($_) }) -join '<br/>') + '</div>'
+        } else { '' }
         @"
 <tr>
   <td><b>$([Web.HttpUtility]::HtmlEncode($r.Node))</b><div class="dim">$($r.Kind)</div></td>
-  <td><span class="pill $cls">$($r.Result)</span>$err$risk</td>
+  <td><span class="pill $cls">$($r.Result)</span>$err$risk$drift$missing</td>
   <td>$($r.Stopped)</td>
   <td>$($r.Backup)</td>
   <td class="num">$($r.FilesCopied)</td>
   <td class="cfg">$cfg</td>
+  <td class="dim">$([Web.HttpUtility]::HtmlEncode($r.Runtimes))</td>
   <td>$($r.Started)</td>
   <td>$($r.Port)</td>
 </tr>
@@ -560,7 +746,7 @@ function Write-Report {
   <div class="card"><div class="n" style="color:#f38ba8">$($summary.Failed)</div><div class="l">failed</div></div>
 </div>
 <table>
-<tr><th>Node</th><th>Result</th><th>Stop</th><th>Backup</th><th>Files</th><th>Config changes</th><th>Start</th><th>Port</th></tr>
+<tr><th>Node</th><th>Result</th><th>Stop</th><th>Backup</th><th>Files</th><th>Config changes</th><th>Runtime</th><th>Start</th><th>Port</th></tr>
 $($rowHtml -join "`n")
 </table>
 <footer>Inventory: $([Web.HttpUtility]::HtmlEncode($InventoryPath))<br/>
@@ -638,6 +824,19 @@ if ($Component -in 'all','controller' -and $ctrlNode -and (-not $Only -or $ctrlN
 if ($targets.Count -eq 0) { throw 'No targets selected. Check -Component / -Only against the inventory.' }
 Write-Host "Targets   : $($targets.Count) ($(($targets | Group-Object Kind | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '))"
 
+# Inferred from the fleet unless the inventory pins it, so no config has to be kept in step with servicing.
+$invStd = Get-Prop $inv 'runtimeStandard' $null
+if ($invStd) {
+    $runtimeStandard = @{}
+    foreach ($fw in $script:TrackedFrameworks) { $runtimeStandard[$fw] = Get-Prop $invStd $fw $null }
+    $stdSource = 'inventory'
+}
+else {
+    $runtimeStandard = Get-RuntimeStandard -Nodes @($targets | ForEach-Object { $_.Spec.Node })
+    $stdSource = 'inferred from fleet'
+}
+Write-Host "Runtimes  : $(($script:TrackedFrameworks | ForEach-Object { $v = $runtimeStandard[$_]; if ($v) { "$_=$v" } else { "$_=?" } }) -join ', ')  ($stdSource)"
+
 $results = [System.Collections.Generic.List[object]]::new()
 foreach ($t in $targets) {
     if ($Rollback) { $results.Add((Restore-Node -Spec $t.Spec -Kind $t.Kind)); continue }
@@ -649,7 +848,7 @@ foreach ($t in $targets) {
         '$CONTROLLERPORT' = "$ctrlPort"
         '$WEBAPIPORT'     = "$(Get-Prop $inv.controller 'webApiPort' 5200)"
     }
-    $results.Add((Deploy-Node -Spec $t.Spec -Patch $t.Patch -Tokens $tokens -Kind $t.Kind))
+    $results.Add((Deploy-Node -Spec $t.Spec -Patch $t.Patch -Tokens $tokens -Kind $t.Kind -RuntimeStandard $runtimeStandard))
 }
 
 $report = Write-Report -Results $results -Mode $mode -Start $runStart -End (Get-Date)

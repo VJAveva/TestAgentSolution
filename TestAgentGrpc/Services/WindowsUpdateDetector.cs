@@ -88,7 +88,6 @@ public sealed class WindowsUpdateDetector : BackgroundService
     private async Task PollAsync(bool forceSnapshot, CancellationToken ct)
     {
         var rebootRequired = IsRebootRequired();
-
         // Visible without being actionable: these are almost always an installer replacing a locked file,
         // which is why they no longer flag the node.
         if (!_settings.TreatPendingFileRenamesAsRebootRequired)
@@ -100,13 +99,7 @@ public sealed class WindowsUpdateDetector : BackgroundService
                     pendingRenames);
         }
 
-        // The WUApi COM search blocks; run it off the loop thread with a hard timeout so a hung
-        // Windows Update service can never stall the agent.
-        ScanOutcome scan = _settings.ScanPendingUpdates
-            ? await Task.Run(SearchPending, ct)
-                .WaitAsync(TimeSpan.FromSeconds(_settings.ScanTimeoutSeconds), ct)
-                .ConfigureAwait(false)
-            : new ScanOutcome(null, [], UpdateScanStatus.Unknown, null, null);
+        ScanOutcome scan = await ScanWithTimeoutAsync(ct).ConfigureAwait(false);
 
         WindowsUpdateStatusDto status;
         bool? previousReboot;
@@ -197,6 +190,45 @@ public sealed class WindowsUpdateDetector : BackgroundService
         UpdateScanStatus Status,
         DateTimeOffset? WindowsLastSearchUtc,
         string? Error);
+
+    /// <summary>
+    /// The WUApi COM search blocks, so it runs off the loop thread under a hard timeout.
+    /// </summary>
+    /// <remarks>
+    /// The timeout is caught HERE, not left to the caller. Measured on JVGR2 on 2026-10-02: an
+    /// <c>Online=false</c> search took 287s against the 180s budget, so the TimeoutException escaped
+    /// <c>PollAsync</c> and the whole poll was abandoned - discarding the reboot-required state that had
+    /// already been read successfully. The node then reported NO posture at all rather than a failed scan,
+    /// which is indistinguishable from an agent that is not running.
+    /// </remarks>
+    private async Task<ScanOutcome> ScanWithTimeoutAsync(CancellationToken ct)
+    {
+        if (!_settings.ScanPendingUpdates)
+            return new ScanOutcome(null, [], UpdateScanStatus.Unknown, null, null);
+
+        var timeout = TimeSpan.FromSeconds(Math.Max(30, _settings.ScanTimeoutSeconds));
+        try
+        {
+            return await Task.Run(SearchPending, ct).WaitAsync(timeout, ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return ScanTimedOut(_logger, (int)timeout.TotalSeconds);
+        }
+    }
+
+    /// <summary>What a timed-out scan reports: Failed with no count, never a fabricated zero.</summary>
+    internal static ScanOutcome ScanTimedOut(ILogger logger, int timeoutSeconds)
+    {
+        logger.LogWarning(
+            "WUApi pending-update search exceeded {Timeout}s; reporting ScanStatus=Failed. " +
+            "A scan this slow usually means the local update cache is stale (NoAutoUpdate=1) or the " +
+            "Windows Update service cannot reach its configured server.", timeoutSeconds);
+
+        return new ScanOutcome(null, [], UpdateScanStatus.Failed, null,
+            $"Scan did not complete within {timeoutSeconds}s. Check the node's Windows Update policy " +
+            "(NoAutoUpdate / WUServer) - a stale local cache makes the offline search crawl.");
+    }
 
     /// <summary>
     /// Windows' own last successful search. Null when the COM API does not expose it — which must read as

@@ -6,18 +6,21 @@
 .DESCRIPTION
     Run on the monitoring machine where TestAgentDisplay (WPF) runs. The Dashboard
     is read-only: it connects OUT to agents and never receives inbound connections,
-    so only outbound firewall rules are required. Validates the .NET 10 Desktop
+    so only outbound firewall rules are required. Validates the .NET 10.0.12 Desktop
     runtime and tests reachability to any agents supplied via -AgentIPs.
 
+.EXAMPLE
+    .\Setup-DisplayNode.ps1 -AgentIPs 10.48.190.60,10.48.190.254
+
 .NOTES
-    Target framework : .NET 10 (LTS)
+    Target framework : .NET 10 (LTS) - runtime 10.0.12 or newer required
     Compatibility    : Windows PowerShell 5.1 and PowerShell 7+ (ASCII-only)
-    Version          : 3.0  |  May 2026
+    Version          : 3.1  |  October 2026
 #>
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]   $InstallDir = "C:\TestAgentSolution\Display",
+    [string]   $InstallDir = "C:\TestAgentService\Display",
     [int]      $AgentPort  = 5200,
     [string[]] $AgentIPs   = @(),
     [switch]   $SkipFirewall,
@@ -28,7 +31,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$script:DotNetMajor = 10
+# Must match the floor enforced by Setup-AgentNode.ps1.
+$script:DotNetMinVersion = [version]'10.0.12'
 
 function Write-Step($n, $t, $m) { Write-Host ("[{0}/{1}] {2}" -f $n, $t, $m) -ForegroundColor White }
 function Write-Ok  ($m)         { Write-Host "  [ OK ] $m"  -ForegroundColor Green  }
@@ -50,7 +54,7 @@ if ($LogFile) { try { Start-Transcript -Path $LogFile -Append -ErrorAction Stop 
 Write-Host ""
 Write-Host "  ========================================================" -ForegroundColor Magenta
 Write-Host "   TestAgent DISPLAY (Dashboard) Node Setup"                -ForegroundColor Magenta
-Write-Host ("   .NET {0} | Agent Port: {1}" -f $DotNetMajor, $AgentPort) -ForegroundColor Magenta
+Write-Host ("   .NET {0}+ | Agent Port: {1}" -f $script:DotNetMinVersion, $AgentPort) -ForegroundColor Magenta
 Write-Host "  ========================================================" -ForegroundColor Magenta
 Write-Host ""
 
@@ -76,20 +80,33 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $isAdmin) { Write-Err "Run this script from an elevated (Administrator) prompt."; exit 1 }
 Write-Ok "Running as Administrator"
 
-# --- 2. .NET 10 -------------------------------------------------------------
+# --- 2. .NET runtime (minimum patch build enforced) -------------------------
 Write-Host ""
-Write-Step 2 $total "Checking .NET $DotNetMajor Desktop runtime..."
+$minNet = $script:DotNetMinVersion
+Write-Step 2 $total "Checking .NET Desktop runtime (minimum $minNet)..."
 if ($SkipDotNetCheck) {
     Write-Note "Skipped (-SkipDotNetCheck)"
 } else {
-    $url = "https://dotnet.microsoft.com/download/dotnet/$DotNetMajor.0"
+    $url = "https://dotnet.microsoft.com/download/dotnet/{0}.{1}" -f $minNet.Major, $minNet.Minor
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-        Write-Err "'dotnet' not found on PATH. Install the .NET $DotNetMajor Desktop Runtime."
+        Write-Err "'dotnet' not found on PATH. Install the .NET $minNet Desktop Runtime."
         Write-Host "  $url" -ForegroundColor Cyan; exit 1
     }
-    $desktop = & dotnet --list-runtimes 2>$null | Where-Object { $_ -match "Microsoft\.WindowsDesktop\.App $DotNetMajor\." }
-    if ($desktop) { Write-Ok ".NET $DotNetMajor Windows Desktop runtime found" }
-    else { Write-Warn ".NET $DotNetMajor Desktop runtime NOT found - required for the WPF Dashboard."; Write-Host "  $url" -ForegroundColor Cyan; $hadWarn = $true }
+    # Take the NEWEST installed build: nodes carry several side-by-side versions, so
+    # stopping at the first matching line would accept a stale one.
+    $have = @(& dotnet --list-runtimes 2>$null | ForEach-Object {
+        if ($_ -match '^Microsoft\.WindowsDesktop\.App\s+(\d+\.\d+\.\d+)') { [version]$Matches[1] }
+    }) | Sort-Object -Descending | Select-Object -First 1
+
+    if (-not $have) {
+        Write-Warn "Windows Desktop runtime NOT found - required for the WPF Dashboard."
+        Write-Host "  $url" -ForegroundColor Cyan; $hadWarn = $true
+    } elseif ($have -lt $minNet) {
+        Write-Warn "Windows Desktop $have is BELOW the required $minNet - update this node."
+        Write-Host "  $url" -ForegroundColor Cyan; $hadWarn = $true
+    } else {
+        Write-Ok "Windows Desktop $have found"
+    }
 }
 
 # --- 3. Directory -----------------------------------------------------------

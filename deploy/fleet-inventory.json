@@ -39,11 +39,11 @@
     { "node": "warmpri" }
   ],
 
-  "$preserveNote": "robocopy /MIR DELETES destination files absent from the publish source. Everything here is host-local STATE, not a deliverable: omitting impact-*.db once destroyed 344 KB of ranker learning data on jvgr22. Verify with: compare the deployed folder against publish\\controller and add anything that is not a build artifact.",
+  "$preserveNote": "robocopy /MIR DELETES destination files absent from the publish source. Everything here is host-local STATE, not a deliverable: omitting impact-*.db once destroyed 344 KB of ranker learning data on jvgr22. '*.bak-*' covers config backups taken by ANY tool, not just this script - Invoke-NodeCleanup.ps1 writes them too and one was deleted by /MIR seconds after being taken. WatchList.xml and Prepare-Agent.bat are controller-only and are never expected on an agent. SQLITE WAL: orchestrator.db / impact-*.db are listed WITH their -wal and -shm siblings on purpose - SQLite keeps committed data in -wal until a checkpoint, so copying or preserving the .db alone yields a stale or unusable database. Any script that file-copies one of these must take all three together, or stop the controller first. The four native .dll entries (libSkiaSharp, libHarfBuzzSharp, e_sqlite3, LdaNative) sit at the deployed ROOT but ship in the payload only under runtimes\\win-x64\\native\\, so /MIR would delete the root copies the app may load from; all four were verified byte-identical to the payload build before being listed. Measured 2026-10-03: e_sqlite3 actually loads from runtimes\\win-x64\\native\\, so the root copies are vestigial and these four entries can be dropped once a report render and an Impact ranking confirm the same for Skia/HarfBuzz/Lda. _patchbackup and _dllbackup are rollback sets managed by Invoke-NodeCleanup.ps1 BackupFolders retention. Verify with: compare the deployed folder against publish\\controller and add anything that is not a build artifact.",
   "preserveFiles": [
     "appsettings.json",
-    "appsettings.json.bak-*",
     "commandpolicy.json",
+    "*.bak-*",
     "WatchList.xml",
     "Prepare-Agent.bat",
     "*.bat",
@@ -56,9 +56,13 @@
     "impact-index.db-shm",
     "impact-outcomes.db",
     "impact-outcomes.db-wal",
-    "impact-outcomes.db-shm"
+    "impact-outcomes.db-shm",
+    "libSkiaSharp.dll",
+    "libHarfBuzzSharp.dll",
+    "e_sqlite3.dll",
+    "LdaNative.dll"
   ],
-  "preserveFolders": [ "Logs", "Data", "Parameters", "maintenance-logs" ],
+  "preserveFolders": [ "Logs", "Data", "Parameters", "maintenance-logs", "_patchbackup", "_dllbackup" ],
 
   "agentConfigPatch": {
     "merge": {
@@ -69,7 +73,6 @@
         "MaxCoalescingSeconds": 300,
         "SnapshotIntervalSeconds": 3600,
         "StartupDelaySeconds": 20,
-        "ScanTimeoutSeconds": 180,
         "ScanPendingUpdates": true,
         "WatchEventLog": true,
         "MaxReportedItems": 30
@@ -78,7 +81,8 @@
     "set": {
       "AgentSettings.AgentName": "$NODE",
       "AgentSettings.AgentEndpoint": "http://$NODE:$GRPCPORT",
-      "AgentSettings.ControllerAddress": "http://$CONTROLLER:$CONTROLLERPORT"
+      "AgentSettings.ControllerAddress": "http://$CONTROLLER:$CONTROLLERPORT",
+      "WindowsUpdate.ScanTimeoutSeconds": 600
     }
   },
 

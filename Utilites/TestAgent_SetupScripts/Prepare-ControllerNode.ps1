@@ -53,7 +53,7 @@ param(
 
     # --- Run-as account (no auto-logon) ---
     [string]   $LogonUser           = 'magellandev2000\wwApps',
-    [string]   $LogonPassword,                                    # only needed with -ConfigureAppPoolIdentity
+    [pscredential] $LogonCredential,                              # only needed with -ConfigureAppPoolIdentity
     [switch]   $ConfigureAppPoolIdentity,                         # stamp an existing IIS app pool with the run-as account
     [string]   $AppPoolName         = 'TestControllerPool',
 
@@ -89,6 +89,9 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'   # makes Invoke-WebRequest downloads fast under PS 5.1
 
 $script:DotNetMajor   = 10
+# Minimum patch build: the solution's Microsoft.* refs are on 10.0.12 (security
+# release). Must match the floor in Setup-AgentNode.ps1.
+$script:DotNetMinVersion = [version]'10.0.12'
 $ControllerExePath    = Join-Path $InstallDir $ControllerExeName
 $UseHostingBundle     = -not $UseStandaloneAspNet    # IIS-hosted WebApi needs ANCM -> hosting bundle by default
 $IncludeNetCore       = -not $SkipNetCore            # install the lean base runtime as well, in one shot
@@ -98,7 +101,6 @@ $script:Phase         = 0
 $script:TotalPhases   = 7
 $script:AncmDll       = Join-Path $env:windir 'system32\inetsrv\aspnetcorev2.dll'
 $script:NeedAncm      = $false
-$script:PlainPwd      = $null
 $script:LocalIP       = $null
 
 # ----------------------------------------------------------------------------
@@ -122,14 +124,16 @@ function Set-RegValue {
     New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $Type -Force | Out-Null
 }
 
-function Get-LogonPassword {
-    if ($script:PlainPwd) { return $script:PlainPwd }
-    if ($LogonPassword)   { $script:PlainPwd = $LogonPassword; return $script:PlainPwd }
-    $sec  = Read-Host "Enter password for $LogonUser" -AsSecureString
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
-    try   { $script:PlainPwd = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+function Get-LogonSecret {
+    <#
+        Returns the run-as password as a plain string ONLY at the point of use, and never
+        caches it. The secret arrives as a PSCredential (-LogonCredential) so it is never
+        visible in the command line, the process list, PowerShell history or the transcript.
+    #>
+    if (-not $LogonCredential) { return $null }
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($LogonCredential.Password)
+    try   { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    return $script:PlainPwd
 }
 
 # ----------------------------------------------------------------------------
@@ -205,11 +209,17 @@ if ($Uninstall) {
 #  coexist with any product that also installs .NET; per-architecture detection)
 # ============================================================================
 function Test-SharedFx {
-    param([string]$DotnetBase, [string]$Framework, [int]$Major)
+    <# True only when the NEWEST installed build of the framework meets $Minimum.
+       Nodes carry several side-by-side builds, so a major-only match would accept a
+       stale, vulnerable runtime. #>
+    param([string]$DotnetBase, [string]$Framework, [version]$Minimum = $script:DotNetMinVersion)
     $dir = Join-Path $DotnetBase "shared\$Framework"
     if (-not (Test-Path -LiteralPath $dir)) { return $false }
-    [bool](Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -like "$Major.*" } | Select-Object -First 1)
+    $newest = @(Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        $v = $null
+        if ([version]::TryParse(($_.Name -replace '-.*$', ''), [ref]$v)) { $v }
+    }) | Sort-Object -Descending | Select-Object -First 1
+    return [bool]($newest -and $newest -ge $Minimum)
 }
 
 function Get-DotNetReleaseInfo {
@@ -347,9 +357,9 @@ function Ensure-DotNetRuntime {
     # 1) Per-architecture gaps, straight from the shared-framework folders on disk.
     $needAsp = @{}; $needDesk = @{}; $needCore = @{}
     foreach ($arch in $DotNetArchitectures) {
-        $needAsp[$arch]  = -not (Test-SharedFx $baseFor[$arch] 'Microsoft.AspNetCore.App'    $major)
-        $needDesk[$arch] = -not (Test-SharedFx $baseFor[$arch] 'Microsoft.WindowsDesktop.App' $major)
-        $needCore[$arch] = $IncludeNetCore -and (-not (Test-SharedFx $baseFor[$arch] 'Microsoft.NETCore.App' $major))
+        $needAsp[$arch]  = -not (Test-SharedFx $baseFor[$arch] 'Microsoft.AspNetCore.App')
+        $needDesk[$arch] = -not (Test-SharedFx $baseFor[$arch] 'Microsoft.WindowsDesktop.App')
+        $needCore[$arch] = $IncludeNetCore -and (-not (Test-SharedFx $baseFor[$arch] 'Microsoft.NETCore.App'))
     }
     if (-not (($needAsp.Values -contains $true) -or ($needDesk.Values -contains $true) -or ($needCore.Values -contains $true) -or $needAncm)) {
         $tail = if ($IncludeNetCore) { ' + .NET Core' } else { '' }
@@ -533,11 +543,16 @@ function Set-RunAsAccount {
             Write-Note "App pool '$AppPoolName' not found yet - run Deploy-TestController.ps1 first, then re-run with -ConfigureAppPoolIdentity."
             return
         }
-        $pwd = Get-LogonPassword
-        if (-not $pwd) { Add-Warn 'No password supplied - cannot set the custom app pool identity.'; return }
-        & $appcmd set apppool "$AppPoolName" /processModel.identityType:SpecificUser /processModel.userName:"$LogonUser" /processModel.password:"$pwd" *> $null
-        if ($LASTEXITCODE -eq 0) { Write-Ok "App pool '$AppPoolName' now runs as $LogonUser" }
-        else { Add-Warn "Failed to set app pool identity (appcmd exit $LASTEXITCODE)." }
+        # $pwd is a PowerShell automatic variable (current location) - never assign to it.
+        $logonSecret = Get-LogonSecret
+        if (-not $logonSecret) { Add-Warn 'No -LogonCredential supplied - cannot set the custom app pool identity.'; return }
+        try {
+            & $appcmd set apppool "$AppPoolName" /processModel.identityType:SpecificUser /processModel.userName:"$LogonUser" /processModel.password:"$logonSecret" *> $null
+            if ($LASTEXITCODE -eq 0) { Write-Ok "App pool '$AppPoolName' now runs as $LogonUser" }
+            else { Add-Warn "Failed to set app pool identity (appcmd exit $LASTEXITCODE)." }
+        } finally {
+            $logonSecret = $null
+        }
     }
 }
 
@@ -752,10 +767,10 @@ function Invoke-Validation {
     }
 
     $x64 = $DotNetInstallDir
-    if ((Test-SharedFx $x64 'Microsoft.AspNetCore.App' $script:DotNetMajor) -and (Test-SharedFx $x64 'Microsoft.WindowsDesktop.App' $script:DotNetMajor)) {
-        Write-Ok ".NET $($script:DotNetMajor) ASP.NET Core + Windows Desktop present (x64)"
+    if ((Test-SharedFx $x64 'Microsoft.AspNetCore.App') -and (Test-SharedFx $x64 'Microsoft.WindowsDesktop.App')) {
+        Write-Ok ".NET $($script:DotNetMinVersion)+ ASP.NET Core + Windows Desktop present (x64)"
     } elseif (-not $SkipDotNet) {
-        Add-Warn ".NET $($script:DotNetMajor) runtimes not fully present (x64)."
+        Add-Warn ".NET $($script:DotNetMinVersion)+ runtimes not fully present (x64)."
     }
 
     $fw = Get-NetFirewallRule -DisplayName 'TestController*' -ErrorAction SilentlyContinue
@@ -771,7 +786,7 @@ function Write-Banner {
     Write-Host ''
     Write-Host '  ============================================================' -ForegroundColor Green
     Write-Host '   TestAgent CONTROLLER NODE PREP  (IIS + WPF gRPC, self-healing)' -ForegroundColor Green
-    Write-Host ('   Host: {0}  Port: {1}  .NET {2}  Run-as: {3}' -f $env:COMPUTERNAME, $ControllerPort, $script:DotNetMajor, $LogonUser) -ForegroundColor Green
+    Write-Host ('   Host: {0}  Port: {1}  .NET {2}+  Run-as: {3}' -f $env:COMPUTERNAME, $ControllerPort, $script:DotNetMinVersion, $LogonUser) -ForegroundColor Green
     Write-Host '  ============================================================' -ForegroundColor Green
 }
 
@@ -848,9 +863,8 @@ if ($script:RebootNeeded) {
         try { Stop-Transcript | Out-Null } catch { }
         Restart-Computer -Force
     } else {
-        $ans = Read-Host 'A reboot is recommended (UAC-off / IIS). Reboot now? [y/N]'
-        if ($ans -match '^(y|yes)$') { try { Stop-Transcript | Out-Null } catch { }; Restart-Computer -Force }
-        else { Write-Host 'Reboot later to finish activating UAC-off and IIS.' -ForegroundColor Yellow }
+        # Non-interactive by design: never block an unattended run on a prompt.
+        Write-Host 'A reboot is required to finish activating UAC-off and IIS. Re-run with -RebootWhenDone, or reboot manually.' -ForegroundColor Yellow
     }
 }
 

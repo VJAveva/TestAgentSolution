@@ -42,9 +42,13 @@
 
 .EXAMPLE
     .\Deploy-WebToIIS.ps1 -AppPath C:\Deployment\TestController.WebApi -SitePort 8080 -ControllerUrl http://localhost:5200
+
+.EXAMPLE
+    .\Deploy-WebToIIS.ps1 -WhatIf
+    Validate the published folder and report what would change, touching nothing.
 #>
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$AppPath = "C:\Deployment\TestController.WebApi",
     [string]$SiteName = "TestControllerWeb",
@@ -103,7 +107,7 @@ function Write-ProductionConfig([string]$dir, [string]$keyPath, [string]$value) 
         $node = $node[$k]
     }
     $node[$parts[-1]] = $value
-    ($root | ConvertTo-Json -Depth 20) | Set-Content -Path $cfgPath -Encoding UTF8
+    if (-not $WhatIfPreference) { ($root | ConvertTo-Json -Depth 20) | Set-Content -Path $cfgPath -Encoding UTF8 }
     return $cfgPath
 }
 
@@ -171,13 +175,17 @@ if (-not (Test-Path $webConfig)) {
   </system.webServer>
 </configuration>
 "@
-    Set-Content -Path $webConfig -Value $wc -Encoding UTF8
-    Log "Created web.config (processPath: $procPath)" "OK"
+    if ($WhatIfPreference) {
+        Log "[WHATIF] Would create web.config (processPath: $procPath)" "INFO"
+    } else {
+        Set-Content -Path $webConfig -Value $wc -Encoding UTF8
+        Log "Created web.config (processPath: $procPath)" "OK"
+    }
 } else {
     Log "web.config already present - leaving it as is" "OK"
 }
 $logsDir = Join-Path $AppPath "logs"
-if (-not (Test-Path $logsDir)) { New-Item $logsDir -ItemType Directory -Force | Out-Null }
+if (-not (Test-Path $logsDir) -and -not $WhatIfPreference) { New-Item $logsDir -ItemType Directory -Force | Out-Null }
 
 # --- Optional: WebSocket feature (OFF by default - THIS is the slow step that hung) ---
 if ($EnsureWebSockets) {
@@ -197,6 +205,19 @@ if ($EnsureWebSockets) {
 
 # --- Step 4: IIS app pool + site ---
 Log "=== Step 4: Configure IIS ===" "STEP"
+
+# -WhatIf stops here: everything below DELETES and recreates the IIS site and app
+# pool, which would interrupt a live site. Nothing above this point has changed state.
+if ($WhatIfPreference) {
+    Log "[WHATIF] Would delete and recreate IIS app pool '$SiteName'" "INFO"
+    Log "[WHATIF] Would delete and recreate IIS site '$SiteName' -> $AppPath (http/*:${SitePort}:)" "INFO"
+    Log "[WHATIF] Would grant 'IIS AppPool\$SiteName' RX on $AppPath and M on $AppPath\logs" "INFO"
+    Log "[WHATIF] Would replace firewall rule 'TestControllerWeb' for TCP $SitePort (Profile Any)" "INFO"
+    Log "[WHATIF] Would start the app pool and site" "INFO"
+    Log "Dry run complete - no changes made. Re-run without -WhatIf to apply." "OK"
+    exit 0
+}
+
 Start-Service WAS -ErrorAction SilentlyContinue
 Start-Service W3SVC -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1

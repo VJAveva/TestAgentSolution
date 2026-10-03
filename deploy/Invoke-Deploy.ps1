@@ -131,6 +131,10 @@ function Set-WebApiSite([ValidateSet('Start', 'Stop')] [string]$Action) {
 }
 
 # -- Snapshot the current remote deployment before overwriting it --------------
+# Copies the whole deployed folder, orchestrator.db included. SQLite in WAL mode holds committed
+# data in orchestrator.db-wal until a checkpoint, so backing up .db on its own yields a STALE or
+# unusable database. Stop the controller first, or copy .db + -wal + -shm together. The /MIR below
+# does take all three, so this path is safe as long as the set is never narrowed to just *.db.
 function Backup-CurrentDeployment {
     if (-not (Test-Path $remotePath)) {
         Write-Warn2 "No existing deployment at $remotePath - nothing to back up (first deploy)."

@@ -21,6 +21,93 @@ Batch files for deploying the **TestControllerGrpc** (Controller) and **TestAgen
 | `Invoke-PreDeployCheck.ps1`   | Pre-deployment safety check (active sessions, locks)  |
 | `Invoke-SmokeTest.ps1`        | Post-deployment smoke test (fleet, SignalR, capabilities) |
 | `Invoke-LogCleanup.ps1`       | Log/audit retention cleanup (configurable retention days) |
+| `Invoke-NodeCleanup.ps1`      | **Run ON a node**: housekeeping, version check, surgical config edit, health report |
+| `New-NodeManifest.ps1`        | Build a node manifest (path + file version + SHA256) from a publish folder |
+
+## Node cleanup (run locally on the node)
+
+`Invoke-NodeCleanup.ps1` runs **on the node itself, as Administrator**. It is a **dry run by
+default** - nothing is changed, and the report lists every file it *would* delete.
+
+**What it protects.** The same `preserveFiles` / `preserveFolders` lists the fleet deployment uses.
+They are read from `fleet-inventory.json` when it sits next to the script, and fall back to an
+embedded copy on a node that has no repo. `Invoke-NodeCleanup.Tests.ps1` fails if the embedded copy
+drifts from the inventory, so the two cannot diverge.
+
+**What it will delete** - only these categories, never anything chosen by size:
+
+| Category | Rule |
+|:---|:---|
+| `OldLogs` | `*.log` and rotated `*.log.N` older than `-LogRetentionDays` (default 14) |
+| `CrashDumps` | `*.dmp` older than `-DumpRetentionDays` (default 7) |
+| `TempFiles` | `*.tmp`, any age |
+| `BackupSets` | all but the newest `-BackupKeep` sets in `_patchbackup` / `_dllbackup` |
+
+Crash dumps get their **own** window because a recent dump is the evidence for whatever just went
+wrong - on JVGR22 that was a 748 MB dump that mattered. Dumps newer than the window are kept and
+listed in the report as *"kept - recent crash evidence"* with size and date. `*.tmp` has no such
+value, so it goes at any age.
+
+**What it never touches:** any `preserveFiles` match (including every `*.bat` and `*.cmd`),
+`runtimes\` (a deployment artifact), `*.jsonl` audit logs (reported only), and anything resolving
+outside `-InstallRoot`.
+
+A preserved *folder* is never removed, but files inside it may be pruned when they match a category
+above - otherwise log pruning could never work, since every log lives under `Logs\`.
+
+**Exit codes:** `0` = OK, `1` = completed with warnings, `2` = failed.
+
+### Dry run on an agent
+
+```powershell
+# Nothing is changed. The report lists every file that would be deleted.
+.\Invoke-NodeCleanup.ps1 -Role Agent
+
+# Keep crash dumps for a fortnight instead of a week.
+.\Invoke-NodeCleanup.ps1 -Role Agent -DumpRetentionDays 14
+```
+
+### Apply on an agent, with a config patch and restart
+
+```powershell
+# patch.json:  { "set": { "WindowsUpdate.ScanTimeoutSeconds": 600 } }
+.\Invoke-NodeCleanup.ps1 -Role Agent -Apply `
+    -ConfigPatchPath .\patch.json `
+    -ManifestPath   .\agent-manifest.json `
+    -StartAfter
+```
+
+Only the listed keys are changed; the rest of `appsettings.json`, including its formatting, is left
+byte-for-byte alone. A key already holding the target value is skipped.
+
+### Controller cleanup on JVGR22
+
+```powershell
+# The controller is NEVER stopped by this script. Close it from the tray first,
+# or the run fails with exit code 2.
+.\Invoke-NodeCleanup.ps1 -Role Controller -Apply
+```
+
+### Build a manifest from a publish folder
+
+```powershell
+.\New-NodeManifest.ps1 -PublishFolder ..\publish\agent -OutFile .\agent-manifest.json
+```
+
+Host-local state (`appsettings.json`, `WatchList.xml`, the databases) is excluded, so it never shows
+up as a false "Extra" on a node. The version check **reports only** - it never copies files, because
+that is deployment's job.
+
+### Tests
+
+```powershell
+Invoke-Pester -Path .\deploy\Invoke-NodeCleanup.Tests.ps1
+```
+
+Pester 3.4 (the version shipped with Windows PowerShell 5.1), so `Should Be`, not `Should -Be`.
+The tests lift the pure helpers out with the PowerShell AST rather than dot-sourcing the script,
+which would otherwise execute a cleanup. No test touches the filesystem.
+
 
 ---
 
