@@ -77,7 +77,7 @@ public class ExecutionDashboardLifecycleTests
     }
 
     // ???????????????????????????????????????????????????????????????????
-    // AgentRowVM.UpdateAction — the core pipeline action chain logic
+    // AgentRowVM.UpdateAction ï¿½ the core pipeline action chain logic
     // ???????????????????????????????????????????????????????????????????
 
     [Fact]
@@ -282,12 +282,25 @@ public class ExecutionDashboardLifecycleTests
     }
 
     [Fact]
-    public void FilterSessionCard_Failed_FiltersOutRunning()
+    public void FilterSessionCard_Failed_StillShowsRunning()
     {
         var vm = CreateVm();
         vm.PipelineStatusFilter = "Failed";
         Assert.True(vm.FilterSessionCard(new SessionCardVM { Status = "Failed", WatchItemTag = "T" }));
-        Assert.False(vm.FilterSessionCard(new SessionCardVM { Status = "Running", WatchItemTag = "T" }));
+        Assert.False(vm.FilterSessionCard(new SessionCardVM { Status = "Success", WatchItemTag = "T" }));
+
+        // A live run outranks the filter: hiding a pipeline that is still driving agents is worse
+        // than an imprecise filter.
+        Assert.True(vm.FilterSessionCard(new SessionCardVM { Status = "Running", WatchItemTag = "T" }));
+    }
+
+    [Fact]
+    public void FilterSessionCard_SearchText_NeverHidesARunningSession()
+    {
+        var vm = CreateVm();
+        vm.PipelineSearchText = "NothingMatchesThis";
+
+        Assert.True(vm.FilterSessionCard(new SessionCardVM { WatchItemTag = "Sanity", Status = "Running" }));
     }
 
     [Fact]
@@ -295,8 +308,8 @@ public class ExecutionDashboardLifecycleTests
     {
         var vm = CreateVm();
         vm.PipelineSearchText = "Smoke";
-        Assert.True(vm.FilterSessionCard(new SessionCardVM { WatchItemTag = "SmokeTest", Status = "Running" }));
-        Assert.False(vm.FilterSessionCard(new SessionCardVM { WatchItemTag = "Sanity", Status = "Running" }));
+        Assert.True(vm.FilterSessionCard(new SessionCardVM { WatchItemTag = "SmokeTest", Status = "Success" }));
+        Assert.False(vm.FilterSessionCard(new SessionCardVM { WatchItemTag = "Sanity", Status = "Success" }));
     }
 
     [Fact]
@@ -304,7 +317,7 @@ public class ExecutionDashboardLifecycleTests
     {
         var vm = CreateVm();
         vm.PipelineSearchText = "jvgr1";
-        var card = new SessionCardVM { WatchItemTag = "Test", Status = "Running" };
+        var card = new SessionCardVM { WatchItemTag = "Test", Status = "Success" };
         card.Agents.Add(new AgentRowVM { AgentName = "jvgr1" });
         Assert.True(vm.FilterSessionCard(card));
     }
@@ -314,7 +327,7 @@ public class ExecutionDashboardLifecycleTests
     {
         var vm = CreateVm();
         vm.PipelineSearchText = "Install";
-        var card = new SessionCardVM { WatchItemTag = "Test", Status = "Running" };
+        var card = new SessionCardVM { WatchItemTag = "Test", Status = "Success" };
         var agent = new AgentRowVM { AgentName = "A1" };
         agent.Actions.Add(new ActionPillVM { Tag = "InstallBuild", Command = "install.cmd" });
         card.Agents.Add(agent);
@@ -326,7 +339,7 @@ public class ExecutionDashboardLifecycleTests
     {
         var vm = CreateVm();
         vm.PipelineSearchText = "NonExistent";
-        var card = new SessionCardVM { WatchItemTag = "Test", Status = "Running" };
+        var card = new SessionCardVM { WatchItemTag = "Test", Status = "Success" };
         Assert.False(vm.FilterSessionCard(card));
     }
 

@@ -55,7 +55,8 @@ public sealed class ExecutionSessionManager
         string watchItemTag, string eventType,
         Dictionary<string, string> resolvedParameters,
         List<IActionNode> snapshotNodes,
-        string? sessionId = null)
+        string? sessionId = null,
+        IReadOnlyDictionary<string, TemplateConfig>? templates = null)
     {
         // If a session with this ID was already pre-registered (e.g. by ExecutionController
         // before handing off to the executor), return it to preserve UserId/Source/LockedAgents.
@@ -68,7 +69,8 @@ public sealed class ExecutionSessionManager
             WatchItemTag = watchItemTag,
             EventType = eventType,
             ResolvedParameters = new Dictionary<string, string>(resolvedParameters, StringComparer.OrdinalIgnoreCase),
-            SnapshotNodes = snapshotNodes
+            SnapshotNodes = snapshotNodes,
+            SnapshotTemplates = templates ?? new Dictionary<string, TemplateConfig>(StringComparer.OrdinalIgnoreCase),
         };
         _active[session.SessionId] = session;
         PersistToDisk();

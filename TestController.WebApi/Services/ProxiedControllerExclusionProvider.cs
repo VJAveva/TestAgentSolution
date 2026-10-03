@@ -24,6 +24,9 @@ public sealed class ProxiedControllerExclusionProvider : IApplicationFeatureProv
         typeof(LocksController),
         // Notification mutes: MuteService is primary-host only — proxied via NotificationEndpoints.
         typeof(NotificationsController),
+        // Pre-flight: its path checks depend on WHO asks, and the controller is the host that runs
+        // the pipeline — proxied via PreflightEndpoints.
+        typeof(PreflightController),
     ];
 
     public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)

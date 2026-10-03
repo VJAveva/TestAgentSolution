@@ -33,6 +33,8 @@ public partial class MainWindow : Window
     private void OnWatchListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var node = WatchListTreeView.SelectedItem as TreeNodeViewModel;
+        // Activate before building: the menu and the Execute commands must target the same node.
+        _vm.ActivateWatchListNode(node);
         WatchListTreeView.ContextMenu = BuildWatchListContextMenu(node);
     }
 
@@ -51,6 +53,7 @@ public partial class MainWindow : Window
         if (node.NodeKind is "WatchItem")
         {
             menu.Items.Add(CreateMenuItemWithIcon("Trigger All Events", _vm.TriggerWatchItemCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(CreateMenuItemWithIcon("Check only…", _vm.CheckOnlyCommand, "\uE9D5", "AccBlue"));
             menu.Items.Add(new Separator());
 
             // Toggle: include/exclude this WatchItem from "Trigger All" execution
@@ -213,6 +216,8 @@ public partial class MainWindow : Window
     private void OnTemplateContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var node = TemplateTreeView.SelectedItem as TreeNodeViewModel;
+        // Activate before building: the menu and the Execute commands must target the same node.
+        _vm.ActivateTemplateNode(node);
         TemplateTreeView.ContextMenu = BuildTemplateContextMenu(node);
     }
 
@@ -238,7 +243,10 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "Template")
         {
-            menu.Items.Add(CreateMenuItemWithIcon("Execute Template", _vm.ExecuteTemplateCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(WithRunBlockedTooltip(
+                CreateMenuItemWithIcon("Execute Template", _vm.ExecuteTemplateCommand, "\uE768", "AccGreen"), node));
+            menu.Items.Add(CreateMenuItemWithIcon("Check only…", _vm.CheckOnlyCommand, "\uE9D5", "AccBlue"));
+            AddTemplateContextItems(menu, node);
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Edit Template XML…", _vm.EditSingleTemplateXmlCommand, "\uE70F", "AccMauve"));
             menu.Items.Add(new Separator());
@@ -253,7 +261,9 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "ActionGroup")
         {
-            menu.Items.Add(CreateMenuItemWithIcon("Execute Group", _vm.ExecuteGroupCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(WithRunBlockedTooltip(
+                CreateMenuItemWithIcon("Execute Group", _vm.ExecuteGroupCommand, "\uE768", "AccGreen"), node));
+            AddTemplateContextItems(menu, node);
             menu.Items.Add(new Separator());
             AddSkipMenuItem(menu, node);
             menu.Items.Add(CreateMenuItemWithIcon("Add Action", _vm.AddActionToTemplateCommand, "\uE7C8", "AccPeach"));
@@ -274,7 +284,9 @@ public partial class MainWindow : Window
         }
         else if (node.NodeKind is "Action")
         {
-            menu.Items.Add(CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"));
+            menu.Items.Add(WithRunBlockedTooltip(
+                CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"), node));
+            AddTemplateContextItems(menu, node);
             menu.Items.Add(new Separator());
             AddSkipMenuItem(menu, node);
             menu.Items.Add(CreateMenuItemWithIcon("Delete", _vm.DeleteTemplateCommand, "\uE74D", "AccRed"));
@@ -360,7 +372,7 @@ public partial class MainWindow : Window
         return new MenuItem { Header = header, Command = command };
     }
 
-    private MenuItem CreateMenuItemWithIcon(string header, ICommand command, string iconGlyph, string resourceColorKey)
+    private MenuItem CreateMenuItemWithIcon(string header, ICommand? command, string iconGlyph, string resourceColorKey)
     {
         var item = new MenuItem { Header = header, Command = command };
         item.Icon = new System.Windows.Controls.TextBlock
@@ -371,6 +383,47 @@ public partial class MainWindow : Window
             Foreground = (Brush)FindResource(resourceColorKey),
         };
         return item;
+    }
+
+    /// <summary>
+    /// Explains why an Execute item is greyed out. A disabled MenuItem swallows its tooltip unless
+    /// ShowOnDisabled is set, which is exactly the case that needs explaining.
+    /// </summary>
+    private MenuItem WithRunBlockedTooltip(MenuItem item, TreeNodeViewModel? node)
+    {
+        var reason = _vm.RunBlockedReasonFor(node);
+        if (string.IsNullOrEmpty(reason)) return item;
+
+        item.ToolTip = reason;
+        ToolTipService.SetShowOnDisabled(item, true);
+        return item;
+    }
+
+    /// <summary>
+    /// Pipeline-context items for a Templates-library node. Offered on any node in the subtree
+    /// because the choice applies to the whole template either way.
+    /// </summary>
+    private void AddTemplateContextItems(ContextMenu menu, TreeNodeViewModel node)
+    {
+        var templateId = node.OwningTemplateId;
+        if (templateId is null) return;
+
+        var current = TemplateRunContext.For(templateId);
+        menu.Items.Add(new Separator());
+
+        var set = CreateMenuItemWithIcon(
+            current is null ? "Set pipeline context\u2026" : $"Change context (now '{current}')\u2026",
+            null, "\uE8AB", "AccBlue");
+        set.ToolTip = "Choose which pipeline supplies this template's values for previews and runs.";
+        set.Click += (_, _) => _vm.ChangeTemplateContext(node);
+        menu.Items.Add(set);
+
+        if (current is null) return;
+
+        var clear = CreateMenuItemWithIcon("Clear context", null, "\uE711", "AccRed");
+        clear.ToolTip = "Show this template's raw [_Tokens] again.";
+        clear.Click += (_, _) => _vm.ClearTemplateContext(node);
+        menu.Items.Add(clear);
     }
 
     /// <summary>Builds a "Change Execution Type" submenu with Sequential/Parallel options.</summary>

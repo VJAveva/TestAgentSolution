@@ -49,10 +49,6 @@ public sealed partial class MainViewModel
         {
             WriteBackAll();
 
-            // Persist resolved AgentName values so the saved XML contains
-            // the actual agent names instead of [Token] placeholders.
-            ResolveAgentNamesInConfig(_config);
-
             // Suppress the file-watcher reload � we're saving our own in-memory state
             _vocabMonitor.SuppressNextReload();
 

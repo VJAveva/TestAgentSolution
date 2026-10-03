@@ -46,6 +46,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly Services.CurrentUserHolder _currentUserHolder;
     private readonly Services.LockStateService _lockStateService;
     private readonly TestControllerGrpc.Locking.ILockRegistry _lockRegistry;
+    private readonly TestControllerGrpc.Core.Preflight.PreflightService? _preflight;
     private readonly System.Windows.Threading.DispatcherTimer _sessionElapsedTimer;
     private readonly System.Windows.Threading.DispatcherTimer _assignmentRefreshTimer;
     private readonly List<IDisposable> _subscriptions = [];
@@ -53,6 +54,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
     [ObservableProperty] private TreeNodeViewModel? _selectedTemplateNode;
     [ObservableProperty] private TreeNodeViewModel? _activeEditNode;
+
+    /// <summary>Single source of truth for which tree the properties pane and Execute both act on.</summary>
+    private readonly TreeSelectionCoordinator _selection = new();
     [ObservableProperty] private string _statusMessage = "Ready";
     [ObservableProperty] private string _vocabFilePath = "";
     [ObservableProperty] private int _activeWatchers;
@@ -347,7 +351,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TestControllerGrpc.Core.Maintenance.INodeUpdateStatusStore? updateStatus = null,
         TestControllerGrpc.Core.Maintenance.IFleetNotificationService? fleetNotifications = null,
         TestControllerGrpc.Core.Maintenance.UpdatePolicyStore? updatePolicy = null,
-        TestControllerGrpc.Core.Maintenance.INodeUpdateInstaller? updateInstaller = null)
+        TestControllerGrpc.Core.Maintenance.INodeUpdateInstaller? updateInstaller = null,
+        TestControllerGrpc.Core.Preflight.PreflightService? preflight = null)
     {
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
@@ -368,6 +373,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _maintenanceState = maintenanceState;
         _fleetMaintenance = fleetMaintenance;
         _updateStatus = updateStatus;
+        _preflight = preflight;
         BuildResultsVM = buildResultsVM;
         AgentWorkspace = new AgentWorkspaceVM(_dispatcher, _lockManager, _sessionManager, _events,
             Application.Current.Dispatcher, fleetMaintenance, _maintenanceState, maintenanceStore,
@@ -869,6 +875,173 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return null;
     }
 
+    /// <summary>ID of the Template owning this node, or null when the node is in the WatchList tree.</summary>
+    private static string? OwningTemplateId(TreeNodeViewModel? node) => node?.OwningTemplateId;
+
+    /// <summary>
+    /// Pipelines that Ref the template owning <paramref name="node"/>. Empty for a WatchList node
+    /// (it has its own pipeline) and for an orphaned template (nothing can supply its tokens).
+    /// </summary>
+    private IReadOnlyList<string> PipelinesForTemplateNode(TreeNodeViewModel? node)
+    {
+        var templateId = OwningTemplateId(node);
+        return templateId is null ? [] : TemplateUsage.PipelinesReferencing(_config, templateId);
+    }
+
+    /// <summary>
+    /// True when this node can be run at all: WatchList nodes always can; a Templates-library node
+    /// only when some pipeline Refs its template and can therefore supply its parameters.
+    /// </summary>
+    private bool IsRunnableNode(TreeNodeViewModel? node) =>
+        OwningTemplateId(node) is null || PipelinesForTemplateNode(node).Count > 0;
+
+    /// <summary>Reason the run affordance is disabled for this node. Empty when it can be run.</summary>
+    public string RunBlockedReasonFor(TreeNodeViewModel? node) =>
+        IsRunnableNode(node) ? "" : "Templates run only inside a pipeline";
+
+    /// <summary>
+    /// Pipeline a Templates-library run should borrow settings from. Uses the template's chosen
+    /// context when it has one, so a run never re-asks a question already answered this session.
+    /// Returns false when the user cancelled or no pipeline uses the template.
+    /// </summary>
+    private bool TryPickTemplatePipeline(TreeNodeViewModel node, out string pipelineTag)
+    {
+        pipelineTag = "";
+        var templateId = OwningTemplateId(node);
+        if (templateId is null) return false;
+
+        var candidates = PipelinesForTemplateNode(node);
+        if (candidates.Count == 0)
+        {
+            AddLog($"Template '{templateId}' is not used by any pipeline, so it has no settings to run with.",
+                LogSeverity.Warning);
+            return false;
+        }
+
+        // A context naming a pipeline that no longer Refs this template is stale, not an answer.
+        var context = TemplateRunContext.For(templateId);
+        if (context is not null && candidates.Contains(context, StringComparer.OrdinalIgnoreCase))
+        {
+            pipelineTag = context;
+            return true;
+        }
+
+        if (TryAutoTemplateContext(templateId, candidates) is { } automatic)
+        {
+            pipelineTag = automatic;
+            return true;
+        }
+
+        var chosen = Views.Dialogs.RunInPipelineDialog.Ask(
+            Application.Current?.MainWindow, templateId, node.DisplayText, candidates);
+
+        if (chosen is null) return false;
+
+        SetTemplateContext(templateId, chosen);
+        pipelineTag = chosen;
+        return true;
+    }
+
+    /// <summary>
+    /// Context that needs no question: a pipeline using this template is running right now, or
+    /// exactly one pipeline Refs it. Returns null when the choice is genuinely ambiguous.
+    /// </summary>
+    private string? TryAutoTemplateContext(string templateId, IReadOnlyList<string> candidates)
+    {
+        var (pipeline, source) = TemplateContextResolver.Decide(candidates, _sessionManager.HasActiveExecution);
+        if (pipeline is null) return null;
+
+        TemplateRunContext.Set(templateId, pipeline, source);
+        return pipeline;
+    }
+
+    /// <summary>
+    /// Gives every template a context it can decide on its own. Called after the trees are built
+    /// and whenever a run starts or finishes, so the Library follows the live run.
+    /// </summary>
+    public void RefreshTemplateAutoContexts()
+    {
+        foreach (var t in _config.Templates)
+        {
+            if (string.IsNullOrWhiteSpace(t.ID)) continue;
+
+            var candidates = TemplateUsage.PipelinesReferencing(_config, t.ID);
+            if (candidates.Count == 0) continue;
+
+            // A manual choice is an answer; never overwrite it.
+            var current = TemplateRunContext.For(t.ID);
+            if (current is not null && TemplateRunContext.SourceFor(t.ID) == TemplateContextSource.Manual) continue;
+
+            TryAutoTemplateContext(t.ID, candidates);
+        }
+    }
+
+    /// <summary>
+    /// Publishes the values each pipeline's current or most recent run actually used, so the tree
+    /// and the properties panel stop predicting values a finished run never received.
+    /// </summary>
+    public void RefreshSessionValues()
+    {
+        TreeNodeViewModel.ClearSessionValues();
+
+        foreach (var wi in _config.WatchItems)
+        {
+            if (string.IsNullOrWhiteSpace(wi.Tag)) continue;
+
+            var session = _sessionManager.GetActiveSessions()
+                              .FirstOrDefault(s => string.Equals(s.WatchItemTag, wi.Tag, StringComparison.OrdinalIgnoreCase))
+                          ?? _sessionManager.GetLastSession(wi.Tag);
+
+            if (session is null || session.ResolvedParameters.Count == 0) continue;
+
+            TreeNodeViewModel.SetSessionValues(wi.Tag, session.SessionId, session.ResolvedParameters);
+        }
+    }
+
+    /// <summary>
+    /// Points a template at a pipeline for this session: every node in its subtree then previews
+    /// and runs with that pipeline's values.
+    /// </summary>
+    private void SetTemplateContext(string? templateId, string? pipelineTag)
+    {
+        TemplateRunContext.Set(templateId, pipelineTag);
+        TemplateListRoot?.RefreshResolvedTextRecursive();
+        NotifyExecutionCanExecuteChanged();
+    }
+
+    /// <summary>Asks which pipeline a template should borrow settings from, replacing any current choice.</summary>
+    [RelayCommand]
+    public void ChangeTemplateContext(TreeNodeViewModel? node)
+    {
+        var templateId = OwningTemplateId(node);
+        if (templateId is null || node is null) return;
+
+        var candidates = PipelinesForTemplateNode(node);
+        if (candidates.Count == 0)
+        {
+            AddLog($"Template '{templateId}' is not used by any pipeline, so there is no context to set.",
+                LogSeverity.Warning);
+            return;
+        }
+
+        var chosen = Views.Dialogs.RunInPipelineDialog.Ask(
+            Application.Current?.MainWindow, templateId, node.DisplayText, candidates);
+        if (chosen is null) return;
+
+        SetTemplateContext(templateId, chosen);
+        AddLog($"Template '{templateId}' now previews and runs with pipeline '{chosen}'.", LogSeverity.Info);
+    }
+
+    /// <summary>Drops a template's pipeline context, returning its subtree to raw tokens.</summary>
+    public void ClearTemplateContext(TreeNodeViewModel? node)
+    {
+        var templateId = OwningTemplateId(node);
+        if (templateId is null) return;
+        TemplateRunContext.Clear(templateId);
+        TemplateListRoot?.RefreshResolvedTextRecursive();
+        NotifyExecutionCanExecuteChanged();
+    }
+
     /// <summary>
     /// Lock and session tag for a scoped run: the owning WatchItem, else the owning Template, else the
     /// node's own tag. Shared by the execute commands and their CanExecute so the button and the run
@@ -891,6 +1064,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TrackNodeEditsForValidation(value);
         if (value is null) return;
 
+        ApplyWatchListSelection(value);
+    }
+
+    /// <summary>
+    /// Makes a WatchList node the active edit and execute target, even when it is already selected.
+    /// </summary>
+    /// <remarks>
+    /// The property callback only fires on CHANGE, so re-clicking the same node after visiting the
+    /// Templates tree would otherwise leave the Templates tree active - the context menu would show
+    /// one node's items while Execute ran a different node.
+    /// </remarks>
+    public void ActivateWatchListNode(TreeNodeViewModel? node)
+    {
+        if (node is null) return;
+        var repeat = ReferenceEquals(SelectedNode, node);
+        SelectedNode = node;
+        if (repeat) ApplyWatchListSelection(node);
+    }
+
+    private void ApplyWatchListSelection(TreeNodeViewModel value)
+    {
+        _selection.ActivateWatchList(value);
         ActiveEditNode = value;
         if (value.NodeKind == NodeKinds.Action)
             value.EnsureDefaultActionTag();
@@ -929,6 +1124,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         NotifyExecutionCanExecuteChanged();
         if (value is null) return;
 
+        ApplyTemplateSelection(value);
+    }
+
+    /// <inheritdoc cref="ActivateWatchListNode"/>
+    public void ActivateTemplateNode(TreeNodeViewModel? node)
+    {
+        if (node is null) return;
+        var repeat = ReferenceEquals(SelectedTemplateNode, node);
+        SelectedTemplateNode = node;
+        if (repeat) ApplyTemplateSelection(node);
+    }
+
+    private void ApplyTemplateSelection(TreeNodeViewModel value)
+    {
+        _selection.ActivateTemplate(value);
         ActiveEditNode = value;
         ActiveEditingContext = "Templates";
 
@@ -938,6 +1148,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             LoadParameterFileEntries(value.ParameterFile, (value.ModelObject as InitializeConfig)?.Profile ?? "");
         else
             ParameterFileEntries.Clear();
+
+        NotifyExecutionCanExecuteChanged();
 
         // Update watermark visibility
         ShowWatermark = false;

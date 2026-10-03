@@ -247,6 +247,10 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
     /// </summary>
     public bool FilterSessionCard(SessionCardVM card)
     {
+        // A live run is never hidden. Losing sight of a pipeline that is still
+        // touching agents is worse than an imperfect filter.
+        if (card.Status == "Running") return true;
+
         // Status filter
         if (PipelineStatusFilter == "Running" && card.Status != "Running") return false;
         if (PipelineStatusFilter == "Failed"  && card.Status != "Failed")  return false;
@@ -300,8 +304,12 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
             // Pre-populate all action pills as "Pending" from the snapshot tree
             // so the user can see the full scope of the pipeline/group being executed.
+            // Refs must be expanded first or a template-built pipeline previews almost nothing.
             if (session?.SnapshotNodes?.Count > 0)
-                PopulatePendingActions(card, session.SnapshotNodes, session.ResolvedParameters);
+                PopulatePendingActions(
+                    card,
+                    SnapshotExpander.ExpandForDisplay(session.SnapshotNodes, session.SnapshotTemplates),
+                    session.ResolvedParameters);
 
             Sessions.Insert(0, card);
             card.RecalculateCounters();
@@ -453,7 +461,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // ExecutionSession snapshot lets us catch up.
         foreach (var card in Sessions.ToList())
         {
-            if (card.Status != "Running") continue;
+            if (card.Status != "Running" || card.IsDemo) continue;
 
             var session = _sessionManager.GetSession(card.SessionId);
             if (session == null) continue;
@@ -643,7 +651,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         for (var i = Sessions.Count - 1; i >= 0 && Sessions.Count > MaxSessionCards; i--)
         {
             var card = Sessions[i];
-            if (card.Status == "Running") continue;
+            if (card.Status == "Running" || card.IsDemo) continue;
             _logCursors.Remove(card.SessionId);
             Sessions.RemoveAt(i);
         }
@@ -653,21 +661,27 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
     internal void RecalculateStats()
     {
-        ActiveSessionCount = Sessions.Count(s => s.Status == "Running");
-        LockedAgentCount = _lockManager.GetAllLocks().Count;
+        // Demo cards are display-only. Mixing them into the KPI strip would report agent work that
+        // never happened.
+        var real = Sessions.Where(s => !s.IsDemo).ToList();
+
+        ActiveSessionCount = real.Count(s => s.Status == "Running");
+        LockedAgentCount = _lockManager?.GetAllLocks().Count ?? 0;
 
         // P2-2: Passed/Failed totals span all retained cards (Running +
         // Completed within the MaxSessionCards window) so the KPI strip
         // doesn't snap to zero the moment the last session finishes.
         // OverallProgressPercent stays Running-only � averaging completed
         // cards (always 100%) would mask in-flight progress.
-        TotalPassedActions = Sessions.Sum(s => s.PassedActions);
-        TotalFailedActions = Sessions.Sum(s => s.FailedActions);
+        TotalPassedActions = real.Sum(s => s.PassedActions);
+        TotalFailedActions = real.Sum(s => s.FailedActions);
 
-        var running = Sessions.Where(s => s.Status == "Running").ToList();
+        var running = real.Where(s => s.Status == "Running").ToList();
         OverallProgressPercent = running.Count > 0
             ? (int)running.Average(s => s.ProgressPercent)
             : 0;
+
+        ClearFinishedCommand.NotifyCanExecuteChanged();
     }
 
     private void CancelSession(string? sessionId)
@@ -712,15 +726,115 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
     // ── Snapshot Recovery ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Reloads persisted session snapshots from disk. Use after a crash to
-    /// see which pipeline step failed. Previously-loaded recovered sessions
-    /// are replaced; live running sessions are preserved.
+    /// Re-queries the controller for the sessions it currently knows about - live ones from the
+    /// session manager first, then the persisted history - and refreshes the cards. Demo cards are
+    /// left alone so Reload does not cancel the Demo toggle.
     /// </summary>
     [RelayCommand]
-    private void ReloadSnapshots()
+    private void Reload()
     {
+        LoadActiveSessions();
         LoadPersistedSessions();
         RecalculateStats();
+        RefreshSessionsView();
+    }
+
+    /// <summary>
+    /// Adds or refreshes a card for every session the manager reports as live. This is what makes a
+    /// run started elsewhere - web client, trigger file, another operator - show up here.
+    /// </summary>
+    private void LoadActiveSessions()
+    {
+        if (_sessionManager == null) return;
+
+        foreach (var session in _sessionManager.GetActiveSessions())
+        {
+            // Deliberately not consulting _dismissedSessionIds: a live session is added back
+            // unconditionally, which is what makes "always show running pipelines" hold.
+            var card = Sessions.FirstOrDefault(s => s.SessionId == session.SessionId);
+            if (card is null)
+            {
+                card = CreateCardFromSession(session);
+                Sessions.Insert(0, card);
+            }
+
+            card.Status = session.State == SessionState.Running ? "Running" : StatusTextFor(session.State);
+            card.Elapsed = (DateTime.UtcNow - session.StartedUtc).ToString(@"hh\:mm\:ss");
+            ReconcileCard(card, session);
+        }
+    }
+
+    private SessionCardVM CreateCardFromSession(ExecutionSession session)
+    {
+        var card = new SessionCardVM
+        {
+            SessionId = session.SessionId,
+            WatchItemTag = session.WatchItemTag,
+            UserId = session.UserId,
+            UserDisplayName = session.UserDisplayName,
+            UserRole = session.UserRole,
+            Source = session.Source,
+            Status = "Running",
+            BuildNumber = session.ResolvedParameters.TryGetValue(WatchListConstants.BuildNumberKey, out var bn) ? bn : "",
+            LockedAgentsList = string.Join(", ", session.LockedAgents),
+            IsExpanded = true,
+        };
+
+        if (session.SnapshotNodes.Count > 0)
+            PopulatePendingActions(
+                card,
+                SnapshotExpander.ExpandForDisplay(session.SnapshotNodes, session.SnapshotTemplates),
+                session.ResolvedParameters);
+
+        card.RecalculateCounters();
+        return card;
+    }
+
+    private static string StatusTextFor(SessionState state) => state switch
+    {
+        SessionState.Running => "Running",
+        SessionState.Completed => "Success",
+        _ => "Failed",
+    };
+
+    // ── Clear finished ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Session ids dismissed by "Clear finished". Remembered so a later Reload does not resurrect
+    /// what the operator deliberately cleared; a session that goes live again is removed from here.
+    /// </summary>
+    private readonly HashSet<string> _dismissedSessionIds = new(StringComparer.Ordinal);
+
+    public bool CanClearFinished => Sessions.Any(s => s.IsFinished);
+
+    /// <summary>
+    /// Removes Completed / Failed / Cancelled cards from the dashboard view only. Running cards
+    /// stay. Nothing is deleted from History or from the persisted session records - this is a
+    /// display dismissal, not a data operation.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanClearFinished))]
+    private void ClearFinished()
+    {
+        for (var i = Sessions.Count - 1; i >= 0; i--)
+        {
+            var card = Sessions[i];
+            if (!card.IsFinished) continue;
+
+            if (!card.IsDemo) _dismissedSessionIds.Add(card.SessionId);
+            _logCursors.Remove(card.SessionId);
+            Sessions.RemoveAt(i);
+
+            if (SelectedSessionId == card.SessionId) SelectedSessionId = null;
+        }
+
+        RecalculateStats();
+        RefreshSessionsView();
+    }
+
+    private void RefreshSessionsView()
+    {
+        ClearFinishedCommand.NotifyCanExecuteChanged();
+        SessionsView?.Refresh();
     }
 
     /// <summary>
@@ -738,6 +852,9 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         {
             // Skip if a card for this session already exists (it's still live)
             if (Sessions.Any(s => s.SessionId == entry.SessionId)) continue;
+
+            // Don't resurrect what "Clear finished" dismissed.
+            if (_dismissedSessionIds.Contains(entry.SessionId)) continue;
 
             // Also skip if the session is currently active in-process
             if (_sessionManager.GetSession(entry.SessionId) is { State: SessionState.Running })
@@ -816,23 +933,57 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
 
     // ── Demo Data (for testing the dashboard UI without a real pipeline run) ──
 
+    /// <summary>Marks every fabricated session id, so Demo OFF removes exactly what Demo ON added.</summary>
+    private const string DemoIdPrefix = "demo-";
+
+    [ObservableProperty] private bool _isDemoMode;
+
+    /// <summary>
+    /// Toggles fabricated sessions on and off. ON adds demo cards alongside whatever is already on
+    /// the dashboard; OFF removes only those cards. Real sessions are never touched - clearing the
+    /// collection here used to destroy the live card, and because every later progress event looks
+    /// its card up by session id, the real run then became permanently invisible.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleDemo()
+    {
+        IsDemoMode = !IsDemoMode;
+        if (IsDemoMode) AddDemoSessions();
+        else RemoveDemoSessions();
+
+        RecalculateStats();
+        RefreshSessionsView();
+    }
+
+    private void RemoveDemoSessions()
+    {
+        for (var i = Sessions.Count - 1; i >= 0; i--)
+        {
+            if (!Sessions[i].IsDemo) continue;
+            if (SelectedSessionId == Sessions[i].SessionId) SelectedSessionId = null;
+            Sessions.RemoveAt(i);
+        }
+
+        var demoLogs = LogEntries.Where(l => l.SessionId.StartsWith(DemoIdPrefix, StringComparison.Ordinal)).ToList();
+        foreach (var log in demoLogs) LogEntries.Remove(log);
+    }
+
     /// <summary>
     /// Populates the dashboard with realistic fake sessions so you can verify
     /// the Pipeline View, Timeline, and Log tabs render correctly without
-    /// actually triggering a pipeline. Call from code-behind or a debug menu.
+    /// actually triggering a pipeline.
     /// </summary>
-    [RelayCommand]
-    private void LoadDemoData()
+    private void AddDemoSessions()
     {
-        Sessions.Clear();
-        LogEntries.Clear();
+        if (Sessions.Any(s => s.IsDemo)) return;
 
         var now = DateTime.UtcNow;
 
         // Session 1: Running pipeline (3 agents, mixed status)
         var s1 = new SessionCardVM
         {
-            SessionId = "demo01",
+            SessionId = DemoIdPrefix + "01",
+            IsDemo = true,
             WatchItemTag = "Deploy.WebApi",
             UserId = "developer1",
             Source = "WPF",
@@ -868,7 +1019,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // Session 2: Completed with failures (2 agents)
         var s2 = new SessionCardVM
         {
-            SessionId = "demo02",
+            SessionId = DemoIdPrefix + "02",
+            IsDemo = true,
             WatchItemTag = "Nightly.FullSuite",
             UserId = "scheduler",
             Source = "WebClient",
@@ -898,7 +1050,8 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // Session 3: Completed successfully (1 agent)
         var s3 = new SessionCardVM
         {
-            SessionId = "demo03",
+            SessionId = DemoIdPrefix + "03",
+            IsDemo = true,
             WatchItemTag = "Build.QuickVerify",
             UserId = "ci-bot",
             Source = "WebClient",
@@ -924,18 +1077,16 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // Demo log entries
         var logs = new[]
         {
-            new LogEntryVM { Timestamp = now.AddSeconds(-135).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-01", Category = "Action", Message = "Starting: Install Build", Severity = "Info" },
-            new LogEntryVM { Timestamp = now.AddSeconds(-90).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-01", Category = "Action", Message = "Install completed (exit code 0)", Severity = "Success" },
-            new LogEntryVM { Timestamp = now.AddSeconds(-80).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-02", Category = "Action", Message = "Starting: Run Integration Tests", Severity = "Info" },
-            new LogEntryVM { Timestamp = now.AddSeconds(-70).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-03", Category = "Action", Message = "Starting: Run Perf Suite", Severity = "Info" },
-            new LogEntryVM { Timestamp = now.AddSeconds(-60).ToString("HH:mm:ss"), SessionId = "demo01", SessionName = "Deploy.WebApi", AgentName = "Agent-02", Category = "stdout", Message = "Running test 42/65... TestPaymentFlow", Severity = "Info" },
-            new LogEntryVM { Timestamp = now.AddMinutes(-14).ToString("HH:mm:ss"), SessionId = "demo02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "Action", Message = "Starting: Run E2E Tests", Severity = "Info" },
-            new LogEntryVM { Timestamp = now.AddMinutes(-2).ToString("HH:mm:ss"), SessionId = "demo02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "stderr", Message = "FAIL: LoginTest - Element '#submit-btn' not found after 30s timeout", Severity = "Error" },
-            new LogEntryVM { Timestamp = now.AddMinutes(-1).ToString("HH:mm:ss"), SessionId = "demo02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "Action", Message = "E2E Tests failed (exit code 1): 3 failures", Severity = "Error" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-135).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "01", SessionName = "Deploy.WebApi", AgentName = "Agent-01", Category = "Action", Message = "Starting: Install Build", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-90).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "01", SessionName = "Deploy.WebApi", AgentName = "Agent-01", Category = "Action", Message = "Install completed (exit code 0)", Severity = "Success" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-80).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "01", SessionName = "Deploy.WebApi", AgentName = "Agent-02", Category = "Action", Message = "Starting: Run Integration Tests", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-70).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "01", SessionName = "Deploy.WebApi", AgentName = "Agent-03", Category = "Action", Message = "Starting: Run Perf Suite", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddSeconds(-60).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "01", SessionName = "Deploy.WebApi", AgentName = "Agent-02", Category = "stdout", Message = "Running test 42/65... TestPaymentFlow", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddMinutes(-14).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "Action", Message = "Starting: Run E2E Tests", Severity = "Info" },
+            new LogEntryVM { Timestamp = now.AddMinutes(-2).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "stderr", Message = "FAIL: LoginTest - Element '#submit-btn' not found after 30s timeout", Severity = "Error" },
+            new LogEntryVM { Timestamp = now.AddMinutes(-1).ToString("HH:mm:ss"), SessionId = DemoIdPrefix + "02", SessionName = "Nightly.FullSuite", AgentName = "Agent-05", Category = "Action", Message = "E2E Tests failed (exit code 1): 3 failures", Severity = "Error" },
         };
         LogEntries.AddRange(logs);
-
-        RecalculateStats();
     }
 
     /// <summary>Stops the refresh timer and releases all event subscriptions.</summary>

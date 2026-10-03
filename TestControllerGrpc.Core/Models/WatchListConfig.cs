@@ -96,6 +96,18 @@ public interface IActionNode
     /// </summary>
     [JsonIgnore]
     string NodeId { get; set; }
+
+    /// <summary>
+    /// Snapshot copy for execution isolation, preserving <see cref="NodeId"/>.
+    /// </summary>
+    /// <remarks>
+    /// Implementations MUST use <c>MemberwiseClone</c> and then deep-copy only the mutable
+    /// collection members. A hand-written field list silently drops every property nobody
+    /// remembers to add - that is how <c>Skip</c> was lost (a skipped action ran), and again
+    /// how <c>Initialize.Profile</c> was lost (the profiles layer never applied at run time).
+    /// Living on the node type keeps the copy next to the data it has to copy.
+    /// </remarks>
+    IActionNode DeepClone();
 }
 
 // =============================================================================
@@ -117,6 +129,14 @@ public sealed class ActionGroupConfig : IActionNode, ISkippableNode
     public string? Comment { get; set; }
     public DateTimeOffset? SkippedAtUtc { get; set; }
     public string? SkippedBy { get; set; }
+
+    /// <inheritdoc />
+    public IActionNode DeepClone()
+    {
+        var copy = (ActionGroupConfig)MemberwiseClone();
+        copy.Children = Children.Select(c => c.DeepClone()).ToList();
+        return copy;
+    }
 }
 
 // =============================================================================
@@ -241,6 +261,10 @@ public sealed class ActionConfig : IActionNode, ISkippableNode
         copy.NodeId = Guid.NewGuid().ToString("N");
         return copy;
     }
+
+    /// <inheritdoc />
+    /// <remarks>Every member is a value type or an immutable string, so shallow is already deep.</remarks>
+    public IActionNode DeepClone() => (ActionConfig)MemberwiseClone();
 }
 
 // =============================================================================
@@ -257,6 +281,9 @@ public sealed class InitializeConfig : IActionNode
 
     /// <summary>Stage profile to apply when ParameterFile points at a layered JSON config.</summary>
     public string Profile { get; set; } = "";
+
+    /// <inheritdoc />
+    public IActionNode DeepClone() => (InitializeConfig)MemberwiseClone();
 }
 
 // =============================================================================
@@ -269,6 +296,9 @@ public sealed class RefConfig : IActionNode
     [JsonIgnore]
     public string NodeId { get; set; } = Guid.NewGuid().ToString("N");
     public string TemplateID { get; set; } = "";
+
+    /// <inheritdoc />
+    public IActionNode DeepClone() => (RefConfig)MemberwiseClone();
 }
 
 // =============================================================================
@@ -337,6 +367,21 @@ public sealed class PipelineExecutionContext
 
     /// <summary>Role of the triggering user at trigger time ("Admin" | "User" | "Anonymous" | "Default").</summary>
     public string UserRole { get; set; } = "";
+
+    /// <summary>
+    /// Set when an Initialize parameter source could not be loaded. Every remaining node is
+    /// abandoned rather than run: without that layer the actions would carry literal [Token] text
+    /// to a shell or a mailbox, and fail far from the real cause.
+    /// </summary>
+    public string? FatalError { get; set; }
+
+    /// <summary>
+    /// True when a Template is being run straight from the library, with no pipeline to borrow
+    /// parameters from. Only changes the wording of an unresolved-token failure - a template has no
+    /// settings of its own, so "the Initialize for this pipeline did not load" names a file the user
+    /// cannot go and fix.
+    /// </summary>
+    public bool IsStandaloneTemplateRun { get; set; }
 }
 
 // =============================================================================
@@ -419,6 +464,13 @@ public sealed class ExecutionSession
 
     /// <summary>Frozen action tree for retry.</summary>
     public List<IActionNode> SnapshotNodes { get; init; } = [];
+
+    /// <summary>
+    /// Templates needed to expand this run's Ref nodes for display. In-memory only - not persisted,
+    /// because it exists to render the pipeline, not to reproduce it.
+    /// </summary>
+    public IReadOnlyDictionary<string, TemplateConfig> SnapshotTemplates { get; init; } =
+        new Dictionary<string, TemplateConfig>(StringComparer.OrdinalIgnoreCase);
 
     public IEnumerable<ActionExecutionResult> FailedActions
         => _actionResults.Where(r => r.IsRetryable);

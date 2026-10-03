@@ -75,7 +75,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         Log("Event", $"Triggered: Type={evt.Type}, Exec={evt.ExecutionType}");
         await ExecuteChildrenAsync(evt.Children, evt.ExecutionType, true, ctx, ct);
-        Log("Event", "Completed");
+        Log("Event", ctx.FatalError is null ? "Completed" : $"ABORTED - {ctx.FatalError}");
     }
 
     public async Task<bool> ExecuteGroupAsync(
@@ -181,7 +181,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             watchItemTag, evt.Type,
             new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
             snapshotChildren,
-            callerSessionId);
+            callerSessionId,
+            _templates);
 
         ApplyOwnerAttribution(session, ctx);
 
@@ -218,6 +219,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             // down). On cancel, control reaches here only once the awaited pipeline unwinds.
             _sessionManager.CompleteSession(session.SessionId);
             ReleaseRunLock(watchItemTag, lockToken);
+            if (ctx.FatalError is not null)
+                Log("Session", $"ABORTED {session.SessionId}: {ctx.FatalError}");
             Log("Session", $"Completed {session.SessionId}: {session.SummaryText}");
         }
     }
@@ -252,7 +255,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             watchItemTag, $"Group:{group.Tag}",
             new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
             snapshotChildren,
-            callerSessionId);
+            callerSessionId,
+            _templates);
 
         ApplyOwnerAttribution(session, ctx);
 
@@ -297,7 +301,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             watchItemTag, $"Action:{action.ResolvedTag}",
             new Dictionary<string, string>(ctx.Parameters, StringComparer.OrdinalIgnoreCase),
             [clonedAction],
-            callerSessionId);
+            callerSessionId,
+            _templates);
 
         ApplyOwnerAttribution(session, ctx);
 
@@ -342,7 +347,9 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             previousSession.WatchItemTag,
             $"Retry:{previousSession.EventType}",
             previousSession.ResolvedParameters,
-            failedNodes);
+            failedNodes,
+            sessionId: null,
+            templates: _templates);
 
         Log("Retry", $"Retrying {failedNodes.Count} failed action(s) for '{previousSession.WatchItemTag}'");
 
@@ -375,7 +382,11 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var tasks = children.Select(async child =>
             {
                 await gate.WaitAsync(ct);
-                try { return await ExecuteNodeAsync(child, ctx, ct); }
+                try
+                {
+                    if (ctx.FatalError is not null) return false;
+                    return await ExecuteNodeAsync(child, ctx, ct);
+                }
                 finally { gate.Release(); }
             }).ToList();
             var results = await Task.WhenAll(tasks);
@@ -385,8 +396,16 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         foreach (var child in children)
         {
             ct.ThrowIfCancellationRequested();
+            if (ctx.FatalError is not null) return false;
+
             var success = await ExecuteNodeAsync(child, ctx, ct);
-            if (!success && !parentFailAndContinue)
+            if (success) continue;
+
+            // A fatal parameter failure overrides FailAndContinue: continuing would dispatch actions
+            // whose tokens cannot resolve.
+            if (ctx.FatalError is not null) return false;
+
+            if (!parentFailAndContinue)
             {
                 Log("Pipeline", "Stopping � FailAndContinue=false");
                 return false;
@@ -464,7 +483,11 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var tasks = children.Select(async child =>
             {
                 await gate.WaitAsync(ct);
-                try { return await ExecuteNodeTrackedAsync(child, ctx, session, ct, groupPath); }
+                try
+                {
+                    if (ctx.FatalError is not null) return false;
+                    return await ExecuteNodeTrackedAsync(child, ctx, session, ct, groupPath);
+                }
                 finally { gate.Release(); }
             }).ToList();
             var results = await Task.WhenAll(tasks);
@@ -474,8 +497,16 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         foreach (var child in children)
         {
             ct.ThrowIfCancellationRequested();
+            if (ctx.FatalError is not null) return false;
+
             var success = await ExecuteNodeTrackedAsync(child, ctx, session, ct, groupPath);
-            if (!success && !parentFailAndContinue)
+            if (success) continue;
+
+            // A fatal parameter failure overrides FailAndContinue: continuing would dispatch actions
+            // whose tokens cannot resolve.
+            if (ctx.FatalError is not null) return false;
+
+            if (!parentFailAndContinue)
             {
                 Log("Pipeline", "Stopping � FailAndContinue=false");
                 return false;
@@ -657,10 +688,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             var unresolved = ParameterResolver.FindUnresolvedTokens(action, ctx);
             if (unresolved.Count > 0)
             {
+                var tokens = string.Join(", ", unresolved.Select(t => "[" + t + "]"));
                 result.Outcome = ActionOutcome.Failed;
-                result.ErrorMessage =
-                    $"Unresolved parameter(s) {string.Join(", ", unresolved.Select(t => "[" + t + "]"))}"
-                    + " - the Initialize parameter source for this pipeline did not load.";
+                result.ErrorMessage = ctx.IsStandaloneTemplateRun
+                    ? $"Unresolved parameter(s) {tokens} - this template has no settings of its own"
+                      + " - run it from a pipeline that uses it."
+                    : $"Unresolved parameter(s) {tokens}"
+                      + " - the Initialize parameter source for this pipeline did not load.";
                 Log("Action", result.ErrorMessage);
             }
             else
@@ -704,21 +738,18 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         var path = ParameterResolver.Resolve(init.ParameterFile, ctx);
         Log("Initialize", $"Loading parameters from: {path}");
 
-        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!ParameterResolver.TryLoadJsonConfig(ctx, path, init.Profile, ctx.WatchItemTag))
-            {
-                Log("Initialize",
-                    $"FAILED to read '{path}' - file missing or not valid JSON. Every [Token] it "
-                    + "supplies will be unresolved.");
-            }
-        }
-        else
-        {
-            ParameterResolver.LoadParameterFile(ctx, path);
-        }
+        var failure = ParameterResolver.TryLoadInitializeSource(ctx, path, init.Profile, ctx.WatchItemTag);
+        if (failure is null) return true;
 
-        return true;
+        var label = string.IsNullOrWhiteSpace(init.Tag) ? "Initialize" : $"Initialize '{init.Tag}'";
+        var message =
+            $"{label} could not load its parameters - {failure} Stopping the run before any action: "
+            + "every [Token] that source supplies would otherwise be sent on unresolved.";
+
+        ctx.FatalError = message;
+        Log("Initialize", message);
+        OnNodeFailed(init, -1, message);
+        return false;
     }
 
     // ?? Host-specific dispatch ?????????????????????????????????????????
@@ -786,33 +817,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     // ?? Deep clone for snapshot isolation ??????????????????????????????
 
-    /// <remarks>
-    /// Actions clone via <see cref="ActionConfig.Clone"/> (MemberwiseClone) rather than a field list: the old
-    /// hand-written copy silently dropped every property nobody remembered to add - which is exactly how
-    /// <c>Skip</c> was lost, letting a skipped action run. NodeId is restored afterwards because progress
-    /// events match tree nodes by it, so the snapshot must keep the original's id.
-    /// </remarks>
-    protected static IActionNode DeepCloneNode(IActionNode node) => node switch
-    {
-        ActionConfig a => CloneAction(a),
-        ActionGroupConfig g => new ActionGroupConfig
-        {
-            NodeId = g.NodeId,
-            Tag = g.Tag, ExecutionType = g.ExecutionType,
-            FailAndContinue = g.FailAndContinue,
-            Skip = g.Skip, SkipReason = g.SkipReason, Comment = g.Comment,
-            SkippedAtUtc = g.SkippedAtUtc, SkippedBy = g.SkippedBy,
-            Children = g.Children.Select(DeepCloneNode).ToList()
-        },
-        InitializeConfig i => new InitializeConfig { NodeId = i.NodeId, Tag = i.Tag, ParameterFile = i.ParameterFile },
-        RefConfig r => new RefConfig { NodeId = r.NodeId, TemplateID = r.TemplateID },
-        _ => node
-    };
-
-    private static ActionConfig CloneAction(ActionConfig a)
-    {
-        var copy = a.Clone();
-        copy.NodeId = a.NodeId;
-        return copy;
-    }
+    /// <summary>
+    /// Snapshot copy of a node, so a hot-reload cannot mutate an in-flight tree.
+    /// </summary>
+    protected static IActionNode DeepCloneNode(IActionNode node) => node.DeepClone();
 }

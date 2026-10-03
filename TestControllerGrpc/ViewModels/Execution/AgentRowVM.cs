@@ -18,6 +18,9 @@ public partial class AgentRowVM : ObservableObject
 
     public ObservableCollection<ActionPillVM> Actions { get; } = new();
 
+    /// <summary>Pipeline this row belongs to; stamped onto each pill so tooltips resolve correctly.</summary>
+    public string PipelineTag { get; set; } = TestControllerGrpc.ViewModels.TreeNodeViewModel.SharedScope;
+
     public string StatusText => Status switch
     {
         "Executing" => "Executing",
@@ -86,6 +89,7 @@ public partial class AgentRowVM : ObservableObject
                 ActionType = actionType,
                 Command = command,
                 AgentName = AgentName,
+                PipelineTag = PipelineTag,
                 Status = status,
                 ExitCode = exitCode,
                 ErrorMessage = errorMessage,

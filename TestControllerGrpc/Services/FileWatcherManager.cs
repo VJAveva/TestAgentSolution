@@ -20,6 +20,8 @@ public sealed class FileWatcherManager : IFileWatcherManager
     private readonly ExecutionSessionManager _sessionManager;
     private readonly ILogger<FileWatcherManager> _logger;
     private readonly ILockRegistry? _lockRegistry;
+    private readonly Core.Preflight.PreflightService? _preflight;
+    private readonly IRegressionReportMailer? _mailer;
     private readonly List<ActiveWatcher> _watchers = new();
     private readonly object _lock = new();
     private WatchListConfig _config = new();
@@ -37,12 +39,16 @@ public sealed class FileWatcherManager : IFileWatcherManager
         IActionPipelineExecutor executor,
         ExecutionSessionManager sessionManager,
         ILogger<FileWatcherManager> logger,
-        ILockRegistry? lockRegistry = null)
+        ILockRegistry? lockRegistry = null,
+        Core.Preflight.PreflightService? preflight = null,
+        IRegressionReportMailer? mailer = null)
     {
         _executor = executor;
         _sessionManager = sessionManager;
         _logger = logger;
         _lockRegistry = lockRegistry;
+        _preflight = preflight;
+        _mailer = mailer;
     }
 
     /// <summary>
@@ -268,6 +274,10 @@ public sealed class FileWatcherManager : IFileWatcherManager
         // Notify UI of all parameters for token resolution
         TriggerParametersLoaded?.Invoke(wi.Tag, ctx.Parameters.ToDictionary(p => p.Key, p => p.Value));
 
+        // Nobody is at the keyboard for a file drop, so errors cannot prompt - they stop the run and
+        // are emailed instead. Warnings travel with the run and land in the result email.
+        if (!PassesTriggerPreflight(wi, ctx, fileName, lockToken)) return;
+
         // ARCH-9 fix: Use session-tracked execution so SessionManager.CancelSession()
         // propagates cancellation through the linked CTS in ExecuteEventTrackedAsync.
         _ = Task.Run(async () =>
@@ -285,6 +295,74 @@ public sealed class FileWatcherManager : IFileWatcherManager
                 _logger.LogError(ex, "Pipeline execution failed for {Path}/{File}", wi.Path, fileName);
             }
         });
+    }
+
+    /// <summary>
+    /// Pre-flight for an unattended run. Errors stop it and go out to <c>[_EmailCheck]</c>; warnings
+    /// let it start and ride along as <c>[_PreflightWarnings]</c> for the result email.
+    /// </summary>
+    private bool PassesTriggerPreflight(
+        WatchItemConfig wi, PipelineExecutionContext ctx, string fileName, string lockToken)
+    {
+        if (_preflight is null) return true;
+
+        Core.Preflight.PreflightReport report;
+        try
+        {
+            report = _preflight.Check(_config, wi, scope: Core.Preflight.PreflightScope.TriggerFile,
+                triggerValues: ctx.Parameters);
+        }
+        catch (Exception ex)
+        {
+            // A broken check must never be the reason a nightly run does not happen.
+            _logger.LogError(ex, "Pre-flight failed to run for '{Tag}'; continuing with the run.", wi.Tag);
+            return true;
+        }
+
+        if (report.HasWarnings)
+        {
+            var warnings = string.Join("; ", report.Warnings.Select(w => $"{w.Name}: {w.Detail}"));
+            _logger.LogWarning("Pre-flight warnings for '{Tag}': {Warnings}", wi.Tag, warnings);
+            ctx.Parameters["_PreflightWarnings"] = warnings;
+            ctx.Parameters["PreflightWarnings"] = warnings;
+        }
+
+        if (!report.HasErrors) return true;
+
+        _logger.LogError("Trigger '{File}' for '{Tag}' blocked by pre-flight: {Summary}",
+            fileName, wi.Tag, report.Summary);
+
+        if (_lockRegistry is not null && !string.IsNullOrEmpty(lockToken))
+            _lockRegistry.TryRelease(wi.Tag, lockToken);
+
+        MailPreflightFailure(wi, ctx, fileName, report);
+        return false;
+    }
+
+    private void MailPreflightFailure(
+        WatchItemConfig wi, PipelineExecutionContext ctx, string fileName, Core.Preflight.PreflightReport report)
+    {
+        if (_mailer is null) return;
+
+        if (!ctx.Parameters.TryGetValue("_EmailCheck", out var recipients) || string.IsNullOrWhiteSpace(recipients))
+        {
+            _logger.LogWarning(
+                "Pre-flight blocked '{Tag}' but [_EmailCheck] is not defined, so nobody was told.", wi.Tag);
+            return;
+        }
+
+        try
+        {
+            var body = "<pre style=\"font-family:Consolas,monospace\">"
+                + System.Net.WebUtility.HtmlEncode(report.ToPlainText())
+                + "</pre>";
+
+            _mailer.Send(recipients, $"Pre-flight FAILED - {wi.Tag} ({fileName})", body, null, "", "");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to email the pre-flight report for '{Tag}'.", wi.Tag);
+        }
     }
 
     /// <summary>

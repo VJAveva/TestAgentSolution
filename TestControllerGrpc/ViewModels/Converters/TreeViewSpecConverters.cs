@@ -295,7 +295,8 @@ public sealed class ActionFilePillTooltipConverter : IMultiValueConverter
 /// <summary>
 /// Multi-line tooltip for Action nodes showing Cmd/Args/Agent details.
 /// For non-Action nodes, returns StatusTooltip.
-/// Values: [0]=NodeKind, [1]=ActionTypeText, [2]=Command, [3]=Parameters, [4]=AgentName, [5]=StatusTooltip
+/// Values: [0]=NodeKind, [1]=ActionTypeText, [2]=Command, [3]=Parameters, [4]=AgentName,
+/// [5]=StatusTooltip, [6]=TokenScope (null for Templates-library nodes, which resolve nothing)
 /// </summary>
 public sealed class NodeTooltipConverter : IMultiValueConverter
 {
@@ -308,14 +309,15 @@ public sealed class NodeTooltipConverter : IMultiValueConverter
         var parameters = values[3] as string ?? "";
         var agentName = values[4] as string ?? "";
         var statusTooltip = values[5] as string ?? "";
+        var scope = values.Length > 6 ? values[6] as string : TreeNodeViewModel.SharedScope;
 
         if (nodeKind != "Action")
             return string.IsNullOrWhiteSpace(statusTooltip) ? null! : statusTooltip;
 
-        // Resolve [Token] placeholders for tooltip display
-        command = TreeNodeViewModel.ResolveTokens(command);
-        parameters = TreeNodeViewModel.ResolveTokens(parameters);
-        agentName = TreeNodeViewModel.ResolveTokens(agentName);
+        // Resolve [Token] placeholders against this node's pipeline only.
+        command = TreeNodeViewModel.ResolveTokens(command, scope);
+        parameters = TreeNodeViewModel.ResolveTokens(parameters, scope);
+        agentName = TreeNodeViewModel.ResolveTokens(agentName, scope);
 
         var lines = new List<string>();
         if (!string.IsNullOrWhiteSpace(command))

@@ -498,6 +498,7 @@ app.MapScalarApiReference(options =>
 app.MapGroup("/api/watchlist").MapWatchListEndpoints().RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/agents").MapAgentEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api/execution").MapExecutionEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/preflight").MapPreflightEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
 app.MapGroup("/api").MapLockEndpoints().RequireAuthorization(SecurityPolicies.User);
 // Auth is proxied to the controller (secondary host has no session store); allow anonymous so
 // login/guest reach the controller, which performs the real authentication.

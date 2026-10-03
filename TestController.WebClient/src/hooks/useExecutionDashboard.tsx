@@ -18,6 +18,9 @@ interface ExecutionDashboardState {
   selectedSessionId: string | null;
   selectedAgentName: string | null;
   maxLogs: number;
+  /** Finished sessions hidden by "Clear finished". View-only; History is untouched. */
+  dismissed: Set<string>;
+  demoOn: boolean;
 }
 
 const initialState: ExecutionDashboardState = {
@@ -26,11 +29,15 @@ const initialState: ExecutionDashboardState = {
   selectedSessionId: null,
   selectedAgentName: null,
   maxLogs: 10000,
+  dismissed: new Set(),
+  demoOn: false,
 };
 
 // ── Actions ──
 type Action =
   | { type: 'SET_SESSIONS'; sessions: SessionSummary[] }
+  | { type: 'SET_DEMO'; on: boolean; sessions?: SessionSummary[] }
+  | { type: 'CLEAR_FINISHED' }
   | { type: 'MERGE_LOGS'; logs: DashboardLogEntry[] }
   | { type: 'EXECUTION_STARTED'; data: any }
   | { type: 'EXECUTION_COMPLETED'; data: any }
@@ -46,7 +53,17 @@ export function reducer(state: ExecutionDashboardState, action: Action): Executi
   switch (action.type) {
     case 'SET_SESSIONS': {
       const map = new Map<string, SessionSummary>();
+
+      // Demo cards survive a poll. Rebuilding the map from the server payload alone deleted
+      // them every few seconds.
+      for (const [id, s] of state.sessions) {
+        if (s.isDemo) map.set(id, s);
+      }
+
       for (const s of action.sessions) {
+        // A running pipeline is always shown, even if it was cleared earlier.
+        if (state.dismissed.has(s.sessionId) && s.status !== 'Running') continue;
+
         const session = { ...s, agents: s.agents || [] };
 
         // Recompute progress from agent-level data when agents are present,
@@ -67,6 +84,35 @@ export function reducer(state: ExecutionDashboardState, action: Action): Executi
         map.set(session.sessionId, session);
       }
       return { ...state, sessions: map };
+    }
+
+    case 'SET_DEMO': {
+      const map = new Map(state.sessions);
+      for (const [id, s] of state.sessions) {
+        if (s.isDemo) map.delete(id);
+      }
+      if (action.on) {
+        for (const s of action.sessions || []) {
+          map.set(s.sessionId, { ...s, isDemo: true, agents: s.agents || [] });
+        }
+      }
+      return { ...state, sessions: map, demoOn: action.on };
+    }
+
+    case 'CLEAR_FINISHED': {
+      const map = new Map<string, SessionSummary>();
+      const dismissed = new Set(state.dismissed);
+      for (const [id, s] of state.sessions) {
+        if (s.status === 'Running' || s.status === 'Queued') { map.set(id, s); continue; }
+        if (!s.isDemo) dismissed.add(id);
+      }
+      const stillShown = state.selectedSessionId !== null && map.has(state.selectedSessionId);
+      return {
+        ...state,
+        sessions: map,
+        dismissed,
+        selectedSessionId: stillShown ? state.selectedSessionId : null,
+      };
     }
 
     case 'MERGE_LOGS': {
@@ -329,6 +375,7 @@ interface ExecutionDashboardContextValue {
   fetchError: string | null;
   selectSession: (id: string | null) => void;
   selectAgent: (name: string | null) => void;
+  reload: () => Promise<unknown>;
 }
 
 const ExecutionDashboardContext = createContext<ExecutionDashboardContextValue>(
@@ -547,7 +594,8 @@ export function ExecutionDashboardProvider({ children }: { children: ReactNode }
     state, dispatch,
     activeSessions, completedSessions, filteredLogs,
     fetchError, selectSession, selectAgent,
-  }), [state, activeSessions, completedSessions, filteredLogs, fetchError, selectSession, selectAgent]);
+    reload: fetchProxySessions,
+  }), [state, activeSessions, completedSessions, filteredLogs, fetchError, selectSession, selectAgent, fetchProxySessions]);
 
   return (
     <ExecutionDashboardContext.Provider value={value}>

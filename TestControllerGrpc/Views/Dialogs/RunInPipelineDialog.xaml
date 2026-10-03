@@ -1,0 +1,69 @@
+<Window x:Class="TestControllerGrpc.Views.Dialogs.RunInPipelineDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Run in which pipeline?"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" SizeToContent="Height" Width="440"
+        Background="{DynamicResource WindowBg}">
+    <!--
+        A Template has no settings of its own, so a library run must borrow a pipeline's
+        Initialize values. The list is exactly the pipelines that Ref this template.
+    -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="Run in which pipeline?"
+                       FontSize="{StaticResource FontSize15}" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextDefaultBrush}" />
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap"
+                       FontSize="{StaticResource FontSize10}"
+                       Foreground="{DynamicResource TextDimBrush}">
+                <Run Text="This template has no settings of its own. Pick the pipeline whose values it should use." />
+            </TextBlock>
+        </StackPanel>
+
+        <Border Grid.Row="1" CornerRadius="4" Padding="10" Margin="0,0,0,12"
+                Background="{DynamicResource BgChipBrush}"
+                BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="{Binding NodeLabel}" TextTrimming="CharacterEllipsis"
+                           FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextDefaultBrush}" />
+                <TextBlock Margin="0,2,0,0" FontSize="{StaticResource FontSize10}"
+                           Foreground="{DynamicResource TextSecondaryBrush}">
+                    <Run Text="Template:" />
+                    <Run Text="{Binding TemplateId, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <ListBox Grid.Row="2" MaxHeight="220" Margin="0,0,0,16"
+                 ItemsSource="{Binding Pipelines}"
+                 SelectedItem="{Binding SelectedPipeline, Mode=TwoWay}"
+                 AutomationProperties.Name="Pipelines using this template"
+                 AutomationProperties.AutomationId="RunInPipelineDialog.PipelineList"
+                 Background="{DynamicResource FieldBg}"
+                 Foreground="{DynamicResource TextDefaultBrush}"
+                 BorderBrush="{DynamicResource Bdr}"
+                 FontSize="{StaticResource FontSize11}" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Width="92" Height="28" Margin="0,0,8,0"
+                    IsCancel="True"
+                    Command="{Binding CancelCommand}"
+                    AutomationProperties.AutomationId="RunInPipelineDialog.Cancel"
+                    Style="{DynamicResource SecondaryButtonStyle}" />
+            <Button Content="Run" Width="92" Height="28"
+                    IsDefault="True"
+                    Command="{Binding RunCommand}"
+                    AutomationProperties.AutomationId="RunInPipelineDialog.Run"
+                    Style="{DynamicResource PrimaryButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>

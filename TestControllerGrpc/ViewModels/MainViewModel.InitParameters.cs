@@ -81,14 +81,15 @@ public sealed partial class MainViewModel
                 entries = ParameterResolver.ParseParameterFile(filePath);
             }
 
+            // Values belong to the pipeline that owns this Initialize node, not to every pipeline.
+            var scope = TreeNodeViewModel.TokensFor(SelectedNode?.TokenScope);
             foreach (var (key, value) in entries)
             {
                 ParameterFileEntries.Add(new ParameterEntryViewModel { Key = key, Value = value });
 
-                // Populate the shared token dictionary for UI display resolution
-                TreeNodeViewModel.TokenValues[key] = value;
+                scope[key] = value;
                 if (key.StartsWith('_'))
-                    TreeNodeViewModel.TokenValues[key[1..]] = value;
+                    scope[key[1..]] = value;
             }
 
             // Refresh resolved display text across all trees

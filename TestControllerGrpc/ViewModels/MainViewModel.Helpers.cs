@@ -26,6 +26,12 @@ public sealed partial class MainViewModel
         RebuildTemplateIds();
         RebuildFilterOptions();
         LoadTokensFromConfig(_config);
+        // Order matters: tokens must be loaded before contexts resolve, and session values must
+        // land before the trees refresh, or the first paint shows predicted values for a real run.
+        RefreshSessionValues();
+        RefreshTemplateAutoContexts();
+        foreach (var root in TreeRoots) root.RefreshResolvedTextRecursive();
+        foreach (var root in TemplateRoots) root.RefreshResolvedTextRecursive();
         ActiveWatchers = _watcherManager.ActiveWatcherCount;
         RefreshPipelinePermissions();
         // Skip origin is a traversal result, so it only exists once the tree does.
@@ -199,24 +205,29 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Scans all Initialize nodes in the config for parameter files and loads
-    /// their tokens into the shared TokenValues dictionary for UI display resolution.
+    /// Scans all Initialize nodes in the config for parameter files and loads their tokens into
+    /// that pipeline's token scope for UI display resolution.
     /// </summary>
     private void LoadTokensFromConfig(WatchListConfig config)
     {
-        TreeNodeViewModel.TokenValues.Clear();
+        TreeNodeViewModel.ClearTokenScopes();
 
-        // Load global variables file first (lowest priority — can be overridden by per-WatchItem Initialize files)
+        // Every node object is about to be replaced, and the pipelines a context named may be gone.
+        TemplateRunContext.ClearAll();
+        _selection.Reset();
+
+        // Global variables belong to the SHARED scope: every pipeline inherits them, and a
+        // per-pipeline Initialize may still override any key.
         if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))
         {
             try
             {
-                var entries = ParameterResolver.ParseParameterFile(config.GlobalVariablesFile);
-                foreach (var (key, value) in entries)
+                var shared = TreeNodeViewModel.SharedTokens;
+                foreach (var (key, value) in ParameterResolver.ParseParameterFile(config.GlobalVariablesFile))
                 {
-                    TreeNodeViewModel.TokenValues[key] = value;
+                    shared[key] = value;
                     if (key.StartsWith('_'))
-                        TreeNodeViewModel.TokenValues[key[1..]] = value;
+                        shared[key[1..]] = value;
                 }
             }
             catch (Exception ex)
@@ -228,8 +239,9 @@ public sealed partial class MainViewModel
         foreach (var wi in config.WatchItems)
             foreach (var ev in wi.Events)
                 LoadTokensFromChildren(ev.Children, wi.Tag);
-        foreach (var t in config.Templates)
-            LoadTokensFromChildren(t.Children, "");
+
+        // Templates are deliberately NOT loaded: a template has no settings of its own, so any value
+        // previewed against it would be a guess at which pipeline will run it.
 
         // Refresh resolved text across all trees
         WatchListRoot?.RefreshResolvedTextRecursive();
@@ -252,8 +264,9 @@ public sealed partial class MainViewModel
                     else
                         ParameterResolver.LoadParameterFile(ctx, init.ParameterFile);
 
+                    var scope = TreeNodeViewModel.TokensFor(pipelineTag);
                     foreach (var entry in ctx.Parameters)
-                        TreeNodeViewModel.TokenValues[entry.Key] = entry.Value;
+                        scope[entry.Key] = entry.Value;
                 }
                 catch (Exception ex)
                 {
@@ -519,18 +532,19 @@ public sealed partial class MainViewModel
     private void OnTriggerFired(string p, string f) => AddLog($"Trigger: {p} > {f}");
 
     /// <summary>
-    /// Called when a trigger file is parsed � merges all extracted key-value pairs
-    /// into the shared TokenValues dictionary so the tree UI shows resolved text.
+    /// Called when a trigger file is parsed - merges the extracted key-value pairs into THAT
+    /// pipeline's token scope so the tree UI shows resolved text for it alone.
     /// </summary>
     private void OnTriggerParametersLoaded(string watchItemTag, Dictionary<string, string> parameters)
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            var scope = TreeNodeViewModel.TokensFor(watchItemTag);
             foreach (var (key, value) in parameters)
             {
-                TreeNodeViewModel.TokenValues[key] = value;
+                scope[key] = value;
                 if (key.StartsWith('_'))
-                    TreeNodeViewModel.TokenValues[key[1..]] = value;
+                    scope[key[1..]] = value;
             }
 
             // Refresh resolved display text across all trees
@@ -568,35 +582,5 @@ public sealed partial class MainViewModel
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(helpPath) { UseShellExecute = true });
         else
             AddLog("Help file not found. Expected at: " + helpPath);
-    }
-
-    /// <summary>
-    /// Resolves [Token] placeholders in AgentName fields across all Actions in the config
-    /// so that the saved XML persists the actual resolved agent names.
-    /// </summary>
-    private static void ResolveAgentNamesInConfig(WatchListConfig config)
-    {
-        foreach (var wi in config.WatchItems)
-            foreach (var ev in wi.Events)
-                ResolveAgentNamesInChildren(ev.Children);
-        foreach (var t in config.Templates)
-            ResolveAgentNamesInChildren(t.Children);
-    }
-
-    private static void ResolveAgentNamesInChildren(List<IActionNode> children)
-    {
-        foreach (var child in children)
-        {
-            if (child is ActionConfig a && !string.IsNullOrWhiteSpace(a.AgentName))
-            {
-                var resolved = TreeNodeViewModel.ResolveTokens(a.AgentName);
-                if (!string.Equals(a.AgentName, resolved, StringComparison.Ordinal))
-                    a.AgentName = resolved;
-            }
-            else if (child is ActionGroupConfig ag)
-            {
-                ResolveAgentNamesInChildren(ag.Children);
-            }
-        }
     }
 }

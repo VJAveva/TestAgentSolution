@@ -174,7 +174,12 @@ describe('useAgentTelemetry — timer lifecycle', () => {
     expect(hookResult.result.current.error).toBeNull();
   });
 
-  it('uses backoff interval when SignalR is connected', async () => {
+  /**
+   * Backoff was deliberately removed: SignalR does not push per-agent telemetry, so throttling the
+   * poll while "connected" froze the monitor during exactly the runs it exists to watch. This guards
+   * that decision rather than the behaviour it replaced.
+   */
+  it('keeps the default interval when SignalR is connected', async () => {
     mockStatus.value = 'connected';
 
     await act(async () => {
@@ -183,16 +188,8 @@ describe('useAgentTelemetry — timer lifecycle', () => {
 
     const callsAfterMount = mockedAxios.get.mock.calls.length;
 
-    // Advance 2s — should NOT fire (backoff is 15s)
     await act(async () => {
       vi.advanceTimersByTime(2100);
-    });
-
-    expect(mockedAxios.get.mock.calls.length).toBe(callsAfterMount);
-
-    // Advance to 15s — should fire
-    await act(async () => {
-      vi.advanceTimersByTime(13000);
     });
 
     expect(mockedAxios.get.mock.calls.length).toBeGreaterThan(callsAfterMount);

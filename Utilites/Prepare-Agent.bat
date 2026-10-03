@@ -6,13 +6,16 @@ REM  Runs ON each Agent (invoked FROM the Controller as RunRemoteCommand).
 REM  Pulls the build payload AND the test binaries from the Controller's
 REM  C$ admin share down to fixed local folders, unblocks them, verifies.
 REM
-REM  Usage:   Prepare-Agent.bat ControllerName [SourceFolder] [BinariesFolder]
-REM  Example: Prepare-Agent.bat CONTROLLER01 TestSetup\SP2023R2Train TestBinaries
+REM  Usage:   Prepare-Agent.bat ControllerName [SourceFolder] BinariesFolder
+REM  Example: Prepare-Agent.bat CONTROLLER01 TestSetup TestSetup\FrameworkBinaries\SP2026
 REM
 REM  Arguments:
 REM    ControllerName  - host name of the Controller (its C$ share is used)
 REM    SourceFolder    - folder under \\Controller\c$ to copy (default: TestSetup)
-REM    BinariesFolder  - folder under \\Controller\c$ to copy (default: TestBinaries)
+REM    BinariesFolder  - REQUIRED. Folder under \\Controller\c$ holding the release
+REM                      binaries, e.g. TestSetup\FrameworkBinaries\SP2026.
+REM                      Pipelines pass [_BinariesFolder]. There is deliberately NO
+REM                      default: a silent fallback would copy the wrong release.
 REM
 REM  Exit codes:
 REM    0  success            2  payload copy failed     20/21 share unreachable
@@ -21,14 +24,19 @@ REM ==============================================================
 
 REM --- Arguments ---
 if "%~1"=="" (
-    echo [FAIL] Usage: Prepare-Agent.bat ControllerName [SourceFolder] [BinariesFolder]
+    echo [FAIL] Usage: Prepare-Agent.bat ControllerName [SourceFolder] BinariesFolder
+    exit /b 1
+)
+if "%~3"=="" (
+    echo [FAIL] BinariesFolder ^(argument 3^) is required - no default is assumed.
+    echo        Usage: Prepare-Agent.bat ControllerName [SourceFolder] BinariesFolder
+    echo        Example: Prepare-Agent.bat CONTROLLER01 TestSetup TestSetup\FrameworkBinaries\SP2026
     exit /b 1
 )
 set "CTRL=%~1"
 set "SRC=%~2"
 set "BIN_SRC=%~3"
 if "%SRC%"==""     set "SRC=TestSetup"
-if "%BIN_SRC%"=="" set "BIN_SRC=TestBinaries"
 
 REM --- Paths (remote sources on the Controller's C$ ; fixed local destinations) ---
 set "REMOTE_SRC=\\%CTRL%\c$\%SRC%"

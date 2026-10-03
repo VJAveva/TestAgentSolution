@@ -1,7 +1,10 @@
 import { useExecutionDashboard } from '../../hooks/useExecutionDashboard';
 
 export function StatsBar() {
-  const { activeSessions } = useExecutionDashboard();
+  const { activeSessions: allActive } = useExecutionDashboard();
+
+  // Demo cards are display-only; counting them would report agent work that never happened.
+  const activeSessions = allActive.filter(s => !s.isDemo);
 
   const totalAgents = activeSessions
     .reduce((sum, s) => sum + (s.agents || []).length, 0);

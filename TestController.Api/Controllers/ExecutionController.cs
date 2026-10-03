@@ -1515,12 +1515,13 @@ public class ExecutionController : ControllerBase
         lockedAgents = s.LockedAgents,
         buildNumber = s.ResolvedParameters
             .GetValueOrDefault("_BuildNumber", ""),
-        totalActions = s.SnapshotNodes.Count,
+        totalActions = SnapshotExpander.CountLeafActions(s.SnapshotNodes, s.SnapshotTemplates),
         completedActions = s.ActionResults.Count,
         passedActions = s.SucceededCount,
         failedActions = s.FailedCount,
-        progressPercent = s.SnapshotNodes.Count > 0
-            ? (int)((double)s.ActionResults.Count / s.SnapshotNodes.Count * 100)
+        progressPercent = SnapshotExpander.CountLeafActions(s.SnapshotNodes, s.SnapshotTemplates) > 0
+            ? (int)((double)s.ActionResults.Count
+                / SnapshotExpander.CountLeafActions(s.SnapshotNodes, s.SnapshotTemplates) * 100)
             : 0,
         agents = BuildAgentDtos(s),
     };
@@ -1538,7 +1539,9 @@ public class ExecutionController : ControllerBase
             StringComparer.OrdinalIgnoreCase);
 
         var pendingByAgent = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
-        CollectPendingFromSnapshot(s.SnapshotNodes, s.ResolvedParameters, startedTags, pendingByAgent);
+        CollectPendingFromSnapshot(
+            SnapshotExpander.ExpandForDisplay(s.SnapshotNodes, s.SnapshotTemplates),
+            s.ResolvedParameters, startedTags, pendingByAgent);
 
         var result = new List<object>();
         var processedAgents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

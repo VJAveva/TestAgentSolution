@@ -72,26 +72,64 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _templateName = "";
     [ObservableProperty] private int _childCount;
 
+    /// <summary>Read-only mirror of a Ref'd template. Never written back to the model.</summary>
+    [ObservableProperty] private bool _isRefExpansion;
+
     // ── Phase 3b: Pipeline lock badge (per-row, bound in TreeViewSpec.xaml) ──
     [ObservableProperty] private LockBadgeViewModel? _lockBadge;
 
     /// <summary>Returns the Parameters string with [Token] placeholders resolved. Read-only display value.</summary>
     public string ResolvedParameters => ResolveTokens(Parameters);
 
+    /// <summary>Returns the Command string with [Token] placeholders resolved. Read-only display value.</summary>
+    public string ResolvedCommand => ResolveTokens(Command);
+
     /// <summary>Returns the AgentName string with [Token] placeholders resolved. Read-only display value.</summary>
     public string ResolvedAgentName => ResolveTokens(AgentName);
 
-    /// <summary>Called by source generator when Parameters changes — refreshes ResolvedParameters.</summary>
-    partial void OnParametersChanged(string value)
+    // ── Resolved vs unresolved ──────────────────────────────────────
+    // Raw tokens used to render in the same green as real values, so "[_Installer]" read as a
+    // resolved path. A field is only "resolved" once no [Token] survives substitution.
+
+    /// <summary>Shown instead of the raw tokens when a field could not be resolved.</summary>
+    public const string UnresolvedHint = "Not resolved \u2014 choose a pipeline context";
+
+    public bool IsCommandResolved => IsResolved(Command, ResolvedCommand);
+    public bool IsParametersResolved => IsResolved(Parameters, ResolvedParameters);
+    public bool IsAgentNameResolved => IsResolved(AgentName, ResolvedAgentName);
+
+    public string ResolvedCommandDisplay => Display(ResolvedCommand, IsCommandResolved);
+    public string ResolvedParametersDisplay => Display(ResolvedParameters, IsParametersResolved);
+    public string ResolvedAgentNameDisplay => Display(ResolvedAgentName, IsAgentNameResolved);
+
+    /// <summary>A blank field is not "unresolved" - there was nothing to resolve.</summary>
+    private static bool IsResolved(string raw, string resolved)
+        => string.IsNullOrWhiteSpace(raw) || !TokenPattern.IsMatch(resolved);
+
+    private static string Display(string resolved, bool isResolved)
+        => isResolved ? resolved : UnresolvedHint;
+
+    private void NotifyResolvedChanged()
     {
         OnPropertyChanged(nameof(ResolvedParameters));
+        OnPropertyChanged(nameof(ResolvedCommand));
+        OnPropertyChanged(nameof(ResolvedAgentName));
+        OnPropertyChanged(nameof(IsCommandResolved));
+        OnPropertyChanged(nameof(IsParametersResolved));
+        OnPropertyChanged(nameof(IsAgentNameResolved));
+        OnPropertyChanged(nameof(ResolvedCommandDisplay));
+        OnPropertyChanged(nameof(ResolvedParametersDisplay));
+        OnPropertyChanged(nameof(ResolvedAgentNameDisplay));
     }
 
+    /// <summary>Called by source generator when Parameters changes — refreshes ResolvedParameters.</summary>
+    partial void OnParametersChanged(string value) => NotifyResolvedChanged();
+
+    /// <summary>Called by source generator when Command changes — refreshes ResolvedCommand.</summary>
+    partial void OnCommandChanged(string value) => NotifyResolvedChanged();
+
     /// <summary>Called by source generator when AgentName changes — refreshes ResolvedAgentName.</summary>
-    partial void OnAgentNameChanged(string value)
-    {
-        OnPropertyChanged(nameof(ResolvedAgentName));
-    }
+    partial void OnAgentNameChanged(string value) => NotifyResolvedChanged();
 
     // ── Skip state ────────────────────────────────────────────────
     // Skip lives on the model (ISkippableNode); these mirror it so the row can bind. SkipOrigin is NOT on the
@@ -441,37 +479,164 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     private static readonly Regex TokenPattern = new(@"\[(\w+)\]", RegexOptions.Compiled);
 
+    /// <summary>Scope holding values every pipeline inherits (the global variables file).</summary>
+    public const string SharedScope = "";
+
     /// <summary>
-    /// Shared token dictionary. Populated from loaded parameter files and runtime context.
-    /// Keys are token names (without brackets), values are resolved values.
+    /// Token values per pipeline, keyed by WatchItem Tag, plus <see cref="SharedScope"/>.
     /// </summary>
-    public static Dictionary<string, string> TokenValues { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <remarks>
+    /// This was ONE flat dictionary serving every pipeline, so whichever WatchItem loaded last won
+    /// each key. A per-pipeline [_EmailCheck] previewed as some other pipeline's address, and a
+    /// Templates-library node previewed fully resolved values it would never actually receive.
+    /// </remarks>
+    private static readonly Dictionary<string, Dictionary<string, string>> TokenScopes =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Token values for one pipeline, created on first use.</summary>
+    public static Dictionary<string, string> TokensFor(string? scope)
+    {
+        var key = scope ?? SharedScope;
+        if (!TokenScopes.TryGetValue(key, out var values))
+            TokenScopes[key] = values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        return values;
+    }
+
+    /// <summary>Values every pipeline inherits.</summary>
+    public static Dictionary<string, string> SharedTokens => TokensFor(SharedScope);
+
+    public static void ClearTokenScopes() => TokenScopes.Clear();
+
+    // ── Values actually used by a run ───────────────────────────────
+    // The preview dictionary and the execution dictionary are two independent populations of the
+    // same data, so a pipeline that ran an hour ago could preview values it never received. When a
+    // session is known for a pipeline, its own ResolvedParameters win.
+
+    private static readonly Dictionary<string, (string SessionId, Dictionary<string, string> Values)> SessionScopes =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public static void SetSessionValues(string? pipelineTag, string sessionId, IReadOnlyDictionary<string, string> values)
+    {
+        if (string.IsNullOrWhiteSpace(pipelineTag)) return;
+        SessionScopes[pipelineTag] = (sessionId, new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase));
+    }
+
+    public static void ClearSessionValues() => SessionScopes.Clear();
+
+    /// <summary>Run whose values this node is showing, or null when it is a plain preview.</summary>
+    public static string? SessionIdFor(string? scope) =>
+        scope is not null && SessionScopes.TryGetValue(scope, out var s) ? s.SessionId : null;
+
+    public string? ValuesFromSessionId => SessionIdFor(TokenScope);
+
+    /// <summary>Banner text for the properties panel when the values came from a real run.</summary>
+    public string ValuesSourceLabel =>
+        ValuesFromSessionId is { } id ? $"Values used in run {id}" : "";
+
+    public bool HasSessionValues => ValuesFromSessionId is not null;
+
+    /// <summary>
+    /// Pipeline whose values this node's preview resolves against, or null when nothing may be
+    /// resolved. A Templates-library node resolves nothing until a pipeline context is chosen for
+    /// its template: a template has no settings of its own, so any value shown before that is a
+    /// guess at which pipeline will eventually run it.
+    /// </summary>
+    public string? TokenScope
+    {
+        get
+        {
+            for (var n = this; n is not null; n = n.Parent)
+            {
+                if (n.ModelObject is WatchItemConfig wi) return wi.Tag;
+                if (n.NodeKind == NodeKinds.Template) return TemplateRunContext.For(n.Tag);
+                if (n.NodeKind == NodeKinds.TemplateList) return null;
+            }
+            return SharedScope;
+        }
+    }
+
+    /// <summary>Template this node belongs to, or null when it is in the WatchList tree.</summary>
+    public string? OwningTemplateId
+    {
+        get
+        {
+            for (var n = this; n is not null; n = n.Parent)
+            {
+                if (n.NodeKind == NodeKinds.WatchItem) return null;
+                if (n.NodeKind == NodeKinds.Template) return n.Tag;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>Chip shown on a Template header row once a pipeline context is chosen.</summary>
+    public string TemplateContextLabel
+    {
+        get
+        {
+            if (NodeKind != NodeKinds.Template) return "";
+            if (TemplateRunContext.For(Tag) is not { } tag) return "";
+            return $"Context: {tag}{TemplateContextSuffix}";
+        }
+    }
+
+    /// <summary>Pipeline part of the chip. Trimmed first, because the suffix carries the meaning.</summary>
+    public string TemplateContextPipeline =>
+        NodeKind == NodeKinds.Template && TemplateRunContext.For(Tag) is { } tag ? $"Context: {tag}" : "";
+
+    /// <summary>How the context was decided. Rendered separately so ellipsis can never eat it.</summary>
+    public string TemplateContextSuffix =>
+        NodeKind != NodeKinds.Template || TemplateRunContext.For(Tag) is null
+            ? ""
+            : TemplateRunContext.SourceFor(Tag) switch
+            {
+                TemplateContextSource.Running => " (running)",
+                TemplateContextSource.Auto => " (auto)",
+                _ => "",
+            };
+
+    public bool HasTemplateContext => TemplateContextLabel.Length > 0;
+
+    /// <summary>Resolves [Token] placeholders against this node's pipeline.</summary>
+    public string ResolveTokens(string input) => ResolveTokens(input, TokenScope);
+
+    /// <summary>
+    /// Resolves [Token] placeholders using <paramref name="scope"/>'s values, falling back to the
+    /// shared scope. A null scope resolves nothing, leaving the tokens visible.
+    /// Unresolved tokens are left as-is.
+    /// </summary>
+    public static string ResolveTokens(string input, string? scope)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        if (!input.Contains('[')) return input;
+        if (scope is null) return input;
+
+        var own = TokensFor(scope);
+        var shared = SharedTokens;
+        SessionScopes.TryGetValue(scope, out var session);
+
+        return TokenPattern.Replace(input, match =>
+        {
+            var key = match.Groups[1].Value;
+            // What the run actually used outranks what the editor would predict.
+            if (session.Values is not null && TryGet(session.Values, key, out var used)) return used;
+            if (TryGet(own, key, out var val) || TryGet(shared, key, out val)) return val;
+            return match.Value; // leave unresolved
+        });
+
+        static bool TryGet(Dictionary<string, string> values, string key, out string value)
+        {
+            if (values.TryGetValue(key, out value!)) return true;
+            // Both [BuildNumber] and [_BuildNumber] must resolve.
+            if (key.StartsWith('_') && values.TryGetValue(key[1..], out value!)) return true;
+            return false;
+        }
+    }
 
     /// <summary>Called by source generator when DisplayText changes.</summary>
     partial void OnDisplayTextChanged(string value)
     {
         UpdateResolvedText(value);
-    }
-
-    /// <summary>
-    /// Resolves [Token] placeholders in the input string using TokenValues dictionary.
-    /// Returns the resolved string. Unresolved tokens are left as-is.
-    /// </summary>
-    public static string ResolveTokens(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return input;
-        if (!input.Contains('[')) return input;
-
-        return TokenPattern.Replace(input, match =>
-        {
-            var key = match.Groups[1].Value;
-            if (TokenValues.TryGetValue(key, out var val))
-                return val;
-            // Also try with leading underscore removed
-            if (key.StartsWith('_') && TokenValues.TryGetValue(key[1..], out val))
-                return val;
-            return match.Value; // leave unresolved
-        });
     }
 
     /// <summary>Updates ResolvedDisplayText and unresolved-token metadata.</summary>
@@ -499,8 +664,15 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public void RefreshResolvedTextRecursive()
     {
         UpdateResolvedText(DisplayText);
-        OnPropertyChanged(nameof(ResolvedParameters));
-        OnPropertyChanged(nameof(ResolvedAgentName));
+        NotifyResolvedChanged();
+        OnPropertyChanged(nameof(TokenScope));
+        OnPropertyChanged(nameof(TemplateContextLabel));
+        OnPropertyChanged(nameof(TemplateContextPipeline));
+        OnPropertyChanged(nameof(TemplateContextSuffix));
+        OnPropertyChanged(nameof(HasTemplateContext));
+        OnPropertyChanged(nameof(ValuesFromSessionId));
+        OnPropertyChanged(nameof(ValuesSourceLabel));
+        OnPropertyChanged(nameof(HasSessionValues));
         foreach (var c in Children) c.RefreshResolvedTextRecursive();
     }
 
@@ -555,11 +727,22 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ModelObject = config, IsExpanded = true,
             ChildCount = config.WatchItems.Count,
         };
+
+        var templates = TemplateIndex(config.Templates);
         foreach (var wi in config.WatchItems)
         {
-            var c = FromWatchItem(wi); c.Parent = root; root.Children.Add(c);
+            var c = FromWatchItem(wi, templates); c.Parent = root; root.Children.Add(c);
         }
         return root;
+    }
+
+    /// <summary>Templates by ID, for expanding Ref nodes inline.</summary>
+    private static Dictionary<string, TemplateConfig> TemplateIndex(List<TemplateConfig>? templates)
+    {
+        var index = new Dictionary<string, TemplateConfig>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in templates ?? [])
+            if (!string.IsNullOrWhiteSpace(t.ID)) index[t.ID] = t;
+        return index;
     }
 
     public static TreeNodeViewModel FromTemplateList(List<TemplateConfig> templates)
@@ -572,9 +755,11 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ModelObject = templates, IsExpanded = true,
             ChildCount = templates.Count,
         };
+
+        var index = TemplateIndex(templates);
         foreach (var t in templates)
         {
-            var c = FromTemplate(t); c.Parent = root; root.Children.Add(c);
+            var c = FromTemplate(t, index); c.Parent = root; root.Children.Add(c);
         }
         return root;
     }
@@ -595,7 +780,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         };
     }
 
-    public static TreeNodeViewModel FromWatchItem(WatchItemConfig wi)
+    public static TreeNodeViewModel FromWatchItem(WatchItemConfig wi, IReadOnlyDictionary<string, TemplateConfig>? templates = null)
     {
         var label = !string.IsNullOrWhiteSpace(wi.Tag)
             ? $"{wi.Tag}  ({wi.Path}{wi.Filter})" : $"{wi.Path}{wi.Filter}";
@@ -612,11 +797,11 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             LastDropLocation = wi.LastDropLocation ?? "",
             DisplayText = label, ModelObject = wi,
         };
-        foreach (var ev in wi.Events) { var c = FromEvent(ev); c.Parent = node; node.Children.Add(c); }
+        foreach (var ev in wi.Events) { var c = FromEvent(ev, templates); c.Parent = node; node.Children.Add(c); }
         return node;
     }
 
-    public static TreeNodeViewModel FromEvent(EventConfig ev)
+    public static TreeNodeViewModel FromEvent(EventConfig ev, IReadOnlyDictionary<string, TemplateConfig>? templates = null)
     {
         var node = new TreeNodeViewModel
         {
@@ -626,11 +811,11 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ExecutionTypeText = ev.ExecutionType.ToString(),
             DisplayText = $"Event: {ev.Type} ({ev.ExecutionType})", ModelObject = ev,
         };
-        foreach (var child in ev.Children) { var c = FromActionNode(child); c.Parent = node; node.Children.Add(c); }
+        foreach (var child in ev.Children) { var c = FromActionNode(child, templates); c.Parent = node; node.Children.Add(c); }
         return node;
     }
 
-    public static TreeNodeViewModel FromTemplate(TemplateConfig t)
+    public static TreeNodeViewModel FromTemplate(TemplateConfig t, IReadOnlyDictionary<string, TemplateConfig>? templates = null)
     {
         var node = new TreeNodeViewModel
         {
@@ -639,20 +824,20 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             TemplateName = t.ID, Tag = t.ID,
             DisplayText = $"Template: {t.ID}", ModelObject = t,
         };
-        foreach (var child in t.Children) { var c = FromActionNode(child); c.Parent = node; node.Children.Add(c); }
+        foreach (var child in t.Children) { var c = FromActionNode(child, templates); c.Parent = node; node.Children.Add(c); }
         return node;
     }
 
-    public static TreeNodeViewModel FromActionNode(IActionNode n) => n switch
+    public static TreeNodeViewModel FromActionNode(IActionNode n, IReadOnlyDictionary<string, TemplateConfig>? templates = null) => n switch
     {
-        ActionGroupConfig ag => FromActionGroup(ag),
+        ActionGroupConfig ag => FromActionGroup(ag, templates),
         ActionConfig a => FromAction(a),
         InitializeConfig init => FromInitialize(init),
-        RefConfig r => FromRef(r),
+        RefConfig r => FromRef(r, templates),
         _ => new TreeNodeViewModel { DisplayText = "Unknown" },
     };
 
-    public static TreeNodeViewModel FromActionGroup(ActionGroupConfig ag)
+    public static TreeNodeViewModel FromActionGroup(ActionGroupConfig ag, IReadOnlyDictionary<string, TemplateConfig>? templates = null)
     {
         var node = new TreeNodeViewModel
         {
@@ -663,7 +848,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             FailAndContinue = ag.FailAndContinue,
             DisplayText = $"[{ag.ExecutionType}] {ag.Tag}", ModelObject = ag,
         };
-        foreach (var child in ag.Children) { var c = FromActionNode(child); c.Parent = node; node.Children.Add(c); }
+        foreach (var child in ag.Children) { var c = FromActionNode(child, templates); c.Parent = node; node.Children.Add(c); }
         return node;
     }
 
@@ -759,18 +944,104 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         DisplayText = $"Initialize: {init.ParameterFile}", ModelObject = init,
     };
 
-    public static TreeNodeViewModel FromRef(RefConfig r) => new()
+    public static TreeNodeViewModel FromRef(RefConfig r, IReadOnlyDictionary<string, TemplateConfig>? templates = null)
+        => FromRef(r, templates, null);
+
+    /// <summary>
+    /// A Ref shows the referenced template's nodes inline, resolved against the OWNING pipeline -
+    /// the ancestor walk in <see cref="TokenScope"/> reaches the WatchItem, so the same template
+    /// under SP2023R2SP2 and SP2026 previews different values.
+    /// </summary>
+    /// <remarks>
+    /// The expansion is a read-only mirror of the template. Its nodes carry the TEMPLATE's model
+    /// objects, so letting them write back would rewrite the shared template for every pipeline
+    /// that Refs it - <see cref="ApplyToModel"/> refuses on <see cref="IsRefExpansion"/>.
+    /// </remarks>
+    private static TreeNodeViewModel FromRef(
+        RefConfig r,
+        IReadOnlyDictionary<string, TemplateConfig>? templates,
+        HashSet<string>? visiting)
     {
-        NodeKind = NodeKinds.Ref, NodeIcon = ">",
-        NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Ref),
-        TemplateID = r.TemplateID,
-        DisplayText = $"Ref > {r.TemplateID}", ModelObject = r,
-    };
+        var node = new TreeNodeViewModel
+        {
+            NodeKind = NodeKinds.Ref, NodeIcon = ">",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Ref),
+            TemplateID = r.TemplateID,
+            DisplayText = $"Ref > {r.TemplateID}", ModelObject = r,
+        };
+
+        if (templates is null || string.IsNullOrWhiteSpace(r.TemplateID)) return node;
+        if (!templates.TryGetValue(r.TemplateID, out var template)) return node;
+
+        // A template that Refs itself, directly or through another, would recurse forever.
+        visiting ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!visiting.Add(r.TemplateID)) return node;
+
+        foreach (var child in template.Children)
+        {
+            var c = FromActionNodeExpanded(child, templates, visiting);
+            c.Parent = node;
+            node.Children.Add(c);
+        }
+
+        visiting.Remove(r.TemplateID);
+        node.ChildCount = node.Children.Count;
+        node.IsExpanded = false;
+        return node;
+    }
+
+    /// <summary>Builds a Ref's descendant and marks the whole subtree as a read-only mirror.</summary>
+    private static TreeNodeViewModel FromActionNodeExpanded(
+        IActionNode n,
+        IReadOnlyDictionary<string, TemplateConfig> templates,
+        HashSet<string> visiting)
+    {
+        var node = n switch
+        {
+            ActionGroupConfig ag => FromActionGroupExpanded(ag, templates, visiting),
+            RefConfig nested => FromRef(nested, templates, visiting),
+            _ => FromActionNode(n, templates),
+        };
+        node.MarkRefExpansion();
+        return node;
+    }
+
+    private static TreeNodeViewModel FromActionGroupExpanded(
+        ActionGroupConfig ag,
+        IReadOnlyDictionary<string, TemplateConfig> templates,
+        HashSet<string> visiting)
+    {
+        var node = new TreeNodeViewModel
+        {
+            NodeKind = NodeKinds.ActionGroup,
+            NodeIcon = ag.ExecutionType == ExecutionMode.Parallel ? "||" : ">>",
+            NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.ActionGroup),
+            Tag = ag.Tag, ExecutionTypeText = ag.ExecutionType.ToString(),
+            FailAndContinue = ag.FailAndContinue,
+            DisplayText = $"[{ag.ExecutionType}] {ag.Tag}", ModelObject = ag,
+        };
+        foreach (var child in ag.Children)
+        {
+            var c = FromActionNodeExpanded(child, templates, visiting);
+            c.Parent = node;
+            node.Children.Add(c);
+        }
+        return node;
+    }
+
+    private void MarkRefExpansion()
+    {
+        IsRefExpansion = true;
+        foreach (var c in Children) c.MarkRefExpansion();
+    }
 
     // ── Write-back & refresh ────────────────────────────────────────
 
     public void ApplyToModel()
     {
+        // A Ref expansion mirrors the template's own model objects. Writing back here would edit
+        // the template itself, silently changing every other pipeline that Refs it.
+        if (IsRefExpansion) return;
         switch (ModelObject)
         {
             case WatchItemConfig wi:

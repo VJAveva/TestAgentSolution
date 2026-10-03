@@ -366,7 +366,9 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         // pre-populate all pills as "Pending" (user sees the full pipeline scope)
         var session = _sessionManager.GetSession(e.SessionId);
         var pendingActions = session?.SnapshotNodes?.Count > 0
-            ? ExtractPendingActions(session.SnapshotNodes, session.ResolvedParameters)
+            ? ExtractPendingActions(
+                SnapshotExpander.ExpandForDisplay(session.SnapshotNodes, session.SnapshotTemplates),
+                session.ResolvedParameters)
             : Array.Empty<object>();
 
         SendSafe("ExecutionStarted", new

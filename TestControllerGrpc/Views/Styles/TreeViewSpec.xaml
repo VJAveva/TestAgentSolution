@@ -93,6 +93,7 @@
                     <Binding Path="Parameters" />
                     <Binding Path="AgentName" />
                     <Binding Path="StatusTooltip" />
+                    <Binding Path="TokenScope" />
                 </MultiBinding>
             </Grid.ToolTip>
             <Grid.ColumnDefinitions>
@@ -261,10 +262,11 @@
                 <TextBlock.Text>
                     <MultiBinding Converter="{StaticResource ActionLabelConv}">
                         <Binding Path="Tag" />
-                        <Binding Path="AgentName" />
+                        <!-- Resolved, not raw: the row must agree with the properties panel. -->
+                        <Binding Path="ResolvedAgentName" />
                         <Binding Path="NodeKind" />
                         <Binding Path="ActionTypeText" />
-                        <Binding Path="Command" />
+                        <Binding Path="ResolvedCommand" />
                         <Binding Path="To" />
                         <Binding Path="Title" />
                         <Binding Path="ResolvedDisplayText" Converter="{StaticResource StripModeConv}" />
@@ -540,11 +542,40 @@
                         <MultiBinding Converter="{StaticResource ActionFilePillConv}">
                             <Binding Path="NodeKind" />
                             <Binding Path="ActionTypeText" />
-                            <Binding Path="Command" />
+                            <Binding Path="ResolvedCommand" />
                             <Binding Path="Title" />
                         </MultiBinding>
                     </TextBlock.Text>
                 </TextBlock>
+            </Border>
+
+            <!-- ── Column 5 (shared with the file pill — Template and Action are mutually exclusive):
+                 Pipeline this template borrows its settings from for this session. ── -->
+            <Border Grid.Column="5"
+                    ToolTip="{Binding TemplateContextLabel}">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource FilePillBorder}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasTemplateContext}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <!-- Grid, not StackPanel: the Auto column reserves the provenance its width first,
+                     so ellipsis eats the pipeline name and never "(running)". -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Style="{StaticResource FilePillText}"
+                               Text="{Binding TemplateContextPipeline}" />
+                    <TextBlock Grid.Column="1" Style="{StaticResource FilePillText}"
+                               Text="{Binding TemplateContextSuffix}"
+                               TextTrimming="None" FontWeight="SemiBold" />
+                </Grid>
             </Border>
 
             <!-- ── Column 1: Status Indicator (spinner for Running, glyphs for terminal) ──

@@ -11,7 +11,7 @@ export default function ExecutionDashboard() {
   useRenderCount('ExecutionDashboard');
   const {
     activeSessions, completedSessions,
-    state, dispatch, selectSession
+    state, dispatch, selectSession, reload
   } = useExecutionDashboard();
 
   const [splitPercent, setSplitPercent] = useState(60);
@@ -25,18 +25,23 @@ export default function ExecutionDashboard() {
     }
   }, [activeSessions.length, completedSessions.length]);
 
-  const loadDemoData = useCallback(() => {
+  // Demo is a toggle. ON fetches sample sessions and adds them alongside whatever is already
+  // on screen; OFF removes only those. Real runs are never replaced.
+  const toggleDemo = useCallback(() => {
+    if (state.demoOn) {
+      dispatch({ type: 'SET_DEMO', on: false });
+      return;
+    }
     apiFetch<{ active: any[]; history: any[] }>('/api/execution/demo-sessions')
       .then(data => {
-        const all = [
-          ...(data.active || []),
-          ...(data.history || []),
-        ];
-        dispatch({ type: 'SET_SESSIONS', sessions: all });
+        const all = [...(data.active || []), ...(data.history || [])];
+        dispatch({ type: 'SET_DEMO', on: true, sessions: all });
         setShowCompleted(true);
       })
-      .catch(logCatch('ExecutionDashboard', 'loadDemoData'));
-  }, [dispatch]);
+      .catch(logCatch('ExecutionDashboard', 'toggleDemo'));
+  }, [dispatch, state.demoOn]);
+
+  const canClearFinished = completedSessions.length > 0;
 
   const filteredActive = activeSessions.filter(s =>
     !filterText ||
@@ -65,9 +70,28 @@ export default function ExecutionDashboard() {
           className="flex-1 bg-bg-surface text-text-primary text-xs border border-bdr rounded px-2 py-1 focus:outline-none focus:border-accent"
         />
         <button
-          onClick={loadDemoData}
-          className="text-xs px-3 py-1 rounded border border-accent/30 text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
-          title="Load demo data to test the dashboard UI"
+          onClick={() => { reload().catch(logCatch('ExecutionDashboard', 'reload')); }}
+          className="text-xs px-3 py-1 rounded border border-bdr text-text-secondary hover:text-text-primary transition-colors"
+          title="Re-query the controller for current sessions"
+        >
+          &#128260; Reload
+        </button>
+        <button
+          onClick={() => dispatch({ type: 'CLEAR_FINISHED' })}
+          disabled={!canClearFinished}
+          className="text-xs px-3 py-1 rounded border border-bdr text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Hide completed, failed and cancelled pipelines. Running pipelines stay, and nothing is removed from History."
+        >
+          &#129529; Clear finished
+        </button>
+        <button
+          onClick={toggleDemo}
+          className={`text-xs px-3 py-1 rounded border transition-colors ${
+            state.demoOn
+              ? 'bg-accent/20 text-accent border-accent'
+              : 'border-accent/30 text-accent bg-accent/10 hover:bg-accent/20'
+          }`}
+          title="Add or remove sample pipelines for testing the dashboard UI. Real runs are unaffected."
         >
           &#9654; Demo
         </button>

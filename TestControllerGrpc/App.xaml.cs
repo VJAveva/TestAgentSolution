@@ -145,6 +145,11 @@ public partial class App : Application
                 services.AddSingleton<IActionPipelineExecutor, ActionPipelineExecutor>();
                 services.AddSingleton<IFileWatcherManager, FileWatcherManager>();
                 services.AddSingleton<IWatchListXmlParser, WatchListXmlParserService>();
+
+                // Heartbeat telemetry, cached so pre-flight can read agent disk without a gRPC call.
+                services.AddSingleton<IAgentTelemetryCache, AgentTelemetryCacheService>();
+                services.AddSingleton<TestControllerGrpc.Core.Preflight.PreflightService>();
+
                 services.AddHostedService<ControllerHostedService>();
                 services.AddHostedService<ControllerGrpcServerHost>();
                 services.AddHostedService<ControllerWebApiHost>();

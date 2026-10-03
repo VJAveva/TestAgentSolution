@@ -201,7 +201,16 @@ public sealed partial class MainViewModel
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new List<TokenSuggestion>();
 
-        foreach (var (key, value) in TreeNodeViewModel.TokenValues)
+        // Only the edited node's own pipeline: offering another pipeline's value would suggest a
+        // token that resolves to something else at run time.
+        var scope = ActiveEditNode?.TokenScope;
+        var values = scope is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(TreeNodeViewModel.SharedTokens, StringComparer.OrdinalIgnoreCase);
+        if (scope is not null)
+            foreach (var (k, v) in TreeNodeViewModel.TokensFor(scope)) values[k] = v;
+
+        foreach (var (key, value) in values)
         {
             if (!seen.Add(key)) continue;
             result.Add(new TokenSuggestion($"[_{key.TrimStart('_')}]", Mask(key, value)));

@@ -12,6 +12,7 @@ using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Core.Maintenance;
+using TestControllerGrpc.Core.Preflight;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels.Execution;
 using TestControllerGrpc.Views.Dialogs;
@@ -59,7 +60,7 @@ public sealed partial class MainViewModel
     /// per-acquisition token to thread into the execution context, or <c>null</c> when
     /// the pipeline already has an active run (the conflict dialog is shown).
     /// </summary>
-    private string? AcquirePipelineLock(string tag)
+    private string? AcquirePipelineLock(string tag, string? borrowedByTemplate = null)
     {
         var user = GetCurrentUserContext();
         var owner = new TestControllerGrpc.Locking.OwnerIdentity(user.UserId, user.DisplayName, ClientKind.Wpf);
@@ -67,12 +68,24 @@ public sealed partial class MainViewModel
         if (result is TestControllerGrpc.Locking.AcquireResult.Conflict conflict)
         {
             var dto = LockMapper.ToDto(conflict.ExistingLock);
-            AddLog($"Pipeline '{tag}' is locked by {dto.OwnerDisplayName} ({dto.OwnerClientKind})", LogSeverity.Warning);
+            AddLog(
+                $"Cannot run {DescribeRunTarget(tag, borrowedByTemplate)} - it is locked by "
+                + $"{dto.OwnerDisplayName} ({dto.OwnerClientKind}). Cancel that run or wait for it to finish.",
+                LogSeverity.Warning);
             ShowLockConflictDialog(dto);
             return null;
         }
         return (result as TestControllerGrpc.Locking.AcquireResult.Success)?.Lock.Token ?? string.Empty;
     }
+
+    /// <summary>
+    /// Names the pipeline a refusal is about, and the template that borrowed it. "locked by Ravi"
+    /// alone is unintelligible to someone who clicked Run on a template, not on that pipeline.
+    /// </summary>
+    private static string DescribeRunTarget(string pipelineTag, string? borrowedByTemplate) =>
+        string.IsNullOrEmpty(borrowedByTemplate)
+            ? $"pipeline '{pipelineTag}'"
+            : $"pipeline '{pipelineTag}' (borrowed by template '{borrowedByTemplate}')";
 
     /// <summary>Maintenance dispatch gate for WPF triggers: true = blocked (already logged and cleaned up).</summary>
     private bool IsBlockedByMaintenance(string tag, IReadOnlyList<string> requiredAgents, string? pipelineToken, PipelineSession session)
@@ -161,6 +174,10 @@ public sealed partial class MainViewModel
         }
 
         WriteBackAll();
+
+        // After write-back so the checks see what will actually run, before the lock so a blocked
+        // run never occupies the pipeline.
+        if (!PassesPreflight(SelectedNode, tag, PreflightScope.Pipeline)) return;
 
         // Single-run pipeline lock — ANY active run blocks (owner included). Path is Cancel.
         var pipelineToken = AcquirePipelineLock(tag);
@@ -332,6 +349,8 @@ public sealed partial class MainViewModel
         }
 
         WriteBackAll();
+
+        if (!PassesPreflight(SelectedNode, wi.Tag, PreflightScope.Pipeline)) return;
 
         // Single-run pipeline lock — ANY active run blocks (owner included). Path is Cancel.
         var pipelineToken = AcquirePipelineLock(wi.Tag);
@@ -673,9 +692,12 @@ public sealed partial class MainViewModel
         if (!allSuccess) ScrollLogToLastError();
     }
 
-    /// <summary>The tree node the execute commands act on — the Templates tree when it is active, else the WatchList tree.</summary>
-    private TreeNodeViewModel? ActiveExecNode =>
-        ActiveEditingContext == "Templates" ? SelectedTemplateNode : SelectedNode;
+    /// <summary>
+    /// The tree node the execute commands act on. Comes from the selection coordinator, which is
+    /// also what activates the properties pane - so the context menu and the run can never target
+    /// different nodes.
+    /// </summary>
+    private TreeNodeViewModel? ActiveExecNode => _selection.ExecTarget;
 
     private bool CanExecuteGroup
     {
@@ -684,6 +706,7 @@ public sealed partial class MainViewModel
             var node = ActiveExecNode;
             if (node?.NodeKind != NodeKinds.ActionGroup) return false;
             if (node.ModelObject is not ActionGroupConfig ag) return false;
+            if (!IsRunnableNode(node)) return false;
             if (_lockStateService.HasActiveLock(ScopedRunTag(node, ag.Tag))) return false;
             // A node in the Templates tree has no owning pipeline and therefore no assignment to check.
             // AuthorizationService has no unscoped Pipeline_Trigger rule for Engineers, so gating it here
@@ -700,16 +723,26 @@ public sealed partial class MainViewModel
         var node = ActiveExecNode;
         if (node?.ModelObject is not ActionGroupConfig ag) return;
 
-        var tag = ScopedRunTag(node, ag.Tag);
+        // A Templates-library node has no parameters of its own; ask which pipeline to borrow from.
+        string? borrowed = null;
+        if (OwningTemplateId(node) is not null)
+        {
+            if (!TryPickTemplatePipeline(node, out var picked)) return;
+            borrowed = picked;
+        }
+
+        var tag = borrowed ?? ScopedRunTag(node, ag.Tag);
+        var borrowedTemplate = borrowed is null ? null : OwningTemplateId(node);
         if (IsWatchItemRunning(tag))
         {
-            AddLog($"WatchItem '{tag}' is already running");
+            AddLog($"Cannot run {DescribeRunTarget(tag, borrowedTemplate)} - a run is already in progress.",
+                LogSeverity.Warning);
             return;
         }
 
         // Authorization before any lock is taken, exactly as the root trigger does. A scoped run
         // dispatches real work to real agents, so it cannot be less gated than the pipeline it belongs to.
-        var pipelineTag = FindWatchItemTag(node);
+        var pipelineTag = FindWatchItemTag(node) ?? borrowed;
         if (pipelineTag is not null)
         {
             try
@@ -719,7 +752,8 @@ public sealed partial class MainViewModel
             }
             catch (PipelineAuthorizationDeniedException ex)
             {
-                AddLog($"Run denied for group '{ag.Tag}': {ex.Message}", LogSeverity.Warning);
+                AddLog($"Run denied for group '{ag.Tag}' on {DescribeRunTarget(pipelineTag, borrowedTemplate)}: {ex.Message}",
+                    LogSeverity.Warning);
                 ShowAuthorizationDeniedDialog(ex.Message);
                 return;
             }
@@ -730,7 +764,9 @@ public sealed partial class MainViewModel
         // Single-run pipeline lock, same as a root trigger: a scoped run still occupies the pipeline,
         // and the WebClient's node-run takes this lock, so skipping it here would let the two hosts
         // run the same pipeline at once.
-        var pipelineToken = AcquirePipelineLock(tag);
+        if (!PassesPreflight(node, tag, PreflightScope.Node, borrowedTemplate)) return;
+
+        var pipelineToken = AcquirePipelineLock(tag, borrowedTemplate);
         if (pipelineToken is null) return;
 
         using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
@@ -741,8 +777,9 @@ public sealed partial class MainViewModel
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
+            WatchItemTag = pipelineTag ?? "",
             TriggerFileName = $"[ManualTrigger:Group:{ag.Tag}]",
-            Parameters = CollectInitializeParameters(node),
+            Parameters = ParametersForRun(node, borrowed),
             SessionId = session.SessionId,
         };
         StampOwner(ctx);
@@ -835,29 +872,48 @@ public sealed partial class MainViewModel
         {
             if (SelectedTemplateNode?.NodeKind != NodeKinds.Template) return false;
             if (SelectedTemplateNode.ModelObject is not TemplateConfig tpl) return false;
-            // No permission check: a Template has no owning pipeline, and the only rule that would
-            // apply denies Engineers outright. Gating it is a policy decision, not a bug fix.
+            // A template has no settings of its own, so it is runnable only through a pipeline that
+            // Refs it. With none, every action would fail on unresolved tokens.
+            if (TemplateUsage.PipelinesReferencing(_config, tpl.ID).Count == 0) return false;
             return !_lockStateService.HasActiveLock($"Template:{tpl.ID}");
         }
     }
 
-    /// <summary>Execute a Template directly — all of its Actions and ActionGroups — independent of any WatchItem.</summary>
+    /// <summary>Execute a Template, borrowing the parameters of a pipeline that uses it.</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteTemplate), AllowConcurrentExecutions = true)]
     private async Task ExecuteTemplate()
     {
         if (SelectedTemplateNode is not { } templateNode || templateNode.ModelObject is not TemplateConfig tpl) return;
 
-        var tag = $"Template:{tpl.ID}";
+        if (!TryPickTemplatePipeline(templateNode, out var borrowed)) return;
+
+        var tag = borrowed;
         if (IsWatchItemRunning(tag))
         {
-            AddLog($"Template '{tpl.ID}' is already running");
+            AddLog($"Cannot run {DescribeRunTarget(tag, tpl.ID)} - a run is already in progress.",
+                LogSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            await _pipelineGuard.AuthorizeAsync(
+                GetCurrentUserContext(), Permission.Pipeline_Trigger, borrowed);
+        }
+        catch (PipelineAuthorizationDeniedException ex)
+        {
+            AddLog($"Run denied for template '{tpl.ID}' on {DescribeRunTarget(borrowed, tpl.ID)}: {ex.Message}",
+                LogSeverity.Warning);
+            ShowAuthorizationDeniedDialog(ex.Message);
             return;
         }
 
         WriteBackAll();
 
-        // Keyed on the synthetic Template tag, so two runs of the same template cannot overlap.
-        var pipelineToken = AcquirePipelineLock(tag);
+        if (!PassesPreflight(templateNode, tag, PreflightScope.Template, tpl.ID)) return;
+
+        // Keyed on the borrowed pipeline, so a template run and that pipeline's own run cannot overlap.
+        var pipelineToken = AcquirePipelineLock(tag, tpl.ID);
         if (pipelineToken is null) return;
 
         using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
@@ -865,14 +921,12 @@ public sealed partial class MainViewModel
 
         var session = CreateSession(tag);
 
-        // Templates have no WatchItem context — collect only their own Initialize parameters.
-        var initCtx = new PipelineExecutionContext();
-        GatherInitializeParams(templateNode, initCtx);
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = "",
+            WatchItemTag = borrowed,
             TriggerFileName = $"[ManualTrigger:Template:{tpl.ID}]",
-            Parameters = initCtx.Parameters,
+            Parameters = ParametersForRun(templateNode, borrowed),
             SessionId = session.SessionId,
         };
         StampOwner(ctx);
@@ -964,6 +1018,7 @@ public sealed partial class MainViewModel
             var node = ActiveExecNode;
             if (node?.NodeKind != NodeKinds.Action) return false;
             if (node.ModelObject is not ActionConfig action) return false;
+            if (!IsRunnableNode(node)) return false;
             if (_lockStateService.HasActiveLock(ScopedRunTag(node, action.Command))) return false;
             var pipelineTag = FindWatchItemTag(node);
             return pipelineTag is null || _capabilityChecker.Can(Permission.Pipeline_Trigger, pipelineTag);
@@ -977,14 +1032,24 @@ public sealed partial class MainViewModel
         var node = ActiveExecNode;
         if (node?.ModelObject is not ActionConfig action) return;
 
-        var tag = ScopedRunTag(node, action.Command);
+        // A Templates-library node has no parameters of its own; ask which pipeline to borrow from.
+        string? borrowed = null;
+        if (OwningTemplateId(node) is not null)
+        {
+            if (!TryPickTemplatePipeline(node, out var picked)) return;
+            borrowed = picked;
+        }
+
+        var tag = borrowed ?? ScopedRunTag(node, action.Command);
+        var borrowedTemplate = borrowed is null ? null : OwningTemplateId(node);
         if (IsWatchItemRunning(tag))
         {
-            AddLog($"WatchItem '{tag}' is already running");
+            AddLog($"Cannot run {DescribeRunTarget(tag, borrowedTemplate)} - a run is already in progress.",
+                LogSeverity.Warning);
             return;
         }
 
-        var pipelineTag = FindWatchItemTag(node);
+        var pipelineTag = FindWatchItemTag(node) ?? borrowed;
         if (pipelineTag is not null)
         {
             try
@@ -994,7 +1059,8 @@ public sealed partial class MainViewModel
             }
             catch (PipelineAuthorizationDeniedException ex)
             {
-                AddLog($"Run denied for action '{action.ResolvedTag}': {ex.Message}", LogSeverity.Warning);
+                AddLog($"Run denied for action '{action.ResolvedTag}' on {DescribeRunTarget(pipelineTag, borrowedTemplate)}: {ex.Message}",
+                    LogSeverity.Warning);
                 ShowAuthorizationDeniedDialog(ex.Message);
                 return;
             }
@@ -1002,7 +1068,9 @@ public sealed partial class MainViewModel
 
         WriteBackAll();
 
-        var pipelineToken = AcquirePipelineLock(tag);
+        if (!PassesPreflight(node, tag, PreflightScope.Node, borrowedTemplate)) return;
+
+        var pipelineToken = AcquirePipelineLock(tag, borrowedTemplate);
         if (pipelineToken is null) return;
 
         using var pipelineLockRenewal = new TestControllerGrpc.Locking.LockRenewalTimer(
@@ -1013,8 +1081,9 @@ public sealed partial class MainViewModel
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
+            WatchItemTag = pipelineTag ?? "",
             TriggerFileName = $"[ManualTrigger:Action:{action.Command}]",
-            Parameters = CollectInitializeParameters(node),
+            Parameters = ParametersForRun(node, borrowed),
             SessionId = session.SessionId,
         };
         StampOwner(ctx);
@@ -1208,9 +1277,27 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Walks up the tree from the selected node to find the WatchItem root,
-    /// then collects parameters from all Initialize nodes in that subtree.
-    /// This ensures tokens are resolved even when executing mid-tree.
+    /// Parameters for a scoped run. A WatchList node uses its own pipeline's Initialize values; a
+    /// Templates-library node borrows them from the pipeline the user picked, which is the only way
+    /// its tokens can resolve at all.
+    /// </summary>
+    private Dictionary<string, string> ParametersForRun(TreeNodeViewModel node, string? borrowedPipelineTag)
+    {
+        if (borrowedPipelineTag is null) return CollectInitializeParameters(node);
+
+        var wi = _config.WatchItems.FirstOrDefault(w =>
+            string.Equals(w.Tag, borrowedPipelineTag, StringComparison.OrdinalIgnoreCase));
+        if (wi is null) return CollectInitializeParameters(node);
+
+        var ctx = new PipelineExecutionContext { WatchItemTag = wi.Tag };
+        ParameterResolver.LoadForWatchItem(ctx, wi);
+        AddLog($"Borrowing parameters from pipeline '{wi.Tag}' ({ctx.Parameters.Count} tokens)");
+        return ctx.Parameters;
+    }
+
+    /// <summary>
+    /// Walks up to the WatchItem or Template root, then collects parameters from all Initialize
+    /// nodes in that subtree. This ensures tokens are resolved even when executing mid-tree.
     /// </summary>
     private Dictionary<string, string> CollectInitializeParameters(TreeNodeViewModel node)
     {

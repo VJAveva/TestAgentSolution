@@ -4,6 +4,16 @@
 * text=auto
 
 ###############################################################################
+# Windows scripts must be CRLF in the working tree.
+# cmd.exe and the batch parser are the fussy consumers here; `* text=auto` alone
+# leaves whatever the author committed, which is how Utilites\ ended up with a
+# mix of LF and CRLF batch files.
+###############################################################################
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

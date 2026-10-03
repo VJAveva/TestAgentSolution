@@ -20,6 +20,9 @@ public partial class ActionPillVM : ObservableObject
     [ObservableProperty] private DateTime _startedUtc = DateTime.UtcNow;
     [ObservableProperty] private double _durationSeconds;
 
+    /// <summary>Pipeline this action ran under; its values are the only ones the tooltip may resolve.</summary>
+    public string PipelineTag { get; set; } = TestControllerGrpc.ViewModels.TreeNodeViewModel.SharedScope;
+
     /// <summary>Stable identity used to update an existing pill in place.</summary>
     public string Key => string.IsNullOrEmpty(Tag)
         ? $"{ActionType}|{Command}"
@@ -62,7 +65,7 @@ public partial class ActionPillVM : ObservableObject
             var lines = new List<string>();
             if (!string.IsNullOrEmpty(Command))
             {
-                var resolved = TreeNodeViewModel.ResolveTokens(Command);
+                var resolved = TestControllerGrpc.ViewModels.TreeNodeViewModel.ResolveTokens(Command, PipelineTag);
                 lines.Add($"Command: {resolved}");
             }
             lines.Add($"Status: {Status}");

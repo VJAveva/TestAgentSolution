@@ -11,6 +11,75 @@
     beh:LayoutBreakpoint.IsEnabled="True"
     Background="{DynamicResource DashboardBg}">
 
+    <Window.Resources>
+        <!-- Toolbar buttons. The default chrome gives no disabled affordance, so a dead
+             "Clear finished" looked identical to a live one. -->
+        <Style x:Key="DashboardToolbarBtn" TargetType="Button">
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentBlue}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="3"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BgRowHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.35" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Demo toggle: the ON state has to be unmistakable, because it puts fake pipelines
+             on a screen operators use to judge real ones. -->
+        <Style x:Key="DemoToggleBtn" TargetType="ToggleButton">
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentBlue}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" CornerRadius="3" Background="Transparent"
+                                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource StatusWarningBg}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource StatusWarningFg}" />
+                                <Setter Property="Foreground" Value="{DynamicResource StatusWarningFg}" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.8" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -137,14 +206,20 @@
                         <DockPanel>
                             <!-- Status RadioButtons + Demo button (right side) -->
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                <Button Content="&#x1F504; Reload" FontSize="{StaticResource FontSize9}" Padding="8,3" Margin="0,0,6,0"
-                                        Foreground="{StaticResource AccentBlue}"
-                                        Command="{Binding ReloadSnapshotsCommand}"
-                                        ToolTip="Reload pipeline snapshots from disk (crash recovery)"/>
-                                <Button Content="&#x25B6; Demo" FontSize="{StaticResource FontSize9}" Padding="8,3" Margin="0,0,10,0"
-                                        Foreground="{StaticResource AccentBlue}"
-                                        Command="{Binding LoadDemoDataCommand}"
-                                        ToolTip="Load demo data to test the dashboard UI"/>
+                                <Button Content="&#x1F504; Reload" Style="{StaticResource DashboardToolbarBtn}"
+                                        Command="{Binding ReloadCommand}"
+                                        ToolTip="Re-query the controller for current sessions"/>
+                                <Button Content="&#x1F9F9; Clear finished" Style="{StaticResource DashboardToolbarBtn}"
+                                        Command="{Binding ClearFinishedCommand}"
+                                        ToolTip="Hide completed, failed and cancelled pipelines. Running pipelines stay, and nothing is removed from History."/>
+                                <ToggleButton Style="{StaticResource DemoToggleBtn}"
+                                              IsChecked="{Binding IsDemoMode, Mode=OneWay}"
+                                              Command="{Binding ToggleDemoCommand}"
+                                              ToolTip="Add or remove sample pipelines for testing the dashboard UI. Real runs are unaffected.">
+                                    <TextBlock>
+                                        <Run Text="&#x25B6;" /><Run Text=" Demo" />
+                                    </TextBlock>
+                                </ToggleButton>
                                 <RadioButton x:Name="PipelineFilterAll" Content="All"
                                              GroupName="PipelineStatus" IsChecked="True"
                                              Style="{StaticResource FilterButtonStyle}"
@@ -269,6 +344,14 @@
                                                                     </Style>
                                                                 </TextBlock.Style>
                                                             </TextBlock>
+                                                        </Border>
+                                                        <!-- DEMO badge: this card is fabricated, not a real run -->
+                                                        <Border CornerRadius="3" Padding="5,1" Margin="0,0,6,0"
+                                                                Background="{DynamicResource StatusWarningBg}"
+                                                                ToolTip="Sample data from the Demo toggle. Not a real pipeline and not counted in the totals."
+                                                                Visibility="{Binding IsDemo, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="DEMO" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                                                                       Foreground="{DynamicResource StatusWarningFg}"/>
                                                         </Border>
                                                         <!-- Pipeline name -->
                                                         <TextBlock Text="{Binding WatchItemTag}" FontSize="{StaticResource FontSize14}" FontWeight="Medium"

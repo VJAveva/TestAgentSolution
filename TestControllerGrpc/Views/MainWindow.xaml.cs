@@ -91,6 +91,11 @@ public partial class MainWindow : Window
         WatchListTreeView.ContextMenuOpening += OnWatchListContextMenuOpening;
         TemplateTreeView.ContextMenuOpening += OnTemplateContextMenuOpening;
 
+        // WPF does not select a TreeViewItem on right-click, so without these the menu is built for
+        // whatever was selected BEFORE and Execute then runs that node instead of the clicked one.
+        WatchListTreeView.PreviewMouseRightButtonDown += OnTreePreviewRightButtonDown;
+        TemplateTreeView.PreviewMouseRightButtonDown += OnTreePreviewRightButtonDown;
+
         // ?? Drag-and-drop handlers ??????????????????????????
         WatchListTreeView.PreviewMouseLeftButtonDown += OnTreePreviewMouseDown;
         WatchListTreeView.PreviewMouseMove += OnTreePreviewMouseMove;
@@ -382,13 +387,27 @@ public partial class MainWindow : Window
     private void OnWatchListSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (e.NewValue is TreeNodeViewModel node)
-            _vm.SelectedNode = node;
+            _vm.ActivateWatchListNode(node);
     }
 
     private void OnTemplateSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (e.NewValue is TreeNodeViewModel node)
-            _vm.SelectedTemplateNode = node;
+            _vm.ActivateTemplateNode(node);
+    }
+
+    /// <summary>
+    /// Selects the TreeViewItem under the cursor before its context menu opens.
+    /// </summary>
+    private void OnTreePreviewRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not ItemsControl tree || e.OriginalSource is not DependencyObject src) return;
+
+        var item = ItemsControl.ContainerFromElement(tree, src) as TreeViewItem;
+        if (item is null) return;
+
+        item.IsSelected = true;
+        item.Focus();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

@@ -16,6 +16,8 @@ export interface SessionSummary {
   progressPercent: number;
   lockedAgents: string[];
   buildNumber?: string;
+  /** Fabricated by the Demo toggle. Never counted in the real totals. */
+  isDemo?: boolean;
 }
 
 /// Attribution for who triggered a run (display only — not an authorization input).

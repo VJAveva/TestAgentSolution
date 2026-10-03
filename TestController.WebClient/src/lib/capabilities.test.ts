@@ -118,7 +118,7 @@ describe('getDisabledReason()', () => {
   it('returns assignment message for Engineer on unassigned pipeline', () => {
     const engineer = makeUser('Engineer', ['pipe-A']);
     const reason = getDisabledReason(engineer, 'secured', 'Pipeline_Trigger', 'pipe-X');
-    expect(reason).toContain('not assigned');
+    expect(reason).toMatch(/not assigned/i);
   });
 
   it('returns not authenticated message for null user', () => {

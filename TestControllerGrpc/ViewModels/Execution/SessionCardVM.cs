@@ -37,6 +37,12 @@ public partial class SessionCardVM : ObservableObject
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private string _lockedAgentsList = "";
 
+    /// <summary>Fabricated card from the Demo toggle. Never counted in the real KPI totals.</summary>
+    [ObservableProperty] private bool _isDemo;
+
+    /// <summary>Reached a terminal state, so "Clear finished" may dismiss it from the view.</summary>
+    public bool IsFinished => Status != "Running";
+
     public ObservableCollection<AgentRowVM> Agents { get; } = new();
 
     /// <summary>Friendly "by &lt;user&gt;" attribution: prefers the display name, falls back to the
@@ -101,7 +107,7 @@ public partial class SessionCardVM : ObservableObject
 
         if (existing != null) return existing;
 
-        var newAgent = new AgentRowVM { AgentName = agentName };
+        var newAgent = new AgentRowVM { AgentName = agentName, PipelineTag = WatchItemTag };
         Agents.Add(newAgent);
         return newAgent;
     }
@@ -138,7 +144,11 @@ public partial class SessionCardVM : ObservableObject
         if (sum != _lastSummary) { _lastSummary = sum; OnPropertyChanged(nameof(Summary)); }
     }
 
-    partial void OnStatusChanged(string value) => RaiseDerivedIfChanged();
+    partial void OnStatusChanged(string value)
+    {
+        RaiseDerivedIfChanged();
+        OnPropertyChanged(nameof(IsFinished));
+    }
 
     partial void OnPassedActionsChanged(int value) => RaiseDerivedIfChanged();
 

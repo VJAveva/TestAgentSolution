@@ -453,7 +453,17 @@ public class ParameterResolverTests : IDisposable
     public void FindUnresolvedTokens_Should_IgnoreNonExecutableFields_When_BodyHasBracketText()
     {
         var ctx = new PipelineExecutionContext();
-        var action = new ActionConfig { Command = "run.bat", Body = "[INFO] build finished" };
+
+        // Title and Body carry prose. "[INFO]" is a label, not a parameter, so it must not stop a
+        // run; Tag and Comment are never substituted at all.
+        var action = new ActionConfig
+        {
+            Command = "run.bat",
+            Title = "[WARN] nightly",
+            Body = "[INFO] build finished",
+            Tag = "[Stage 1]",
+            Comment = "see [TICKET-42]",
+        };
 
         Assert.Empty(ParameterResolver.FindUnresolvedTokens(action, ctx));
     }

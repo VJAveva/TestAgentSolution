@@ -61,6 +61,16 @@ export function SessionCard({
             {style.label}
           </span>
 
+          {/* Sample data, not a real run */}
+          {session.isDemo && (
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-500"
+              title="Sample data from the Demo toggle. Not a real pipeline and not counted in the totals."
+            >
+              DEMO
+            </span>
+          )}
+
           {/* Pipeline name */}
           <span className="text-text-primary">{session.watchItemTag}</span>
 

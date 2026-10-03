@@ -41,6 +41,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly IUpdatePolicyStore? _updatePolicy;
     private readonly IAppLogger _appLogger;
     private readonly IRegressionImpactMatcher _impactMatcher;
+    private readonly TestControllerGrpc.Core.Preflight.PreflightService? _preflight;
     private readonly ILogger<ControllerWebApiHost> _logger;
     private readonly IConfiguration _config;
     private readonly int _port;
@@ -67,7 +68,8 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         IMaintenanceOperationStore? maintenanceStore = null,
         INodeUpdateStatusStore? updateStatus = null,
         IFleetNotificationService? fleetNotifications = null,
-        IUpdatePolicyStore? updatePolicy = null)
+        IUpdatePolicyStore? updatePolicy = null,
+        TestControllerGrpc.Core.Preflight.PreflightService? preflight = null)
     {
         _sessionManager = sessionManager;
         _executor = executor;
@@ -87,6 +89,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         _updatePolicy = updatePolicy;
         _appLogger = appLogger;
         _impactMatcher = impactMatcher;
+        _preflight = preflight;
         _logger = logger;
         _config = config;
         _port = config.GetValue<int>("WebApiPort", 5200);
@@ -114,6 +117,11 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         if (_lockManager is null) problems.Add(nameof(AgentLockManager));
         if (_events is null) problems.Add(nameof(IEventAggregator));
         if (_appLogger is null) problems.Add(nameof(IAppLogger));
+
+        // Not fatal: only /api/preflight needs it, and refusing to start the whole API would be a
+        // worse outcome than one endpoint returning 500.
+        if (_preflight is null)
+            _logger.LogWarning("PreflightService is not registered; /api/preflight will not work.");
 
         if (problems.Count > 0)
         {
@@ -171,7 +179,10 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             if (_updatePolicy is not null)
                 builder.Services.AddSingleton(_updatePolicy);
             builder.Services.AddSingleton(_appLogger);
-
+            // This host builds its OWN container, so every service a shared controller needs must
+            // be re-registered here - a missing one is a runtime 500, not a compile error.
+            if (_preflight is not null)
+                builder.Services.AddSingleton(_preflight);
             // Bridge the impact-mapping matcher (with its engine + index) from the WPF container so the
             // React client on this embedded host gets the same "Impacted Test Cases" data as the desktop.
             builder.Services.AddSingleton(_impactMatcher);

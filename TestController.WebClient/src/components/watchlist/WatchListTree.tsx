@@ -11,6 +11,7 @@ import type { TreeNode, NodeKind } from '../../types/api';
 import { ChevronDown, ChevronRight, Eye, Zap, FolderTree, Play, Settings, Link2, FileText, List, Circle, Lock } from 'lucide-react';
 import type { PipelineLockDto } from '../../stores/lockStore';
 import LockBadge from './LockBadge';
+import { PreflightButton } from './PreflightButton';
 import DisabledTriggerButton from '../common/DisabledTriggerButton';
 import TriggerDialog from '../execution/TriggerDialog';
 import NodeRunDialog from './NodeRunDialog';
@@ -398,6 +399,8 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverri
               Override
             </button>
           )}
+
+          <PreflightButton pipelineTag={node.tag} />
         </div>
       )}
 

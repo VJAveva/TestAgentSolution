@@ -1284,6 +1284,14 @@
                                 <TextBlock Text="Run All" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center" Margin="4,0,0,0" />
                             </StackPanel>
                         </Button>
+                        <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding CheckOnlyCommand}"
+                                ToolTip="Run the pre-flight checks for the selected pipeline without starting it"
+                                Height="28" Padding="8,2">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D5;" FontSize="{StaticResource FontSize14}" Foreground="{DynamicResource AccBlue}" />
+                                <TextBlock Text="Check only" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                            </StackPanel>
+                        </Button>
                         <Border Background="{DynamicResource DangerBtnBg}" CornerRadius="4" Margin="2"
                                 Visibility="{Binding IsExecuting, Converter={StaticResource BoolVis}}">
                             <Button Style="{StaticResource RibbonBtnDanger}" Command="{Binding CancelExecutionCommand}"
@@ -1682,6 +1690,13 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE769;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Trigger Item" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding CheckOnlyCommand}"
+                                                    ToolTip="Run the pre-flight checks for the selected pipeline without starting it">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D5;" Foreground="{DynamicResource AccBlue}" />
+                                                    <TextBlock Text="Check only" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerEventCommand}"
@@ -2350,6 +2365,27 @@
                                           RelativeSource={RelativeSource AncestorType=Window},
                                           Converter={StaticResource InvBoolVis}}">
                             <StackPanel>
+                                <!-- Values actually used by a run outrank anything the editor would predict. -->
+                                <Border CornerRadius="4" Padding="8,5" Margin="0,0,0,8"
+                                        Background="{DynamicResource SuccessBadgeBg}"
+                                        BorderBrush="{DynamicResource AccGreen}" BorderThickness="1"
+                                        Visibility="{Binding HasSessionValues, Converter={StaticResource BoolVis}}">
+                                    <TextBlock Text="{Binding ValuesSourceLabel}" FontSize="{StaticResource FontSize10}"
+                                               FontWeight="SemiBold" Foreground="{DynamicResource AccGreen}"
+                                               TextWrapping="Wrap" />
+                                </Border>
+
+                                <!-- Read-only mirror of a Ref'd template: edits here would change every pipeline. -->
+                                <Border CornerRadius="4" Padding="8,5" Margin="0,0,0,8"
+                                        Background="{DynamicResource BgSurface}"
+                                        BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                                        Visibility="{Binding IsRefExpansion, Converter={StaticResource BoolVis}}">
+                                    <TextBlock FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextS}">
+                                        <Run Text="&#8505;" FontWeight="Bold" /><Run Text=" From the referenced template - read-only here. Edit it in the Library." />
+                                    </TextBlock>
+                                </Border>
+
                                 <!-- ===== WatchList (root) ===== -->
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=WatchList, FallbackValue=Collapsed}">
                                 <Border Background="{DynamicResource WatchRootBg}" CornerRadius="6" Padding="14" Margin="0,5">
@@ -2600,15 +2636,57 @@
                                     <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"
                                              behaviors:TokenCompletionBehavior.Source="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                              AutomationProperties.Name="COMMAND" />
+                                    <Label Content="RESOLVED COMMAND" Style="{StaticResource Lbl}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding ResolvedCommandDisplay, Mode=OneWay}" FontFamily="Consolas"
+                                                 IsReadOnly="True"
+                                                 ToolTip="Read-only: shows the command with [Token] placeholders resolved"  AutomationProperties.Name="RESOLVED COMMAND">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox" BasedOn="{StaticResource Fld}">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                    <!-- Green means a real value. An unresolved field must never borrow it. -->
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCommandResolved}" Value="False">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                                            <Setter Property="FontStyle" Value="Italic" />
+                                                            <Setter Property="FontFamily" Value="Segoe UI" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                        <Button Grid.Column="1" Content="Choose&#8230;" Margin="6,0,0,0" Padding="10,3"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Visibility="{Binding IsCommandResolved, Converter={StaticResource InvBoolVis}}"
+                                                Command="{Binding DataContext.ChangeTemplateContextCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Pick the pipeline whose values this should resolve against" />
+                                    </Grid>
                                     <Label Content="PARAMETERS" Style="{StaticResource Lbl}" />
                                     <TextBox Text="{Binding Parameters, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontFamily="Consolas"
                                              behaviors:TokenCompletionBehavior.Source="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                              TextWrapping="Wrap" AcceptsReturn="True" Height="52" VerticalScrollBarVisibility="Auto"  AutomationProperties.Name="PARAMETERS" />
                                     <Label Content="RESOLVED PARAMETERS" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding ResolvedParameters, Mode=OneWay}" Style="{StaticResource Fld}" FontFamily="Consolas"
-                                             IsReadOnly="True" Foreground="{DynamicResource AccGreen}"
+                                    <TextBox Text="{Binding ResolvedParametersDisplay, Mode=OneWay}" FontFamily="Consolas"
+                                             IsReadOnly="True"
                                              TextWrapping="Wrap" Height="52" VerticalScrollBarVisibility="Auto"
-                                             ToolTip="Read-only: shows parameters with [Token] placeholders resolved"  AutomationProperties.Name="RESOLVED PARAMETERS" />
+                                             ToolTip="Read-only: shows parameters with [Token] placeholders resolved"  AutomationProperties.Name="RESOLVED PARAMETERS">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox" BasedOn="{StaticResource Fld}">
+                                                <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsParametersResolved}" Value="False">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                                        <Setter Property="FontStyle" Value="Italic" />
+                                                        <Setter Property="FontFamily" Value="Segoe UI" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
                                     <Grid Margin="0,2">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" />
@@ -2703,9 +2781,21 @@
                                             ToolTip="Copy this action once per selected agent into a new Parallel group"
                                             AutomationProperties.Name="Apply to agents" />
                                     <Label Content="RESOLVED AGENT NAME" Style="{StaticResource Lbl}" />
-                                    <TextBox Text="{Binding ResolvedAgentName, Mode=OneWay}" Style="{StaticResource Fld}"
-                                             IsReadOnly="True" Foreground="{DynamicResource AccGreen}"
-                                             ToolTip="Read-only: shows AgentName with [Token] placeholders resolved"  AutomationProperties.Name="RESOLVED AGENT NAME" />
+                                    <TextBox Text="{Binding ResolvedAgentNameDisplay, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             ToolTip="Read-only: shows AgentName with [Token] placeholders resolved"  AutomationProperties.Name="RESOLVED AGENT NAME">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox" BasedOn="{StaticResource Fld}">
+                                                <Setter Property="Foreground" Value="{DynamicResource AccGreen}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAgentNameResolved}" Value="False">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                                        <Setter Property="FontStyle" Value="Italic" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" />
@@ -2897,7 +2987,7 @@
                                           AutomationProperties.Name="TEMPLATE ID" />
                                 <TextBlock TextWrapping="Wrap" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" Margin="0,4">
                                     <Run Text="ⓘ" FontWeight="Bold" />
-                                    <Run Text=" This node expands to the children of the referenced Template at execution time." />
+                                    <Run Text=" Expand this node to see the referenced Template's steps, resolved with this pipeline's Initialize. They are read-only here - edit them in the Library." />
                                 </TextBlock>
                             </StackPanel>
 

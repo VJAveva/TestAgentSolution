@@ -187,10 +187,145 @@ public static class WatchListValidator
         foreach (var wi in config.WatchItems)
             AnalyzeWatchItemWarnings(wi, issues);
 
+        foreach (var wi in config.WatchItems)
+            AnalyzeParameterSources(config, wi, issues);
+
         if (knownAgents is { Count: > 0 })
             AnalyzeAgentNames(config, knownAgents, issues);
 
         return issues;
+    }
+
+    /// <summary>
+    /// Checks each WatchItem's Initialize sources against the files on disk: the file exists, the
+    /// named Profile is in it, the WatchItem Tag has a pipelines entry, and every [Token] the
+    /// actions use is defined by some layer.
+    /// </summary>
+    /// <remarks>
+    /// These are the four failures that used to be completely silent. A renamed Tag simply stopped
+    /// matching <c>pipelines[tag]</c> and all its overrides vanished with no signal anywhere; a
+    /// mistyped Profile did the same. Reading the files is deliberate - none of it is knowable from
+    /// the XML alone, and a validator that cannot open the parameter file cannot catch the bug.
+    /// </remarks>
+    private static void AnalyzeParameterSources(
+        WatchListConfig config, WatchItemConfig wi, List<ValidationIssue> issues)
+    {
+        var path = $"WatchItem[{wi.Tag}]";
+        var inits = ParameterResolver.CollectInitializeNodes(wi);
+        if (inits.Count == 0) return;
+
+        var sawLayeredConfig = false;
+        var tagHasPipelineEntry = false;
+
+        foreach (var init in inits)
+        {
+            // A tokenised path cannot be resolved without a run, so judging it would flag every
+            // templated pipeline.
+            if (ContainsToken(init.ParameterFile)) continue;
+
+            var initPath = $"{path}.Initialize[{init.Tag}]";
+
+            if (!File.Exists(init.ParameterFile))
+            {
+                issues.Add(new(WatchIssueSeverity.Warning, initPath,
+                    $"Parameter file '{init.ParameterFile}' does not exist.",
+                    "The run will stop before any action until this file is present."));
+                continue;
+            }
+
+            if (!ParameterResolver.IsLayeredConfig(init.ParameterFile)) continue;
+
+            var parsed = ParameterResolver.ReadJsonConfig(init.ParameterFile);
+            if (parsed is null)
+            {
+                issues.Add(new(WatchIssueSeverity.Warning, initPath,
+                    $"Parameter file '{init.ParameterFile}' is not valid JSON.",
+                    "The run will stop before any action until it parses."));
+                continue;
+            }
+
+            sawLayeredConfig = true;
+            tagHasPipelineEntry |= parsed.Pipelines.ContainsKey(wi.Tag);
+
+            if (!string.IsNullOrWhiteSpace(init.Profile) && !parsed.Profiles.ContainsKey(init.Profile))
+            {
+                var known = parsed.Profiles.Count == 0
+                    ? "that file defines no profiles"
+                    : "available: " + string.Join(", ", parsed.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
+                issues.Add(new(WatchIssueSeverity.Warning, initPath,
+                    $"Profile '{init.Profile}' is not defined in '{Path.GetFileName(init.ParameterFile)}' ({known}).",
+                    "Fix the Profile attribute or add the profile to the config."));
+            }
+        }
+
+        if (sawLayeredConfig && !tagHasPipelineEntry)
+        {
+            issues.Add(new(WatchIssueSeverity.Warning, path,
+                $"No 'pipelines' entry is keyed '{wi.Tag}', so this pipeline gets no per-pipeline overrides.",
+                "The pipelines key must match the WatchItem Tag exactly; renaming the Tag silently drops the overrides."));
+        }
+
+        AnalyzeUndefinedTokens(config, wi, path, issues);
+    }
+
+    /// <summary>
+    /// Flags [Token]s an action uses that no layer defines. Tokens the trigger file supplies at run
+    /// time are excluded - they are legitimately absent from the config.
+    /// </summary>
+    private static void AnalyzeUndefinedTokens(
+        WatchListConfig config, WatchItemConfig wi, string path, List<ValidationIssue> issues)
+    {
+        var ctx = new PipelineExecutionContext { WatchItemTag = wi.Tag };
+
+        if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile) && File.Exists(config.GlobalVariablesFile))
+            ParameterResolver.LoadParameterFile(ctx, config.GlobalVariablesFile, ParameterRank.Global);
+
+        ParameterResolver.LoadForWatchItem(ctx, wi);
+
+        // Supplied by the trigger file that fires the run, so their absence here is expected.
+        foreach (var runtimeKey in new[] { wi.BuildNumberField, wi.DropLocationField })
+        {
+            if (string.IsNullOrWhiteSpace(runtimeKey)) continue;
+            ParameterResolver.SetParameter(ctx, runtimeKey, "", ParameterRank.TriggerFile);
+            ParameterResolver.SetParameter(ctx, "_" + runtimeKey.TrimStart('_'), "", ParameterRank.TriggerFile);
+        }
+
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ev in wi.Events)
+            WalkForTokens(ev.Children, $"{path}.Event[{ev.Type}]", config, ctx, reported, issues);
+    }
+
+    private static void WalkForTokens(
+        IEnumerable<IActionNode> nodes, string path, WatchListConfig config,
+        PipelineExecutionContext ctx, HashSet<string> reported, List<ValidationIssue> issues)
+    {
+        foreach (var node in nodes)
+        {
+            switch (node)
+            {
+                case ActionGroupConfig ag:
+                    WalkForTokens(ag.Children, $"{path}.Group[{ag.Tag}]", config, ctx, reported, issues);
+                    break;
+
+                case RefConfig r:
+                    var template = config.Templates.FirstOrDefault(
+                        t => string.Equals(t.ID, r.TemplateID, StringComparison.OrdinalIgnoreCase));
+                    if (template is not null)
+                        WalkForTokens(template.Children, $"{path}.Ref[{r.TemplateID}]", config, ctx, reported, issues);
+                    break;
+
+                case ActionConfig a:
+                    foreach (var token in ParameterResolver.FindUnresolvedTokens(a, ctx))
+                    {
+                        if (!reported.Add(token)) continue;
+                        issues.Add(new(WatchIssueSeverity.Warning,
+                            $"{path}.Action[{(!string.IsNullOrEmpty(a.Tag) ? a.Tag : a.ResolvedTag)}]",
+                            $"Token [{token}] is not defined by any parameter layer (global, profile or pipelines).",
+                            "Add it to the parameter file, or the action will be refused at dispatch."));
+                    }
+                    break;
+            }
+        }
     }
 
     /// <summary>

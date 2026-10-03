@@ -235,6 +235,16 @@ public static partial class ParameterResolver
         var config = ReadJsonConfig(filePath);
         if (config is null) return false;
 
+        ApplyJsonLayers(ctx, config, profile, pipelineTag);
+        return true;
+    }
+
+    private static void ApplyJsonLayers(
+        PipelineExecutionContext ctx,
+        PipelineParameterConfig config,
+        string? profile,
+        string? pipelineTag)
+    {
         foreach (var entry in config.Global)
             SetParameter(ctx, entry.Key, entry.Value, ParameterRank.Global);
 
@@ -251,33 +261,112 @@ public static partial class ParameterResolver
             foreach (var entry in pinned)
                 SetParameter(ctx, entry.Key, entry.Value, ParameterRank.PipelinePin);
         }
-
-        return true;
     }
 
     /// <summary>
-    /// Token names referenced by an action that have no value in the context. Only the fields that
-    /// reach a shell or an agent are inspected, so descriptive text like [INFO] in an email body
-    /// is not reported. A non-empty result means a parameter source failed to load.
+    /// Loads one Initialize node's parameter source, returning null on success or a caller-safe
+    /// reason on failure. Unlike the older void loaders, a missing file or a profile that is not in
+    /// the file is REPORTED rather than skipped: silently continuing is what let a run reach an
+    /// agent with literal [Token] text, failing far from the real cause.
+    /// </summary>
+    public static string? TryLoadInitializeSource(
+        PipelineExecutionContext ctx,
+        string filePath,
+        string? profile,
+        string? pipelineTag)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return "no ParameterFile is configured.";
+
+        if (!File.Exists(filePath))
+            return $"parameter file '{filePath}' does not exist.";
+
+        if (!IsLayeredConfig(filePath))
+        {
+            LoadParameterFile(ctx, filePath);
+            return null;
+        }
+
+        var config = ReadJsonConfig(filePath);
+        if (config is null)
+            return $"parameter file '{filePath}' could not be read as JSON.";
+
+        if (!string.IsNullOrWhiteSpace(profile) && !config.Profiles.ContainsKey(profile))
+        {
+            var known = config.Profiles.Count == 0
+                ? "the file defines no profiles at all"
+                : "defined profiles are: " + string.Join(", ", config.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
+            return $"profile '{profile}' is not defined in '{Path.GetFileName(filePath)}' - {known}.";
+        }
+
+        ApplyJsonLayers(ctx, config, profile, pipelineTag);
+        return null;
+    }
+
+    /// <summary>
+    /// Fields of an <see cref="ActionConfig"/> that are NOT substituted before use, so a bracketed
+    /// value in them is literal text rather than a token. Everything else is discovered by
+    /// reflection: an explicit include-list drifts out of date the moment a field is added, which is
+    /// how <c>To</c>, <c>Title</c> and <c>Body</c> went unchecked and mailed literal "[_EmailCheck]".
+    /// </summary>
+    private static readonly HashSet<string> NonSubstitutedFields = new(StringComparer.Ordinal)
+    {
+        nameof(ActionConfig.NodeType),
+        nameof(ActionConfig.NodeId),
+        nameof(ActionConfig.Tag),
+        nameof(ActionConfig.ResolvedTag),
+        nameof(ActionConfig.Order),
+        nameof(ActionConfig.Comment),
+        nameof(ActionConfig.SkipReason),
+        nameof(ActionConfig.SkippedBy),
+        nameof(ActionConfig.RetryBackoff),
+        nameof(ActionConfig.RetryOnExitCodes),
+    };
+
+    /// <summary>Cached because this runs once per action on the dispatch path.</summary>
+    private static readonly System.Reflection.PropertyInfo[] SubstitutedFields =
+        typeof(ActionConfig)
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Where(p => p.PropertyType == typeof(string)
+                        && p.CanRead
+                        && !NonSubstitutedFields.Contains(p.Name))
+            .OrderBy(p => p.Name, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    /// Fields where a bracketed word is prose unless it carries the <c>_</c> parameter prefix. An
+    /// email subject or body legitimately reads "[INFO] build finished", and refusing to run over
+    /// that would be worse than the bug this guards; "[_BuildNumber]" in the same text is still a
+    /// parameter reference and still fails. Every other substituted field is strict - a stray
+    /// bracket in a command line or a recipient address is never intentional.
+    /// </summary>
+    private static readonly HashSet<string> ProseTolerantFields = new(StringComparer.Ordinal)
+    {
+        nameof(ActionConfig.Title),
+        nameof(ActionConfig.Body),
+    };
+
+    /// <summary>
+    /// Token names referenced by an action that have no value in the context. Covers every field
+    /// <see cref="ResolveAction"/> substitutes — the command line AND the email delivery fields —
+    /// because an unresolved token anywhere means a parameter source failed to load. A non-empty
+    /// result must stop the action: running on sends literal "[Token]" text to a shell or a mailbox.
     /// </summary>
     public static List<string> FindUnresolvedTokens(ActionConfig action, PipelineExecutionContext ctx)
     {
         var missing = new List<string>();
-        ReadOnlySpan<string> executable =
-        [
-            action.Command,
-            action.Parameters,
-            action.AgentName,
-            action.CompletionCheckCommand,
-        ];
 
-        foreach (var field in executable)
+        foreach (var field in SubstitutedFields)
         {
-            if (string.IsNullOrEmpty(field)) continue;
+            if (field.GetValue(action) is not string value || value.Length == 0) continue;
 
-            foreach (Match match in TokenPattern.Matches(field))
+            var underscoreOnly = ProseTolerantFields.Contains(field.Name);
+
+            foreach (Match match in TokenPattern.Matches(value))
             {
                 var key = match.Groups[1].Value;
+                if (underscoreOnly && !key.StartsWith('_')) continue;
+
                 if (!ctx.Parameters.ContainsKey(key)
                     && !missing.Contains(key, StringComparer.OrdinalIgnoreCase))
                 {
