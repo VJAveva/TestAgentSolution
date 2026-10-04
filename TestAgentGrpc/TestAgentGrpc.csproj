@@ -33,6 +33,14 @@
     <Protobuf Include="..\TestControllerGrpc.Core\Protos\test_agent.proto" Link="Protos\test_agent.proto" GrpcServices="Both" />
   </ItemGroup>
 
+  <!-- Ships to C:\TestAgentService via the agent payload; .ps1 is not in preserveFiles so /MIR keeps it current. -->
+  <ItemGroup>
+    <Content Include="..\Utilites\TestAgent_SetupScripts\Watch-AgentListener.ps1"
+             Link="Watch-AgentListener.ps1"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\TestControllerGrpc.Core\TestControllerGrpc.Core.csproj" />
   </ItemGroup>

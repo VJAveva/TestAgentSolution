@@ -9,6 +9,9 @@
 
 Document status: feasibility only — no implementation started. Code freeze respected.
 Revision 2: answers to Q1–Q10 applied (section 7).
+Revision 3 (2026-10-04): section 3 replaced with **measured** values; the `InstallPlan` node and `_Step*`
+tokens are withdrawn in favour of `Ref ForEachPlanStep` + baked literals (7.3); forward-compatibility guard
+added (7.4). The engine verdict is unchanged; the **artefact** blockers are larger than revision 2 assumed.
 
 ---
 
@@ -50,11 +53,21 @@ installer and response file come from **one catalog file** (`release-catalog.jso
 block** (GR first, restart, other nodes in parallel) repeated once per step. Tests use the framework binaries of the
 **final** release. New monthly patches are found by folder name (`…-P{nn}`), so nothing is edited when one appears.
 
+The repeat is expressed on the **existing** `Ref` node — `<Ref TemplateID="InstallStep" ForEachPlanStep="true"/>` —
+and each repetition is produced by cloning the template and **substituting that step's values as literals**, on the
+run copy only. No new node type, and no `_Step*` tokens exist at run time. Rationale and blast-radius measurement
+in 7.3.
+
 ---
 
 ## 3. What we know about the real environment
 
+> Everything in this section was **measured on 2026-10-04**, not inherited. Revision 2 carried several
+> values that no longer hold; the rows that changed are marked **(was: …)**.
+
 ### Build share `\\DevTFSBldoaksp\REPL\Ado`
+
+Directories actually present:
 
 | Folder | Meaning | Catalog use |
 |---|---|---|
@@ -62,8 +75,13 @@ block** (GR first, restart, other nodes in parallel) repeated once per step. Tes
 | `SP2023R2SP1-P03`, `SP2023R2SP1-P04` | SP1 monthly patches | `patchRoot = …\SP2023R2SP1-P{nn}\` |
 | `SP-2023-R2-SP2` | SP2 release builds | base build (pinned GA folder) |
 | `SP` | **SP2026** builds | base build (pinned GA folder) |
-| `SP2023R2-Meta-Patch` | unknown | open question Q6 |
+| `SP2023R2-Meta-Patch` | not needed (Q6) | excluded |
 | `SP-2023`, `SP-2023-R2` | older lines | not in scope |
+
+**The only patch folders on the share are `SP2023R2SP1-P03` and `SP2023R2SP1-P04`.** There is no
+`SP2023R2SP2-P*`, no `SP2026-P*`, and no SP2026 R2 root of any name. This is not the naming question Q7
+assumed — those artefacts are not published yet. Consequence for section 1: **6 of the 11 use cases cannot
+resolve today** (every row containing `/P01`, plus both SP2026 R2 rows).
 
 Naming differs: releases use hyphens (`SP-2023-R2-SP1`), patches do not (`SP2023R2SP1-P04`). The catalog holds a
 separate pattern per release, so this is not a problem.
@@ -72,11 +90,18 @@ separate pattern per release, so this is not a problem.
 
 | Item | State |
 |---|---|
-| `C:\TestSetup\FrameworkBinaries\SP2023R2SP2` | present, 1,685 files, 6.2 GB, validated |
-| `C:\TestSetup\FrameworkBinaries\SP2026` | present, 1,584 files, 6.3 GB, validated (also for SP2026 R2) |
+| `C:\TestSetup\FrameworkBinaries\SP2023R2SP2` | present, **1,685 files, 6.1 GB** |
+| `C:\TestSetup\FrameworkBinaries\SP2026` | present, **1,584 files, 6.1 GB** (also for SP2026 R2) |
+| `C:\TestSetup\Install\` | **`Common`, `SP2023R2SP2`, `SP2026`, `SP2026R2`** — there is **no `SP2023R2SP1`** |
 | `C:\TestSetup\Common\SmokeTest` | shared tests in place; not yet in the repo |
-| Install files per release | partly in place; patch and SP2026 R2 response files still to be supplied |
-| Free disk | **~10 GB** (old `C:\TestBinaries*` copies still present, ~12 GB reclaimable) |
+| `C:\TestControllerService\Parameters\` | only `SP2023R2SP2\pipeline-config.json` and `SP2026\pipeline-config.json` |
+| Free disk | **22.9 GB of 149.4 GB** *(was: ~10 GB)* |
+| `C:\TestBinaries*` | **`TestBinaries26`, 0.0 GB** — already cleaned *(was: ~12 GB reclaimable)* |
+
+**This contradicts revision 2's "Ready now" claim.** SP1 has patch *builds* on the share but **no installer or
+response files on the controller**, so no SP1 plan can run. The genuinely runnable set today is
+**`SP2023R2SP2` and `SP2026` fresh installs** — exactly what the two existing `pipeline-config.json` files
+already cover.
 
 ---
 
@@ -108,9 +133,14 @@ separate pattern per release, so this is not a problem.
 | Gap | Size | Phase |
 |---|---|---|
 | Catalog + plan resolver (steps from release/patch/upgrade choice, patch discovery) | M | 1 |
-| `Initialize Plan="auto"` + `InstallPlan` node that repeats the install block per step | M | 2 |
+| `Ref ForEachPlanStep` expansion with baked literals (7.3) | S | 2 |
+| `Initialize Plan="auto"` — one string property, same shape as the existing `Profile` | S | 2 |
+| `MinEngine` forward-compatibility guard (7.4) | S | 2 |
 | Pre-flight checks + plan builder dialog | M | 3 |
 | Trigger-file plans + pool queue | M | 4 |
+
+Phase 2 dropped from **M** to **S** by withdrawing the new node type — see 7.3 for the measurement that
+justifies it.
 
 ---
 
@@ -139,9 +169,11 @@ separate pattern per release, so this is not a problem.
 | Upgrade installer behaves differently from fresh install | Upgrade fails | Separate `upgradeResponse` (and optional `upgradeInstaller`) per release; test each path once |
 | 6 GB of binaries copied to each agent every run | Long prep time, agent disk | Measure on first run; option later: bake release binaries into snapshots |
 | Long upgrade plans (4 installs × reboots) | 4–6 h per run | Run upgrades on a schedule; queue (Phase 4) runs them unattended |
-| Controller disk at ~10 GB | Failures mid-run | Delete old `C:\TestBinaries*` after first green run (frees ~12 GB) |
+| Controller disk | Failures mid-run | **Resolved** — measured 22.9 GB free on 2026-10-04; `TestBinaries26` is already empty |
 | Test binaries incompatible with an upgraded product | False failures | Binaries always from the final release (R5) |
-| SP2026 R2 location and patch folder names unconfirmed | SP2026 patch / R2 plans cannot be resolved | Fill when the build team confirms (Q7); `-Check` will show them as FAIL until then |
+| SP2/SP2026 patch builds and the SP2026 R2 root **do not exist on the share** | 6 of 11 use cases cannot resolve | Build team must publish them; `-Check` shows FAIL until then (7.2) |
+| **An older controller silently ignores unknown XML attributes** | After a rollback a 3-step plan runs **once**, with no error | `MinEngine` guard — refuse to load rather than under-run (7.4) |
+| A new node type must be taught to every tree walker | One missed `case` = silent wrong behaviour | Withdrawn — reuse `Ref` instead (7.3) |
 | Suites grow (WARM, PSR, more) | Pipelines get long | Suites as separate templates (section 7.1) |
 | Base folder not yet decided | Unrepeatable results | Pin GA folders before the first unattended run (Q4) |
 
@@ -176,7 +208,7 @@ The test stage becomes a list of **suites**, each one template, so adding a suit
 Each pool's pipeline lists its suites after the install plan:
 
 ```xml
-<InstallPlan StepTemplate="InstallStepWarm" />
+<Ref TemplateID="InstallStepWarm" ForEachPlanStep="true" />
 <Ref TemplateID="SuiteWarm" />
 <Ref TemplateID="SuitePsr" />
 ```
@@ -185,14 +217,90 @@ Adding a suite = add one template + one `Ref`. Feasible today with the existing 
 
 ### 7.2 What is still blocking
 
+Rewritten in revision 3 against measured state (section 3). The first two rows are larger than revision 2
+assumed: the artefacts do not exist, so no amount of configuration reaches them.
+
 | Blocker | Blocks | Owner |
 |---|---|---|
-| GA build folders not decided (Q4) | Pinned bases for all releases | Release decision |
-| SP2026 R2 location and SP2026 / R2 patch folder names (Q7) | SP2026 patch plans, SP2026 R2 plans | Build team |
-| Patch and SP2026 R2 response files | Patch, upgrade and SP2026 R2 steps | You |
+| **No `SP2023R2SP2-P*` or `SP2026-P*` folder exists on the share** | `SP2023R2SP2/P01`, `SP2026/P01` and the 4 upgrade plans ending in a patch — **6 of 11 use cases** | Build team |
+| **No SP2026 R2 root on the share** | `SP2026R2`, `SP2023R2SP1/P04>SP2026R2` | Build team |
+| **No `C:\TestSetup\Install\SP2023R2SP1`** (installer + response files) | every SP1 plan, including SP1→SP2 upgrades | You |
+| GA build folders not decided (Q4) | pinned bases for all releases — nothing is repeatable without this | Release decision |
+| Patch and SP2026 R2 response files | patch, upgrade and SP2026 R2 steps | You |
 | WARM test and PSR run commands | `SuiteWarm`, `SuitePsr` templates | You |
 
-**Ready now:** SP2023 R2 SP1 (+P04) and SP2023 R2 SP2 plans, including SP1 → SP2 upgrades — once their GA folders are pinned.
+**Runnable today:** `SP2023R2SP2` and `SP2026` **fresh installs** only, once their GA folders are pinned.
+Revision 2's "SP1 (+P04) and SP2 plans are ready now" was wrong — SP1 has no install files on the controller.
+
+### 7.3 Design change: repeat via `Ref`, not a new node type
+
+Revision 2 proposed a new `IActionNode` (`<InstallPlan StepTemplate="…"/>`) plus `_StepBuild` / `_StepInstaller`
+/ `_StepResponse` tokens. **Both are withdrawn.**
+
+**Why.** `RefConfig` was the last node type added. It is handled by **26 `switch` sites across 15 files** —
+parser (parse + serialize), `PipelineExecutorBase` (×6), `NodeAddressing` (×2), `WatchListValidator` (×2),
+`SnapshotExpander`, `TemplateUsage`, `PreflightRunner`, `AgentResolver`, `IActionPipelineExecutor`,
+`WatchListController`, `TreeNodeViewModel` (×4), `WatchBuilderNodes`, `MainViewModel.TemplateCrud` — plus
+`[JsonDerivedType]`, `DeepClone`, the `NodeKinds` icon/label maps and the TypeScript tree. Every one of those
+fails **silently** when a node type is missed, and on 2026-10-04 exactly that happened: `AgentResolver` had no
+`case RefConfig`, so a Ref-built pipeline reserved **no agents at all** — the Fleet showed nine idle machines
+during a live install and a second pipeline could have dispatched on top of it. A new node type buys 26 more
+chances at that bug.
+
+**Instead:** one bool on the existing `RefConfig`.
+
+```xml
+<Ref TemplateID="InstallStep" ForEachPlanStep="true" />
+```
+
+| Property | Why it holds |
+|---|---|
+| All 26 sites still see a `RefConfig` | they keep working unchanged — no new silent-miss surface |
+| `RefConfig.DeepClone()` is `MemberwiseClone` | the new property is copied automatically — this is the documented fix for the dropped `Skip` and `Profile` bugs |
+| Already a `[JsonDerivedType]` | session snapshot and JSON round-trip unaffected |
+| Parser cost | one line read, one line written, in the single shared `ParseChildren` / serializer |
+| Agent locking | the Ref→template walk added on 2026-10-04 already resolves the agents — correct for free |
+
+**Bake literals, do not invent per-node tokens.** Parameters are per-**run**, not per-**node**, so three steps
+sharing one template would all resolve `[_StepBuild]` to the same value. Expansion therefore clones the
+template's actions and substitutes that step's values **as literals** into the clone. Two consequences, both
+good:
+
+- no `_Step*` token exists at run time, so `ParameterResolver.FindUnresolvedTokens` — the "fail loudly" gate
+  added on 2026-10-04 — needs **no special case**. Left as tokens, it would fail every plan pipeline in
+  pre-flight;
+- expansion happens on the **run copy only**, never the authored tree, which preserves both
+  "saving never writes resolved tokens" and the positional node paths (`e0/c2/c1`) that `NodeAddressing` and
+  retry depend on. `SnapshotExpander` already establishes this precedent and says so explicitly.
+
+**Forced ordering:** resolve plan → expand → **pre-flight** → revert → run. Pre-flight then validates every
+step's real installer and response path, which is most of Phase 3 for free.
+
+Two items deferred to detailed design (after the two green runs and the snapshots): how retry addresses a
+failed step inside an expanded plan, and whether a single step can be skipped independently.
+
+### 7.4 Forward-compatibility guard
+
+`WatchListXmlParser.ParseChildren` reads known attributes and **silently ignores the rest**. So a controller
+rolled back to today's build would read `ForEachPlanStep="true"`, not understand it, and run a three-step
+install **once** — wrong, silent, and indistinguishable from success until the test results look odd. The same
+hazard applies to `Initialize Plan="auto"`.
+
+The guard: a version stamp the parser checks **before** building any node.
+
+```xml
+<WatchList MinEngine="2">
+```
+
+| Rule | Behaviour |
+|---|---|
+| Attribute absent | treated as `1` — every existing WatchList loads exactly as today |
+| `MinEngine` ≤ engine's supported version | load normally |
+| `MinEngine` > supported | **refuse to load**, keep the previous config, surface one clear error naming the required version |
+
+Refusing is the right failure: a pipeline that silently under-runs an install is worse than one that does not
+start. The writer stamps `MinEngine` only when the file actually uses a newer feature, so files that avoid
+plan features stay loadable by any build and no existing file changes.
 
 ---
 
@@ -211,11 +319,22 @@ cd C:\TestControllerService\Parameters
 
 **Feasibility is proven when:**
 
-- [ ] `-Check` ends with **RESULT: ALL CHECKS PASSED**
-- [ ] SP1 shows **Patches found: P03, P04**
-- [ ] SP2026 / SP2026 R2 entries show FAIL only for the items still open in 7.2
-- [ ] `-AllUseCases` shows the expected steps for every row in section 1
+The gate is now **two-stage**, because section 3 showed that most releases have no artefacts to check.
+
+Stage 1 — what can pass today (fill the catalog for **SP2023R2SP2 and SP2026 only**):
+
+- [ ] `-Check` passes for those two releases: base build, installer, fresh response, binaries
+- [ ] `-Plan "SP2023R2SP2"` and `-Plan "SP2026"` resolve to a single BASE step with all paths PASS
 - [ ] A disallowed upgrade is refused (`-Plan "SP2026R2>SP2026/P01"`)
+- [ ] SP1 shows **Patches found: P03, P04** — proves folder discovery works end to end
+
+Stage 2 — blocked until the build team publishes (7.2); expected to FAIL until then, and that is the
+correct reading, not a script fault:
+
+- [ ] SP2 / SP2026 patch roots exist → the 4 `/P01` plans resolve
+- [ ] SP2026 R2 root exists → both R2 plans resolve
+- [ ] `C:\TestSetup\Install\SP2023R2SP1` exists → every SP1 plan resolves
+- [ ] `-AllUseCases` shows the expected steps for all 11 rows in section 1
 
 The script logic was tested against a simulated catalog: all plans resolved correctly, patch folders were
 discovered, and a disallowed upgrade was refused. It has not yet run against the real share.
@@ -225,8 +344,12 @@ discovered, and a disallowed upgrade was refused. It has not yet run against the
 ## 9. Decision
 
 - [x] Questions Q1–Q10 answered (revision 2)
-- [ ] Blockers in 7.2 resolved (GA folders, SP2026 R2 / patch names, response files, suite commands)
-- [ ] Catalog filled, `-Check` green on real paths
+- [x] Environment measured, not inherited (revision 3, section 3)
+- [x] Design agreed: `Ref ForEachPlanStep` + baked literals replace the `InstallPlan` node and `_Step*` tokens (7.3)
+- [x] Forward-compatibility guard agreed: `MinEngine` (7.4)
+- [ ] Build team confirms SP2/SP2026 patch publishing, the SP2026 R2 location and the GA folders (7.2)
+- [ ] SP1 installer + response files placed on the controller (7.2)
+- [ ] Catalog filled for SP2023R2SP2 + SP2026, stage-1 gate green (section 8)
 - [ ] Option A bridge agreed for the freeze period
 - [ ] Option B approved for after the freeze → continue with Appendix C, one phase per session
 
@@ -535,12 +658,17 @@ Output: ordered steps {Kind Base|Patch|Upgrade, Label, Build, Installer, Respons
 Invalid plan -> clear error. Tests: all plans in section 1 give the same steps as the script. Design first.
 ```
 
-**Phase 2 — InstallPlan node**
+**Phase 2 — plan expansion**
 ```
-New WatchList node <InstallPlan StepTemplate="..."/> repeating the template per plan step with _StepBuild,
-_StepInstaller, _StepResponse, _StepLabel; tags "Step n/N - <label>". <Initialize Plan="auto" Profile="..."/>
-loads the plan (trigger keys Plan/From/To or dialog) and sets _ReleaseName and _BinariesFolder from the final
-release. Expansion saved in the session snapshot; a failed step stops later steps; validator knows the node.
+Add bool RefConfig.ForEachPlanStep (parse + serialize in WatchListXmlParser only; DeepClone is MemberwiseClone
+so it copies itself). On the RUN CLONE, expand such a Ref once per plan step: clone the template's actions and
+substitute that step's Build/Installer/Response as LITERALS, tag "Step n/N - <label>". No new node type and no
+_Step* tokens - every existing switch over IActionNode keeps working unchanged (see 7.3).
+Also: string InitializeConfig.Plan ("auto") loading the plan from trigger keys Plan/From/To or the dialog, and
+setting _ReleaseName and _BinariesFolder from the FINAL release; mirror the expansion in SnapshotExpander so the
+dashboard shows every step; add the MinEngine guard from 7.4.
+REGRESSION BAR: a Ref WITHOUT ForEachPlanStep must produce a byte-identical node tree, and a current WatchList
+must parse->serialize byte-identically. Red-proof by flipping the flag on a fixture.
 ```
 
 **Phase 3 — Pre-flight + plan builder**
