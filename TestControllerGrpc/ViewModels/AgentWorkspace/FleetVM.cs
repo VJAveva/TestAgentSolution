@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -79,6 +80,13 @@ public partial class FleetVM : ObservableObject, IDisposable
     private bool _isProbing;
     private bool _isActive = true;
 
+    /// <summary>
+    /// Agent name to the session the controller last dispatched an action to it for. Stamped from
+    /// <see cref="NodeProgressEvent"/> at dispatch, i.e. the controller's own knowledge of in-flight work,
+    /// which does not depend on the agent lock having been taken or on the agent self-reporting.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, string> _inFlightByAgent = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Debounce timer: coalesces rapid event bursts into a single Refresh.</summary>
     private readonly DispatcherTimer _refreshDebounce;
 
@@ -119,11 +127,11 @@ public partial class FleetVM : ObservableObject, IDisposable
 
         events.Subscribe<AgentLocksChangedEvent>(_ => ScheduleRefresh());
         events.Subscribe<ExecutionStartedEvent>(_ => ScheduleRefresh());
-        events.Subscribe<ExecutionCompletedEvent>(_ => ScheduleRefresh());
+        events.Subscribe<ExecutionCompletedEvent>(e => { ForgetSession(e.SessionId); ScheduleRefresh(); });
         events.Subscribe<AgentHeartbeatEvent>(_ => ScheduleRefresh());
         events.Subscribe<AgentRegisteredEvent>(_ => ScheduleRefresh());
         events.Subscribe<AgentUnregisteredEvent>(_ => ScheduleRefresh());
-        events.Subscribe<NodeProgressEvent>(_ => ScheduleRefresh());
+        events.Subscribe<NodeProgressEvent>(OnNodeProgress);
 
         // 5-second periodic health probe to detect power cycle recovery
         _healthTimer = new DispatcherTimer(
@@ -197,6 +205,64 @@ public partial class FleetVM : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Records dispatch state from the executor's own progress stream. Called on the publishing thread,
+    /// before the debounced <see cref="Refresh"/>, so the map is already current when the card is rebuilt.
+    /// </summary>
+    internal void OnNodeProgress(NodeProgressEvent e)
+    {
+        // "Controller" is the sentinel for a local action, not a fleet machine.
+        if (!string.IsNullOrEmpty(e.AgentName) &&
+            !string.Equals(e.AgentName, "Controller", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(e.Status, "Running", StringComparison.OrdinalIgnoreCase))
+                _inFlightByAgent[e.AgentName] = e.SessionId;
+            else
+                _inFlightByAgent.TryRemove(e.AgentName, out _);
+        }
+
+        ScheduleRefresh();
+    }
+
+    /// <summary>Drops dispatch state for a finished run, so a cancelled action cannot pin a card to Busy.</summary>
+    private void ForgetSession(string sessionId)
+    {
+        foreach (var entry in _inFlightByAgent)
+        {
+            if (entry.Value == sessionId)
+                _inFlightByAgent.TryRemove(entry.Key, out _);
+        }
+    }
+
+    /// <summary>
+    /// Agent name to the active session occupying it, from the controller's own state rather than the agent
+    /// lock: dispatch-time progress first, then any active session that already claims the agent. Built once
+    /// per refresh so a large fleet does not rescan every session per card.
+    /// </summary>
+    private Dictionary<string, ExecutionSession> BuildOccupancy(List<ExecutionSession> activeSessions)
+    {
+        var map = new Dictionary<string, ExecutionSession>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var session in activeSessions)
+        {
+            foreach (var agent in session.LockedAgents)
+                map.TryAdd(agent, session);
+            foreach (var summary in session.GetAgentSummaries())
+                map.TryAdd(summary.AgentName, session);
+        }
+
+        foreach (var entry in _inFlightByAgent)
+        {
+            var live = activeSessions.FirstOrDefault(s => s.SessionId == entry.Value);
+            if (live is not null)
+                map[entry.Key] = live;
+            else
+                _inFlightByAgent.TryRemove(entry.Key, out _);  // run ended without a terminal node event
+        }
+
+        return map;
+    }
+
+    /// <summary>
     /// Probes all registered agents on the cadence from <see cref="ProbeIntervalFor"/>.
     /// Updates health state so Fleet cards reflect actual status after power cycles.
     /// Skips agents currently executing (locked) to avoid unnecessary gRPC calls.
@@ -220,7 +286,8 @@ public partial class FleetVM : ObservableObject, IDisposable
             foreach (var name in agents)
             {
                 // Skip agents that are actively executing — they're known busy
-                if (allLocks.Any(l => string.Equals(l.AgentName, name, StringComparison.OrdinalIgnoreCase)))
+                if (allLocks.Any(l => string.Equals(l.AgentName, name, StringComparison.OrdinalIgnoreCase))
+                    || _dispatcher.IsAgentExecuting(name))
                     continue;
 
                 var health = _dispatcher.GetAgentHealth(name);
@@ -249,6 +316,7 @@ public partial class FleetVM : ObservableObject, IDisposable
         var agents = _dispatcher.RegisteredAgents.ToList();
         var allHealth = _dispatcher.GetAllAgentHealth();
         var allLocks = _lockManager.GetAllLocks();
+        var occupancy = BuildOccupancy(_sessionManager.GetActiveSessions());
 
         int busy = 0, free = 0, offline = 0, failed = 0;
 
@@ -277,19 +345,27 @@ public partial class FleetVM : ObservableObject, IDisposable
             var agentLock = allLocks.FirstOrDefault(l =>
                 string.Equals(l.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
 
-            if (agentLock != null)
+            // The agent lock is NOT the only evidence of work. A run that reserved no agents still streams
+            // commands, and a busy agent cannot self-report while its channel carries that stream — so a
+            // lock-only test renders every executing machine as Idle. Union the three controller-side sources.
+            occupancy.TryGetValue(agentName, out var runSession);
+            var session = agentLock is not null
+                ? _sessionManager.GetSession(agentLock.SessionId) ?? runSession
+                : runSession;
+            var isDispatching = _dispatcher.IsAgentExecuting(agentName);
+
+            if (agentLock != null || session != null || isDispatching)
             {
-                // Lock check takes priority — agent is executing work
-                card.SessionId = agentLock.SessionId;
-                card.GroupKey = agentLock.SessionId;
-                card.WatchItemTag = agentLock.WatchItemTag;
-                var session = _sessionManager.GetSession(agentLock.SessionId);
+                card.SessionId = agentLock?.SessionId ?? session?.SessionId ?? "";
+                card.GroupKey = card.SessionId;
+                card.WatchItemTag = agentLock?.WatchItemTag
+                    ?? (string.IsNullOrEmpty(session?.WatchItemTag) ? "" : session!.WatchItemTag);
                 // Prefer the friendly attributed user from the session; fall back to the
                 // raw agent-lock identity (e.g. "WPF/user@machine") when not captured.
                 card.Owner =
                     !string.IsNullOrWhiteSpace(session?.UserDisplayName) ? session!.UserDisplayName
                     : !string.IsNullOrWhiteSpace(session?.UserId) ? session!.UserId
-                    : agentLock.UserId;
+                    : agentLock?.UserId ?? "";
                 card.OwnerRole = session?.UserRole ?? "";
                 var agentSummary = session?.GetAgentSummaries()
                     .FirstOrDefault(s => string.Equals(s.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
@@ -306,7 +382,7 @@ public partial class FleetVM : ObservableObject, IDisposable
                     card.Status = "Busy";
                     card.StatusDetail = agentSummary != null
                         ? $"{agentSummary.CompletedCount}/{agentSummary.TotalCount} actions"
-                        : agentLock.WatchItemTag;
+                        : card.WatchItemTag.Length > 0 ? card.WatchItemTag : "Executing";
                     card.IsError = false;
                     busy++;
                 }
@@ -385,7 +461,7 @@ public partial class FleetVM : ObservableObject, IDisposable
             .GroupBy(c => c.GroupKey)
             .Select(g => new FleetGroupVM(
                 groupKey: g.Key,
-                title: g.First().WatchItemTag ?? g.Key,
+                title: string.IsNullOrEmpty(g.First().WatchItemTag) ? g.Key : g.First().WatchItemTag,
                 owner: g.First().Owner,
                 ownerRole: g.First().OwnerRole,
                 isAvailablePool: false,

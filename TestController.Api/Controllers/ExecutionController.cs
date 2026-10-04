@@ -392,7 +392,7 @@ public class ExecutionController : ControllerBase
         }
 
         // Extract required agents (resolved from variables)
-        var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
+        var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters, config?.Templates);
 
         // Fleet-maintenance gate: a node being reverted/rebooted/updated/quarantined is not dispatchable.
         // Return a typed fleet-unavailable result rather than a bare 409.
@@ -1023,12 +1023,12 @@ public class ExecutionController : ControllerBase
         WatchListConfig? config, ResolvedNode resolved, Dictionary<string, string> parameters)
         => resolved.Kind switch
         {
-            RunnableNodeKind.Event => AgentResolver.ExtractAgentNames(resolved.OwningEvent, parameters),
-            RunnableNodeKind.Group => AgentResolver.ExtractAgentNames((ActionGroupConfig)resolved.Node!, parameters),
+            RunnableNodeKind.Event => AgentResolver.ExtractAgentNames(resolved.OwningEvent, parameters, config?.Templates),
+            RunnableNodeKind.Group => AgentResolver.ExtractAgentNames((ActionGroupConfig)resolved.Node!, parameters, config?.Templates),
             RunnableNodeKind.Action => AgentResolver.ExtractAgentNames((ActionConfig)resolved.Node!, parameters),
             RunnableNodeKind.Template => config?.Templates.FirstOrDefault(t =>
                     string.Equals(t.ID, ((RefConfig)resolved.Node!).TemplateID, StringComparison.OrdinalIgnoreCase)) is { } template
-                ? AgentResolver.ExtractAgentNames(template, parameters)
+                ? AgentResolver.ExtractAgentNames(template, parameters, config?.Templates)
                 : [],
             _ => [],
         };
@@ -1141,7 +1141,7 @@ public class ExecutionController : ControllerBase
             return NotFound(ApiErrorFactory.InvalidTag(watchItemTag));
 
         var parameters = LoadParametersForWatchItem(watchItem);
-        var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters);
+        var requiredAgents = AgentResolver.ExtractAgentNames(watchItem, parameters, config?.Templates);
         var conflicts = _lockManager.CheckAvailability(requiredAgents);
 
         return Ok(new

@@ -201,7 +201,7 @@ public sealed partial class MainViewModel
 
         // Acquire agent locks
         var requiredAgents = wiConfig != null
-            ? AgentResolver.ExtractAgentNames(ev, ctx.Parameters)
+            ? AgentResolver.ExtractAgentNames(ev, ctx.Parameters, _config.Templates)
             : [];
         if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
@@ -365,7 +365,7 @@ public sealed partial class MainViewModel
 
         // Acquire agent locks for all agents across all events
         var parameters = CollectInitializeParameters(SelectedNode);
-        var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+        var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters, _config.Templates);
         if (IsBlockedByMaintenance(wi.Tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
@@ -577,7 +577,7 @@ public sealed partial class MainViewModel
             var parameters = wiNode != null
                 ? CollectInitializeParameters(wiNode)
                 : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters);
+            var requiredAgents = AgentResolver.ExtractAgentNames(wi, parameters, _config.Templates);
             if (IsBlockedByMaintenance(wi.Tag, requiredAgents, pipelineToken, session)) return true;
             if (requiredAgents.Count > 0)
             {
@@ -785,7 +785,7 @@ public sealed partial class MainViewModel
         StampOwner(ctx);
 
         // Acquire agent locks so Registry/Monitor reflect live status
-        var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters);
+        var requiredAgents = AgentResolver.ExtractAgentNames(ag, ctx.Parameters, _config.Templates);
         if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {
@@ -931,7 +931,7 @@ public sealed partial class MainViewModel
         };
         StampOwner(ctx);
 
-        var requiredAgents = AgentResolver.ExtractAgentNames(tpl, ctx.Parameters);
+        var requiredAgents = AgentResolver.ExtractAgentNames(tpl, ctx.Parameters, _config.Templates);
         if (IsBlockedByMaintenance(tag, requiredAgents, pipelineToken, session)) return;
         if (requiredAgents.Count > 0)
         {

@@ -8,6 +8,10 @@ namespace TestControllerGrpc.Services;
 ///
 /// Resolves [_Variable] references using provided parameters
 /// so locking works on actual agent hostnames, not variable names.
+///
+/// Pass the WatchList's templates whenever the caller has them: a pipeline built from shared
+/// templates carries every AgentName behind a &lt;Ref&gt;, so without them this returns nothing
+/// and the caller reserves no agents at all.
 /// </summary>
 public static class AgentResolver
 {
@@ -17,12 +21,14 @@ public static class AgentResolver
     /// </summary>
     public static List<string> ExtractAgentNames(
         WatchItemConfig watchItem,
-        Dictionary<string, string>? parameters = null)
+        Dictionary<string, string>? parameters = null,
+        IReadOnlyList<TemplateConfig>? templates = null)
     {
         var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var ev in watchItem.Events)
-            CollectFromNodes(ev.Children, agents, parameters);
+            CollectFromNodes(ev.Children, agents, parameters, templates, visited);
 
         return agents.ToList();
     }
@@ -32,10 +38,12 @@ public static class AgentResolver
     /// </summary>
     public static List<string> ExtractAgentNames(
         EventConfig eventConfig,
-        Dictionary<string, string>? parameters = null)
+        Dictionary<string, string>? parameters = null,
+        IReadOnlyList<TemplateConfig>? templates = null)
     {
         var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        CollectFromNodes(eventConfig.Children, agents, parameters);
+        CollectFromNodes(eventConfig.Children, agents, parameters, templates,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         return agents.ToList();
     }
 
@@ -44,10 +52,12 @@ public static class AgentResolver
     /// </summary>
     public static List<string> ExtractAgentNames(
         ActionGroupConfig group,
-        Dictionary<string, string>? parameters = null)
+        Dictionary<string, string>? parameters = null,
+        IReadOnlyList<TemplateConfig>? templates = null)
     {
         var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        CollectFromNodes(group.Children, agents, parameters);
+        CollectFromNodes(group.Children, agents, parameters, templates,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         return agents.ToList();
     }
 
@@ -56,10 +66,13 @@ public static class AgentResolver
     /// </summary>
     public static List<string> ExtractAgentNames(
         TemplateConfig template,
-        Dictionary<string, string>? parameters = null)
+        Dictionary<string, string>? parameters = null,
+        IReadOnlyList<TemplateConfig>? templates = null)
     {
         var agents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        CollectFromNodes(template.Children, agents, parameters);
+        // Seeded with this template so a self-reference cannot recurse back into it.
+        CollectFromNodes(template.Children, agents, parameters, templates,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { template.ID });
         return agents.ToList();
     }
 
@@ -83,7 +96,9 @@ public static class AgentResolver
     private static void CollectFromNodes(
         IReadOnlyList<IActionNode> nodes,
         HashSet<string> agents,
-        Dictionary<string, string>? parameters)
+        Dictionary<string, string>? parameters,
+        IReadOnlyList<TemplateConfig>? templates,
+        HashSet<string> visitedTemplates)
     {
         foreach (var node in nodes)
         {
@@ -99,8 +114,22 @@ public static class AgentResolver
                 }
 
                 case ActionGroupConfig group:
-                    CollectFromNodes(group.Children, agents, parameters);
+                    CollectFromNodes(group.Children, agents, parameters, templates, visitedTemplates);
                     break;
+
+                case RefConfig reference when templates is not null:
+                {
+                    // Expanding each template once is enough for a set of names, and it stops a
+                    // template that references itself (directly or in a cycle) from recursing forever.
+                    if (!visitedTemplates.Add(reference.TemplateID))
+                        break;
+
+                    var template = templates.FirstOrDefault(t =>
+                        string.Equals(t.ID, reference.TemplateID, StringComparison.OrdinalIgnoreCase));
+                    if (template is not null)
+                        CollectFromNodes(template.Children, agents, parameters, templates, visitedTemplates);
+                    break;
+                }
             }
         }
     }

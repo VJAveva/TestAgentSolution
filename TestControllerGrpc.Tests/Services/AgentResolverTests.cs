@@ -10,7 +10,7 @@ namespace TestControllerGrpc.Tests.Services;
 public class AgentResolverTests
 {
     // ?????????????????????????????????????????????????????????????????
-    // ExtractAgentNames — WatchItemConfig overload
+    // ExtractAgentNames ï¿½ WatchItemConfig overload
     // ?????????????????????????????????????????????????????????????????
 
     [Fact]
@@ -283,7 +283,7 @@ public class AgentResolverTests
     }
 
     // ?????????????????????????????????????????????????????????????????
-    // ExtractAgentNames — EventConfig overload
+    // ExtractAgentNames ï¿½ EventConfig overload
     // ?????????????????????????????????????????????????????????????????
 
     [Fact]
@@ -327,5 +327,175 @@ public class AgentResolverTests
 
         Assert.Single(agents);
         Assert.Equal("[_Var]", agents[0]);
+    }
+
+    // ------------------------------------------------------------------
+    // Ref / Template expansion
+    //
+    // A release-driven WatchList puts every action behind a <Ref>, so a resolver that walks only
+    // Action and ActionGroup returns nothing, the caller skips TryLockAgents entirely, and an
+    // in-flight pipeline holds ZERO agent locks. That is a safety hole, not a display glitch:
+    // a second pipeline can dispatch to the same machines mid-run.
+    // ------------------------------------------------------------------
+
+    private static WatchItemConfig RefOnlyPipeline(params string[] templateIds) => new()
+    {
+        Tag = "SP2026 - Sanity 5 Nodes Smoke E2E",
+        Events =
+        [
+            new EventConfig
+            {
+                Type = "Renamed",
+                Children = [.. templateIds.Select(id => (IActionNode)new RefConfig { TemplateID = id })],
+            },
+        ],
+    };
+
+    private static TemplateConfig Template(string id, params string[] agentNames) => new()
+    {
+        ID = id,
+        Children = [.. agentNames.Select(a => (IActionNode)new ActionConfig { AgentName = a, Command = "Prepare-Agent.bat" })],
+    };
+
+    [Fact]
+    public void ExtractAgentNames_Should_ReturnAgents_When_EveryActionSitsBehindARef()
+    {
+        var wi = RefOnlyPipeline("PrepSanity");
+        List<TemplateConfig> templates = [Template("PrepSanity", "jvgr1", "jvgr2", "jvhist", "jvkpri", "jvkbak")];
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null, templates);
+
+        Assert.Equal(5, agents.Count);
+        Assert.Contains("jvkpri", agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_ReturnEmpty_When_TemplatesAreNotSupplied()
+    {
+        var wi = RefOnlyPipeline("PrepSanity");
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null);
+
+        Assert.Empty(agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_CollectAcrossTemplates_When_PipelineRefsSeveral()
+    {
+        var wi = RefOnlyPipeline("RevertSanity", "PrepSanity", "SmokeSanity");
+        List<TemplateConfig> templates =
+        [
+            Template("RevertSanity", "jvgr1"),
+            Template("PrepSanity", "jvgr2"),
+            Template("SmokeSanity", "jvhist"),
+        ];
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null, templates);
+
+        Assert.Equal(3, agents.Count);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_ResolveVariable_When_AgentNameIsATokenInsideATemplate()
+    {
+        var wi = RefOnlyPipeline("PrepSanity");
+        List<TemplateConfig> templates = [Template("PrepSanity", "[_Agent1]")];
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["_Agent1"] = "jvgr1" };
+
+        var agents = AgentResolver.ExtractAgentNames(wi, parameters, templates);
+
+        Assert.Equal(["jvgr1"], agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_DescendIntoGroups_When_TemplateWrapsItsActions()
+    {
+        var wi = RefOnlyPipeline("PrepSanity");
+        List<TemplateConfig> templates =
+        [
+            new TemplateConfig
+            {
+                ID = "PrepSanity",
+                Children =
+                [
+                    new ActionGroupConfig
+                    {
+                        Tag = "Prep",
+                        Children = [new ActionConfig { AgentName = "jvgr1", Command = "x" }],
+                    },
+                ],
+            },
+        ];
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null, templates);
+
+        Assert.Equal(["jvgr1"], agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_FollowNestedRefs_When_ATemplateRefsAnother()
+    {
+        var wi = RefOnlyPipeline("Outer");
+        List<TemplateConfig> templates =
+        [
+            new TemplateConfig { ID = "Outer", Children = [new RefConfig { TemplateID = "Inner" }] },
+            Template("Inner", "jvkbak"),
+        ];
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null, templates);
+
+        Assert.Equal(["jvkbak"], agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_Terminate_When_TemplatesReferenceEachOtherInACycle()
+    {
+        var wi = RefOnlyPipeline("A");
+        List<TemplateConfig> templates =
+        [
+            new TemplateConfig
+            {
+                ID = "A",
+                Children = [new ActionConfig { AgentName = "jvgr1", Command = "x" }, new RefConfig { TemplateID = "B" }],
+            },
+            new TemplateConfig { ID = "B", Children = [new RefConfig { TemplateID = "A" }] },
+        ];
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null, templates);
+
+        Assert.Equal(["jvgr1"], agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_Should_Ignore_When_RefNamesAnUnknownTemplate()
+    {
+        var wi = RefOnlyPipeline("DoesNotExist");
+        List<TemplateConfig> templates = [Template("PrepSanity", "jvgr1")];
+
+        var agents = AgentResolver.ExtractAgentNames(wi, null, templates);
+
+        Assert.Empty(agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_TemplateOverload_Should_FollowRefs_When_TemplateRefsAnother()
+    {
+        var outer = new TemplateConfig { ID = "Outer", Children = [new RefConfig { TemplateID = "Inner" }] };
+        List<TemplateConfig> templates = [outer, Template("Inner", "warmpri")];
+
+        var agents = AgentResolver.ExtractAgentNames(outer, null, templates);
+
+        Assert.Equal(["warmpri"], agents);
+    }
+
+    [Fact]
+    public void ExtractAgentNames_GroupOverload_Should_FollowRefs_When_GroupContainsARef()
+    {
+        var group = new ActionGroupConfig { Tag = "Prep", Children = [new RefConfig { TemplateID = "PrepSanity" }] };
+        List<TemplateConfig> templates = [Template("PrepSanity", "warmbak")];
+
+        var agents = AgentResolver.ExtractAgentNames(group, null, templates);
+
+        Assert.Equal(["warmbak"], agents);
     }
 }
