@@ -35,7 +35,9 @@ if not defined PS1 (
 
 echo [INFO] Launcher : %~f0
 echo [INFO] Script   : %PS1%
-echo [INFO] Args     : %*
+REM NEVER echo %* here. Args 3 and 4 are the vCloud user and password, and this stdout is
+REM relayed by the agent into the controller's execution log, where it persists on disk.
+echo [INFO] Args     : %1 %2 (user and password redacted)
 
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%PS1%" %*
 set "RC=%ERRORLEVEL%"

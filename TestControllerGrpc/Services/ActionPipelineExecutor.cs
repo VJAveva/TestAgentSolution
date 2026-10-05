@@ -90,7 +90,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
 
                 case ActionType.RunCommand:
                     if (attempt == 1)
-                        Log("Action", $"RunCommand (local): {resolved.Command} {resolved.Parameters}");
+                        Log("Action", $"RunCommand (local): {SecurityRedactor.RedactCommandLine(resolved.Command, resolved.Parameters)}");
                     else
                         Log("Retry", $"RunCommand (local) (attempt {attempt})");
                     result = await _dispatcher.ExecuteLocalCommandAsync(action, ctx, ct);
