@@ -427,12 +427,39 @@ public sealed partial class MainViewModel
 
     // ?? Node progress handler (maps IActionNode ? TreeNodeViewModel) ??
 
-    private void OnNodeProgress(IActionNode node, string status)
+    /// <summary>
+    /// Resolves the subtree a progress update belongs to. Ref-expanded nodes are the SAME model
+    /// instances, with the same NodeIds, under every pipeline that Refs the template - so a global
+    /// FindByModel returns whichever pipeline sits first in the tree and paints that one instead of
+    /// the one actually running. Searching inside the owning pipeline is what keeps them apart.
+    /// </summary>
+    private TreeNodeViewModel? ResolveProgressScope(string? pipelineTag)
+    {
+        if (string.IsNullOrWhiteSpace(pipelineTag)) return WatchListRoot;
+        return FindWatchItemNode(WatchListRoot, pipelineTag) ?? WatchListRoot;
+    }
+
+    internal static TreeNodeViewModel? FindWatchItemNode(TreeNodeViewModel? node, string tag)
+    {
+        if (node is null) return null;
+        if (node.ModelObject is WatchItemConfig wi
+            && string.Equals(wi.Tag, tag, StringComparison.OrdinalIgnoreCase))
+            return node;
+
+        foreach (var c in node.Children)
+        {
+            var found = FindWatchItemNode(c, tag);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private void OnNodeProgress(IActionNode node, string status, string? pipelineTag)
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             // Update tree node status
-            var treeNode = WatchListRoot?.FindByModel(node);
+            var treeNode = ResolveProgressScope(pipelineTag)?.FindByModel(node);
             if (treeNode is not null)
             {
                 treeNode.ExecutionStatus = status;

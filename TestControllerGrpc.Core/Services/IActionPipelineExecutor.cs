@@ -15,8 +15,11 @@ public interface IActionPipelineExecutor
     /// <summary>
     /// Raised when an IActionNode starts or finishes execution.
     /// Status: "Running", "Success", "Failed", "PartialFailure", "Cancelled".
+    /// The third argument is the OWNING pipeline tag, or null when the run has no pipeline scope.
+    /// Ref-expanded nodes are shared instances with shared NodeIds, so the node alone cannot say
+    /// which pipeline is running it - without this a subscriber paints the wrong pipeline.
     /// </summary>
-    event Action<IActionNode, string>? NodeProgress;
+    event Action<IActionNode, string, string?>? NodeProgress;
 
     /// <summary>
     /// Raised when an action node fails, providing exit code and error details.

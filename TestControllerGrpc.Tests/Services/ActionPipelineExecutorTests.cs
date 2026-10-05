@@ -331,7 +331,7 @@ public class ActionPipelineExecutorTests
 
         // ExecuteEventAsync doesn't return bool, but we can verify via NodeProgress
         var statuses = new List<string>();
-        _executor.NodeProgress += (node, status) =>
+        _executor.NodeProgress += (node, status, _) =>
         {
             if (node is RefConfig) statuses.Add(status);
         };
@@ -471,7 +471,7 @@ public class ActionPipelineExecutorTests
             .ReturnsAsync(new ActionResult(true, 0, ""));
 
         var progressEvents = new List<(IActionNode Node, string Status)>();
-        _executor.NodeProgress += (node, status) => progressEvents.Add((node, status));
+        _executor.NodeProgress += (node, status, _) => progressEvents.Add((node, status));
 
         var action = new ActionConfig { Type = ActionType.RunCommand, Command = "test" };
         await _executor.ExecuteSingleActionAsync(action, CreateContext(), CancellationToken.None);
@@ -489,7 +489,7 @@ public class ActionPipelineExecutorTests
             .ReturnsAsync(new ActionResult(false, 1, "error"));
 
         var progressEvents = new List<(IActionNode Node, string Status)>();
-        _executor.NodeProgress += (node, status) => progressEvents.Add((node, status));
+        _executor.NodeProgress += (node, status, _) => progressEvents.Add((node, status));
 
         var action = new ActionConfig { Type = ActionType.RunCommand, Command = "test", FailAndContinue = false };
         await _executor.ExecuteSingleActionAsync(action, CreateContext(), CancellationToken.None);
@@ -497,5 +497,30 @@ public class ActionPipelineExecutorTests
         Assert.Equal(2, progressEvents.Count);
         Assert.Equal("Running", progressEvents[0].Status);
         Assert.Equal("Failed", progressEvents[1].Status);
+    }
+
+    [Fact]
+    public async Task ExecuteEventTrackedAsync_Should_StampTheOwningPipeline_When_ProgressIsRaised()
+    {
+        _dispatcher
+            .Setup(d => d.ExecuteLocalCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ActionResult(true, 0, ""));
+
+        var scopes = new List<string?>();
+        _executor.NodeProgress += (_, _, pipelineTag) => scopes.Add(pipelineTag);
+
+        var evt = new EventConfig
+        {
+            Type = "Renamed",
+            ExecutionType = ExecutionMode.Sequential,
+            Children = [new ActionConfig { Type = ActionType.RunCommand, Command = "test" }],
+        };
+        await _executor.ExecuteEventTrackedAsync(
+            "SP2026R2 - Sanity 5 Nodes Smoke E2E", evt, CreateContext(), CancellationToken.None);
+
+        // Ref'd nodes are shared across pipelines, so without this stamp a subscriber cannot tell
+        // which pipeline a progress update belongs to and paints whichever one it finds first.
+        Assert.NotEmpty(scopes);
+        Assert.All(scopes, s => Assert.Equal("SP2026R2 - Sanity 5 Nodes Smoke E2E", s));
     }
 }

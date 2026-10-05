@@ -165,7 +165,7 @@ public class NodeSkipTests
             new BuildResultsAggregator(config), new BuildReportHtmlGenerator(config), config);
 
         var statuses = new List<(string Tag, string Status)>();
-        executor.NodeProgress += (node, status) =>
+        executor.NodeProgress += (node, status, _) =>
         {
             if (node is ActionConfig a) statuses.Add((a.Tag, status));
         };
@@ -237,7 +237,7 @@ public class NodeSkipTests
             new BuildResultsAggregator(config), new BuildReportHtmlGenerator(config), config);
 
         var statuses = new List<(string Tag, string Status)>();
-        executor.NodeProgress += (node, status) =>
+        executor.NodeProgress += (node, status, _) =>
         {
             if (node is ActionConfig a) statuses.Add((a.Tag, status));
         };

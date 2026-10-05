@@ -40,8 +40,9 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     /// <summary>
     /// Raised when an IActionNode starts or finishes execution.
     /// Status: "Running", "Success", "Failed", "PartialFailure", "Cancelled".
+    /// The third argument is the owning pipeline tag - see <see cref="IActionPipelineExecutor"/>.
     /// </summary>
-    public event Action<IActionNode, string>? NodeProgress;
+    public event Action<IActionNode, string, string?>? NodeProgress;
 
     /// <summary>
     /// Raised when an action node fails, providing exit code and error details.
@@ -59,6 +60,17 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     }
 
     /// <summary>
+    /// The pipeline whose run the CURRENT async flow belongs to, stamped onto every NodeProgress.
+    /// AsyncLocal rather than a field: one executor instance serves concurrent runs, and each run's
+    /// continuations must carry their own scope.
+    /// </summary>
+    private readonly AsyncLocal<string?> _pipelineScope = new();
+
+    /// <summary>Scopes everything this async flow raises to <paramref name="watchItemTag"/>.</summary>
+    private void EnterPipelineScope(string? watchItemTag)
+        => _pipelineScope.Value = string.IsNullOrWhiteSpace(watchItemTag) ? null : watchItemTag;
+
+    /// <summary>
     /// Loads the template dictionary for Ref resolution.
     /// Called whenever the vocabulary is loaded/reloaded.
     /// </summary>
@@ -73,6 +85,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task ExecuteEventAsync(
         EventConfig evt, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        EnterPipelineScope(ctx.WatchItemTag);
         Log("Event", $"Triggered: Type={evt.Type}, Exec={evt.ExecutionType}");
         await ExecuteChildrenAsync(evt.Children, evt.ExecutionType, true, ctx, ct);
         Log("Event", ctx.FatalError is null ? "Completed" : $"ABORTED - {ctx.FatalError}");
@@ -165,6 +178,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task ExecuteEventTrackedAsync(
         string watchItemTag, EventConfig evt, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        EnterPipelineScope(watchItemTag);
+
         // Checked before the session exists so a skipped event does not open a session or take a lock.
         if (BlockedBySkip(evt, $"Event '{evt.Type}'"))
         {
@@ -242,6 +257,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task<bool> ExecuteGroupTrackedAsync(
         string watchItemTag, ActionGroupConfig group, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        EnterPipelineScope(watchItemTag);
+
         if (BlockedBySkip(group, $"ActionGroup '{group.Tag}'"))
         {
             MarkSubtreeSkipped(group, null);
@@ -287,6 +304,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     public async Task<bool> ExecuteSingleActionTrackedAsync(
         string watchItemTag, ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        EnterPipelineScope(watchItemTag);
+
         // "Execute Action" on a skipped row reaches here directly, bypassing the per-node gate.
         if (BlockedBySkip(action, $"Action '{action.ResolvedTag}'"))
         {
@@ -766,7 +785,8 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     //    invocable from derived classes) ?????????????????????????????????
 
     protected void OnLogEntry(PipelineLogEntry entry) => LogEntry?.Invoke(entry);
-    protected void  OnNodeProgress(IActionNode node, string status) => NodeProgress?.Invoke(node, status);
+    protected void  OnNodeProgress(IActionNode node, string status)
+        => NodeProgress?.Invoke(node, status, _pipelineScope.Value);
     protected void OnNodeFailed(IActionNode node, int exitCode, string error)
         => NodeFailed?.Invoke(node, exitCode, error);
 

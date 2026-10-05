@@ -395,6 +395,96 @@ public class AgentResolverTests
         Assert.Equal(3, agents.Count);
     }
 
+    // ------------------------------------------------------------------
+    // Resolver + lock manager seam.
+    //
+    // Each half was already covered alone, and both passed while the real hole was BETWEEN them:
+    // the resolver returned nothing for a Ref-built pipeline, so the caller never reached
+    // TryLockAgents and a second pipeline dispatched to machines the first was still using.
+    // These drive the two together, the way a trigger does.
+    // ------------------------------------------------------------------
+
+    private static WatchItemConfig RefPipeline(string tag, string templateId) => new()
+    {
+        Tag = tag,
+        Events = [new EventConfig { Type = "Renamed", Children = [new RefConfig { TemplateID = templateId }] }],
+    };
+
+    [Fact]
+    public void TryLockAgents_Should_RefuseSecondPipeline_When_BothReachTheSameAgentsThroughRefTemplates()
+    {
+        string[] sanityNodes = ["jvgr1", "jvgr2", "jvhist", "jvkpri", "jvkbak"];
+        List<TemplateConfig> templates = [Template("RevertSanity", sanityNodes)];
+        var locks = new AgentLockManager();
+
+        var first = RefPipeline("SP2023R2SP2 - Sanity 5 Nodes Smoke E2E", "RevertSanity");
+        var firstAgents = AgentResolver.ExtractAgentNames(first, null, templates);
+        var (firstLocked, _) = locks.TryLockAgents(firstAgents, "sess-A", first.Tag, "vinod", "WPF");
+
+        var second = RefPipeline("SP2026R2 - Sanity 5 Nodes Smoke E2E", "RevertSanity");
+        var secondAgents = AgentResolver.ExtractAgentNames(second, null, templates);
+        var (secondLocked, conflicts) = locks.TryLockAgents(secondAgents, "sess-B", second.Tag, "vinod", "WPF");
+
+        Assert.True(firstLocked);
+        Assert.Equal(5, firstAgents.Count);
+
+        // The whole point: a different pipeline, same machines, must not start.
+        Assert.False(secondLocked);
+        Assert.Equal(5, conflicts.Count);
+
+        // The refusal has to say WHO holds them, or the operator cannot act on it.
+        Assert.All(conflicts, c => Assert.Equal("sess-A", c.SessionId));
+        Assert.All(conflicts, c => Assert.Equal(first.Tag, c.WatchItemTag));
+
+        // Every lock still belongs to the first session - a refused attempt must steal nothing.
+        Assert.All(sanityNodes, n => Assert.Equal("sess-A", locks.GetLock(n)!.SessionId));
+    }
+
+    [Fact]
+    public void TryLockAgents_Should_AllowSecondPipeline_When_RefTemplatesUseDifferentAgents()
+    {
+        List<TemplateConfig> templates =
+        [
+            Template("SanityNodes", "jvgr1", "jvgr2"),
+            Template("WarmNodes", "warmgr", "warmpri"),
+        ];
+        var locks = new AgentLockManager();
+
+        var first = RefPipeline("SP2023R2SP2 - Sanity", "SanityNodes");
+        locks.TryLockAgents(AgentResolver.ExtractAgentNames(first, null, templates), "sess-A", first.Tag, "vinod", "WPF");
+
+        var second = RefPipeline("SP2023R2SP2 - WARM", "WarmNodes");
+        var (secondLocked, conflicts) = locks.TryLockAgents(
+            AgentResolver.ExtractAgentNames(second, null, templates), "sess-B", second.Tag, "vinod", "WPF");
+
+        // Control for the test above: refusal must come from the shared agents, not from
+        // "a second pipeline is running" - unrelated pipelines still run concurrently.
+        Assert.True(secondLocked);
+        Assert.Empty(conflicts);
+    }
+
+    [Fact]
+    public void TryLockAgents_Should_RefuseSecondPipeline_When_AgentsAreTokensResolvedInsideRefTemplates()
+    {
+        List<TemplateConfig> templates = [Template("RevertSanity", "[_Agent1]", "[_Agent2]")];
+        var parameters = new Dictionary<string, string> { ["_Agent1"] = "jvgr1", ["_Agent2"] = "jvgr2" };
+        var locks = new AgentLockManager();
+
+        var first = RefPipeline("SP2023R2SP2 - Sanity", "RevertSanity");
+        var firstAgents = AgentResolver.ExtractAgentNames(first, parameters, templates);
+        locks.TryLockAgents(firstAgents, "sess-A", first.Tag, "vinod", "WPF");
+
+        // A different pipeline whose tokens resolve to the SAME machines must still be refused:
+        // locks are keyed on the resolved hostname, not on the token text.
+        var second = RefPipeline("SP2026R2 - Sanity", "RevertSanity");
+        var secondAgents = AgentResolver.ExtractAgentNames(second, parameters, templates);
+        var (secondLocked, conflicts) = locks.TryLockAgents(secondAgents, "sess-B", second.Tag, "vinod", "WPF");
+
+        Assert.Equal(["jvgr1", "jvgr2"], firstAgents);
+        Assert.False(secondLocked);
+        Assert.Equal(2, conflicts.Count);
+    }
+
     [Fact]
     public void ExtractAgentNames_Should_ResolveVariable_When_AgentNameIsATokenInsideATemplate()
     {

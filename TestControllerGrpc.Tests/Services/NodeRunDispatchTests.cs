@@ -20,7 +20,7 @@ public class NodeRunDispatchTests
         public PipelineExecutionContext? Ctx { get; private set; }
 
         public event Action<PipelineLogEntry>? LogEntry { add { } remove { } }
-        public event Action<IActionNode, string>? NodeProgress { add { } remove { } }
+        public event Action<IActionNode, string, string?>? NodeProgress { add { } remove { } }
         public event Action<IActionNode, int, string>? NodeFailed { add { } remove { } }
 
         public void LoadTemplates(IEnumerable<TemplateConfig> templates) { }

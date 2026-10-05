@@ -75,6 +75,91 @@ public class RefExpansionTests : IDisposable
     private static TreeNodeViewModel RefUnder(TreeNodeViewModel root, string pipelineTag)
         => root.Children.Single(c => c.Tag == pipelineTag).Children[0].Children[0];
 
+    private static TreeNodeViewModel PipelineNode(TreeNodeViewModel root, string tag)
+        => root.Children.Single(c => c.Tag == tag);
+
+    // ── progress attribution ────────────────────────────────────────────────
+    //
+    // Every pipeline that Refs a template shows the SAME model objects, carrying the SAME NodeIds.
+    // A progress update therefore cannot be matched to a pipeline by its node alone: a search from
+    // the root returns whichever pipeline sits first and paints that one. Live on 2026-10-05 this
+    // made SP2026R2's run light up SP2023R2SP2 and read as two pipelines on the same agents.
+
+    [Fact]
+    public void FindByModel_Should_MatchInBothPipelines_When_TheyShareARefdTemplate()
+    {
+        var root = TreeNodeViewModel.FromWatchList(TwoPipelinesSharingATemplate());
+        var shared = RefUnder(root, "SP2023R2SP2").Children[0].ModelObject!;
+
+        var inFirst = PipelineNode(root, "SP2023R2SP2").FindByModel(shared);
+        var inSecond = PipelineNode(root, "SP2026").FindByModel(shared);
+
+        // Both own a node for the same model - which is exactly why the scope has to be chosen.
+        Assert.NotNull(inFirst);
+        Assert.NotNull(inSecond);
+        Assert.NotSame(inFirst, inSecond);
+
+        // And an unscoped search cannot tell them apart: it always answers with the first pipeline.
+        Assert.Same(inFirst, root.FindByModel(shared));
+    }
+
+    [Fact]
+    public void RunningOnePipeline_Should_LeaveTheOtherIdle_When_BothRefTheSameTemplate()
+    {
+        var root = TreeNodeViewModel.FromWatchList(TwoPipelinesSharingATemplate());
+        var running = PipelineNode(root, "SP2026");
+        var idle = PipelineNode(root, "SP2023R2SP2");
+        var shared = RefUnder(root, "SP2026").Children[0].ModelObject!;
+
+        // Exactly what the fixed handler does: pick the owning pipeline, then search inside it.
+        var scope = MainViewModel.FindWatchItemNode(root, "SP2026");
+        Assert.Same(running, scope);
+
+        var target = scope!.FindByModel(shared)!;
+        target.ExecutionStatus = "Running";
+        target.PropagateStatusUp();
+
+        Assert.Equal("Running", target.ExecutionStatus);
+        Assert.Equal("Running", running.ExecutionStatus);
+
+        // The bystander must not light up - this is the whole defect.
+        Assert.Equal("Idle", idle.ExecutionStatus);
+        AssertSubtreeIdle(idle);
+    }
+
+    private static void AssertSubtreeIdle(TreeNodeViewModel node)
+    {
+        Assert.Equal("Idle", node.ExecutionStatus);
+        foreach (var c in node.Children) AssertSubtreeIdle(c);
+    }
+
+    // ── cancellation ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void CancelWithDescendants_Should_LeaveNoDescendantRunning_When_ARunIsCancelledMidFlight()
+    {
+        var root = TreeNodeViewModel.FromWatchList(TwoPipelinesSharingATemplate());
+        var pipeline = PipelineNode(root, "SP2026");
+
+        // A run paints the whole subtree Running optimistically before dispatch.
+        pipeline.SetStatusRecursive("Running");
+        Assert.Contains(Descendants(pipeline), n => n.ExecutionStatus == "Running");
+
+        pipeline.CancelWithDescendants();
+
+        Assert.Equal("Cancelled", pipeline.ExecutionStatus);
+        Assert.DoesNotContain(Descendants(pipeline), n => n.ExecutionStatus == "Running");
+    }
+
+    private static IEnumerable<TreeNodeViewModel> Descendants(TreeNodeViewModel node)
+    {
+        foreach (var c in node.Children)
+        {
+            yield return c;
+            foreach (var g in Descendants(c)) yield return g;
+        }
+    }
+
     // ── expansion ───────────────────────────────────────────────────────────
 
     [Fact]

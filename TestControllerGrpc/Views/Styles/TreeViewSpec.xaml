@@ -144,6 +144,10 @@
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
                                 <Setter Property="Fill" Value="{DynamicResource SFailedBrush}" />
                             </DataTrigger>
+                            <!-- Without this a cancelled pipeline falls back to Idle and reads as "never ran". -->
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
+                            </DataTrigger>
                             <!-- Pulse animation for Running -->
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
                                 <DataTrigger.EnterActions>
@@ -188,6 +192,9 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="PartialFailure">
                                 <Setter Property="Text" Value="&#x2717;" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
+                                <Setter Property="Text" Value="&#x2014;" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>

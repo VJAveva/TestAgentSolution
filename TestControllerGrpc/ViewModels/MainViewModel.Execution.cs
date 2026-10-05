@@ -426,6 +426,17 @@ public sealed partial class MainViewModel
                         evNode.PropagateStatusUp();
                     }
                 }
+                // Must precede catch(Exception): it would swallow the cancellation, the outer
+                // handler would never run, and every node painted Running optimistically before
+                // dispatch would stay on a spinner forever.
+                catch (OperationCanceledException)
+                {
+                    allSuccess = false;
+                    evNode?.CancelWithDescendants();
+                    evNode?.PropagateStatusUp();
+                    AddLog($"[{session.SessionId}] Event cancelled: {ev.Type}", LogSeverity.Warning);
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     allSuccess = false;
@@ -434,7 +445,7 @@ public sealed partial class MainViewModel
                         evNode.SetFailed(ex.Message);
                         evNode.PropagateStatusUp();
                     }
-                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} � {ex.Message}", LogSeverity.Error);
+                    AddLog($"[{session.SessionId}] Event failed: {ev.Type} - {ex.Message}", LogSeverity.Error);
                 }
             }
             wiNode.ExecutionStatus = allSuccess ? "Success" : "Failed";
