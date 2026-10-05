@@ -19,6 +19,55 @@ public class FleetMaintenanceServiceTests
             stateStore, new Mock<IMaintenanceOperationStore>().Object, new UpdatePolicyStore(policy),
             new Mock<IAppLogger>().Object);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartInstallUpdatesAsync_Should_HonourTheParkedFlag_When_Called(bool allowInstall)
+    {
+        // The UI check is an affordance; this is the enforcement, so the API cannot bypass it.
+        var updateOp = new Mock<IMachineUpdateOperation>();
+        updateOp
+            .Setup(o => o.ExecuteAsync(It.IsAny<MaintenanceOperation>(), It.IsAny<InstallUpdatesRequest>(),
+                It.IsAny<IProgress<MaintenanceProgress>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MaintenanceOperation
+            {
+                Id = Guid.NewGuid(),
+                NodeId = Node,
+                Kind = MaintenanceKind.InstallUpdates,
+                TriggerSource = MaintenanceTriggerSource.FleetPanel,
+            });
+
+        var sut = new FleetMaintenanceService(
+            new Mock<IMachineRevertOperation>().Object,
+            new Mock<IMachineRebootOperation>().Object,
+            new Mock<IAgentGrpcDispatcher>().Object,
+            new AgentLockManager(),
+            new MaintenanceStateStore(),
+            new Mock<IMaintenanceOperationStore>().Object,
+            new UpdatePolicyStore(null),
+            new Mock<IAppLogger>().Object,
+            updateOp.Object,
+            new MaintenanceOptions { AllowUpdateInstall = allowInstall });
+
+        var request = new InstallUpdatesRequest
+        {
+            NodeId = Node,
+            TriggerSource = MaintenanceTriggerSource.FleetPanel,
+            TriggeredBy = "test",
+        };
+
+        if (allowInstall)
+        {
+            Assert.NotEqual(Guid.Empty, await sut.StartInstallUpdatesAsync(request, CancellationToken.None));
+        }
+        else
+        {
+            var ex = await Assert.ThrowsAsync<NotSupportedException>(
+                () => sut.StartInstallUpdatesAsync(request, CancellationToken.None));
+            Assert.Contains("installed by IT", ex.Message);
+        }
+    }
+
     [Fact]
     public async Task StartRevertAsync_Should_ThrowMaintenanceInProgress_When_SecondRevertOnSameNode()
     {

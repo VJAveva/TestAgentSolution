@@ -12,6 +12,10 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
 {
     private const string LogCategory = "Maintenance.Fleet";
 
+    /// <summary>Shown wherever install is offered, so the UI and the engine cannot word it differently.</summary>
+    public const string UpdateInstallDisabledMessage =
+        "Windows updates are installed by IT. This controller reports status only.";
+
     private readonly IMachineRevertOperation _revertOperation;
     private readonly IMachineRebootOperation _rebootOperation;
     private readonly IMachineUpdateOperation? _updateOperation;
@@ -20,6 +24,7 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
     private readonly IMaintenanceStateStore _stateStore;
     private readonly IMaintenanceOperationStore _operationStore;
     private readonly IUpdatePolicyStore _policy;
+    private readonly MaintenanceOptions _options;
     private readonly IAppLogger _logger;
 
     private readonly ConcurrentDictionary<string, RunningOperation> _active = new(StringComparer.OrdinalIgnoreCase);
@@ -41,11 +46,13 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
         IMaintenanceOperationStore operationStore,
         IUpdatePolicyStore policy,
         IAppLogger logger,
-        IMachineUpdateOperation? updateOperation = null)
+        IMachineUpdateOperation? updateOperation = null,
+        MaintenanceOptions? options = null)
     {
         _revertOperation = revertOperation;
         _rebootOperation = rebootOperation;
         _updateOperation = updateOperation;
+        _options = options ?? new MaintenanceOptions();
         _dispatcher = dispatcher;
         _lockManager = lockManager;
         _stateStore = stateStore;
@@ -145,6 +152,9 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
 
     public Task<Guid> StartInstallUpdatesAsync(InstallUpdatesRequest request, CancellationToken cancellationToken)
     {
+        if (!_options.AllowUpdateInstall)
+            throw new NotSupportedException(UpdateInstallDisabledMessage);
+
         if (_updateOperation is null)
             throw new NotSupportedException("This host has no update operation registered.");
 

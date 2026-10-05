@@ -20,6 +20,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     private readonly IFleetMaintenanceService? _maintenance;
     private readonly INodeUpdateInstaller? _installer;
     private readonly CapabilityChecker? _capabilities;
+    private readonly MaintenanceOptions _maintenanceOptions;
 
     /// <summary>
     /// Keyed by agent, and deliberately NOT on the row: RebuildRows throws every row away on each status
@@ -92,7 +93,8 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         IFleetMaintenanceService? maintenance = null,
         UpdatePolicyStore? policy = null,
         INodeUpdateInstaller? installer = null,
-        CapabilityChecker? capabilities = null)
+        CapabilityChecker? capabilities = null,
+        MaintenanceOptions? maintenanceOptions = null)
     {
         _dispatcher = dispatcher;
         _uiDispatcher = uiDispatcher;
@@ -102,6 +104,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         _policy = policy;
         _installer = installer;
         _capabilities = capabilities;
+        _maintenanceOptions = maintenanceOptions ?? new MaintenanceOptions();
 
         if (_store is not null) _store.Changed += OnStatusChanged;
         if (_notifications is not null) _notifications.NotificationsChanged += OnNotificationsChanged;
@@ -334,12 +337,19 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         }
 
         // Installing patches a live machine, so it is Administrator-only. Checking updates stays open.
-        if (action.State == NodeUpdateActionState.Available
-            && _capabilities is not null
-            && !_capabilities.Can(Permission.Fleet_InstallUpdates))
+        if (action.State == NodeUpdateActionState.Available)
         {
-            action.Detail = "Installing updates requires the Administrator role.";
-            return;
+            if (!_maintenanceOptions.AllowUpdateInstall)
+            {
+                action.Detail = FleetMaintenanceService.UpdateInstallDisabledMessage;
+                return;
+            }
+
+            if (_capabilities is not null && !_capabilities.Can(Permission.Fleet_InstallUpdates))
+            {
+                action.Detail = "Installing updates requires the Administrator role.";
+                return;
+            }
         }
 
         if (action.State == NodeUpdateActionState.Available)

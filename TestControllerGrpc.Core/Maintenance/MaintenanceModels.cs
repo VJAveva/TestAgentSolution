@@ -186,4 +186,11 @@ public sealed record MaintenanceOptions
 
     /// <summary>Ping/boot-wait tuning for the PingWait phase.</summary>
     public PingOptions PingOptions { get; init; } = new();
+
+    /// <summary>
+    /// Whether this controller may install Windows updates. Default FALSE: IT owns patching, and the tool
+    /// only reports posture. Lives here rather than on <c>UpdatePolicy</c> because PutPolicy rebuilds that
+    /// record from scratch and would silently re-enable this on every policy save.
+    /// </summary>
+    public bool AllowUpdateInstall { get; init; }
 }

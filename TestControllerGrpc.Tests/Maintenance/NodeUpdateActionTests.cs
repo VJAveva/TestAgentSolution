@@ -16,10 +16,18 @@ public class NodeUpdateActionTests
     private const string Node = "JVGR2";
 
     private static FleetUpdatesVM Build(Mock<INodeUpdateInstaller> installer, params string[] agents)
-        => Build(installer, null, agents);
+        => Build(installer, null, allowInstall: false, agents);
 
+    // Passing a maintenance service means the test is about install MECHANICS, so install is enabled.
     private static FleetUpdatesVM Build(
         Mock<INodeUpdateInstaller> installer, Mock<IFleetMaintenanceService>? maintenance, params string[] agents)
+        => Build(installer, maintenance, allowInstall: true, agents);
+
+    private static FleetUpdatesVM Build(
+        Mock<INodeUpdateInstaller> installer,
+        Mock<IFleetMaintenanceService>? maintenance,
+        bool allowInstall,
+        params string[] agents)
     {
         var dispatcher = new Mock<IAgentGrpcDispatcher>();
         dispatcher.SetupGet(d => d.RegisteredAgents).Returns(agents.Length == 0 ? [Node] : agents);
@@ -33,7 +41,8 @@ public class NodeUpdateActionTests
             Dispatcher.CurrentDispatcher,
             store: store.Object,
             maintenance: maintenance?.Object,
-            installer: installer.Object);
+            installer: installer.Object,
+            maintenanceOptions: new MaintenanceOptions { AllowUpdateInstall = allowInstall });
     }
 
     private static Mock<IFleetMaintenanceService> Maintenance()
@@ -139,7 +148,7 @@ public class NodeUpdateActionTests
         // Without the service there is no safe way to install, so the button must refuse rather than
         // fall back to the old unguarded path.
         var installer = Installer(search: new UpdateSearchResult(true, 1, ["A"]));
-        var vm = Build(installer);
+        var vm = Build(installer, null, allowInstall: true);
 
         await vm.UpdateActionCommand.ExecuteAsync(Node);
         await vm.UpdateActionCommand.ExecuteAsync(Node);
