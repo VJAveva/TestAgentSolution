@@ -275,16 +275,21 @@ public sealed class PreflightRunner
         if (_fs.CheckDirectory(folder) != PathAccess.Exists) return; // the folder probe already reported it
 
         var dll = Path.Combine(folder, "WASSmokeTest.dll");
-        if (_fs.CheckFile(dll) == PathAccess.Exists)
+        report.Checks.Add(_fs.CheckFile(dll) switch
         {
-            report.Checks.Add(new PreflightCheck(PreflightGroups.ControllerFiles, "WASSmokeTest.dll",
-                PreflightStatus.Pass, "Present with its folder contents."));
-            return;
-        }
+            PathAccess.Exists => new PreflightCheck(PreflightGroups.ControllerFiles, "WASSmokeTest.dll",
+                PreflightStatus.Pass, "Present with its folder contents."),
 
-        report.Checks.Add(new PreflightCheck(PreflightGroups.ControllerFiles, "WASSmokeTest.dll",
-            PreflightStatus.Fail, $"Not found in '{folder}'.",
-            "Copy the smoke-test build output - the DLL and its dependencies - into [_BinariesFolder]."));
+            // Never a Fail, and never worded as missing: this identity cannot look, which says nothing
+            // about whether the DLL is there. See PathAccess.Denied.
+            PathAccess.Denied => new PreflightCheck(PreflightGroups.ControllerFiles, "WASSmokeTest.dll",
+                PreflightStatus.Warn, $"'{dll}' could not be checked - {_fs.Identity} is denied access.",
+                $"Could not verify from here. Confirm '{dll}' is reachable by the account that runs the pipeline."),
+
+            _ => new PreflightCheck(PreflightGroups.ControllerFiles, "WASSmokeTest.dll",
+                PreflightStatus.Fail, $"Not found in '{folder}'.",
+                "Copy the smoke-test build output - the DLL and its dependencies - into [_BinariesFolder]."),
+        });
     }
 
     /// <summary>

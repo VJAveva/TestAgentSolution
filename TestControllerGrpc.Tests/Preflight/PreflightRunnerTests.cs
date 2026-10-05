@@ -190,6 +190,66 @@ public class PreflightRunnerTests : IDisposable
         Assert.False(report.CanRun);
     }
 
+    // ── 2b. Smoke-test binaries: "I cannot look" is not "it is not there" ──
+
+    private const string BinariesFolder = @"\\JVGR22\c$\TestSetup\FrameworkBinaries\SP2023R2SP2";
+    private const string SmokeDll = BinariesFolder + @"\WASSmokeTest.dll";
+
+    /// <summary>Seeds _BinariesFolder so only the DLL's own access result varies.</summary>
+    private string SeedBinariesFolder()
+    {
+        SeedHealthyDisk();
+        _fs.Directories.Add(BinariesFolder);
+        return WriteParameterFile(c => c.Global["_BinariesFolder"] = @"TestSetup\FrameworkBinaries\SP2023R2SP2");
+    }
+
+    [Fact]
+    public void Run_Should_Pass_When_TheSmokeTestDllIsPresent()
+    {
+        var file = SeedBinariesFolder();
+        _fs.Files.Add(SmokeDll);
+
+        var report = Runner().Run(Request(Config(file)));
+
+        var check = Find(report, PreflightGroups.ControllerFiles, "WASSmokeTest.dll");
+        Assert.NotNull(check);
+        Assert.Equal(PreflightStatus.Pass, check!.Status);
+        Assert.True(report.CanRun);
+    }
+
+    [Fact]
+    public void Run_Should_Fail_When_TheSmokeTestDllIsGenuinelyMissing()
+    {
+        var file = SeedBinariesFolder();
+
+        var report = Runner().Run(Request(Config(file)));
+
+        var check = Find(report, PreflightGroups.ControllerFiles, "WASSmokeTest.dll");
+        Assert.NotNull(check);
+        Assert.Equal(PreflightStatus.Fail, check!.Status);
+        Assert.Contains("Not found in", check.Detail);
+        Assert.False(report.CanRun);
+    }
+
+    [Fact]
+    public void Run_Should_WarnWithTheIdentity_When_TheSmokeTestDllCannotBeRead()
+    {
+        var file = SeedBinariesFolder();
+        _fs.Denied.Add(SmokeDll);
+
+        var report = Runner().Run(Request(Config(file)));
+
+        var check = Find(report, PreflightGroups.ControllerFiles, "WASSmokeTest.dll");
+        Assert.NotNull(check);
+        Assert.Equal(PreflightStatus.Warn, check!.Status);
+        Assert.Contains(_fs.Identity, check.Detail);
+        Assert.Contains("denied access", check.Detail, StringComparison.OrdinalIgnoreCase);
+
+        // The whole point: an unreadable path must never be worded as absent, and must never block.
+        Assert.DoesNotContain("Not found", check.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.True(report.CanRun);
+    }
+
     // ── 3. Unresolved token ─────────────────────────────────────────
 
     [Fact]
