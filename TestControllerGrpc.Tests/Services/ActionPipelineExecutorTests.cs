@@ -523,4 +523,29 @@ public class ActionPipelineExecutorTests
         Assert.NotEmpty(scopes);
         Assert.All(scopes, s => Assert.Equal("SP2026R2 - Sanity 5 Nodes Smoke E2E", s));
     }
+
+    [Fact]
+    public async Task ExecuteEventTrackedAsync_Should_StampTheOwningPipeline_When_AnActionFails()
+    {
+        _dispatcher
+            .Setup(d => d.ExecuteLocalCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ActionResult(false, -1, "Cancelled by user"));
+
+        var scopes = new List<string?>();
+        _executor.NodeFailed += (_, _, _, pipelineTag) => scopes.Add(pipelineTag);
+
+        var evt = new EventConfig
+        {
+            Type = "Renamed",
+            ExecutionType = ExecutionMode.Sequential,
+            Children = [new ActionConfig { Type = ActionType.RunCommand, Command = "test" }],
+        };
+        await _executor.ExecuteEventTrackedAsync(
+            "SP2026R2 - Sanity 5 Nodes Smoke E2E", evt, CreateContext(), CancellationToken.None);
+
+        // Cancelling raises NodeFailed, which carries the exit code and error text shown in the UI.
+        // Unscoped, that detail was stamped on the first pipeline in the tree, not the one that ran.
+        Assert.NotEmpty(scopes);
+        Assert.All(scopes, s => Assert.Equal("SP2026R2 - Sanity 5 Nodes Smoke E2E", s));
+    }
 }

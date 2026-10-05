@@ -204,7 +204,7 @@ public class InitializeFailureStopsRunTests : IDisposable
     public async Task ExecuteEventTrackedAsync_Should_ReportTheFailingNode_When_InitializeFails()
     {
         var failures = new List<string>();
-        _executor.NodeFailed += (node, _, msg) =>
+        _executor.NodeFailed += (node, _, msg, _) =>
         {
             if (node is InitializeConfig) failures.Add(msg);
         };

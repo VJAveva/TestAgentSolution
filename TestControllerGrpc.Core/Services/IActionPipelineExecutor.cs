@@ -23,8 +23,10 @@ public interface IActionPipelineExecutor
 
     /// <summary>
     /// Raised when an action node fails, providing exit code and error details.
+    /// The fourth argument is the OWNING pipeline tag, for the same reason as NodeProgress:
+    /// a Ref'd node is shared, so without it the error lands on the wrong pipeline.
     /// </summary>
-    event Action<IActionNode, int, string>? NodeFailed;
+    event Action<IActionNode, int, string, string?>? NodeFailed;
 
     /// <summary>
     /// Loads the template dictionary for Ref resolution.

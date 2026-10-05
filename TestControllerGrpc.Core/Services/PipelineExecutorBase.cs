@@ -46,8 +46,9 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     /// <summary>
     /// Raised when an action node fails, providing exit code and error details.
+    /// The fourth argument is the owning pipeline tag - see <see cref="IActionPipelineExecutor"/>.
     /// </summary>
-    public event Action<IActionNode, int, string>? NodeFailed;
+    public event Action<IActionNode, int, string, string?>? NodeFailed;
 
     protected PipelineExecutorBase(
         ExecutionSessionManager sessionManager,
@@ -788,7 +789,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     protected void  OnNodeProgress(IActionNode node, string status)
         => NodeProgress?.Invoke(node, status, _pipelineScope.Value);
     protected void OnNodeFailed(IActionNode node, int exitCode, string error)
-        => NodeFailed?.Invoke(node, exitCode, error);
+        => NodeFailed?.Invoke(node, exitCode, error, _pipelineScope.Value);
 
     // ?? Logging helpers ????????????????????????????????????????????????
 

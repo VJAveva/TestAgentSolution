@@ -477,11 +477,13 @@ public sealed partial class MainViewModel
         });
     }
 
-    private void OnNodeFailed(IActionNode node, int exitCode, string errorMessage)
+    private void OnNodeFailed(IActionNode node, int exitCode, string errorMessage, string? pipelineTag)
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            var treeNode = WatchListRoot?.FindByModel(node);
+            // Same scoping rule as OnNodeProgress: a Ref'd node exists under every pipeline that
+            // uses the template, so an unscoped search stamps the error on the wrong one.
+            var treeNode = ResolveProgressScope(pipelineTag)?.FindByModel(node);
             if (treeNode is not null)
             {
                 treeNode.LastExitCode = exitCode;
