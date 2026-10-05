@@ -377,3 +377,6 @@ impact-outcomes.db-wal
 impact-outcomes.db-shm
 
 webapi-tests.txt
+
+# Personal working notes, not project documentation.
+docs/PreFlightCheck/

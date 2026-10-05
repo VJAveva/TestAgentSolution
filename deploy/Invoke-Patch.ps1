@@ -74,6 +74,7 @@ param(
     [switch]$IncludeSpa,
     [switch]$Rollback,
     [string]$BackupStamp,
+    [switch]$AllowDirty,
     [ValidateSet('Release', 'Debug')]
     [string]$Configuration = 'Release'
 )
@@ -392,6 +393,67 @@ if ($components -contains 'controller') {
     else { Write-Ok 'Controller is stopped - safe to patch' }
 }
 
+# ---- source provenance ---------------------------------------------------
+# A stamp has to be reproducible from git, and the payload is the whole working TREE, not the
+# change you happen to be thinking about - so say exactly what is going out.
+Write-Step 'SOURCE'
+
+$gitOk = $false
+try {
+    $null = & git -C $RepoRoot rev-parse --is-inside-work-tree 2>$null
+    $gitOk = ($LASTEXITCODE -eq 0)
+}
+catch { $gitOk = $false }
+
+if (-not $gitOk) {
+    Write-Warn 'Not a git working tree - provenance cannot be verified.'
+    if (-not $AllowDirty) { throw 'Refusing to deploy from a non-git source. Pass -AllowDirty to override.' }
+}
+else {
+    $branch  = (& git -C $RepoRoot rev-parse --abbrev-ref HEAD).Trim()
+    $head    = (& git -C $RepoRoot rev-parse --short HEAD).Trim()
+    $subject = (& git -C $RepoRoot log -1 --pretty=%s).Trim()
+    Write-Info "branch       : $branch"
+    Write-Info "commit       : $head  $subject"
+
+    $dirty = @(& git -C $RepoRoot status --porcelain)
+    if ($dirty.Count -gt 0) {
+        Write-Bad "Working tree has $($dirty.Count) uncommitted change(s):"
+        $dirty | Select-Object -First 25 | ForEach-Object { Write-Info "   $_" }
+        if ($dirty.Count -gt 25) { Write-Info "   ... and $($dirty.Count - 25) more" }
+
+        if (-not $AllowDirty) {
+            throw 'Refusing to deploy from a dirty working tree. Commit first, or pass -AllowDirty.'
+        }
+        Write-Warn '-AllowDirty: shipping UNCOMMITTED work. This stamp is NOT reproducible from git.'
+    }
+    else { Write-Ok 'Working tree is clean' }
+
+    foreach ($name in $components) {
+        $marker = Join-Path $Targets[$name].Path '_patchbackup\DEPLOYED_COMMIT.txt'
+        if (-not (Test-Path $marker)) {
+            Write-Info "$($Targets[$name].Label): no previous deploy recorded - cannot diff"
+            continue
+        }
+
+        $prev = ((Get-Content $marker -Raw) -split "`n")[0].Trim()
+        $null = & git -C $RepoRoot cat-file -e "$prev^{commit}" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "$($Targets[$name].Label): recorded commit $prev is not in this repo - cannot diff"
+            continue
+        }
+
+        $commits = @(& git -C $RepoRoot log --oneline "$prev..HEAD" 2>$null)
+        $files   = @(& git -C $RepoRoot diff --name-only "$prev..HEAD" 2>$null)
+
+        Write-Info "$($Targets[$name].Label): $($commits.Count) commit(s) / $($files.Count) file(s) since $prev"
+        $commits | Select-Object -First 20 | ForEach-Object { Write-Info "   $_" }
+        if ($commits.Count -gt 20) { Write-Info "   ... and $($commits.Count - 20) more" }
+        $files | Select-Object -First 30 | ForEach-Object { Write-Info "   ~ $_" }
+        if ($files.Count -gt 30) { Write-Info "   ~ ... and $($files.Count - 30) more" }
+    }
+}
+
 # ---- build ---------------------------------------------------------------
 Write-Step 'BUILD'
 foreach ($name in $components) {
@@ -476,6 +538,14 @@ foreach ($name in $components) {
 
     if ($failed.Count -eq 0) {
         Write-Ok "patched and SHA256-verified $($changed.Count) file(s)"
+
+        if ($gitOk) {
+            $marker = Join-Path $spec.Path '_patchbackup\DEPLOYED_COMMIT.txt'
+            $headFull = (& git -C $RepoRoot rev-parse HEAD).Trim()
+            $note = if ($AllowDirty -and $dirty.Count -gt 0) { "  (DIRTY: $($dirty.Count) uncommitted file(s))" } else { '' }
+            Set-Content -Path $marker -Value "$headFull`n$stamp$note" -Encoding ASCII
+            Write-Info "recorded deployed commit $($headFull.Substring(0,8))$note"
+        }
     }
     else {
         $anyFailure = $true
