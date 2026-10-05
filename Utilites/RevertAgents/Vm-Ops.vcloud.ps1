@@ -299,8 +299,24 @@ foreach ($name in $script:names) {
                 if (-not $snap) { throw "No snapshot exists to revert to." }
                 Wait-EntityIdle $vmObj ($TaskTimeoutMinutes * 60)
                 $vmObj.ExtensionData.RevertToCurrentSnapshot() | Out-Null
-                Add-Result $name $true
                 Log "$name : revert issued (snapshot created $($snap.Created))" "OK"
+
+                # A baseline taken while powered off restores a POWERED-OFF VM, so the revert must
+                # power it back on or the node never returns. Re-query: the revert replaced the VM's
+                # state, so the handle captured before it is stale.
+                Wait-EntityIdle $vmObj ($TaskTimeoutMinutes * 60)
+                $fresh = Get-Vm $name
+                if (-not $fresh) { throw "VM disappeared after revert." }
+
+                if ($fresh.Status -eq "PoweredOn") {
+                    Add-Result $name $true -power "on"
+                    Log "$name : already powered on after revert" "OK"
+                }
+                else {
+                    Start-CIVM -VM $fresh -Confirm:$false -ErrorAction Stop | Out-Null
+                    Add-Result $name $true -power "on"
+                    Log "$name : powered on after revert" "OK"
+                }
             }
 
             "Create" {

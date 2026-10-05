@@ -23,7 +23,17 @@ public static class FleetMaintenanceExtensions
         services.AddSingleton<INodeReadinessProbe, NodeReadinessProbe>();
         services.AddSingleton<IMaintenanceStateStore, MaintenanceStateStore>();
         services.AddSingleton<IMaintenanceOperationStore, MaintenanceOperationStore>();
-        services.AddSingleton<IMachineRevertOperation, MachineRevertOperation>();
+        services.AddSingleton<IMachineRevertOperation>(sp => new MachineRevertOperation(
+            sp.GetRequiredService<IAgentGrpcDispatcher>(),
+            sp.GetRequiredService<IPowerShellScriptRunner>(),
+            sp.GetRequiredService<INodeReadinessProbe>(),
+            sp.GetRequiredService<AgentLockManager>(),
+            sp.GetRequiredService<ExecutionSessionManager>(),
+            sp.GetRequiredService<IMaintenanceStateStore>(),
+            sp.GetRequiredService<IMaintenanceOperationStore>(),
+            sp.GetRequiredService<MaintenanceOptions>(),
+            sp.GetRequiredService<IAppLogger>(),
+            TryResolveVirtualization(sp)));
         services.AddSingleton<IMachineRebootOperation, MachineRebootOperation>();
         services.AddSingleton<IMachineUpdateOperation, MachineUpdateOperation>();
         services.AddSingleton<IFleetMaintenanceService, FleetMaintenanceService>();
@@ -33,6 +43,26 @@ public static class FleetMaintenanceExtensions
         services.AddSingleton<INodeUpdateInstaller, NodeUpdateInstaller>();
 
         return services;
+    }
+
+    /// <summary>
+    /// The provider's factory throws on a misconfigured platform. Revert worked without it for a year, so a
+    /// config error must degrade power-on to best-effort rather than break revert outright.
+    /// </summary>
+    private static IVirtualizationProvider? TryResolveVirtualization(IServiceProvider sp)
+    {
+        try
+        {
+            return sp.GetService<IVirtualizationProvider>();
+        }
+        catch (Exception ex)
+        {
+            sp.GetRequiredService<IAppLogger>().Warn(
+                "Maintenance",
+                $"Virtualization provider unavailable ({ex.Message}); revert will rely on the revert script "
+                + "to power the VM on.");
+            return null;
+        }
     }
 
     /// <summary>

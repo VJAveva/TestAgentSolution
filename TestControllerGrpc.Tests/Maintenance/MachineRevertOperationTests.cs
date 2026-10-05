@@ -61,7 +61,21 @@ public class MachineRevertOperationTests
 
         public MachineRevertOperation Build() => new(
             Dispatcher.Object, ScriptRunner.Object, Probe.Object, LockManager, SessionManager,
-            StateStore, OperationStore.Object, Options, new Mock<IAppLogger>().Object);
+            StateStore, OperationStore.Object, Options, new Mock<IAppLogger>().Object,
+            Virtualization?.Object);
+
+        public Mock<IVirtualizationProvider>? Virtualization { get; set; }
+
+        /// <summary>Attaches a provider whose PowerOn succeeds, and returns it for verification.</summary>
+        public Mock<IVirtualizationProvider> WithVirtualization()
+        {
+            var m = new Mock<IVirtualizationProvider>();
+            m.Setup(p => p.PowerOnAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyList<string> names, CancellationToken _) =>
+                    new VmOpResult([.. names.Select(n => new VmResult(n, true) { Power = VmPower.On })]));
+            Virtualization = m;
+            return m;
+        }
     }
 
     private static MaintenanceOperation Shell() => new()

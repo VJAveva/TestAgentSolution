@@ -23,6 +23,7 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
     private readonly IMaintenanceStateStore _stateStore;
     private readonly IMaintenanceOperationStore _operationStore;
     private readonly MaintenanceOptions _options;
+    private readonly IVirtualizationProvider? _virtualization;
     private readonly IAppLogger _logger;
 
     public MachineRevertOperation(
@@ -34,7 +35,8 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
         IMaintenanceStateStore stateStore,
         IMaintenanceOperationStore operationStore,
         MaintenanceOptions options,
-        IAppLogger logger)
+        IAppLogger logger,
+        IVirtualizationProvider? virtualization = null)
     {
         _dispatcher = dispatcher;
         _scriptRunner = scriptRunner;
@@ -44,6 +46,7 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
         _stateStore = stateStore;
         _operationStore = operationStore;
         _options = options;
+        _virtualization = virtualization;
         _logger = logger;
     }
 
@@ -128,10 +131,14 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
             if (revert.ExitCode != 0)
                 return await QuarantineAsync(op, RevertPhase.SnapshotRevert, $"Revert script exited {revert.ExitCode}.", log, stopwatch, progress);
 
-            // ── Phase 4: PowerOn — a zero exit means the snapshot applied and power-on was requested ──
+            // ── Phase 4: PowerOn — issued, not assumed. A baseline taken while powered off restores a
+            // POWERED-OFF VM, and the revert script's power-on is an undocumented side effect we must
+            // not depend on. ──
             op = op with { Phase = RevertPhase.PowerOn };
             await SaveAsync(op);
-            Report(progress, op, 4, "Snapshot applied; power-on requested.", stopwatch);
+            Report(progress, op, 4, "Snapshot applied; powering the machine on.", stopwatch);
+
+            await TryPowerOnAsync(request.NodeId, log);
 
             if (!request.WaitForAgent)
                 return await CompleteAsync(op, log, stopwatch, progress);  // fire-and-forget: no reconnect wait
@@ -190,8 +197,7 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
 
             // ── Phase 8: Verify ──
             return await CompleteAsync(op, log, stopwatch, progress);
-        }
-        catch (Exception ex)
+        }        catch (Exception ex)
         {
             _logger.Error(LogCategory, $"Revert of '{request.NodeId}' threw during phase {op.Phase}.", ex);
             log.Note($"Unhandled error during {op.Phase}: {ex.Message}");
@@ -208,6 +214,38 @@ public sealed class MachineRevertOperation : IMachineRevertOperation
             };
             await SaveAsync(faulted);
             return faulted;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort power-on. Deliberately does NOT fail the operation: the revert script may already have
+    /// powered the VM on, and a provider misconfiguration must not turn a good revert into a quarantine.
+    /// PingWait and AgentWait remain the arbiters of whether the node actually came back.
+    /// </summary>
+    private async Task TryPowerOnAsync(string nodeId, OperationLog log)
+    {
+        if (_virtualization is null)
+        {
+            log.Note("No virtualization provider configured; relying on the revert script to power the VM on.");
+            return;
+        }
+
+        try
+        {
+            var result = await _virtualization.PowerOnAsync([nodeId], CancellationToken.None).ConfigureAwait(false);
+            var vm = result.For(nodeId);
+
+            if (vm is null)
+                log.Note("Power-on returned no result for this node; ping and agent checks will decide readiness.");
+            else if (!vm.Ok)
+                log.Note($"Power-on reported '{vm.Error}'; ping and agent checks will decide readiness.");
+            else
+                log.Note("Power-on issued.");
+        }
+        catch (Exception ex)
+        {
+            log.Note($"Power-on could not be issued ({ex.Message}); ping and agent checks will decide readiness.");
+            _logger.Warn(LogCategory, $"Power-on of '{nodeId}' failed after revert: {ex.Message}");
         }
     }
 
