@@ -51,6 +51,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly System.Windows.Threading.DispatcherTimer _assignmentRefreshTimer;
     private readonly List<IDisposable> _subscriptions = [];
 
+    /// <summary>Watches parameter files so edited values re-resolve on screen. Display-only.</summary>
+    private ParameterFileMonitor? _parameterFileMonitor;
+
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
     [ObservableProperty] private TreeNodeViewModel? _selectedTemplateNode;
     [ObservableProperty] private TreeNodeViewModel? _activeEditNode;
@@ -418,7 +421,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _subscriptions.Add(events.Subscribe<AgentLocksChangedEvent>(_ =>
             Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
         _subscriptions.Add(events.Subscribe<ExecutionCompletedEvent>(_ =>
-            Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                RefreshLockDisplay();
+                RefreshTokenDisplay();
+            })));
 
         // Issue #3: Immediately add new sessions to the filter dropdown
         // so users can filter by session as soon as execution starts.
@@ -427,6 +434,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 if (!string.IsNullOrEmpty(e.SessionId) && !AvailableSessionIds.Contains(e.SessionId))
                     AvailableSessionIds.Add(e.SessionId);
+                // A run's own values outrank the editor's prediction the moment it starts.
+                RefreshTokenDisplay();
             })));
 
         // Always start with a single empty WatchList root
@@ -703,6 +712,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         DisposeSmartEdit();
+        _parameterFileMonitor?.Dispose();
         _vocabMonitor.ConfigReloaded -= OnConfigReloaded;
         _executor.LogEntry -= OnLogEntry;
         _executor.NodeProgress -= OnNodeProgress;
@@ -996,6 +1006,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
             TreeNodeViewModel.SetSessionValues(wi.Tag, session.SessionId, session.ResolvedParameters);
         }
+    }
+
+    /// <summary>
+    /// Re-resolves every label, pill and tooltip without rebuilding the trees. Called when a run
+    /// starts or ends (its own values outrank the preview) and when a parameter file changes on
+    /// disk - resolution is computed once per node, so nothing updates on its own.
+    /// </summary>
+    public void RefreshTokenDisplay()
+    {
+        RefreshSessionValues();
+        foreach (var root in TreeRoots) root.RefreshResolvedTextRecursive();
+        foreach (var root in TemplateRoots) root.RefreshResolvedTextRecursive();
     }
 
     /// <summary>

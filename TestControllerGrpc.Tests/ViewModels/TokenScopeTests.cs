@@ -147,9 +147,10 @@ public class TokenScopeTests : IDisposable
     }
 
     [Fact]
-    public void ResolveTokens_Should_LeaveUnknownTokens_When_NoLayerDefinesThem()
+    public void ResolveTokens_Should_MarkUnknownTokens_When_NoLayerDefinesThem()
     {
-        Assert.Equal("[_Nope]", TreeNodeViewModel.ResolveTokens("[_Nope]", "Sanity"));
+        // Still visible, so the user can see WHICH token is missing - but marked, never bare.
+        Assert.Equal("[_Nope] (not set)", TreeNodeViewModel.ResolveTokens("[_Nope]", "Sanity"));
     }
 
     [Fact]

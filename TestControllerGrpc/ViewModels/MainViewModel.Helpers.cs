@@ -210,6 +210,9 @@ public sealed partial class MainViewModel
     /// </summary>
     private void LoadTokensFromConfig(WatchListConfig config)
     {
+        // Taken BEFORE the clear: a file caught mid-save parses as garbage, and without a rollback
+        // the clear-then-reload would leave every label reading "(not set)".
+        var previous = TreeNodeViewModel.SnapshotTokens();
         TreeNodeViewModel.ClearTokenScopes();
 
         // Every node object is about to be replaced, and the pipelines a context named may be gone.
@@ -222,33 +225,70 @@ public sealed partial class MainViewModel
         {
             try
             {
-                var shared = TreeNodeViewModel.SharedTokens;
                 foreach (var (key, value) in ParameterResolver.ParseParameterFile(config.GlobalVariablesFile))
                 {
-                    shared[key] = value;
+                    TreeNodeViewModel.SetToken(TreeNodeViewModel.SharedScope, key, value, TokenLayer.Global);
                     if (key.StartsWith('_'))
-                        shared[key[1..]] = value;
+                        TreeNodeViewModel.SetToken(TreeNodeViewModel.SharedScope, key[1..], value, TokenLayer.Global);
                 }
             }
             catch (Exception ex)
             {
-                _appLogger.Warn("Tokens", $"Failed to load global variables file '{config.GlobalVariablesFile}': {ex.Message}");
+                TreeNodeViewModel.RestoreScopeFrom(previous, TreeNodeViewModel.SharedScope);
+                _appLogger.Warn("Tokens",
+                    $"Global variables file '{config.GlobalVariablesFile}' could not be read ({ex.Message}). "
+                    + "Keeping the last good values; will retry on the next change.");
             }
         }
 
         foreach (var wi in config.WatchItems)
             foreach (var ev in wi.Events)
-                LoadTokensFromChildren(ev.Children, wi.Tag);
+                LoadTokensFromChildren(ev.Children, wi.Tag, previous);
 
         // Templates are deliberately NOT loaded: a template has no settings of its own, so any value
         // previewed against it would be a guess at which pipeline will run it.
+
+        WatchParameterFiles(config);
 
         // Refresh resolved text across all trees
         WatchListRoot?.RefreshResolvedTextRecursive();
         TemplateListRoot?.RefreshResolvedTextRecursive();
     }
 
-    private void LoadTokensFromChildren(List<IActionNode> children, string pipelineTag)
+    /// <summary>
+    /// Keeps the parameter-file watch set in step with the config, so editing a value in
+    /// pipeline-config.json re-resolves every label without a restart.
+    /// </summary>
+    private void WatchParameterFiles(WatchListConfig config)
+    {
+        _parameterFileMonitor ??= CreateParameterFileMonitor();
+
+        var files = new List<string?>();
+        if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))
+            files.Add(config.GlobalVariablesFile);
+        foreach (var wi in config.WatchItems)
+            foreach (var init in ParameterResolver.CollectInitializeNodes(wi))
+                files.Add(init.ParameterFile);
+
+        _parameterFileMonitor.Watch(files);
+    }
+
+    private ParameterFileMonitor CreateParameterFileMonitor()
+    {
+        var monitor = new ParameterFileMonitor();
+        monitor.ParametersChanged += () =>
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                if (_config is null) return;
+                LoadTokensFromConfig(_config);
+                RefreshTokenDisplay();
+                AddLog("Parameter file changed - refreshed resolved values.", LogSeverity.Info);
+            });
+        return monitor;
+    }
+
+    private void LoadTokensFromChildren(
+        List<IActionNode> children, string pipelineTag, TreeNodeViewModel.TokenSnapshot previous)
     {
         foreach (var child in children)
         {
@@ -260,22 +300,46 @@ public sealed partial class MainViewModel
                     // lines as keys, so every [Token] in the tree would render unresolved.
                     var ctx = new PipelineExecutionContext { WatchItemTag = pipelineTag };
                     if (init.ParameterFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                        ParameterResolver.LoadJsonConfig(ctx, init.ParameterFile, init.Profile, pipelineTag);
+                    {
+                        // Try*, not LoadJsonConfig: a malformed or half-written file returns false
+                        // rather than throwing, so the plain loader would silently yield no values.
+                        if (!ParameterResolver.TryLoadJsonConfig(ctx, init.ParameterFile, init.Profile, pipelineTag))
+                        {
+                            TreeNodeViewModel.RestoreScopeFrom(previous, pipelineTag);
+                            _appLogger.Warn("Tokens",
+                                $"Parameter file '{init.ParameterFile}' could not be read (missing, or invalid JSON "
+                                + $"- it may have been caught mid-save). Keeping the last good values for "
+                                + $"'{pipelineTag}'; will retry on the next change.");
+                            continue;
+                        }
+                    }
                     else
+                    {
                         ParameterResolver.LoadParameterFile(ctx, init.ParameterFile);
+                    }
 
-                    var scope = TreeNodeViewModel.TokensFor(pipelineTag);
+                    // Each key carries the rank it won at, so a tooltip can name the layer the
+                    // value actually came from rather than guessing from the file it was read in.
                     foreach (var entry in ctx.Parameters)
-                        scope[entry.Key] = entry.Value;
+                    {
+                        var rank = ctx.ParameterRanks.TryGetValue(entry.Key, out var r)
+                            ? (ParameterRank)r
+                            : ParameterRank.ParameterFile;
+                        TreeNodeViewModel.SetToken(pipelineTag, entry.Key, entry.Value, TokenDisplay.LayerFromRank(rank));
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _appLogger.Warn("Tokens", $"Failed to load parameter file '{init.ParameterFile}': {ex.Message}");
+                    // Only this pipeline rolls back - a broken file must not blank the other eight.
+                    TreeNodeViewModel.RestoreScopeFrom(previous, pipelineTag);
+                    _appLogger.Warn("Tokens",
+                        $"Parameter file '{init.ParameterFile}' could not be read ({ex.Message}). "
+                        + $"Keeping the last good values for '{pipelineTag}'; will retry on the next change.");
                 }
             }
             else if (child is ActionGroupConfig ag)
             {
-                LoadTokensFromChildren(ag.Children, pipelineTag);
+                LoadTokensFromChildren(ag.Children, pipelineTag, previous);
             }
         }
     }
@@ -539,12 +603,11 @@ public sealed partial class MainViewModel
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            var scope = TreeNodeViewModel.TokensFor(watchItemTag);
             foreach (var (key, value) in parameters)
             {
-                scope[key] = value;
+                TreeNodeViewModel.SetToken(watchItemTag, key, value, TokenLayer.Trigger);
                 if (key.StartsWith('_'))
-                    scope[key[1..]] = value;
+                    TreeNodeViewModel.SetToken(watchItemTag, key[1..], value, TokenLayer.Trigger);
             }
 
             // Refresh resolved display text across all trees

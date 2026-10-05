@@ -89,11 +89,11 @@
                 <MultiBinding Converter="{StaticResource NodeTooltipConv}">
                     <Binding Path="NodeKind" />
                     <Binding Path="ActionTypeText" />
-                    <Binding Path="Command" />
-                    <Binding Path="Parameters" />
-                    <Binding Path="AgentName" />
+                    <Binding Path="ResolvedCommand" />
+                    <Binding Path="ResolvedParameters" />
+                    <Binding Path="ResolvedAgentName" />
                     <Binding Path="StatusTooltip" />
-                    <Binding Path="TokenScope" />
+                    <Binding Path="TokenProvenance" />
                 </MultiBinding>
             </Grid.ToolTip>
             <Grid.ColumnDefinitions>
@@ -261,14 +261,14 @@
             <TextBlock Grid.Column="3" VerticalAlignment="Center">
                 <TextBlock.Text>
                     <MultiBinding Converter="{StaticResource ActionLabelConv}">
-                        <Binding Path="Tag" />
                         <!-- Resolved, not raw: the row must agree with the properties panel. -->
+                        <Binding Path="ResolvedTag" />
                         <Binding Path="ResolvedAgentName" />
                         <Binding Path="NodeKind" />
                         <Binding Path="ActionTypeText" />
                         <Binding Path="ResolvedCommand" />
-                        <Binding Path="To" />
-                        <Binding Path="Title" />
+                        <Binding Path="ResolvedTo" />
+                        <Binding Path="ResolvedTitle" />
                         <Binding Path="ResolvedDisplayText" Converter="{StaticResource StripModeConv}" />
                     </MultiBinding>
                 </TextBlock.Text>
@@ -533,8 +533,8 @@
                     <MultiBinding Converter="{StaticResource ActionFilePillTipConv}">
                         <Binding Path="NodeKind" />
                         <Binding Path="ActionTypeText" />
-                        <Binding Path="Command" />
-                        <Binding Path="Title" />
+                        <Binding Path="ResolvedCommand" />
+                        <Binding Path="ResolvedTitle" />
                     </MultiBinding>
                 </Border.ToolTip>
                 <TextBlock Style="{StaticResource FilePillText}">
@@ -543,7 +543,7 @@
                             <Binding Path="NodeKind" />
                             <Binding Path="ActionTypeText" />
                             <Binding Path="ResolvedCommand" />
-                            <Binding Path="Title" />
+                            <Binding Path="ResolvedTitle" />
                         </MultiBinding>
                     </TextBlock.Text>
                 </TextBlock>

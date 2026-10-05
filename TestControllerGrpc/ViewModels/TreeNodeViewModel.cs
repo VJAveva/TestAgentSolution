@@ -78,48 +78,75 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // ── Phase 3b: Pipeline lock badge (per-row, bound in TreeViewSpec.xaml) ──
     [ObservableProperty] private LockBadgeViewModel? _lockBadge;
 
-    /// <summary>Returns the Parameters string with [Token] placeholders resolved. Read-only display value.</summary>
-    public string ResolvedParameters => ResolveTokens(Parameters);
+    // ── Resolved display values ─────────────────────────────────────
+    // Every one of these is a thin wrapper over Describe(); none carries its own resolving logic.
 
-    /// <summary>Returns the Command string with [Token] placeholders resolved. Read-only display value.</summary>
-    public string ResolvedCommand => ResolveTokens(Command);
-
-    /// <summary>Returns the AgentName string with [Token] placeholders resolved. Read-only display value.</summary>
-    public string ResolvedAgentName => ResolveTokens(AgentName);
+    public string ResolvedParameters => Describe(Parameters).Text;
+    public string ResolvedCommand => Describe(Command).Text;
+    public string ResolvedAgentName => Describe(AgentName).Text;
+    public string ResolvedTag => Describe(Tag).Text;
+    public string ResolvedTo => Describe(To).Text;
+    public string ResolvedTitle => Describe(Title).Text;
+    public string ResolvedBody => Describe(Body).Text;
 
     // ── Resolved vs unresolved ──────────────────────────────────────
     // Raw tokens used to render in the same green as real values, so "[_Installer]" read as a
-    // resolved path. A field is only "resolved" once no [Token] survives substitution.
+    // resolved path. Unresolved tokens now carry their own "(not set)" marker inline, so a field
+    // that resolves three of four tokens still shows the three real values.
 
-    /// <summary>Shown instead of the raw tokens when a field could not be resolved.</summary>
-    public const string UnresolvedHint = "Not resolved \u2014 choose a pipeline context";
+    /// <summary>Shown instead of the tokens when the node has no pipeline context at all.</summary>
+    public const string UnresolvedHint = TokenDisplay.NoContextHint;
 
-    public bool IsCommandResolved => IsResolved(Command, ResolvedCommand);
-    public bool IsParametersResolved => IsResolved(Parameters, ResolvedParameters);
-    public bool IsAgentNameResolved => IsResolved(AgentName, ResolvedAgentName);
+    /// <summary>A Library node whose template has no chosen pipeline can resolve nothing.</summary>
+    public bool HasNoTokenContext => TokenScope is null;
 
-    public string ResolvedCommandDisplay => Display(ResolvedCommand, IsCommandResolved);
-    public string ResolvedParametersDisplay => Display(ResolvedParameters, IsParametersResolved);
-    public string ResolvedAgentNameDisplay => Display(ResolvedAgentName, IsAgentNameResolved);
+    public bool IsCommandResolved => !Describe(Command).HasUnresolved;
+    public bool IsParametersResolved => !Describe(Parameters).HasUnresolved;
+    public bool IsAgentNameResolved => !Describe(AgentName).HasUnresolved;
 
-    /// <summary>A blank field is not "unresolved" - there was nothing to resolve.</summary>
-    private static bool IsResolved(string raw, string resolved)
-        => string.IsNullOrWhiteSpace(raw) || !TokenPattern.IsMatch(resolved);
+    public string ResolvedCommandDisplay => FieldDisplay(Command);
+    public string ResolvedParametersDisplay => FieldDisplay(Parameters);
+    public string ResolvedAgentNameDisplay => FieldDisplay(AgentName);
 
-    private static string Display(string resolved, bool isResolved)
-        => isResolved ? resolved : UnresolvedHint;
+    /// <summary>
+    /// Node Properties text. With no context at all, say so ONCE rather than repeating "(not set)"
+    /// against every token the node could never have resolved.
+    /// </summary>
+    private string FieldDisplay(string? raw)
+        => HasNoTokenContext && !string.IsNullOrWhiteSpace(raw) && raw.Contains('[')
+            ? TokenDisplay.NoContextHint
+            : Describe(raw).Text;
+
+    /// <summary>Tooltip lines "[_Token] -> value (Layer)" for every token in the given fields.</summary>
+    public string TokenTooltip(params string?[] fields)
+    {
+        var lines = fields
+            .SelectMany(f => Describe(f).Describe())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return lines.Count == 0 ? "" : string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>Provenance for the fields the tree tooltip shows, so a value's layer is visible.</summary>
+    public string TokenProvenance => TokenTooltip(Command, Parameters, AgentName);
 
     private void NotifyResolvedChanged()
     {
         OnPropertyChanged(nameof(ResolvedParameters));
         OnPropertyChanged(nameof(ResolvedCommand));
         OnPropertyChanged(nameof(ResolvedAgentName));
+        OnPropertyChanged(nameof(ResolvedTag));
+        OnPropertyChanged(nameof(ResolvedTo));
+        OnPropertyChanged(nameof(ResolvedTitle));
+        OnPropertyChanged(nameof(ResolvedBody));
         OnPropertyChanged(nameof(IsCommandResolved));
         OnPropertyChanged(nameof(IsParametersResolved));
         OnPropertyChanged(nameof(IsAgentNameResolved));
         OnPropertyChanged(nameof(ResolvedCommandDisplay));
         OnPropertyChanged(nameof(ResolvedParametersDisplay));
         OnPropertyChanged(nameof(ResolvedAgentNameDisplay));
+        OnPropertyChanged(nameof(HasNoTokenContext));
+        OnPropertyChanged(nameof(TokenProvenance));
     }
 
     /// <summary>Called by source generator when Parameters changes — refreshes ResolvedParameters.</summary>
@@ -502,10 +529,82 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         return values;
     }
 
+    /// <summary>
+    /// Layer each token's value came from, parallel to <see cref="TokenScopes"/>. Kept separate so
+    /// the existing dictionary API still works; values written without a layer read back as
+    /// <see cref="TokenLayer.Unknown"/> and are simply not attributed in tooltips.
+    /// </summary>
+    private static readonly Dictionary<string, Dictionary<string, TokenLayer>> TokenLayers =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Writes a token together with the parameter layer it came from.</summary>
+    public static void SetToken(string? scope, string key, string value, TokenLayer layer)
+    {
+        var s = scope ?? SharedScope;
+        TokensFor(s)[key] = value;
+        if (!TokenLayers.TryGetValue(s, out var layers))
+            TokenLayers[s] = layers = new Dictionary<string, TokenLayer>(StringComparer.OrdinalIgnoreCase);
+        layers[key] = layer;
+    }
+
+    private static TokenLayer LayerFor(string scope, string key, TokenLayer fallback = TokenLayer.Unknown)
+    {
+        if (!TokenLayers.TryGetValue(scope, out var layers)) return fallback;
+        if (layers.TryGetValue(key, out var layer)) return layer;
+        if (key.StartsWith('_') && layers.TryGetValue(key[1..], out layer)) return layer;
+        return fallback;
+    }
+
+    /// <summary>
+    /// Toolbar toggle: show the authored tokens instead of their values. Display-only - it never
+    /// affects what is saved or executed.
+    /// </summary>
+    public static bool ShowRawTokens { get; set; }
+
     /// <summary>Values every pipeline inherits.</summary>
     public static Dictionary<string, string> SharedTokens => TokensFor(SharedScope);
 
-    public static void ClearTokenScopes() => TokenScopes.Clear();
+    public static void ClearTokenScopes()
+    {
+        TokenScopes.Clear();
+        TokenLayers.Clear();
+    }
+
+    /// <summary>Values and layers for every scope, taken before a reload that might fail.</summary>
+    public sealed record TokenSnapshot(
+        Dictionary<string, Dictionary<string, string>> Values,
+        Dictionary<string, Dictionary<string, TokenLayer>> Layers);
+
+    /// <summary>
+    /// Copies the current token state so a reload can be rolled back per pipeline. A parameter file
+    /// caught mid-save parses as garbage; without this the clear-then-reload would leave every label
+    /// reading "(not set)" until the next successful edit.
+    /// </summary>
+    public static TokenSnapshot SnapshotTokens() => new(
+        TokenScopes.ToDictionary(
+            e => e.Key,
+            e => new Dictionary<string, string>(e.Value, StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase),
+        TokenLayers.ToDictionary(
+            e => e.Key,
+            e => new Dictionary<string, TokenLayer>(e.Value, StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>Puts one scope back to its snapshot values, leaving every other scope alone.</summary>
+    public static void RestoreScopeFrom(TokenSnapshot snapshot, string? scope)
+    {
+        var key = scope ?? SharedScope;
+
+        if (snapshot.Values.TryGetValue(key, out var values))
+            TokenScopes[key] = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+        else
+            TokenScopes.Remove(key);
+
+        if (snapshot.Layers.TryGetValue(key, out var layers))
+            TokenLayers[key] = new Dictionary<string, TokenLayer>(layers, StringComparer.OrdinalIgnoreCase);
+        else
+            TokenLayers.Remove(key);
+    }
 
     // ── Values actually used by a run ───────────────────────────────
     // The preview dictionary and the execution dictionary are two independent populations of the
@@ -603,26 +702,55 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// <summary>
     /// Resolves [Token] placeholders using <paramref name="scope"/>'s values, falling back to the
     /// shared scope. A null scope resolves nothing, leaving the tokens visible.
-    /// Unresolved tokens are left as-is.
     /// </summary>
     public static string ResolveTokens(string input, string? scope)
+        => Describe(input, scope).Text;
+
+    /// <summary>
+    /// Full resolution result for a field: display text plus every token with its value and layer.
+    /// This is the single entry point - <see cref="ResolveTokens(string)"/> and every Resolved*
+    /// property are thin wrappers over it, so no call site carries its own resolving logic.
+    /// </summary>
+    public static DisplayResult Describe(string? input, string? scope)
+        => Describe(input, scope, null);
+
+    private static DisplayResult Describe(string? input, string? scope, Func<string, bool>? isReserved)
     {
-        if (string.IsNullOrEmpty(input)) return input;
-        if (!input.Contains('[')) return input;
-        if (scope is null) return input;
+        // A null scope means "nothing may be resolved here" (a Library node with no context),
+        // which is different from "resolved to nothing".
+        if (scope is null) return new DisplayResult(input ?? "", []);
+        return TokenDisplay.Resolve(input, name => LookupToken(name, scope), ShowRawTokens, isReserved);
+    }
 
-        var own = TokensFor(scope);
-        var shared = SharedTokens;
+    /// <summary>
+    /// "[Sequential]" / "[Parallel]" is execution-mode decoration baked into DisplayText, not a
+    /// token. Treating it as one marked it "(not set)", and the label converter then stripped the
+    /// brackets and left a bare "(not set)" in front of every group name.
+    /// </summary>
+    private static bool IsExecutionModeDecoration(string name)
+        => name.Equals("Sequential", StringComparison.OrdinalIgnoreCase)
+           || name.Equals("Parallel", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Per-node overload using this node's own scope.</summary>
+    public DisplayResult Describe(string? input) => Describe(input, TokenScope);
+
+    /// <summary>
+    /// Value and layer for one token. A value the run actually used outranks anything the editor
+    /// would predict, so the session layer is consulted first.
+    /// </summary>
+    private static (string Value, TokenLayer Layer)? LookupToken(string name, string scope)
+    {
         SessionScopes.TryGetValue(scope, out var session);
+        if (session.Values is not null && TryGet(session.Values, name, out var used))
+            return (used, TokenLayer.Run);
 
-        return TokenPattern.Replace(input, match =>
-        {
-            var key = match.Groups[1].Value;
-            // What the run actually used outranks what the editor would predict.
-            if (session.Values is not null && TryGet(session.Values, key, out var used)) return used;
-            if (TryGet(own, key, out var val) || TryGet(shared, key, out val)) return val;
-            return match.Value; // leave unresolved
-        });
+        if (TryGet(TokensFor(scope), name, out var own))
+            return (own, LayerFor(scope, name));
+
+        if (TryGet(SharedTokens, name, out var shared))
+            return (shared, LayerFor(SharedScope, name, TokenLayer.Global));
+
+        return null;
 
         static bool TryGet(Dictionary<string, string> values, string key, out string value)
         {
@@ -642,22 +770,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// <summary>Updates ResolvedDisplayText and unresolved-token metadata.</summary>
     private void UpdateResolvedText(string rawText)
     {
-        var resolved = ResolveTokens(rawText);
-        ResolvedDisplayText = resolved;
+        var result = Describe(rawText, TokenScope, IsExecutionModeDecoration);
+        ResolvedDisplayText = result.Text;
 
-        // Check for remaining unresolved tokens
-        var remaining = TokenPattern.Matches(resolved);
-        if (remaining.Count > 0)
-        {
-            HasUnresolvedTokens = true;
-            var names = string.Join(", ", remaining.Select(m => m.Value).Distinct());
-            UnresolvedTokenTooltip = $"Unresolved tokens: {names}";
-        }
-        else
-        {
-            HasUnresolvedTokens = false;
-            UnresolvedTokenTooltip = "";
-        }
+        HasUnresolvedTokens = result.HasUnresolved;
+        UnresolvedTokenTooltip = result.HasUnresolved
+            ? string.Join(Environment.NewLine, result.Describe())
+            : "";
     }
 
     /// <summary>Refreshes resolved display text on this node and all descendants (e.g. after token dict changes).</summary>

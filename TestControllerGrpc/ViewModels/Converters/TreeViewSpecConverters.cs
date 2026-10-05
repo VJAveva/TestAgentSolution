@@ -309,16 +309,13 @@ public sealed class NodeTooltipConverter : IMultiValueConverter
         var parameters = values[3] as string ?? "";
         var agentName = values[4] as string ?? "";
         var statusTooltip = values[5] as string ?? "";
-        var scope = values.Length > 6 ? values[6] as string : TreeNodeViewModel.SharedScope;
+        var provenance = values.Length > 6 ? values[6] as string ?? "" : "";
 
         if (nodeKind != "Action")
             return string.IsNullOrWhiteSpace(statusTooltip) ? null! : statusTooltip;
 
-        // Resolve [Token] placeholders against this node's pipeline only.
-        command = TreeNodeViewModel.ResolveTokens(command, scope);
-        parameters = TreeNodeViewModel.ResolveTokens(parameters, scope);
-        agentName = TreeNodeViewModel.ResolveTokens(agentName, scope);
-
+        // These arrive ALREADY resolved. Resolving again would re-mark an unresolved token,
+        // rendering "[_Agent1] (not set) (not set)".
         var lines = new List<string>();
         if (!string.IsNullOrWhiteSpace(command))
             lines.Add($"Cmd:    {command}");
@@ -328,6 +325,14 @@ public sealed class NodeTooltipConverter : IMultiValueConverter
             lines.Add($"Agent:  {agentName}");
         if (!string.IsNullOrWhiteSpace(statusTooltip))
             lines.Add($"Status: {statusTooltip}");
+
+        if (!string.IsNullOrWhiteSpace(provenance))
+        {
+            lines.Add("");
+            lines.Add("Tokens:");
+            foreach (var line in provenance.Split('\n'))
+                lines.Add("  " + line.TrimEnd('\r'));
+        }
 
         return lines.Count > 0 ? string.Join("\n", lines) : null!;
     }

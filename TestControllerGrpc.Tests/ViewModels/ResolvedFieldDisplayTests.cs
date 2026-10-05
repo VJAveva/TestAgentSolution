@@ -59,23 +59,78 @@ public class ResolvedFieldDisplayTests : IDisposable
 
     // ── unresolved ──────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Display_Should_ShowTheHint_When_ATokenCouldNotBeResolved()
+    [Theory]
+    [InlineData("[Sequential] RevertingAgents")]
+    [InlineData("[Parallel] RevertingAgents")]
+    public void Display_Should_LeaveExecutionModeDecorationAlone_When_ItLooksLikeAToken(string label)
     {
-        var node = ActionIn(OnePipeline());
+        // Marking "[Sequential]" as a token made the label converter strip the brackets and
+        // render a bare "(not set) RevertingAgents" for every group in the tree.
+        var group = TreeNodeViewModel.FromWatchList(OnePipeline())
+            .Children.Single(c => c.Tag == "Sanity").Children[0];
 
-        Assert.False(node.IsCommandResolved);
-        Assert.Equal(TreeNodeViewModel.UnresolvedHint, node.ResolvedCommandDisplay);
+        group.DisplayText = label;
+
+        Assert.Equal(label, group.ResolvedDisplayText);
+        Assert.False(group.HasUnresolvedTokens);
+        Assert.DoesNotContain("(not set)", group.ResolvedDisplayText);
     }
 
     [Fact]
-    public void Display_Should_NeverShowRawTokens_When_Unresolved()
+    public void Display_Should_StillMarkRealTokens_When_TheLabelAlsoCarriesExecutionMode()
+    {
+        var group = TreeNodeViewModel.FromWatchList(OnePipeline())
+            .Children.Single(c => c.Tag == "Sanity").Children[0];
+
+        group.DisplayText = "[Sequential] Install [_Installer]";
+
+        Assert.Equal("[Sequential] Install [_Installer] (not set)", group.ResolvedDisplayText);
+        Assert.True(group.HasUnresolvedTokens);
+    }
+
+    [Fact]
+    public void Display_Should_MarkTheTokenNotSet_When_ItIsMissingFromAPipelineThatHasAContext()
     {
         var node = ActionIn(OnePipeline());
 
-        Assert.DoesNotContain("[_Installer]", node.ResolvedCommandDisplay);
-        Assert.DoesNotContain("[_DropLocation]", node.ResolvedParametersDisplay);
-        Assert.DoesNotContain("[_Agent1]", node.ResolvedAgentNameDisplay);
+        // In scope, but no value: name the specific token rather than blanking the whole field.
+        Assert.False(node.IsCommandResolved);
+        Assert.Equal("[_Installer] (not set)", node.ResolvedCommandDisplay);
+    }
+
+    [Fact]
+    public void Display_Should_KeepTheWholeFieldHint_When_TheNodeHasNoPipelineContextAtAll()
+    {
+        // A Library node whose template has no chosen pipeline can resolve nothing, so marking each
+        // token "(not set)" would blame the data instead of the missing context.
+        var templates = new List<TemplateConfig>
+        {
+            new()
+            {
+                ID = "OrphanTemplate",
+                Children = [new ActionConfig { Command = "[_Installer]", Type = ActionType.RunRemoteCommand }],
+            },
+        };
+
+        var action = TreeNodeViewModel.FromTemplateList(templates).Children[0].Children[0];
+
+        Assert.Null(action.TokenScope);
+        Assert.True(action.HasNoTokenContext);
+        Assert.Equal(TreeNodeViewModel.UnresolvedHint, action.ResolvedCommandDisplay);
+    }
+
+    [Fact]
+    public void Display_Should_NeverRenderAnUnresolvedTokenAsAValue()
+    {
+        var node = ActionIn(OnePipeline());
+
+        // The token stays visible so the user knows WHICH one is missing - but it is always
+        // marked, never left looking like a resolved value.
+        Assert.Contains("(not set)", node.ResolvedCommandDisplay);
+        Assert.Contains("(not set)", node.ResolvedParametersDisplay);
+        Assert.Contains("(not set)", node.ResolvedAgentNameDisplay);
+        Assert.False(node.IsCommandResolved);
+        Assert.False(node.IsAgentNameResolved);
     }
 
     [Fact]
@@ -131,7 +186,7 @@ public class ResolvedFieldDisplayTests : IDisposable
         node.Command = "[_Missing]";
 
         Assert.False(node.IsCommandResolved);
-        Assert.Equal(TreeNodeViewModel.UnresolvedHint, node.ResolvedCommandDisplay);
+        Assert.Equal("[_Missing] (not set)", node.ResolvedCommandDisplay);
     }
 
     [Fact]
