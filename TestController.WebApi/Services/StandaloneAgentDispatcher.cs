@@ -386,6 +386,13 @@ public sealed class StandaloneAgentDispatcher : IAgentGrpcDispatcher
                     ? ctx.WatchItemPath : Environment.CurrentDirectory,
             };
 
+            // Secrets go into the child's ENVIRONMENT, never its command line - a command line is
+            // visible in the process table no matter how well we redact the logs.
+            var secretCount = SecretEnvironment.Apply(psi, resolved.SecretEnv);
+            if (secretCount > 0)
+                _logger.LogInformation("Local exec: {Count} secret env var(s) [{Names}]",
+                    secretCount, SecretEnvironment.DescribeNames(resolved.SecretEnv));
+
             using var process = Process.Start(psi);
             if (process is null)
                 return new ActionResult(false, -1, "Failed to start process");

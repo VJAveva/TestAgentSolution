@@ -205,11 +205,17 @@ public sealed class ActionConfig : IActionNode, ISkippableNode
     /// Example: <c>cmd /c tasklist | findstr msiexec || echo DONE</c>
     /// </summary>
     public string CompletionCheckCommand { get; set; } = "";
-
     /// <summary>
     /// How often (in seconds) to run the CompletionCheckCommand. Default is 30 seconds.
     /// </summary>
     public int CompletionPollIntervalSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Semicolon-separated <c>NAME=value</c> pairs handed to the child process ENVIRONMENT instead of its
+    /// command line, so a credential never appears in the process table. Values may contain [Tokens].
+    /// Example: <c>RCLOUD_USER=[_RcloudUser];RCLOUD_PASSWORD=[_RcloudPassword]</c>
+    /// </summary>
+    public string SecretEnv { get; set; } = "";
 
     // Credentials (RunRemoteCommand)
     public string UserName { get; set; } = "";

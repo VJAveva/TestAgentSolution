@@ -30,8 +30,10 @@
 param(
     [Parameter(Mandatory, Position = 0)][string]$OrgName,
     [Parameter(Mandatory, Position = 1)][string[]]$Machines,
-    [Parameter(Mandatory, Position = 2)][string]$User,
-    [Parameter(Mandatory, Position = 3)][string]$Password,
+    # Positional for backwards compatibility, but prefer the environment: an argument is visible in
+    # the process table, an environment block is not.
+    [Parameter(Position = 2)][string]$User = $env:RCLOUD_USER,
+    [Parameter(Position = 3)][string]$Password = $env:RCLOUD_PASSWORD,
     [string]$vCloudURL = "rcloud.dev.wonderware.com",
     [int]$ReadyWaitSeconds = 120,      # settle time after ping OK
     [int]$StopTimeoutMinutes = 5,
@@ -229,6 +231,11 @@ try {
     Set-PowerCLIConfiguration -Scope User -InvalidCertificateAction Ignore -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
 }
 catch { }
+
+if ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Password)) {
+    Log "vCloud credentials are not set. Pass -User/-Password, or set RCLOUD_USER and RCLOUD_PASSWORD." "FAIL"
+    exit 2
+}
 
 $SecurePassword = ConvertTo-SecureString $Password -AsPlainText -Force
 $script:Credentials = New-Object System.Management.Automation.PSCredential($User, $SecurePassword)

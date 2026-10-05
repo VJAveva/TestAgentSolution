@@ -160,6 +160,11 @@ public static partial class ParameterResolver
     {
         if (string.IsNullOrEmpty(key)) return;
 
+        // Register before the rank check: a value that loses the race is still a live secret and can
+        // still reach a log. TokenDisplay.IsSecret is the same rule the UI masks on.
+        if (TokenDisplay.IsSecret(key))
+            SecurityRedactor.RegisterSecretValue(value);
+
         Apply(ctx, key, value, rank);
 
         // Both [BuildNumber] and [_BuildNumber] must resolve, so the alias carries the same rank.
@@ -448,6 +453,7 @@ public static partial class ParameterResolver
         IsReboot = action.IsReboot,
         Order = action.Order,
         CompletionCheckCommand = Resolve(action.CompletionCheckCommand, ctx),
+        SecretEnv = Resolve(action.SecretEnv, ctx),
         CompletionPollIntervalSeconds = action.CompletionPollIntervalSeconds,
         UserName = Resolve(action.UserName, ctx),
         Password = Resolve(action.Password, ctx),

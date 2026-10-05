@@ -105,6 +105,7 @@ public static class WatchListXmlParser
                         Order = Attr(el, "Order"),
                         Tag = Attr(el, "Tag"),
                         CompletionCheckCommand = Attr(el, "CompletionCheckCommand"),
+                        SecretEnv = Attr(el, "SecretEnv"),
                         CompletionPollIntervalSeconds = AttrInt(el, "CompletionPollIntervalSeconds", 30),
                         UserName = Attr(el, "UserName"),
                         Password = Attr(el, "Password"),
@@ -283,6 +284,7 @@ public static class WatchListXmlParser
                     AddIfNotEmpty(aEl, "Order", a.Order);
                     AddIfNotEmpty(aEl, "Tag", a.Tag);
                     AddIfNotEmpty(aEl, "CompletionCheckCommand", a.CompletionCheckCommand);
+                    AddIfNotEmpty(aEl, "SecretEnv", a.SecretEnv);
                     if (a.CompletionPollIntervalSeconds != 30 && !string.IsNullOrEmpty(a.CompletionCheckCommand))
                         aEl.Add(new XAttribute("CompletionPollIntervalSeconds", a.CompletionPollIntervalSeconds));
                     AddIfNotEmpty(aEl, "UserName", a.UserName);

@@ -1087,6 +1087,13 @@ public sealed class AgentGrpcDispatcher : IAgentGrpcDispatcher
                     ? ctx.WatchItemPath : Environment.CurrentDirectory,
             };
 
+            // Secrets go into the child's ENVIRONMENT, never its command line - a command line is
+            // visible in the process table no matter how well we redact the logs.
+            var secretCount = SecretEnvironment.Apply(psi, resolved.SecretEnv);
+            if (secretCount > 0)
+                _logger.LogInformation("Local exec: {Count} secret env var(s) [{Names}]",
+                    secretCount, SecretEnvironment.DescribeNames(resolved.SecretEnv));
+
             // Pass credentials if provided (for local runas scenarios, log only)
             if (!string.IsNullOrEmpty(resolved.UserName))
                 _logger.LogInformation("Local exec with credential hint: {User}", resolved.UserName);
