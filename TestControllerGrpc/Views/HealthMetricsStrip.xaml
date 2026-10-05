@@ -21,7 +21,7 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever" Storyboard.DesiredFrameRate="20">
             <DoubleAnimation Storyboard.TargetName="HealthDot"
                              Storyboard.TargetProperty="Opacity"
                              From="1" To="0.3" Duration="0:0:0.6"

@@ -916,14 +916,18 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsExecuting}" Value="True">
                                                             <DataTrigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard RepeatBehavior="Forever">
+                                                                <BeginStoryboard x:Name="ExecDotPulse">
+                                                                    <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="20">
                                                                         <DoubleAnimation Storyboard.TargetProperty="Opacity"
                                                                                          From="1" To="0.3" Duration="0:0:0.8"
                                                                                          AutoReverse="True"/>
                                                                     </Storyboard>
                                                                 </BeginStoryboard>
                                                             </DataTrigger.EnterActions>
+                                                            <!-- Without this the dot kept pulsing after the run finished. -->
+                                                            <DataTrigger.ExitActions>
+                                                                <StopStoryboard BeginStoryboardName="ExecDotPulse" />
+                                                            </DataTrigger.ExitActions>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -3458,16 +3462,27 @@
                                 <TextBlock.RenderTransform>
                                     <RotateTransform Angle="0" CenterX="14" CenterY="14" />
                                 </TextBlock.RenderTransform>
-                                <TextBlock.Triggers>
-                                    <EventTrigger RoutedEvent="Loaded">
-                                        <BeginStoryboard>
-                                            <Storyboard RepeatBehavior="Forever">
-                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                                 From="0" To="360" Duration="0:0:1.5" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </EventTrigger>
-                                </TextBlock.Triggers>
+                                <!-- Spin only while the overlay is up; as a Loaded trigger it rotated
+                                     forever behind a collapsed overlay. -->
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsExecuting}" Value="True">
+                                                <DataTrigger.EnterActions>
+                                                    <BeginStoryboard x:Name="ExecOverlaySpin">
+                                                        <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="20">
+                                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                             From="0" To="360" Duration="0:0:1.5" />
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </DataTrigger.EnterActions>
+                                                <DataTrigger.ExitActions>
+                                                    <StopStoryboard BeginStoryboardName="ExecOverlaySpin" />
+                                                </DataTrigger.ExitActions>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
                             </TextBlock>
                             <TextBlock Text="Executing..." FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource Accent}"
                                        FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,1,0,0" />

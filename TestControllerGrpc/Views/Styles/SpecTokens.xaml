@@ -52,7 +52,8 @@
          x:Shared="False" lets the same storyboard be applied per-chip
          without WPF complaining about a frozen instance.
          =============================================================== -->
-    <Storyboard x:Key="PulseAnim" x:Shared="False" RepeatBehavior="Forever" AutoReverse="True">
+    <Storyboard x:Key="PulseAnim" x:Shared="False" RepeatBehavior="Forever" AutoReverse="True"
+                Storyboard.DesiredFrameRate="20">
         <DoubleAnimation Storyboard.TargetProperty="Opacity"
                          From="1.0" To="0.4" Duration="0:0:0.75"/>
     </Storyboard>

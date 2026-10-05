@@ -25,13 +25,16 @@
     <conv:PluralizeActionsConverter x:Key="PluralizeActions" />
 
     <!-- ═══ Status dot pulse animation (Running) ═══ -->
-    <Storyboard x:Key="PulseDotAnimation" RepeatBehavior="Forever" AutoReverse="True">
+    <!-- DesiredFrameRate: the controller is driven over RDP, so every rendered frame is encoded and
+         shipped. Perpetual animations default to 60fps and pegged the render thread. -->
+    <Storyboard x:Key="PulseDotAnimation" RepeatBehavior="Forever" AutoReverse="True"
+                Storyboard.DesiredFrameRate="20">
         <DoubleAnimation Storyboard.TargetProperty="Opacity"
                          From="1.0" To="0.4" Duration="0:0:0.7" />
     </Storyboard>
 
     <!-- ═══ Spinner rotation animation (Running status indicator) ═══ -->
-    <Storyboard x:Key="SpinnerRotation" RepeatBehavior="Forever">
+    <Storyboard x:Key="SpinnerRotation" RepeatBehavior="Forever" Storyboard.DesiredFrameRate="20">
         <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
                          From="0" To="360" Duration="0:0:1.2" />
     </Storyboard>
@@ -145,7 +148,8 @@
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
                                 <DataTrigger.EnterActions>
                                     <BeginStoryboard x:Name="PulseBegin">
-                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True"
+                                                    Storyboard.DesiredFrameRate="20">
                                             <DoubleAnimation Storyboard.TargetProperty="Opacity"
                                                              From="1.0" To="0.4" Duration="0:0:0.7" />
                                         </Storyboard>
@@ -589,10 +593,13 @@
                     <mi:MaterialIcon.RenderTransform>
                         <RotateTransform Angle="0" />
                     </mi:MaterialIcon.RenderTransform>
+                    <!-- Must stay a Loaded EventTrigger, NOT DataTrigger.EnterActions: WPF freezes the
+                         RotateTransform during HierarchicalDataTemplate instantiation and animating it
+                         from a DataTrigger throws "Cannot animate immutable object". Throttled instead. -->
                     <mi:MaterialIcon.Triggers>
                         <EventTrigger RoutedEvent="Loaded">
                             <BeginStoryboard>
-                                <Storyboard RepeatBehavior="Forever">
+                                <Storyboard RepeatBehavior="Forever" Storyboard.DesiredFrameRate="20">
                                     <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
                                                      From="0" To="360" Duration="0:0:1.2" />
                                 </Storyboard>

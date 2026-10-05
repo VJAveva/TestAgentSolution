@@ -76,12 +76,16 @@
     <sys:Double x:Key="OpacityMuted">0.7</sys:Double>
 
     <!-- ═══ Storyboards ═══ -->
-    <Storyboard x:Key="SpinAnimation" x:Shared="False" RepeatBehavior="Forever">
+    <!-- DesiredFrameRate on every Forever storyboard: 60fps of continuous repainting over RDP is what
+         pegged the render thread. 20 is imperceptible for a pulse or a slow spin. -->
+    <Storyboard x:Key="SpinAnimation" x:Shared="False" RepeatBehavior="Forever"
+                Storyboard.DesiredFrameRate="20">
         <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
                          From="0" To="360" Duration="0:0:1.2" />
     </Storyboard>
 
-    <Storyboard x:Key="PulseAnimation" x:Shared="False" RepeatBehavior="Forever" AutoReverse="True">
+    <Storyboard x:Key="PulseAnimation" x:Shared="False" RepeatBehavior="Forever" AutoReverse="True"
+                Storyboard.DesiredFrameRate="20">
         <DoubleAnimation Storyboard.TargetProperty="Opacity"
                          From="1.0" To="0.4" Duration="0:0:0.75" />
     </Storyboard>
