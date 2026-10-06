@@ -986,4 +986,26 @@ public sealed class CommandExecutionE2ETests : IDisposable
         Assert.False(accepted);
         Assert.Null(stream);
     }
+
+    // ── Progress duration formatting ────────────────────────────────────
+    //
+    // The progress line reported "mm:ss", which prints only the minute and second COMPONENTS.
+    // On JVGR22 a run that used its full 2 hours reported "59:31 / 00:00" - it read as "stopped
+    // after an hour, no timeout configured", and the 2-hour timeout was blamed for firing early.
+
+    [Theory]
+    [InlineData(90, "00:01:30")]
+    [InlineData(3599, "00:59:59")]
+    [InlineData(3600, "01:00:00")]        // mm:ss showed "00:00"
+    [InlineData(7171, "01:59:31")]        // the live case - mm:ss showed "59:31"
+    [InlineData(7200, "02:00:00")]        // the 2h budget - mm:ss showed "00:00"
+    public void FormatDuration_Should_KeepTheHours_When_ARunExceedsAnHour(int seconds, string expected)
+        => Assert.Equal(expected, CommandExecutor.FormatDuration(TimeSpan.FromSeconds(seconds)));
+
+    [Fact]
+    public void FormatDuration_Should_WidenToDays_When_ARunExceeds24Hours()
+    {
+        // hh:mm:ss drops days the same way mm:ss dropped hours, and the agent's safety net is 24h.
+        Assert.Equal("1.01:00:00", CommandExecutor.FormatDuration(TimeSpan.FromHours(25)));
+    }
 }

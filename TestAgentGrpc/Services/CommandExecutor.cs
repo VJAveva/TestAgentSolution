@@ -394,8 +394,8 @@ public sealed class CommandExecutor : IDisposable
 
                     var elapsed = DateTime.UtcNow - startTime;
                     var percent = Math.Min(99, (int)(elapsed.TotalSeconds / timeoutTotal.TotalSeconds * 100));
-                    var elapsedStr = elapsed.ToString(@"mm\:ss");
-                    var totalStr = timeoutTotal.ToString(@"mm\:ss");
+                    var elapsedStr = FormatDuration(elapsed);
+                    var totalStr = FormatDuration(timeoutTotal);
 
                     var detail = $"Still running... (PID {cachedPid}, {elapsedStr} / {totalStr})";
 
@@ -413,7 +413,7 @@ public sealed class CommandExecutor : IDisposable
                         {
                             _silenceFlagged = true;
                             EmitEvent(executionId, ExecutionEventType.EventProgress,
-                                detail: $"\u26A0 No output for {silence:mm\\:ss} \u2014 command may be hung (PID {cachedPid})",
+                                detail: $"\u26A0 No output for {FormatDuration(silence)} \u2014 command may be hung (PID {cachedPid})",
                                 progressPct: percent,
                                 perCallChannel: perCallChannel);
 
@@ -431,7 +431,7 @@ public sealed class CommandExecutor : IDisposable
                     {
                         var elapsed = DateTime.UtcNow - startTime;
                         EmitEvent(executionId, ExecutionEventType.EventProgress,
-                            detail: $"Process exited (exit code {process.ExitCode}, {elapsed:mm\\:ss} elapsed)",
+                            detail: $"Process exited (exit code {process.ExitCode}, {FormatDuration(elapsed)} elapsed)",
                             progressPct: 100,
                             perCallChannel: perCallChannel);
                     }
@@ -899,6 +899,20 @@ public sealed class CommandExecutor : IDisposable
     }
 
     // ── Event construction ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Formats a duration for humans, widening past a day rather than truncating.
+    /// </summary>
+    /// <remarks>
+    /// The <c>mm\:ss</c> this replaced printed only the minute and second COMPONENTS, so the hours
+    /// were dropped silently: a 1:59:31 run reported "59:31" and a 2-hour budget reported "00:00",
+    /// which read as "stopped after an hour with no timeout set". Measured against JVGR22 on
+    /// 2026-10-06, where a run that used its full 2 hours looked like it had used one.
+    /// </remarks>
+    internal static string FormatDuration(TimeSpan value) =>
+        value.TotalDays >= 1
+            ? value.ToString(@"d\.hh\:mm\:ss")
+            : value.ToString(@"hh\:mm\:ss");
 
     private void EmitEvent(string executionId, ExecutionEventType type,
         string? outputLine = null, OutputKind? outputKind = null,
