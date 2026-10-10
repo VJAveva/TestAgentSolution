@@ -33,5 +33,12 @@ public enum Permission
     ReportCard_View,
 
     /// <summary>Install Windows updates on a fleet node. Administrator only - it patches a live machine.</summary>
-    Fleet_InstallUpdates
+    Fleet_InstallUpdates,
+
+    /// <summary>
+    /// Author WatchList content - create a pipeline with the Pipeline Builder. Administrator only:
+    /// authoring decides which commands run on which agents, so it is strictly more powerful than
+    /// triggering a pipeline somebody else authored.
+    /// </summary>
+    Pipeline_Author
 }

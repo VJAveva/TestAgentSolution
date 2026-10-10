@@ -124,7 +124,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         bool success;
         try
         {
-            success = await ExecuteActionAsync(action, ctx, ct);
+            success = await DispatchActionAsync(action, ctx, ct);
         }
         catch (OperationCanceledException)
         {
@@ -387,8 +387,11 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
     // ?? Core recursive executor (non-tracked) ?????????????????????????????
 
-    /// <summary>Max concurrent agent operations in parallel mode to prevent ThreadPool starvation.</summary>
-    private const int MaxParallelDegree = 50;
+    /// <summary>
+    /// How many children one group starts at once. The process-wide bound on actions actually in
+    /// flight is <see cref="PipelineConcurrency"/> - this only limits task fan-out within a group.
+    /// </summary>
+    private static int MaxParallelDegree => PipelineConcurrency.MaxConcurrentActions;
 
     protected async Task<bool> ExecuteChildrenAsync(
         List<IActionNode> children, ExecutionMode mode, bool parentFailAndContinue,
@@ -456,7 +459,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
                 InitializeConfig init   => ExecuteInitialize(init, ctx),
                 RefConfig refNode       => await ExecuteRefAsync(refNode, ctx, ct),
                 ActionGroupConfig group => await ExecuteGroupAsync(group, ctx, ct),
-                ActionConfig action     => await ExecuteActionAsync(action, ctx, ct),
+                ActionConfig action     => await DispatchActionAsync(action, ctx, ct),
                 _                       => true,
             };
         }
@@ -719,7 +722,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
             }
             else
             {
-                var actionSuccess = await ExecuteActionAsync(action, ctx, ct);
+                var actionSuccess = await DispatchActionAsync(action, ctx, ct);
                 result.Outcome = actionSuccess ? ActionOutcome.Success : ActionOutcome.Failed;
             }
 
@@ -781,6 +784,17 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     /// </summary>
     protected abstract Task<bool> ExecuteActionAsync(
         ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct);
+
+    /// <summary>
+    /// The ONE seam every action passes through, tracked and untracked alike, so the process-wide
+    /// dispatch cap cannot be bypassed by picking a different entry point.
+    /// </summary>
+    private async Task<bool> DispatchActionAsync(
+        ActionConfig action, PipelineExecutionContext ctx, CancellationToken ct)
+    {
+        using var permit = await PipelineConcurrency.AcquireAsync(ct);
+        return await ExecuteActionAsync(action, ctx, ct);
+    }
 
     // ?? Event firing helpers (since events declared on base aren't directly
     //    invocable from derived classes) ?????????????????????????????????

@@ -11,6 +11,7 @@ namespace TestControllerGrpc.Tests.Scaling;
 /// Regression: Without SemaphoreSlim(50), a 200-child parallel group started 200
 /// tasks at once, exhausting the ThreadPool and causing cascading timeouts.
 /// </summary>
+[Collection("PipelineConcurrency")]
 public class PipelineParallelismTests
 {
     /// <summary>

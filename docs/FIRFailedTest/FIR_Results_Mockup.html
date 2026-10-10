@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Information Report</title>
+<style>
+  /* Layout: Results window clone - build tree on the left, Detail pane on the right with the FIR on top.
+     Every FIR line pairs the Excel test step (WASSet1.xlsx, same Row No) with the log evidence. */
+  :root{
+    --bg:#f3f5f8; --pane:#ffffff; --ink:#1c2533; --muted:#5d6878; --line:#dfe4eb; --hd:#f5f7fa;
+    --link:#1f4f9a; --fail:#c62828; --fail-bg:#fdecea; --pass:#2e7d32; --pass-bg:#e8f5e9;
+    --warn:#9a6400; --warn-bg:#fff4dc; --root:#7a1f1f; --accent:#1f4f9a; --accent-soft:#e8eff9;
+    --mono:"Cascadia Mono",Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 "Segoe UI",system-ui,sans-serif}
+  .app{display:grid;grid-template-columns:minmax(0,0.8fr) minmax(0,1.6fr);gap:10px;padding:10px;min-height:100vh}
+  .pane{background:var(--pane);border:1px solid var(--line);border-radius:4px;overflow:hidden;min-width:0}
+  table.tree{border-collapse:collapse;width:100%}
+  .tree th{background:var(--hd);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}
+  .tree th:first-child{text-align:left}
+  .tree td{padding:4px 8px;border-bottom:1px solid #f0f2f5;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tree td:first-child{text-align:left}
+  tr.b td:first-child{color:var(--link);font-weight:600}
+  tr.t{cursor:pointer}
+  tr.t:hover td{background:#f4f7fc}
+  tr.t.sel td{background:#e6eefb}
+  .x{color:var(--fail);font-weight:700;margin-right:4px}
+  .ok{color:var(--pass);font-weight:700;margin-right:4px}
+  .ind1{padding-left:22px!important}.ind2{padding-left:40px!important}
+  .fail{color:var(--fail)}.pass{color:var(--pass)}
+  .det{padding:14px 18px 22px}
+  .det h1{font-size:18px;margin:0 0 6px;font-weight:600}
+  .chip{display:inline-block;border-radius:3px;padding:1px 8px;font-size:12px;font-weight:600}
+  .chip.f{background:var(--fail);color:#fff}
+  .meta{color:var(--muted);font-size:12px;margin-left:6px}
+  .fir{margin-top:14px;border:1px solid #c9d6ea;border-radius:6px;overflow:hidden}
+  .fir-hd{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--accent-soft);border-bottom:1px solid #c9d6ea;flex-wrap:wrap}
+  .fir-hd b{color:var(--accent);font-size:13px;letter-spacing:.02em}
+  .fir-hd .auto{color:var(--muted);font-size:11.5px}
+  .fir-hd .acts{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+  .btn{border:1px solid #bfcbe0;background:#fff;color:var(--accent);border-radius:4px;padding:4px 10px;font:12px "Segoe UI",sans-serif;cursor:pointer}
+  .btn:hover{background:#f1f5fc}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .fir-bd{padding:14px}
+  .verdict{font-size:14px;line-height:1.55;margin:0 0 12px;padding:10px 12px;border-left:4px solid var(--root);background:#fbf3f3;border-radius:0 4px 4px 0}
+  .verdict b{color:var(--root)}
+  .facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:6px}
+  .fact{border:1px solid var(--line);border-radius:5px;padding:7px 9px;min-width:0}
+  .fact .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .fact .v{font-weight:600;margin-top:2px;overflow-wrap:anywhere}
+  .fact .s{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+  .sec{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 7px}
+  /* correlated step table */
+  .steps-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:5px}
+  table.steps{border-collapse:collapse;width:100%;min-width:640px}
+  .steps th{background:var(--hd);color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .steps td{padding:7px 8px;border-bottom:1px solid #eef1f5;vertical-align:top;text-align:left}
+  .steps tr:last-child td{border-bottom:none}
+  .steps tr.is-root td{background:#fdf5f5}
+  .steps .rn{font-family:var(--mono);font-size:12px;color:var(--link);white-space:nowrap}
+  .steps .stp{font-family:var(--mono);font-size:11.5px;color:#25324a;white-space:nowrap}
+  .steps .stp i{font-style:normal;color:var(--muted)}
+  .steps .ev{min-width:0;overflow-wrap:anywhere}
+  .steps .ev code{font-family:var(--mono);font-size:11.5px;background:#f4f6f9;padding:0 4px;border-radius:3px}
+  .steps .why{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+  .tag{display:inline-block;font-size:10px;font-weight:700;border-radius:3px;padding:1px 6px;letter-spacing:.03em;white-space:nowrap}
+  .tag.root{background:var(--root);color:#fff}
+  .tag.casc{background:#eef0f3;color:#5b6573}
+  .tag.mask{background:var(--warn-bg);color:var(--warn);border:1px solid #f0d49b}
+  .tag.rec{background:var(--pass-bg);color:var(--pass)}
+  .tag.ok{background:var(--pass-bg);color:var(--pass)}
+  .tag.slow{background:#efe9fb;color:#5b3fa0}
+  .cats{display:flex;flex-wrap:wrap;gap:6px}
+  .cat{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;background:#fff}
+  .cat b{font-variant-numeric:tabular-nums}
+  .cat.p{border-color:#efb8b8;background:var(--fail-bg)}
+  .cat.v{border-color:#c9d6ea;background:var(--accent-soft)}
+  .cat.m{border-color:#f0d49b;background:var(--warn-bg)}
+  .cat.l{border-color:#d9cdf3;background:#f5f1fd}
+  .cat.n{color:var(--muted)}
+  .box{margin-top:12px;padding:9px 12px;border-radius:5px}
+  .box.hint{border:1px dashed #b9c6db;background:#fafcff;color:#2b3a52}
+  .box.hint b{color:var(--accent)}
+  .box.open{border:1px solid #e3d3a8;background:#fffaf0;color:#5a4410}
+  .box.sec{border:1px solid #f3c2bd;background:#fff1f0;color:#7a231b;font-size:12.5px;text-transform:none;letter-spacing:0;font-weight:400}
+  .sec-raw{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}
+  details{border:1px solid var(--line);border-radius:4px;margin-top:8px}
+  summary{cursor:pointer;padding:7px 10px;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;background:var(--hd)}
+  details pre{margin:0;padding:10px;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere;color:#3a4657;max-height:220px;overflow:auto}
+  .red{color:var(--fail)}
+  .redact{background:#2b2f36;color:#2b2f36;border-radius:2px;padding:0 3px;user-select:none}
+  @media (max-width:980px){
+    .app{grid-template-columns:minmax(0,1fr)}
+    .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="pane" aria-label="Results tree">
+    <table class="tree">
+      <thead><tr><th>Name</th><th>Total</th><th>Passed</th><th>Failed</th></tr></thead>
+      <tbody>
+        <tr class="b"><td>&#9662; OAK_main_20261005.3</td><td>24</td><td class="pass">22</td><td class="fail">2</td></tr>
+        <tr><td class="ind1">&#9662; Set1</td><td>24</td><td class="pass">22</td><td class="fail">2</td></tr>
+        <tr class="t"><td class="ind2"><span class="ok">&#10003;</span>S1_01_SmokeSet1_Setup</td><td></td><td></td><td></td></tr>
+        <tr class="t"><td class="ind2"><span class="ok">&#10003;</span>S1_03_ConfigureAssignAppObjects</td><td></td><td></td><td></td></tr>
+        <tr class="t sel" data-test="s104"><td class="ind2"><span class="x">&#10007;</span>S1_04_SmokeTestDeploy</td><td></td><td></td><td></td></tr>
+        <tr class="t"><td class="ind2"><span class="ok">&#10003;</span>S1_06_SmokeTest_LockStatus</td><td></td><td></td><td></td></tr>
+        <tr class="t"><td class="ind2"><span class="ok">&#10003;</span>S1_12_TPTest2</td><td></td><td></td><td></td></tr>
+        <tr class="t" data-test="s113"><td class="ind2"><span class="x">&#10007;</span>S1_13_TPTest3</td><td></td><td></td><td></td></tr>
+        <tr class="t"><td class="ind2"><span class="ok">&#10003;</span>S1_14_SmokeTestVTQ</td><td></td><td></td><td></td></tr>
+        <tr class="t"><td class="ind2" style="color:var(--muted)">&hellip; 17 more passed</td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    <p style="padding:10px 12px;color:var(--muted);font-size:12px;margin:0">Click a failed test (&#10007;) to switch the report. Steps come from <code>WASSet1.xlsx</code>; evidence from <code>Logs.zip</code> (OAK_main_20261005.3 / Set1). Row N in the log = row N of the test's sheet.</p>
+  </section>
+
+  <section class="pane" aria-label="Detail">
+    <div class="det" id="det"></div>
+  </section>
+</div>
+
+<script>
+const DATA = {
+  s104: {
+    name:"S1_04_SmokeTestDeploy", dur:"10 m 57 s", secrets:2,
+    reason:"Validation Failure Count: 32, Logger ERRORS Count: 1, Logger WARNINGS Count: 14",
+    verdict:"<b>Root cause: Excel row 6</b> &mdash; <code>Appserver | deploy | SmokeSet1</code> (deploy the whole galaxy). Platforms <b>REP1</b> and <b>REP2</b> failed to start, so every object hosted on them was not deployed. <b>All 32 failures</b> are on REP1/REP2 or objects they host. The same platforms deployed <b>16 of 16</b> at rows 33&ndash;34, 8 minutes later.",
+    facts:[
+      ["Failing step","Row 6 &middot; deploy","Appserver | deploy | SmokeSet1 | true | true | false"],
+      ["Keyword code","AutoGalaxyConfiguration.cs:8622","DeployOperation"],
+      ["When","02:38:53 &rarr; 02:43:23","step took 4 m 30 s"],
+      ["Impact","32 failures &rarr; 1 cause","26 at row 6 &middot; 6 at rows 24&ndash;25"]
+    ],
+    steps:[
+      ["root","6","Appserver &middot; deploy &middot; <i>SmokeSet1</i>","<code>Platform startup failed</code> on REP1, REP2 (+ &ldquo;Deploy change operation is failed&rdquo;). 12 hosted objects: <code>Platform communication error</code>. Deployed 0 of 13 under each platform.","26 &ldquo;is not Deployed&rdquo; lines"],
+      ["ok","23","Appserver &middot; deploy &middot; <i>ViewEngine_001</i>","Deployed 3 of 3 &mdash; hosted by <b>GRP1</b>.","proves the galaxy and GR are fine"],
+      ["casc","24","Appserver &middot; deploy &middot; <i>ViewEngine_002</i>","Deployed 0 of 3 &mdash; hosted by <b>REP1</b>.","same platform as the root &middot; high confidence"],
+      ["casc","25","Appserver &middot; deploy &middot; <i>ViewEngine_003</i>","Deployed 0 of 3 &mdash; hosted by <b>REP2</b>.","same platform as the root &middot; high confidence"],
+      ["mask","32","Appserver &middot; deploy &middot; <i>GRP1</i>","Keyword logged <b>Passed</b>; product: Deployed 0 of 17, &ldquo;Previous deployment has not been completed&rdquo; (ITViewApp_001, ViewApp_001). Banner still says [SUCCESS].","not counted as a failure today"],
+      ["rec","33&ndash;34","Appserver &middot; deploy &middot; <i>REP1</i>, <i>REP2</i>","Deployed 16 of 16 each (02:46:53, 02:48:51).","platforms do start &mdash; just not at row 6"]
+    ],
+    cats:[["p","Product error (deploy)",32],["m","Masked pass",1],["l","Logger","1 error &middot; 14 warnings"],["n","Harness noise hidden",64]],
+    hint:"<b>Hint (pattern):</b> row 6 deploys the whole galaxy straight after connecting. REP1/REP2 start later (rows 33&ndash;34 succeed), so this looks like <b>platform start-up timing on jvgr1</b>, not test data. Check the jvgr1 SMC log for 02:38&ndash;02:43.",
+    open:"<b>Not in the log:</b> the 1 logger error and 14 warnings. They will show here once GetErrors/GetWarnings print the messages.",
+    err:"Assert.IsFalse failed. TestCase FAILED and the Reason being: \"Validation Failure Count: 32, Logger ERRORS Count: 1, Logger WARNINGS Count: 14\""
+  },
+  s113: {
+    name:"S1_13_TPTest3", dur:"21 m 39 s", secrets:4,
+    reason:"Validation Failure Count: 5, Logger ERRORS Count: 0, Logger WARNINGS Count: 1",
+    verdict:"<b>Root cause: Excel row 23</b> &mdash; <code>Appserver | redeploy | DDESL_002</code>. The redeploy <b>did not happen</b> (&ldquo;Unable to communicate with the target engine&rdquo;, Deployed 0 of 1), but the keyword logged <b>Passed</b>. All 5 failures (rows 29&ndash;32) are on the <b>same object, DDESL_002</b>. The first red line (row 29) is a consequence, not the cause.",
+    facts:[
+      ["Failing step","Row 23 &middot; redeploy","Appserver | redeploy | DDESL_002_&hellip;"],
+      ["Keyword code","DeployOperation","logged Passed (masked)"],
+      ["When","03:12:37","first red line 4 min later"],
+      ["Impact","5 failures &rarr; 1 cause","15 m 42 s spent waiting at row 30"]
+    ],
+    steps:[
+      ["mask","23","Appserver &middot; redeploy &middot; <i>DDESL_002</i>","Keyword <b>Passed</b>; product: <code>Unable to communicate with the target engine</code>, Deployed 0 of 1.","first failure on DDESL_002"],
+      ["ok","24","Appserver &middot; deploy &middot; <i>UDO3</i>","Deployed 1 of 1, placed on scan.","the other object deployed fine"],
+      ["ok","28","objectviewer &middot; waitforattributequality &middot; <i>DDESL_002</i>","Quality as expected at 03:13:14.","DDESL_002 still answered 40 s after the failed redeploy"],
+      ["casc","29","objectviewer &middot; modifyovvalue &middot; <i>DDESL_002</i>","Write to <code>ScanStateCmd</code> failed after 3 min (ModifyOVvalue, ObjectViewerValidation).","same object &middot; high confidence"],
+      ["slow","30","objectviewer &middot; waitforattributequality &middot; <i>DDESL_002</i>","Waited <b>15 m 42 s</b>; quality <b>00:Bad</b>, expected C0:Good.","same object &middot; cascade"],
+      ["casc","31","objectviewer &middot; getandvalidateovvalue &middot; <i>DDESL_002</i>","Expected &ldquo;No Data&rdquo; / C0:Good, got &ldquo;0&rdquo; / 00:Bad.","same object &middot; cascade"],
+      ["casc","32","objectviewer &middot; ovcomparetimestamp &middot; <i>DDESL_002</i>","Source timestamp <b>12/31/1600</b> &mdash; never updated.","same object &middot; cascade"]
+    ],
+    cats:[["m","Masked pass (root)",1],["v","Validation mismatch",3],["p","Runtime write failed",2],["l","Logger","0 errors &middot; 1 warning"],["n","Harness noise hidden",64]],
+    hint:"<b>Hint (pattern):</b> make the <b>redeploy/deploy</b> keyword fail on &ldquo;Deployed 0 of N&rdquo;. The test would then stop at row 23 with the real reason, instead of failing 4 minutes and a 15-minute wait later.",
+    open:"<b>Open point:</b> row 28 passed, so DDESL_002 kept working for about 40 s after the failed redeploy. Row 23 is the first failure on that object; the log does not show what changed between rows 28 and 29.",
+    err:"Assert.IsFalse failed. TestCase FAILED and the Reason being: \"Validation Failure Count: 5, Logger ERRORS Count: 0, Logger WARNINGS Count: 1\""
+  }
+};
+const LABEL={root:"ROOT",casc:"CASCADE",mask:"MASKED",rec:"RECOVERED",ok:"PASSED",slow:"SLOW"};
+
+function render(id){
+  const d=DATA[id];
+  document.getElementById('det').innerHTML=`
+    <h1>${d.name}</h1>
+    <span class="chip f">Failed</span><span class="meta">Set1 &middot; OAK_main_20261005.3 &middot; jvgr1 &middot; ${d.dur}</span>
+    <div class="fir" role="region" aria-label="First Information Report">
+      <div class="fir-hd">
+        <b>FIRST INFORMATION REPORT</b><span class="auto">log + TRX correlated with WASSet1.xlsx &rsaquo; ${d.name}</span>
+        <div class="acts">
+          <button class="btn" type="button">Jump to root row</button>
+          <button class="btn" type="button" id="copyBtn">Copy as bug text</button>
+          <button class="btn" type="button">Compare with last pass</button>
+        </div>
+      </div>
+      <div class="fir-bd">
+        <p class="verdict">${d.verdict}</p>
+        <div class="facts">${d.facts.map(f=>`<div class="fact"><div class="k">${f[0]}</div><div class="v">${f[1]}</div><div class="s">${f[2]}</div></div>`).join('')}</div>
+        <div class="sec">Test steps vs. what the log says</div>
+        <div class="steps-wrap"><table class="steps">
+          <thead><tr><th>Status</th><th>Row</th><th>Test step (Excel)</th><th>Log evidence</th></tr></thead>
+          <tbody>${d.steps.map(s=>`<tr class="${s[0]==='root'||s[0]==='mask'?'is-root':''}"><td><span class="tag ${s[0]}">${LABEL[s[0]]}</span></td><td class="rn">${s[1]}</td><td class="stp">${s[2]}</td><td class="ev">${s[3]}<span class="why">${s[4]}</span></td></tr>`).join('')}</tbody>
+        </table></div>
+        <div class="sec">Categories</div>
+        <div class="cats">${d.cats.map(c=>`<span class="cat ${c[0]}">${c[1]}: <b>${c[2]}</b></span>`).join('')}</div>
+        <div class="box hint">${d.hint}</div>
+        <div class="box open">${d.open}</div>
+        <div class="box sec">&#9888; This log printed a <b>password and an access token</b> (GetUserToken, ${d.secrets} lines). They are hidden in every view; fix the keyword's logging and rotate the account.</div>
+      </div>
+    </div>
+    <div class="sec-raw">
+      <details open><summary>Error message</summary><pre class="red">${d.err}</pre></details>
+      <details><summary>Debug trace (noise filtered, secrets masked)</summary><pre>[..] Info: (GetUserToken) grpcuser: <span class="redact">xxxxxxxxxxxxxxxx</span>
+[..] Info: (GetUserToken) <span class="redact">xxxxxxxxxxxxxxxxxxxxxxxx</span>
+…</pre></details>
+    </div>`;
+  document.getElementById('copyBtn').addEventListener('click',function(){
+    const strip=s=>s.replace(/<[^>]+>/g,'').replace(/&middot;/g,'·').replace(/&rarr;/g,'->').replace(/&[a-z]+;/g,' ');
+    const txt=[d.name,strip(d.verdict),''].concat(d.steps.map(s=>`${LABEL[s[0]]}  Row ${strip(s[1])}  ${strip(s[2])}  -  ${strip(s[3])}`)).join('\n');
+    const b=this;try{navigator.clipboard.writeText(txt).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy as bug text',1500)},()=>{});}catch(e){}
+  });
+}
+document.querySelectorAll('tr[data-test]').forEach(tr=>tr.addEventListener('click',()=>{
+  document.querySelectorAll('tr.t').forEach(x=>x.classList.remove('sel'));
+  tr.classList.add('sel');render(tr.dataset.test);
+}));
+render('s104');
+</script>
+</body>
+</html>

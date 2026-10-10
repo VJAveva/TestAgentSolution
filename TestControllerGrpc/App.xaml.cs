@@ -108,6 +108,11 @@ public partial class App : Application
                 ParameterResolver.UseGlobalVariablesFile(
                     ctx.Configuration[ParameterResolver.GlobalVariablesPathConfigKey]);
 
+                // Process-wide cap on actions in flight. The old per-call semaphore bounded one
+                // group, so two concurrent stages doubled it.
+                PipelineConcurrency.Configure(ctx.Configuration.GetValue(
+                    PipelineConcurrency.ConfigKey, PipelineConcurrency.DefaultMaxConcurrentActions));
+
                 // RBAC feature (identity, authorization, audit, persistence)
                 services.AddRbacFeature(ctx.Configuration);
 

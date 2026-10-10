@@ -19,7 +19,7 @@ function makeUser(role: string, assignedPipelineIds: string[] = []): AuthUser {
 
 describe('PERMISSION_CATALOG', () => {
   it('Administrator has 22 permissions', () => {
-    expect(PERMISSION_CATALOG.Administrator).toHaveLength(22);
+    expect(PERMISSION_CATALOG.Administrator).toHaveLength(23);
   });
   it('SeniorManager has 13 permissions', () => {
     expect(PERMISSION_CATALOG.SeniorManager).toHaveLength(13);

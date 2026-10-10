@@ -15,6 +15,7 @@ export const PERMISSION_CATALOG: Readonly<Record<string, readonly string[]>> = O
     'User_Assign', 'User_Revoke', 'Report_View', 'Report_Generate',
     'Audit_View', 'Audit_Export', 'Notification_Mute',
     'CodeChurn_View', 'CodeChurn_Export', 'ReportCard_View',
+    'Pipeline_Author',
   ]),
   SeniorManager: Object.freeze([
     'Pipeline_View', 'Pipeline_Trigger', 'Pipeline_Cancel', 'Pipeline_Retry',

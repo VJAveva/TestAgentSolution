@@ -163,6 +163,11 @@ builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 ParameterResolver.UseGlobalVariablesFile(
     builder.Configuration[ParameterResolver.GlobalVariablesPathConfigKey]);
 
+// Process-wide cap on actions in flight. The old per-call semaphore bounded one group, so two
+// concurrent stages doubled it.
+PipelineConcurrency.Configure(builder.Configuration.GetValue(
+    PipelineConcurrency.ConfigKey, PipelineConcurrency.DefaultMaxConcurrentActions));
+
 // Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
 builder.Services.AddControllerApi()
     .ConfigureApplicationPartManager(apm =>
