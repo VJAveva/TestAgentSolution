@@ -126,6 +126,36 @@ public partial class BuildResultsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Re-discovers builds on disk and reloads whatever the dashboard is currently showing. The view model
+    /// is a singleton, so without this the window keeps the data it loaded the first time it was opened.
+    /// </summary>
+    public async Task RefreshCurrentViewAsync()
+    {
+        if (IsLoading) return;
+
+        if (IsConsolidatedMode)
+        {
+            RefreshBuilds();
+            ApplyTimeRangeFilter();
+            return;
+        }
+
+        if (LoadedBuildNodes.Count > 1)
+        {
+            await LoadAllBuilds();
+            return;
+        }
+
+        var previousPath = SelectedBuild?.Path;
+        RefreshBuilds();
+
+        // RefreshBuilds replaces every BuildListItem, so re-selecting by path raises
+        // OnSelectedBuildChanged, which performs the reload.
+        SelectedBuild = AvailableBuilds.FirstOrDefault(
+            b => string.Equals(b.Path, previousPath, StringComparison.OrdinalIgnoreCase));
+    }
+
     // ???????????????????????????????????????????????????????????????
     // Commands - Export & Report
     // ???????????????????????????????????????????????????????????????

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Global Variables Dialog</title>
+<style>
+  :root{
+    --bg:#eef1f5; --card:#ffffff; --ink:#1b2430; --muted:#5b6775; --line:#dbe1e9;
+    --accent:#2b5797; --accent-soft:#eaf1fb; --ok:#1e7a46; --ok-bg:#e9f6ee;
+    --warn:#8a5a00; --warn-bg:#fdf3dc; --field:#fbfcfe;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:var(--ink);
+       display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;min-height:100vh}
+  .dlg{width:100%;max-width:720px;background:var(--card);border:1px solid var(--line);border-radius:8px;
+       box-shadow:0 12px 40px rgba(20,30,50,.22);overflow:hidden}
+  .bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:#f7f9fc}
+  .tc{width:22px;height:22px;border-radius:5px;background:var(--accent);color:#fff;font-weight:700;font-size:11px;
+      display:flex;align-items:center;justify-content:center;letter-spacing:.5px}
+  .bar h1{font-size:14px;margin:0;font-weight:600;flex:1}
+  .bar .wins span{display:inline-block;width:13px;height:13px;margin-left:6px;border:1px solid #c3ccd8;border-radius:3px;background:#fff}
+  .body{padding:18px 20px}
+
+  /* workflow help */
+  .how{display:flex;gap:12px;background:var(--accent-soft);border:1px solid #cedcf1;border-radius:7px;padding:12px 14px;margin-bottom:18px}
+  .how .hd{font-weight:600;color:var(--accent);margin:0 0 4px}
+  .how ol{margin:4px 0 0;padding-left:18px}
+  .how li{margin:2px 0;color:#334155}
+  .how .note{margin-top:7px;font-size:12.5px;color:var(--muted)}
+  .how .ic{font-size:18px;line-height:1;color:var(--accent);flex:0 0 auto}
+
+  .row{display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:center;margin-bottom:12px}
+  .row label{color:var(--muted);text-align:right}
+  .inp{background:var(--field);border:1px solid var(--line);border-radius:5px;padding:7px 9px;font:13px "Segoe UI",sans-serif;color:var(--ink);width:100%}
+  .btn{border:1px solid #c3ccd8;background:#f2f5f9;border-radius:6px;padding:7px 12px;font:13px "Segoe UI",sans-serif;color:var(--ink);cursor:pointer}
+  .btn:hover{background:#e7edf5}
+  .btn.ghost{display:inline-flex;align-items:center;gap:6px}
+  .meta{grid-column:2 / 4;display:flex;gap:18px;align-items:center;margin:-4px 0 14px}
+  .meta .k{color:var(--muted);font-size:12.5px}
+  .build{color:var(--ok);font-weight:700}
+  .pill{background:var(--ok-bg);color:var(--ok);border:1px solid #bfe3cc;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600}
+
+  .sub{display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px}
+  .sub h2{font-size:13px;margin:0;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  table{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  th{background:#f3f6fa;color:var(--muted);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td.key{font-family:"Cascadia Mono",Consolas,monospace;color:#28405e;width:180px}
+  td.val{font-family:"Cascadia Mono",Consolas,monospace;color:#33414f;word-break:break-all}
+  tr.locked td.key::after{content:" (from build)";font-family:"Segoe UI",sans-serif;color:#9aa7b6;font-size:11px}
+  .tblbtns{display:flex;gap:8px;margin-top:8px}
+  .hint{color:var(--muted);font-size:12.5px;margin-left:auto;align-self:center}
+
+  /* bottom action bar - Apply lives here now */
+  .foot{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--line);background:#f7f9fc}
+  .foot .apply{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:7px}
+  .foot .apply:hover{background:#24487e}
+  .foot .right{margin-left:auto;display:flex;gap:10px}
+  .foot .save{background:#2f6f45;color:#fff;border-color:#2f6f45;font-weight:600}
+  .foot .save:hover{background:#275d3a}
+  .foot .applynote{color:var(--muted);font-size:12px}
+  @media (max-width:560px){
+    .row{grid-template-columns:1fr}
+    .row label{text-align:left}
+    .meta{grid-column:1}
+    .foot{flex-wrap:wrap}
+    .foot .right{margin-left:0;width:100%}
+  }
+</style>
+</head>
+<body>
+  <div class="dlg" role="dialog" aria-label="Global Variables">
+    <div class="bar">
+      <div class="tc">TC</div>
+      <h1>Global Variables &mdash; Set Build for All Pipelines</h1>
+      <div class="wins"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="body">
+      <!-- workflow explanation -->
+      <div class="how">
+        <div class="ic">&#9432;</div>
+        <div>
+          <p class="hd">How this works</p>
+          <ol>
+            <li>Pick the <b>build</b> below (Drop Location). The Build Number and Release fill in automatically.</li>
+            <li><b>Apply Build to All Pipelines</b> saves it to <code>GlobalVariables.json</code> &mdash; one file, nothing else is rewritten.</li>
+            <li>Every pipeline of that <b>same release</b> uses this build. Other releases are not touched.</li>
+          </ol>
+          <p class="note">A trigger file&rsquo;s build still overrides this for a one-off run. Safe on a WatchList that spans releases: each pipeline uses this build only if its release matches, so the others are untouched.</p>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="drop">Drop Location:</label>
+        <input id="drop" class="inp" value="\\DevTFSBldoaksp\REPL\Ado\SP-2023-R2-SP2\OAK_SP-2023-R2-SP2_20260909.4">
+        <button class="btn ghost">&#128193; Browse</button>
+      </div>
+      <div class="meta">
+        <span><span class="k">Build Number:</span> <span class="build">OAK_SP-2023-R2-SP2_20260909.4</span></span>
+        <span><span class="k">Release:</span> <span class="pill">SP2023R2SP2</span></span>
+      </div>
+
+      <div class="sub">
+        <h2>Variables File &mdash; GlobalVariables.json</h2>
+        <button class="btn">Browse&hellip;</button>
+      </div>
+      <table>
+        <thead><tr><th>Key</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td class="key">_ControllerName</td><td class="val">JVGR22</td></tr>
+          <tr><td class="key">_EmailCheck</td><td class="val">vinodkumar.javvadi@aveva.com</td></tr>
+          <tr class="locked"><td class="key">_ReleaseName</td><td class="val">SP2023R2SP2</td></tr>
+          <tr class="locked"><td class="key">_BuildNumber</td><td class="val">OAK_SP-2023-R2-SP2_20260909.4</td></tr>
+          <tr class="locked"><td class="key">_DropLocation</td><td class="val">\\DevTFSBldoaksp\REPL\Ado\SP-2023-R2-SP2\OAK_SP-2023-R2-SP2_20260909.4</td></tr>
+        </tbody>
+      </table>
+      <div class="tblbtns">
+        <button class="btn">+ Add</button>
+        <button class="btn">&minus; Remove</button>
+        <span class="hint">Build rows are filled by Apply; constants you can edit here.</span>
+      </div>
+    </div>
+
+    <!-- bottom action bar: Apply moved here -->
+    <div class="foot">
+      <button class="apply">&#9889; Apply Build to All Pipelines</button>
+      <span class="applynote">Saves the build to GlobalVariables.json for this release.</span>
+      <div class="right">
+        <button class="btn save">Save Variables File</button>
+        <button class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

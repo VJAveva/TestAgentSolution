@@ -30,7 +30,9 @@ public partial class BuildResultsViewModel : ObservableObject
     public ObservableCollection<BuildNode> LoadedBuildNodes { get; } = new();
 
     private readonly Dictionary<string, bool> _expandState = new();
-    private readonly ConcurrentDictionary<string, BuildNode> _buildCache = new();
+
+    // Stamped, so a build folder that gained .trx files since it was parsed is never served from cache.
+    private readonly ConcurrentDictionary<string, (string Stamp, BuildNode Node)> _buildCache = new();
 
     // ?? Core state ??
     [ObservableProperty] private BuildListItem? _selectedBuild;

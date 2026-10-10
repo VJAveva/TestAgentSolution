@@ -102,6 +102,12 @@ public partial class App : Application
             })
             .ConfigureServices((ctx, services) =>
             {
+                // Shared GlobalVariables.json (one build for every pipeline of the matching
+                // release). Opt-in per host: the resolver defaults to disabled, so a missing file
+                // leaves resolution exactly as it was.
+                ParameterResolver.UseGlobalVariablesFile(
+                    ctx.Configuration[ParameterResolver.GlobalVariablesPathConfigKey]);
+
                 // RBAC feature (identity, authorization, audit, persistence)
                 services.AddRbacFeature(ctx.Configuration);
 

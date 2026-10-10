@@ -225,11 +225,22 @@ public sealed partial class MainViewModel
         {
             try
             {
-                foreach (var (key, value) in ParameterResolver.ParseParameterFile(config.GlobalVariablesFile))
+                // A .json global file must NOT reach the CSV parser - it would turn whole lines into
+                // key names, which is how a secret once ended up inside a key.
+                var shared = ParameterResolver.IsLayeredConfig(config.GlobalVariablesFile)
+                    ? ParameterResolver.ReadGlobalVariables(config.GlobalVariablesFile)?.Values
+                        .Select(e => (e.Key, e.Value)).ToList() ?? []
+                    : ParameterResolver.ParseParameterFile(config.GlobalVariablesFile);
+
+                var layer = ParameterResolver.IsLayeredConfig(config.GlobalVariablesFile)
+                    ? TokenLayer.GlobalBuild
+                    : TokenLayer.Global;
+
+                foreach (var (key, value) in shared)
                 {
-                    TreeNodeViewModel.SetToken(TreeNodeViewModel.SharedScope, key, value, TokenLayer.Global);
+                    TreeNodeViewModel.SetToken(TreeNodeViewModel.SharedScope, key, value, layer);
                     if (key.StartsWith('_'))
-                        TreeNodeViewModel.SetToken(TreeNodeViewModel.SharedScope, key[1..], value, TokenLayer.Global);
+                        TreeNodeViewModel.SetToken(TreeNodeViewModel.SharedScope, key[1..], value, layer);
                 }
             }
             catch (Exception ex)

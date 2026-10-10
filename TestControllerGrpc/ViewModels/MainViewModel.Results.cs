@@ -10,7 +10,7 @@ public sealed partial class MainViewModel
     private ResultsDashboardWindow? _resultsDashboardWindow;
 
     [RelayCommand]
-    private void OpenResults()
+    private async Task OpenResults()
     {
         // Singleton pattern: reuse existing window if still open
         if (_resultsDashboardWindow is not null && _resultsDashboardWindow.IsLoaded)
@@ -18,11 +18,15 @@ public sealed partial class MainViewModel
             _resultsDashboardWindow.Activate();
             if (_resultsDashboardWindow.WindowState == WindowState.Minimized)
                 _resultsDashboardWindow.WindowState = WindowState.Normal;
-            return;
+        }
+        else
+        {
+            _resultsDashboardWindow = new ResultsDashboardWindow(BuildResultsVM);
+            _resultsDashboardWindow.Closed += (_, _) => _resultsDashboardWindow = null;
+            _resultsDashboardWindow.Show();
         }
 
-        _resultsDashboardWindow = new ResultsDashboardWindow(BuildResultsVM);
-        _resultsDashboardWindow.Closed += (_, _) => _resultsDashboardWindow = null;
-        _resultsDashboardWindow.Show();
+        // The view model is a singleton that outlives the window, so pick up results written since last time.
+        await BuildResultsVM.RefreshCurrentViewAsync();
     }
 }

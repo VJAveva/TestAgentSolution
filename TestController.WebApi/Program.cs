@@ -158,6 +158,11 @@ builder.Services.AddHostedService<SystemModeSyncService>();
 // Multi-identity security framework: authentication + authorization + audit
 builder.Services.AddMultiIdentitySecurity(builder.Configuration);
 
+// Shared GlobalVariables.json (one build for every pipeline of the matching release). Opt-in per
+// host because the resolver defaults to disabled, so a missing file leaves resolution untouched.
+ParameterResolver.UseGlobalVariablesFile(
+    builder.Configuration[ParameterResolver.GlobalVariablesPathConfigKey]);
+
 // Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
 builder.Services.AddControllerApi()
     .ConfigureApplicationPartManager(apm =>

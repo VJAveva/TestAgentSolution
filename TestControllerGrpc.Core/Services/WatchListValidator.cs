@@ -278,7 +278,20 @@ public static class WatchListValidator
         var ctx = new PipelineExecutionContext { WatchItemTag = wi.Tag };
 
         if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile) && File.Exists(config.GlobalVariablesFile))
-            ParameterResolver.LoadParameterFile(ctx, config.GlobalVariablesFile, ParameterRank.Global);
+        {
+            if (ParameterResolver.IsLayeredConfig(config.GlobalVariablesFile))
+            {
+                // Hand it to the funnel instead of parsing here: it must be applied AFTER Initialize
+                // (the release is not known before that) and at GlobalVars rank, or the validator and
+                // the executor would disagree about which build a pipeline actually gets. The CSV
+                // parser would also turn whole JSON lines into key names.
+                ctx.GlobalVariablesFile = config.GlobalVariablesFile;
+            }
+            else
+            {
+                ParameterResolver.LoadParameterFile(ctx, config.GlobalVariablesFile, ParameterRank.Global);
+            }
+        }
 
         ParameterResolver.LoadForWatchItem(ctx, wi);
 

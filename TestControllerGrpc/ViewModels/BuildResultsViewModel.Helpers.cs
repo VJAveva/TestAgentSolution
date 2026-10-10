@@ -278,16 +278,19 @@ public partial class BuildResultsViewModel : ObservableObject
                     return;
                 }
 
+                var stamp = await Task.Run(() => TryComputeBuildStamp(build.Path));
+
                 BuildNode node;
-                if (_buildCache.TryGetValue(build.Path, out var cached))
+                if (stamp is not null && _buildCache.TryGetValue(build.Path, out var cached) && cached.Stamp == stamp)
                 {
-                    node = cached;
+                    node = cached.Node;
                 }
                 else
                 {
                     node = await Task.Run(() => _parser.ParseBuildFolder(build.Path));
                     node = _aggregator.EvaluateBuildHealth(node);
-                    _buildCache[build.Path] = node;
+                    if (stamp is not null)
+                        _buildCache[build.Path] = (stamp, node);
                 }
 
                 parsedNodes.Add((build, node));
@@ -330,6 +333,37 @@ public partial class BuildResultsViewModel : ObservableObject
 
         foreach (var (build, _) in parsedNodes)
             build.HasBeenLoaded = true;
+    }
+
+    /// <summary>
+    /// Fingerprints exactly what <see cref="TrxResultsParser.ParseBuildFolder"/> reads: .trx files in the
+    /// build folder plus one level of use-case folders. Null when the folder cannot be read, which forces a
+    /// re-parse rather than serving a node that may be stale.
+    /// </summary>
+    private static string? TryComputeBuildStamp(string buildFolderPath)
+    {
+        try
+        {
+            var count = 0;
+            long maxTicks = 0, sumTicks = 0;
+
+            foreach (var dir in Directory.GetDirectories(buildFolderPath).Prepend(buildFolderPath))
+            {
+                foreach (var file in Directory.GetFiles(dir, "*.trx"))
+                {
+                    var ticks = File.GetLastWriteTimeUtc(file).Ticks;
+                    count++;
+                    if (ticks > maxTicks) maxTicks = ticks;
+                    unchecked { sumTicks += ticks; }
+                }
+            }
+
+            return $"{count}:{maxTicks}:{sumTicks}";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     [RelayCommand]

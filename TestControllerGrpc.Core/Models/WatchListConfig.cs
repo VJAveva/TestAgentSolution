@@ -342,6 +342,13 @@ public sealed class PipelineExecutionContext
     /// <summary>Tag of the WatchItem being run. Selects that pipeline's entry in the JSON config.</summary>
     public string WatchItemTag { get; set; } = "";
 
+    /// <summary>
+    /// Shared GlobalVariables.json for this run. Empty falls back to
+    /// <see cref="Services.ParameterResolver.GlobalVariablesPath"/>; tests set it per context so a
+    /// file that merely happens to exist on the machine can never leak into a test.
+    /// </summary>
+    public string GlobalVariablesFile { get; set; } = "";
+
     public string TriggerFileName { get; set; } = "";
     public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

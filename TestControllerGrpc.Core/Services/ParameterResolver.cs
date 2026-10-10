@@ -213,6 +213,118 @@ public static partial class ParameterResolver
         }
     }
 
+    // ── GlobalVariables.json ────────────────────────────────────────────
+
+    /// <summary>
+    /// Path of the shared <c>GlobalVariables.json</c>, set once per host at startup.
+    /// <para>
+    /// Empty by DEFAULT, which disables the layer entirely. That default is load-bearing twice over:
+    /// a host that has not opted in behaves exactly as before, and a unit test can never pick up a
+    /// real file that happens to exist on the build machine. Per-run overrides go on
+    /// <see cref="PipelineExecutionContext.GlobalVariablesFile"/>, which wins over this.
+    /// </para>
+    /// </summary>
+    public static string GlobalVariablesPath { get; set; } = "";
+
+    /// <summary>Configuration key a host may set to move the file off its default location.</summary>
+    public const string GlobalVariablesPathConfigKey = "Parameters:GlobalVariablesFile";
+
+    /// <summary>
+    /// Host opt-in: points the resolver at the shared file, falling back to
+    /// <see cref="GlobalVariablesConfig.DefaultPath"/> when nothing is configured. Call once at
+    /// startup. Harmless when the file does not exist - the layer simply stays inert.
+    /// </summary>
+    public static void UseGlobalVariablesFile(string? configuredPath) =>
+        GlobalVariablesPath = string.IsNullOrWhiteSpace(configuredPath)
+            ? GlobalVariablesConfig.DefaultPath
+            : configuredPath;
+
+    /// <summary>
+    /// Reads <c>GlobalVariables.json</c>, or null when it is missing or not valid JSON. The file is
+    /// flat, so it is read as a property bag rather than through a typed model: <c>Version</c> is a
+    /// number and everything else is a token value.
+    /// </summary>
+    public static GlobalVariablesConfig? ReadGlobalVariables(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return null;
+
+        try
+        {
+            var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                File.ReadAllText(filePath), JsonOptions);
+            if (raw is null) return null;
+
+            var config = new GlobalVariablesConfig();
+            foreach (var (key, element) in raw)
+            {
+                if (string.IsNullOrWhiteSpace(key)) continue;
+
+                if (key.Equals(nameof(GlobalVariablesConfig.Version), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var version))
+                        config.Version = version;
+                    continue;
+                }
+
+                config.Values[key] = element.ValueKind switch
+                {
+                    JsonValueKind.String => element.GetString() ?? "",
+                    JsonValueKind.Null or JsonValueKind.Undefined => "",
+                    _ => element.ToString(),
+                };
+            }
+
+            return config;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Applies the shared global build to this context, and returns null on success or a
+    /// caller-safe reason when the file exists but cannot be read.
+    /// <para>
+    /// Must run AFTER the Initialize source: a pipeline's <c>_ReleaseName</c> lives inside its own
+    /// per-release config, so the release is not known until that has loaded. Order does not decide
+    /// precedence - <see cref="ParameterRank.GlobalVars"/> does - it only means this cannot be first.
+    /// </para>
+    /// <para>
+    /// A MISSING file is a silent no-op by design: that is every pipeline's behaviour today and the
+    /// whole feature must stay inert until someone creates the file.
+    /// </para>
+    /// </summary>
+    public static string? TryApplyGlobalVariables(PipelineExecutionContext ctx, string? path = null)
+    {
+        var file = FirstNonEmpty(path, ctx.GlobalVariablesFile, GlobalVariablesPath);
+        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file)) return null;
+
+        var config = ReadGlobalVariables(file);
+        if (config is null)
+            return $"global variables file '{file}' could not be read as JSON.";
+
+        var pipelineRelease = ctx.Parameters.TryGetValue("_ReleaseName", out var r) ? r : "";
+
+        // Both sides must NAME a release. An unknown release cannot be proven to match, and silently
+        // taking the build would install another release's product.
+        var releaseMatches =
+            !string.IsNullOrWhiteSpace(config.ReleaseName)
+            && !string.IsNullOrWhiteSpace(pipelineRelease)
+            && string.Equals(config.ReleaseName, pipelineRelease, StringComparison.OrdinalIgnoreCase);
+
+        foreach (var (key, value) in config.Values)
+        {
+            if (GlobalVariablesConfig.IsReleaseScoped(key) && !releaseMatches) continue;
+            SetParameter(ctx, key, value, ParameterRank.GlobalVars);
+        }
+
+        return null;
+
+        static string FirstNonEmpty(params string?[] candidates)
+            => candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)) ?? "";
+    }
+
     /// <summary>
     /// Applies the layered JSON config: shared globals, then the named stage profile, then any
     /// build pinned to this pipeline. Each layer carries its own rank, so a pin is not undone by
@@ -241,6 +353,11 @@ public static partial class ParameterResolver
         if (config is null) return false;
 
         ApplyJsonLayers(ctx, config, profile, pipelineTag);
+
+        // Reason deliberately dropped: this bool answers "was the LAYERED config readable", and the
+        // display and validation callers restore last-good tokens from it. A bad global file is
+        // reported on the run path instead, by TryLoadInitializeSource.
+        TryApplyGlobalVariables(ctx);
         return true;
     }
 
@@ -289,7 +406,7 @@ public static partial class ParameterResolver
         if (!IsLayeredConfig(filePath))
         {
             LoadParameterFile(ctx, filePath);
-            return null;
+            return TryApplyGlobalVariables(ctx);
         }
 
         var config = ReadJsonConfig(filePath);
@@ -305,7 +422,7 @@ public static partial class ParameterResolver
         }
 
         ApplyJsonLayers(ctx, config, profile, pipelineTag);
-        return null;
+        return TryApplyGlobalVariables(ctx);
     }
 
     /// <summary>
@@ -400,6 +517,10 @@ public static partial class ParameterResolver
             else
                 LoadParameterFile(ctx, init.ParameterFile);
         }
+
+        // Also covers a pipeline whose Initialize is a plain .txt, and a pipeline with no Initialize
+        // at all - neither reaches the JSON loader above.
+        TryApplyGlobalVariables(ctx);
     }
 
     /// <summary>Every Initialize node under a WatchItem, in declaration order, at any depth.</summary>

@@ -17,6 +17,13 @@ public enum ParameterRank
     /// <summary>A build pinned to one pipeline and persisted in the JSON config.</summary>
     PipelinePin = 30,
 
+    /// <summary>
+    /// The shared <c>GlobalVariables.json</c>: one build selected once and used by every pipeline of
+    /// the matching release. Outranks a per-pipeline pin so setting it in one place actually takes
+    /// effect, but stays below the trigger file so a one-off run can still override it.
+    /// </summary>
+    GlobalVars = 35,
+
     /// <summary>The trigger file that fired this run.</summary>
     TriggerFile = 40,
 

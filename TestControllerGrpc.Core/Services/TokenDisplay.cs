@@ -14,6 +14,10 @@ public enum TokenLayer
     Pipeline,
     Trigger,
     Run,
+
+    // Appended, not inserted: the members above are ordered by precedence but their numeric values
+    // are implicit, so slotting this in beside Pipeline would renumber Trigger and Run.
+    GlobalBuild,
 }
 
 /// <summary>One token occurrence inside a display string.</summary>
@@ -122,6 +126,7 @@ public static class TokenDisplay
         ParameterRank.Global => TokenLayer.Global,
         ParameterRank.ParameterFile => TokenLayer.Profile,
         ParameterRank.PipelinePin => TokenLayer.Pipeline,
+        ParameterRank.GlobalVars => TokenLayer.GlobalBuild,
         ParameterRank.TriggerFile => TokenLayer.Trigger,
         ParameterRank.RunOverride => TokenLayer.Run,
         _ => TokenLayer.Unknown,
