@@ -9,7 +9,7 @@ When a test fails, show **one short report at the top of the Detail pane** that 
 - **what really caused it** (the first real failure, not the first red line),
 - **where** — sheet, Excel row, keyword, source file:line, time,
 - **what followed from it** (cascade), grouped into categories,
-- with the 64 lines of harness noise and any secrets hidden.
+- with the 63 lines of harness noise and any secrets hidden.
 
 The raw Error message, Stack trace, STDOUT and Debug trace stay below it, collapsed.
 
@@ -21,7 +21,7 @@ The raw Error message, Stack trace, STDOUT and Debug trace stay below it, collap
 | **One cause produces many failures.** | S1_04_SmokeTestDeploy: 32 failures, all from *Platform startup failed* on 2 platforms at Row 6. |
 | **The product banner can lie.** | `[SUCCESS] Deploy Completed: Deployed 0 object(s) out of a total 17` — trust the counts, not the banner. |
 | **Waiting on a cascade wastes time.** | Row 30 of TPTest3 waited 15 m 42 s for a quality that could never arrive. |
-| **Every log has the same 64 lines of noise.** | vstest "assembly not found" / "satellite assemblies" deployment warnings. |
+| **Every log has the same 63 lines of noise.** | vstest "assembly not found" / "satellite assemblies" deployment warnings. |
 | **Logger counts are printed, the logger messages are not.** | "1 Errors, 14 Warnings on jvgr1" — the actual messages are not in the log. |
 | **Credentials are written to the logs.** | `GetUserToken` prints the account name + password and the access token (2 lines in S1_04, 4 in S1_13). |
 

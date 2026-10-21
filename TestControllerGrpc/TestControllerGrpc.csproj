@@ -43,6 +43,12 @@
     <ProjectReference Include="..\TestController.Impact\TestController.Impact.csproj" />
   </ItemGroup>
 
+  <!-- FIR rule packs are data, versioned with the code. A team adds support for its framework or
+       product by dropping a *.fir.json here; nothing is compiled against them. -->
+  <ItemGroup>
+    <Content Include="..\rules\*.fir.json" Link="rules\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />

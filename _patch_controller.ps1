@@ -28,6 +28,12 @@ $srcFull = (Resolve-Path $Source).Path
 $excludeSet = @{}
 $Exclude | ForEach-Object { $excludeSet[$_.ToLowerInvariant()] = $true }
 
+# A payload folder that does not exist on the target yet (e.g. rules\) makes Copy-Item fail outright.
+function EnsureParent([string]$path) {
+    $dir = Split-Path $path -Parent
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+}
+
 # ---- 1. Work out the minimal file set -------------------------------------------------
 $changed = @()
 $skipped = @()
@@ -70,27 +76,33 @@ if (-not $Apply) { ''; 'DRY RUN - nothing copied. Re-run with -Apply once the co
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backup = Join-Path $Target "_patchbackup\$stamp"
 New-Item -ItemType Directory -Path $backup -Force | Out-Null
+$backedUp = 0
 foreach ($rel in $changed) {
     $dst = Join-Path $Target $rel
-    if (Test-Path $dst) { Copy-Item $dst (Join-Path $backup $rel) -Force }
+    if (-not (Test-Path $dst)) { continue }   # new file on the target - there is nothing to roll back to
+    EnsureParent (Join-Path $backup $rel)
+    Copy-Item $dst (Join-Path $backup $rel) -Force
+    $backedUp++
 }
-"Backed up $($changed.Count) file(s) to $backup"
+"Backed up $backedUp of $($changed.Count) file(s) to $backup"
 
 # ---- 4. Copy, then verify every file by hash ------------------------------------------
 $failed = @()
 foreach ($rel in $changed) {
-    Copy-Item (Join-Path $srcFull $rel) (Join-Path $Target $rel) -Force
+    $dstPath = Join-Path $Target $rel
+    EnsureParent $dstPath
+    Copy-Item (Join-Path $srcFull $rel) $dstPath -Force
     $a = (Get-FileHash (Join-Path $srcFull $rel) -Algorithm SHA256).Hash
-    $b = (Get-FileHash (Join-Path $Target $rel) -Algorithm SHA256).Hash
+    $b = (Get-FileHash $dstPath -Algorithm SHA256).Hash
     if ($a -ne $b) { $failed += $rel }
 }
 
 if ($failed.Count) {
     "VERIFY FAILED for: $($failed -join ', ')"
-    "Roll back with: Copy-Item '$backup\*' '$Target' -Force"
+    "Roll back with: Copy-Item '$backup\*' '$Target' -Recurse -Force"
     throw 'Patch verification failed.'
 }
 
 "Patched and verified $($changed.Count) file(s)."
-"Rollback: Copy-Item '$backup\*' '$Target' -Force"
+"Rollback: Copy-Item '$backup\*' '$Target' -Recurse -Force"
 "NEXT: start $ProcessName on $Node (launchMode is Manual - it cannot be started remotely)."

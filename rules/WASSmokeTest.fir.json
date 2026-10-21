@@ -1,0 +1,37 @@
+{
+  "id": "WASSmokeTest",
+  "kind": "Framework",
+  "version": 1,
+  "appliesTo": {
+    "testAssembly": [ "wassmoketest.dll" ],
+    "className": [ "^WASSmokeTest\\." ],
+    "outputContains": [ "(ReadValuesFromExcel)" ]
+  },
+
+  "rowMarker": "\\(ReadValuesFromExcel\\) \\*+ Row No: (?<row>\\d+)",
+  "testDataLine": "\\(ReadValuesFromExcel\\) ExcelPath : \"(?<path>[^\"]+)\" and sheet name: \"(?<sheet>[^\"]+)\"",
+  "stepLine": "^\\s*(?:\\[LineNo:(?<line>\\d+)-(?<file>[^\\]]+)\\])?\\[(?<ts>[^\\]]+)\\] (?<level>Passed|Failed|Info|Error|Warning): \\((?<kw>[^)]+)\\) ?(?<msg>.*)$",
+  "failLevels": [ "Failed", "Error" ],
+  "reasonLine": "Validation Failure Count: (?<v>\\d+), Logger ERRORS Count: (?<e>\\d+), Logger WARNINGS Count: (?<w>\\d+)",
+  "secretLines": [ "\\(GetUserToken\\)" ],
+  "slowStepSeconds": 180,
+
+  "testData": {
+    "componentColumn": 1,
+    "keywordColumn": 2,
+    "paramsColumn": 3,
+    "paramSeparator": "|",
+    "skipRow": "^\\s*(?:end)?region#",
+    "keywordPattern": "^<?(?<kw>[^<>]+?)>?$"
+  },
+
+  "testDataKeywordMap": {
+    "deploy": [ "DeployOperation" ],
+    "redeploy": [ "DeployOperation" ],
+    "undeploy": [ "UndeployOperation" ],
+    "modifyovvalue": [ "ModifyOVvalue", "ObjectViewerValidation" ],
+    "getandvalidateovvalue": [ "OVGetValue", "ValidateOVValue" ],
+    "waitforattributequality": [ "WaitforAttributeQuality" ],
+    "ovcomparetimestamp": [ "OVCompareTimestamp" ]
+  }
+}

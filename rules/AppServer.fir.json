@@ -1,0 +1,27 @@
+{
+  "id": "AppServer",
+  "kind": "Product",
+  "version": 1,
+  "appliesTo": {
+    "outputContains": [ "Deploy Completed:", "galaxy" ]
+  },
+
+  "productError": [
+    "^\\s*Error: Failed to (?:deploy|undeploy) (?<obj>\\S+?)\\s*:\\s*(?<reason>.+)$"
+  ],
+  "productCount": "^\\s*\\[(?:SUCCESS|WARNING|ERROR)\\] (?:Un)?Deploy Completed: (?:Un)?Deployed (?<done>\\d+) object\\(s\\) out of a total (?<total>\\d+)",
+
+  "noise": [
+    "^\\s*Warning: Test Run deployment issue: The assembly or module",
+    "^\\s*Test Run deployment issue: an error occurred while getting satellite assemblies",
+    "^\\s*Parameter name: startIndex\\s*$"
+  ],
+
+  "categories": {
+    "Product error": [ "DeployOperation", "UndeployOperation" ],
+    "Validation mismatch": [ "Validate*", "OVCompare*", "WaitforAttribute*" ],
+    "Runtime write failed": [ "Modify*", "ObjectViewer*", "UserSet*" ]
+  },
+
+  "objectShortName": "^(?<short>[A-Za-z]+\\d*(?:_\\d{3})?)"
+}

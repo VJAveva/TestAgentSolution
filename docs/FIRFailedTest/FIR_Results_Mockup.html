@@ -143,7 +143,7 @@ const DATA = {
       ["mask","32","Appserver &middot; deploy &middot; <i>GRP1</i>","Keyword logged <b>Passed</b>; product: Deployed 0 of 17, &ldquo;Previous deployment has not been completed&rdquo; (ITViewApp_001, ViewApp_001). Banner still says [SUCCESS].","not counted as a failure today"],
       ["rec","33&ndash;34","Appserver &middot; deploy &middot; <i>REP1</i>, <i>REP2</i>","Deployed 16 of 16 each (02:46:53, 02:48:51).","platforms do start &mdash; just not at row 6"]
     ],
-    cats:[["p","Product error (deploy)",32],["m","Masked pass",1],["l","Logger","1 error &middot; 14 warnings"],["n","Harness noise hidden",64]],
+    cats:[["p","Product error (deploy)",32],["m","Masked pass",1],["l","Logger","1 error &middot; 14 warnings"],["n","Harness noise hidden",63]],
     hint:"<b>Hint (pattern):</b> row 6 deploys the whole galaxy straight after connecting. REP1/REP2 start later (rows 33&ndash;34 succeed), so this looks like <b>platform start-up timing on jvgr1</b>, not test data. Check the jvgr1 SMC log for 02:38&ndash;02:43.",
     open:"<b>Not in the log:</b> the 1 logger error and 14 warnings. They will show here once GetErrors/GetWarnings print the messages.",
     err:"Assert.IsFalse failed. TestCase FAILED and the Reason being: \"Validation Failure Count: 32, Logger ERRORS Count: 1, Logger WARNINGS Count: 14\""
@@ -156,18 +156,18 @@ const DATA = {
       ["Failing step","Row 23 &middot; redeploy","Appserver | redeploy | DDESL_002_&hellip;"],
       ["Keyword code","DeployOperation","logged Passed (masked)"],
       ["When","03:12:37","first red line 4 min later"],
-      ["Impact","5 failures &rarr; 1 cause","15 m 42 s spent waiting at row 30"]
+      ["Impact","5 failures &rarr; 1 cause","~19 min spent waiting at rows 29&ndash;30"]
     ],
     steps:[
       ["mask","23","Appserver &middot; redeploy &middot; <i>DDESL_002</i>","Keyword <b>Passed</b>; product: <code>Unable to communicate with the target engine</code>, Deployed 0 of 1.","first failure on DDESL_002"],
       ["ok","24","Appserver &middot; deploy &middot; <i>UDO3</i>","Deployed 1 of 1, placed on scan.","the other object deployed fine"],
       ["ok","28","objectviewer &middot; waitforattributequality &middot; <i>DDESL_002</i>","Quality as expected at 03:13:14.","DDESL_002 still answered 40 s after the failed redeploy"],
-      ["casc","29","objectviewer &middot; modifyovvalue &middot; <i>DDESL_002</i>","Write to <code>ScanStateCmd</code> failed after 3 min (ModifyOVvalue, ObjectViewerValidation).","same object &middot; high confidence"],
+      ["slow","29","objectviewer &middot; modifyovvalue &middot; <i>DDESL_002</i>","Write to <code>ScanStateCmd</code> failed after the 3-min timeout (203 s; ModifyOVvalue, ObjectViewerValidation).","same object &middot; high confidence"],
       ["slow","30","objectviewer &middot; waitforattributequality &middot; <i>DDESL_002</i>","Waited <b>15 m 42 s</b>; quality <b>00:Bad</b>, expected C0:Good.","same object &middot; cascade"],
       ["casc","31","objectviewer &middot; getandvalidateovvalue &middot; <i>DDESL_002</i>","Expected &ldquo;No Data&rdquo; / C0:Good, got &ldquo;0&rdquo; / 00:Bad.","same object &middot; cascade"],
       ["casc","32","objectviewer &middot; ovcomparetimestamp &middot; <i>DDESL_002</i>","Source timestamp <b>12/31/1600</b> &mdash; never updated.","same object &middot; cascade"]
     ],
-    cats:[["m","Masked pass (root)",1],["v","Validation mismatch",3],["p","Runtime write failed",2],["l","Logger","0 errors &middot; 1 warning"],["n","Harness noise hidden",64]],
+    cats:[["m","Masked pass (root)",1],["v","Validation mismatch",3],["p","Runtime write failed",2],["l","Logger","0 errors &middot; 1 warning"],["n","Harness noise hidden",63]],
     hint:"<b>Hint (pattern):</b> make the <b>redeploy/deploy</b> keyword fail on &ldquo;Deployed 0 of N&rdquo;. The test would then stop at row 23 with the real reason, instead of failing 4 minutes and a 15-minute wait later.",
     open:"<b>Open point:</b> row 28 passed, so DDESL_002 kept working for about 40 s after the failed redeploy. Row 23 is the first failure on that object; the log does not show what changed between rows 28 and 29.",
     err:"Assert.IsFalse failed. TestCase FAILED and the Reason being: \"Validation Failure Count: 5, Logger ERRORS Count: 0, Logger WARNINGS Count: 1\""

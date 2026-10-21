@@ -39,6 +39,12 @@
     <InternalsVisibleTo Include="TestController.WebApi.Tests" />
   </ItemGroup>
 
+  <!-- FIR rule packs are data, versioned with the code. A team adds support for its framework or
+       product by dropping a *.fir.json here; nothing is compiled against them. -->
+  <ItemGroup>
+    <Content Include="..\rules\*.fir.json" Link="rules\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The impact databases are deliberately NOT packaged. They are resolved at runtime through
        IImpactIndexPathProvider (default %ProgramData%\TestAgentSolution\ImpactIndex) and are host-local
        state, not deliverables: the index is a regenerable cache that reached 1.29 GB, and the outcome

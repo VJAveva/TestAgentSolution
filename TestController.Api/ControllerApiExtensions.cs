@@ -57,6 +57,9 @@ public static class ControllerApiExtensions
         TestControllerGrpc.Ado.Reporting.ReportingServiceCollectionExtensions.AddChurnXlsxReporting(services);
         services.TryAddSingleton<IRegressionDataProvider, MockRegressionDataProvider>();
 
+        // First Information Report: rule packs, workbook resolution and the <Test>.fir.json cache.
+        services.AddFirFeature();
+
         // Lock recovery options: defaults are fine, hosts can override via Configure<LockRecoveryOptions>()
         services.TryAddSingleton(Microsoft.Extensions.Options.Options.Create(new LockRecoveryOptions()));
 

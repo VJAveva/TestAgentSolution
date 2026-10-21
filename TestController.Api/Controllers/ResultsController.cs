@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using TestController.Api.Security;
+using TestControllerGrpc.Core.Fir;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -395,10 +397,37 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/results/builds/{build}/test/{testName}/fir?refresh=true
+    /// The First Information Report for a failed test, computed on demand and cached beside the TRX.
+    /// </summary>
+    [HttpGet("builds/{build}/test/{testName}/fir")]
+    public IActionResult GetFir(string build, string testName, [FromQuery] bool refresh = false)
+    {
+        var corr = Corr;
+        try
+        {
+            // Resolved per request: a host that has not registered the feature simply has no report.
+            if (HttpContext.RequestServices.GetService(typeof(FirService)) is not FirService service)
+                return NotFound(new { error = "FIR is not enabled on this host", correlationId = corr });
+
+            var report = service.GetOrCompute(build, testName, refresh);
+            if (report is null)
+                return NotFound(new { error = $"No report for '{testName}' in build '{build}'", correlationId = corr });
+
+            return Content(JsonSerializer.Serialize(report, FirService.JsonOptions), "application/json");
+        }
+        catch (Exception ex)
+        {
+            _appLogger.Log(LogLevel.Error, "ResultsController",
+                $"GetFir FAILED for build='{build}' test='{testName}': {ex.Message}", corr, ex: ex);
+            return StatusCode(500, new { error = "FIR failed", detail = ex.Message, correlationId = corr });
+        }
+    }
+
+    /// <summary>
     /// POST /api/results/invalidate/{buildNumber} � force re-parse of a specific build.
     /// </summary>
-    [HttpPost("invalidate/{buildNumber}")]
-    public IActionResult InvalidateBuild(string buildNumber)
+    [HttpPost("invalidate/{buildNumber}")]    public IActionResult InvalidateBuild(string buildNumber)
     {
         _buildResults.Invalidate(buildNumber);
         return Ok(new

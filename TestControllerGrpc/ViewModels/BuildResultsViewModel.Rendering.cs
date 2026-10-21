@@ -206,6 +206,7 @@ public partial class BuildResultsViewModel : ObservableObject
         DetailStdOut = tr.StdOut ?? "(no stdout captured)";
         DetailDebugTrace = tr.DebugTrace ?? "(no debug trace)";
         DetailTrxFileName = tr.TrxFileName;
+        _ = PopulateFir(node.BuildNumber ?? "", tr);
 
         var buildPath = LoadedBuildNodes
             .FirstOrDefault(b => b.BuildNumber == node.BuildNumber)?.RootPath;

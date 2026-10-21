@@ -916,10 +916,144 @@
                                             <Run Text="{Binding DetailDuration, Mode=OneWay}" FontFamily="Consolas" />
                                         </TextBlock>
 
+                                        <!-- FIRST INFORMATION REPORT (docs/FIRFailedTest) -->
+                                        <Border CornerRadius="6" Margin="0,0,0,12" Padding="0"
+                                                BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                                                Visibility="{Binding HasFir, Converter={StaticResource BoolVis}}">
+                                            <StackPanel>
+                                                <Border Background="{DynamicResource BgPanel}" Padding="10,6" CornerRadius="6,6,0,0">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Style="{StaticResource SmBtn}"
+                                                                Command="{Binding CopyFirAsBugTextCommand}"
+                                                                Content="Copy as bug text"
+                                                                AutomationProperties.Name="Copy report as bug text" />
+                                                        <TextBlock Text="FIRST INFORMATION REPORT" FontSize="{StaticResource FontSize10}"
+                                                                   FontWeight="Bold" Foreground="{DynamicResource Accent}"
+                                                                   VerticalAlignment="Center" />
+                                                    </DockPanel>
+                                                </Border>
+
+                                                <StackPanel Margin="10,8,10,10">
+                                                    <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4"
+                                                            BorderBrush="{DynamicResource AccRed}" BorderThickness="3,0,0,0"
+                                                            Padding="10,8" Margin="0,0,0,10">
+                                                        <TextBlock Text="{Binding FirVerdict}" TextWrapping="Wrap"
+                                                                   FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+                                                    </Border>
+
+                                                    <WrapPanel Margin="0,0,0,8">
+                                                        <TextBlock FontSize="{StaticResource FontSize9}" Margin="0,0,16,4"
+                                                                   Foreground="{DynamicResource TextS}">
+                                                            <Run Text="WHERE: " FontWeight="Bold" />
+                                                            <Run Text="{Binding FirWhere, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="{StaticResource FontSize9}" Margin="0,0,16,4"
+                                                                   Foreground="{DynamicResource TextS}"
+                                                                   Visibility="{Binding FirSource, Converter={x:Static vm:StringNotEmptyToVisConverter.Instance}}">
+                                                            <Run Text="SOURCE: " FontWeight="Bold" />
+                                                            <Run Text="{Binding FirSource, Mode=OneWay}" FontFamily="Consolas" />
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="{StaticResource FontSize9}" Margin="0,0,0,4"
+                                                                   Foreground="{DynamicResource TextS}">
+                                                            <Run Text="IMPACT: " FontWeight="Bold" />
+                                                            <Run Text="{Binding FirImpact, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                    </WrapPanel>
+
+                                                    <ItemsControl ItemsSource="{Binding FirRows}" Margin="0,0,0,8"
+                                                                  Grid.IsSharedSizeScope="True">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Padding="6,4" Margin="0,1" CornerRadius="3"
+                                                                        Background="{DynamicResource BgRowHoverBrush}">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <!-- Shared so chips size to the longest tag yet stay aligned down the list. -->
+                                                                            <ColumnDefinition Width="Auto" SharedSizeGroup="FirTagChip" />
+                                                                            <ColumnDefinition Width="40" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Border Grid.Column="0" CornerRadius="3" Padding="8,1"
+                                                                                MinWidth="78" MinHeight="16"
+                                                                                VerticalAlignment="Top" HorizontalAlignment="Left"
+                                                                                Background="{DynamicResource BgChipBrush}">
+                                                                            <Border.Style>
+                                                                                <Style TargetType="Border">
+                                                                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource TextP}" />
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Tag}" Value="ROOT">
+                                                                                            <Setter Property="Background" Value="{DynamicResource StatusFailedBg}" />
+                                                                                            <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusFailedFg}" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Tag}" Value="MASKED">
+                                                                                            <Setter Property="Background" Value="{DynamicResource StatusWarningBg}" />
+                                                                                            <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusWarningFg}" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Tag}" Value="RECOVERED">
+                                                                                            <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}" />
+                                                                                            <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusSuccessFg}" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Tag}" Value="PASSED">
+                                                                                            <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}" />
+                                                                                            <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusSuccessFg}" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Tag}" Value="SLOW">
+                                                                                            <Setter Property="Background" Value="{DynamicResource StatusRunningBg}" />
+                                                                                            <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusRunningFg}" />
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </Border.Style>
+                                                                            <TextBlock Text="{Binding Tag}" FontSize="{StaticResource FontSize9}"
+                                                                                       FontWeight="Bold" />
+                                                                        </Border>
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Row}" FontFamily="Consolas"
+                                                                                   FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource AccBlue}"
+                                                                                   VerticalAlignment="Top" />
+                                                                        <StackPanel Grid.Column="2">
+                                                                            <TextBlock Text="{Binding Step}" FontFamily="Consolas" TextWrapping="Wrap"
+                                                                                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextP}" />
+                                                                            <TextBlock Text="{Binding Evidence}" TextWrapping="Wrap"
+                                                                                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" />
+                                                                            <TextBlock Text="{Binding Why}" TextWrapping="Wrap" FontStyle="Italic"
+                                                                                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" />
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <TextBlock Text="{Binding FirCategories}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" />
+
+                                                    <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="8,6" Margin="0,0,0,6"
+                                                            Visibility="{Binding FirOpenPoint, Converter={x:Static vm:StringNotEmptyToVisConverter.Instance}}">
+                                                        <TextBlock Text="{Binding FirOpenPoint}" TextWrapping="Wrap"
+                                                                   FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextP}" />
+                                                    </Border>
+
+                                                    <Border Background="{DynamicResource StatusFailedBg}" CornerRadius="4" Padding="8,6"
+                                                            Visibility="{Binding FirSecretWarning, Converter={x:Static vm:StringNotEmptyToVisConverter.Instance}}">
+                                                        <TextBlock Text="{Binding FirSecretWarning}" TextWrapping="Wrap"
+                                                                   FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextP}" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button Style="{StaticResource SmBtn}" HorizontalAlignment="Left" Margin="0,0,0,10"
+                                                Command="{Binding ToggleRawOutputCommand}"
+                                                Content="{Binding RawOutputToggleText}"
+                                                Visibility="{Binding HasFir, Converter={StaticResource BoolVis}}"
+                                                AutomationProperties.Name="Show or hide the raw TRX output" />
+
                                         <!-- Error Message -->
                                         <TextBlock Text="ERROR MESSAGE" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
-                                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
-                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,4"
+                                                   Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}" />
+                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12"
+                                                Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}">
                                             <TextBox Text="{Binding DetailErrorMessage, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"
@@ -929,8 +1063,10 @@
 
                                         <!-- Stack Trace -->
                                         <TextBlock Text="STACK TRACE" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
-                                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
-                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,4"
+                                                   Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}" />
+                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12"
+                                                Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}">
                                             <TextBox Text="{Binding DetailStackTrace, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"
@@ -940,8 +1076,10 @@
 
                                         <!-- Stdout -->
                                         <TextBlock Text="STDOUT" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
-                                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,4" />
-                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                                   Foreground="{DynamicResource TextS}" Margin="0,0,0,4"
+                                                   Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}" />
+                                        <Border Background="{DynamicResource BgRowHoverBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12"
+                                                Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}">
                                             <TextBox Text="{Binding DetailStdOut, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"
@@ -951,8 +1089,10 @@
 
                                         <!-- Debug Trace -->
                                         <TextBlock Text="DEBUG TRACE" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
-                                                   Foreground="{DynamicResource AccMauve}" Margin="0,0,0,4" />
-                                        <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12">
+                                                   Foreground="{DynamicResource AccMauve}" Margin="0,0,0,4"
+                                                   Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}" />
+                                        <Border Background="{DynamicResource InfoBoxBg}" CornerRadius="4" Padding="10,8" Margin="0,0,0,12"
+                                                Visibility="{Binding ShowRawOutput, Converter={StaticResource BoolVis}}">
                                             <TextBox Text="{Binding DetailDebugTrace, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap"
                                                      Background="Transparent" BorderThickness="0"

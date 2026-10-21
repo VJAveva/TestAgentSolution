@@ -23,6 +23,7 @@ public partial class BuildResultsViewModel : ObservableObject
     private readonly BuildReportHtmlGenerator _htmlGenerator;
     private readonly FailurePatternAnalyzer? _patternAnalyzer;
     private readonly CapabilityChecker? _capabilityChecker;
+    private readonly TestControllerGrpc.Core.Fir.FirService? _firService;
 
     public ObservableCollection<BuildListItem> AvailableBuilds { get; } = new();
     public ObservableCollection<ResultsTreeNode> ResultsTree { get; } = new();
@@ -105,7 +106,7 @@ public partial class BuildResultsViewModel : ObservableObject
     // Constructor
     // ???????????????????????????????????????????????????????????????
 
-    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator, FailurePatternAnalyzer? patternAnalyzer = null, CapabilityChecker? capabilityChecker = null)
+    public BuildResultsViewModel(TrxResultsParser parser, BuildResultsAggregator aggregator, BuildResultsConfig config, BuildReportHtmlGenerator htmlGenerator, FailurePatternAnalyzer? patternAnalyzer = null, CapabilityChecker? capabilityChecker = null, TestControllerGrpc.Core.Fir.FirService? firService = null)
     {
         _parser = parser;
         _aggregator = aggregator;
@@ -113,6 +114,7 @@ public partial class BuildResultsViewModel : ObservableObject
         _htmlGenerator = htmlGenerator;
         _patternAnalyzer = patternAnalyzer;
         _capabilityChecker = capabilityChecker;
+        _firService = firService;
         _goodThreshold = config.GoodThreshold;
         _warningThreshold = config.WarningThreshold;
         _resultsRootPath = config.ResultsRootPath;

@@ -38,6 +38,7 @@ public sealed class ThemeContrastTests
         ("StatusMaintenanceFg", ["StatusMaintenanceBg"]),
         ("StatusDrainingFg", ["StatusDrainingBg"]),
         ("TreeBadgeFg", ["AccMauve", "Accent", "AccRed"]),
+        ("TextP", ["BgChipBrush"]),
     ];
 
     private readonly record struct Rgba(double A, double R, double G, double B);

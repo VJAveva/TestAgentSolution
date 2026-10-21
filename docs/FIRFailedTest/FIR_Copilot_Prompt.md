@@ -54,15 +54,15 @@ Signature (normalized root reason with object names/timestamps removed - for lat
 Tests - use the real logs as fixtures (Logs.zip from OAK_main_20261005.3/Set1):
 - S1_04_SmokeTestDeploy: root Row 6, DeployOperation, AutoGalaxyConfiguration.cs:8622; reasons include
   "Platform startup failed" x2 and "Platform communication error" x12; 32 failed keyword lines; Row 32 MASKED
-  (Passed but Deployed 0 of 17); Row 6 SLOW (~270 s); 64 noise lines; SecretsFound 2.
+  (Passed but Deployed 0 of 17); Row 6 SLOW (~270 s); 63 noise lines; SecretsFound 2.
 - S1_13_TPTest3: root Row 23 MASKED (Passed but Deployed 0 of 1, "Unable to communicate with the target
-  engine"); cascade Rows 29-32; Row 30 SLOW (~942 s); categories Validation mismatch 3, Runtime write 2;
+  engine"); cascade Rows 29-32; Rows 29 (~203 s) and 30 (~942 s) SLOW; categories Validation mismatch 3, Runtime write 2;
   SecretsFound 4. With WASSet1.xlsx: Row 23 = Appserver | redeploy | DDESL_002...; rows 29-32 are objectviewer
   steps on the same DDESL_002 (High); Row 28 shown as PASSED context; OpenPoint present.
 - S1_04 with WASSet1.xlsx: Row 6 = Appserver | deploy | SmokeSet1 | true | true | false; Rows 24/25 = deploy
   ViewEngine_002/_003 hosted by REP1/REP2 (High); Row 23 ViewEngine_001 on GRP1 shown as PASSED context;
   Rows 33-34 deploy REP1/REP2 RECOVERED (16 of 16).
-- Any of the 22 passed logs: no FIR, 64 noise lines.
+- Any of the 22 passed logs: no FIR, 63 noise lines.
 - No output string contains the masked secrets.
 Show FirReport and the rule-pack schema before coding.
 ```
