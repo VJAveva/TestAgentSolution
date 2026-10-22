@@ -115,6 +115,30 @@ public class PipelineBuilderViewModelTests : IDisposable
 
     // ── flow ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// A tick on an agent row is the only way to satisfy the Agents step. The count it feeds is a
+    /// computed property, so without an explicit notification the Next button stays greyed out no
+    /// matter how many agents the user picks - green tests, dead panel.
+    /// </summary>
+    [Fact]
+    public void PickingAnAgent_Should_RaiseTheNotifications_That_EnableTheNextButton()
+    {
+        var vm = Vm(secured: false, nameof(Role.Administrator), "a", "b");
+        vm.SelectedTarget = vm.Targets.First();
+        vm.NextCommand.Execute(null);
+        vm.SelectedRecipe = vm.Recipes.First();
+        vm.NextCommand.Execute(null);
+
+        var raised = new List<string>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName ?? "");
+
+        vm.Agents[0].IsSelected = true;
+
+        Assert.Contains(nameof(vm.SelectedAgentCount), raised);
+        Assert.Contains(nameof(vm.CanGoNext), raised);
+        Assert.True(vm.CanGoNext);
+    }
+
     [Fact]
     public void Next_Should_NotAdvance_Until_TheStepIsAnswered()
     {

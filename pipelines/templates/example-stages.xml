@@ -1,0 +1,40 @@
+<!--
+  Example stage templates for the Pipeline Builder.
+
+  These are ordinary WatchList <Templates> XML, so you can copy a template straight out of a
+  working WatchList to start from. The one builder-specific rule: name the machine with the
+  generic [_Agent] token. The builder rewrites it to [_Agent1], [_Agent2]... when it expands a
+  stage across the agents the author picked.
+
+  Deliberately free of release tokens so the examples validate against any target. Real stages
+  add tokens such as [_ReleaseName] or [_BinariesFolder] - the builder checks they are defined
+  by the chosen target before it will create anything.
+-->
+<Templates>
+  <Template ID="Example-Prepare">
+    <Action Type="RunRemoteCommand"
+            Tag="prepare [_Agent]"
+            AgentName="[_Agent]"
+            Command="C:\Scripts\Prepare.bat"
+            Parameters="[_Agent]"
+            Timeout="600" />
+  </Template>
+
+  <Template ID="Example-Install">
+    <Action Type="RunRemoteCommand"
+            Tag="install [_Agent]"
+            AgentName="[_Agent]"
+            Command="C:\Scripts\Install.bat"
+            Parameters="[_Agent]"
+            Timeout="3600" />
+  </Template>
+
+  <Template ID="Example-Smoke">
+    <Action Type="RunRemoteCommand"
+            Tag="smoke [_Agent]"
+            AgentName="[_Agent]"
+            Command="C:\Scripts\Smoke.bat"
+            Parameters="[_Agent]"
+            Timeout="1800" />
+  </Template>
+</Templates>

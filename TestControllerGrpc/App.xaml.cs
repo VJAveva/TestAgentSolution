@@ -290,6 +290,7 @@ public partial class App : Application
                 // FIR: the desktop container is separate from the embedded API host's, so it needs its
                 // own registration for the Detail pane to have a report service.
                 TestController.Api.FirFeatureExtensions.AddFirFeature(services);
+                services.AddPipelineBuilderFeature();
                 services.TryAddSingleton<TestControllerGrpc.Services.IRegressionDataProvider, TestControllerGrpc.Services.MockRegressionDataProvider>();
                 services.AddSingleton<TestControllerGrpc.Services.IRegressionReportMailer, TestControllerGrpc.Services.RegressionReportMailer>();
                 services.AddTransient<TestControllerGrpc.ViewModels.Regression.AdoSignInViewModel>();

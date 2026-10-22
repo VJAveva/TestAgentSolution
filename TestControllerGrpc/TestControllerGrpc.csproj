@@ -49,6 +49,13 @@
     <Content Include="..\rules\*.fir.json" Link="rules\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Pipeline Builder recipes and agent-generic stage templates. Same deal: a team adds a pipeline
+       shape by dropping a file here, no rebuild. -->
+  <ItemGroup>
+    <Content Include="..\pipelines\recipes\*.json" Link="pipelines\recipes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\pipelines\templates\*.xml" Link="pipelines\templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />

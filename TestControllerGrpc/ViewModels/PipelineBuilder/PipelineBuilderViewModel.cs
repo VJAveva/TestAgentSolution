@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -88,10 +89,33 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
         foreach (var recipe in _builder.Recipes().Recipes) Recipes.Add(recipe);
 
         Agents.Clear();
-        foreach (var agent in _agentSource.GetAgents()) Agents.Add(new AgentPickItem(agent));
+        foreach (var agent in _agentSource.GetAgents())
+        {
+            var item = new AgentPickItem(agent);
+            item.PropertyChanged += OnAgentPicked;
+            Agents.Add(item);
+        }
 
         ApplyAgentFilter();
     }
+
+    /// <summary>
+    /// A tick on a row is the only thing that can satisfy the Agents step, and the count it feeds is
+    /// computed - without this the Next button would stay disabled no matter what the user picked.
+    /// </summary>
+    private void OnAgentPicked(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AgentPickItem.IsSelected)) return;
+
+        OnPropertyChanged(nameof(SelectedAgentCount));
+        OnPropertyChanged(nameof(CanGoNext));
+    }
+
+    partial void OnCurrentStepChanged(BuilderStep value) => OnPropertyChanged(nameof(CanGoNext));
+
+    partial void OnSelectedTargetChanged(TargetDescriptor? value) => OnPropertyChanged(nameof(CanGoNext));
+
+    partial void OnSelectedRecipeChanged(Recipe? value) => OnPropertyChanged(nameof(CanGoNext));
 
     partial void OnAgentFilterChanged(string value) => ApplyAgentFilter();
 

@@ -1,0 +1,23 @@
+{
+  // Example recipe. Copy this file, rename it, and point the stages at your own templates.
+  // Every stage names a template from the templates folder and says how it attaches to the
+  // agents the author picks: "single", "pool-fanout" or "ordered-first-then-rest".
+  "name": "Example-SmokeE2E",
+  "stages": [
+    {
+      "name": "Prepare",
+      "templateId": "Example-Prepare",
+      "agentMapping": "pool-fanout"
+    },
+    {
+      "name": "Install",
+      "templateId": "Example-Install",
+      "agentMapping": "ordered-first-then-rest"
+    },
+    {
+      "name": "Smoke",
+      "templateId": "Example-Smoke",
+      "agentMapping": "single"
+    }
+  ]
+}

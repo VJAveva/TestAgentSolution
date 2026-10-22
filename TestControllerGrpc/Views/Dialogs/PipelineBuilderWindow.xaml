@@ -1,0 +1,326 @@
+<Window x:Class="TestControllerGrpc.Views.Dialogs.PipelineBuilderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="New pipeline"
+        WindowStartupLocation="CenterOwner"
+        Width="920" Height="680" MinWidth="720" MinHeight="520"
+        Background="{DynamicResource WindowBg}">
+    <Window.Resources>
+        <!-- One step is visible at a time; the trigger value is the BuilderStep member name. -->
+        <Style x:Key="StepPanel" TargetType="Grid">
+            <Setter Property="Visibility" Value="Collapsed" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="New pipeline" FontSize="{StaticResource FontSize15}" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextP}" />
+            <TextBlock Text="Pick a target, a recipe and the agents. Nothing is written until you create."
+                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}"
+                       Margin="0,2,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Step indicator -->
+        <ItemsControl Grid.Row="1" Margin="0,0,0,12">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <Border x:Name="ChipTarget" CornerRadius="3" Padding="10,3" Margin="0,0,6,0"
+                    Background="{DynamicResource BgChipBrush}">
+                <TextBlock Text="1  Target" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+            </Border>
+            <Border x:Name="ChipRecipe" CornerRadius="3" Padding="10,3" Margin="0,0,6,0"
+                    Background="{DynamicResource BgChipBrush}">
+                <TextBlock Text="2  Recipe" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+            </Border>
+            <Border x:Name="ChipAgents" CornerRadius="3" Padding="10,3" Margin="0,0,6,0"
+                    Background="{DynamicResource BgChipBrush}">
+                <TextBlock Text="3  Agents" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+            </Border>
+            <Border x:Name="ChipReview" CornerRadius="3" Padding="10,3"
+                    Background="{DynamicResource BgChipBrush}">
+                <TextBlock Text="4  Review" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+            </Border>
+        </ItemsControl>
+
+        <!-- Body -->
+        <Border Grid.Row="2" CornerRadius="4" Padding="12" BorderThickness="1"
+                Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource Bdr}">
+            <Grid>
+                <!-- Step 1: Target -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="Target">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Target / release" FontWeight="SemiBold"
+                               FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextP}"
+                               Margin="0,0,0,6" />
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
+                             AutomationProperties.Name="Target list"
+                             Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}"
+                             Foreground="{DynamicResource TextP}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="2">
+                                    <TextBlock Text="{Binding Id}" FontWeight="SemiBold"
+                                               FontSize="{StaticResource FontSize11}"
+                                               Foreground="{DynamicResource TextP}" />
+                                    <TextBlock Text="{Binding ConfigPath}" FontSize="{StaticResource FontSize9}"
+                                               Foreground="{DynamicResource TextS}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <!-- Step 2: Recipe -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="Recipe">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Recipe" FontWeight="SemiBold"
+                               FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextP}"
+                               Margin="0,0,0,6" />
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Recipes}" SelectedItem="{Binding SelectedRecipe}"
+                             AutomationProperties.Name="Recipe list"
+                             Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}"
+                             Foreground="{DynamicResource TextP}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="2">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                               FontSize="{StaticResource FontSize11}"
+                                               Foreground="{DynamicResource TextP}" />
+                                    <ItemsControl ItemsSource="{Binding Stages}" Margin="0,2,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border CornerRadius="3" Padding="6,1" Margin="0,0,4,0"
+                                                        Background="{DynamicResource BgChipBrush}">
+                                                    <TextBlock FontSize="{StaticResource FontSize9}"
+                                                               Foreground="{DynamicResource TextS}">
+                                                        <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding AgentMapping, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <!-- Step 3: Agents -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="Agents">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Agents" FontWeight="SemiBold"
+                               FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextP}"
+                               Margin="0,0,0,6" />
+
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding AgentFilter, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="Filter agents"
+                                 FontSize="{StaticResource FontSize10}" Padding="6,3" Margin="0,0,8,0"
+                                 Background="{DynamicResource FieldBg}" Foreground="{DynamicResource TextP}"
+                                 BorderBrush="{DynamicResource Bdr}" />
+                        <CheckBox Grid.Column="1" Content="Online only" IsChecked="{Binding OnlineOnly}"
+                                  AutomationProperties.Name="Show online agents only"
+                                  VerticalAlignment="Center" Margin="0,0,8,0"
+                                  FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+                        <Button Grid.Column="2" Content="Select visible" Command="{Binding SelectAllVisibleCommand}"
+                                AutomationProperties.Name="Select all visible agents"
+                                Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
+                        <Button Grid.Column="3" Content="Clear" Command="{Binding ClearSelectionCommand}"
+                                AutomationProperties.Name="Clear agent selection"
+                                Style="{StaticResource SmBtn}" Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="4" VerticalAlignment="Center"
+                                   FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}">
+                            <Run Text="{Binding SelectedAgentCount, Mode=OneWay}" /><Run Text=" selected" />
+                        </TextBlock>
+                    </Grid>
+
+                    <ListBox Grid.Row="2" ItemsSource="{Binding VisibleAgents}"
+                             AutomationProperties.Name="Agent list"
+                             Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
+                                              AutomationProperties.Name="{Binding Name}"
+                                              VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontFamily="Consolas"
+                                               FontSize="{StaticResource FontSize10}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextP}" />
+                                    <Border Grid.Column="2" CornerRadius="3" Padding="6,1"
+                                            Background="{DynamicResource BgChipBrush}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextS}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Online">
+                                                        <Setter Property="Background" Value="{DynamicResource StatusSuccessBg}" />
+                                                        <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusSuccessFg}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Busy">
+                                                        <Setter Property="Background" Value="{DynamicResource StatusRunningBg}" />
+                                                        <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusRunningFg}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                        <Setter Property="Background" Value="{DynamicResource StatusFailedBg}" />
+                                                        <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusFailedFg}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding Status}" FontSize="{StaticResource FontSize9}" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <!-- Step 4: Review -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="Review">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="Review" FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextP}"
+                                       Margin="0,0,0,6" />
+
+                            <Border CornerRadius="4" Padding="10" Margin="0,0,0,10"
+                                    Background="{DynamicResource InfoBoxBg}">
+                                <StackPanel>
+                                    <TextBlock FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextP}" TextWrapping="Wrap">
+                                        <Run Text="Tag: " /><Run Text="{Binding Preview.Tag, Mode=OneWay}" FontFamily="Consolas" />
+                                    </TextBlock>
+                                    <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                               TextWrapping="Wrap" Margin="0,4,0,0">
+                                        <Run Text="Config: " /><Run Text="{Binding Preview.ConfigPath, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                               TextWrapping="Wrap">
+                                        <Run Text="Trigger: " /><Run Text="{Binding Preview.TriggerFolder, Mode=OneWay}" /><Run Text="\" /><Run Text="{Binding Preview.TriggerFilter, Mode=OneWay}" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="Must be fixed" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource AccRed}" />
+                            <ItemsControl ItemsSource="{Binding Blocking}" Margin="0,0,0,10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,1"
+                                                   FontSize="{StaticResource FontSize10}"
+                                                   Foreground="{DynamicResource TextP}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Verified at run time" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}" />
+                            <ItemsControl ItemsSource="{Binding Informational}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,1"
+                                                   FontSize="{StaticResource FontSize10}"
+                                                   Foreground="{DynamicResource TextS}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Status -->
+        <TextBlock Grid.Row="3" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,10,0,0"
+                   FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}" />
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Back" Command="{Binding BackCommand}"
+                    AutomationProperties.Name="Previous step"
+                    Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
+            <Button Content="Next" Command="{Binding NextCommand}" IsEnabled="{Binding CanGoNext}"
+                    AutomationProperties.Name="Next step"
+                    Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
+            <Button Content="Create" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}"
+                    AutomationProperties.Name="Create pipeline"
+                    Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
+            <Button Content="Close" Click="OnClose"
+                    AutomationProperties.Name="Close"
+                    Style="{StaticResource SmBtn}" />
+        </StackPanel>
+    </Grid>
+</Window>
