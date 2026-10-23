@@ -14,20 +14,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
     <!-- Pin patched SQLitePCLRaw to override vulnerable transitive 2.1.11 (GHSA-2m69-gcr7-jv3q) pulled by EF Core Sqlite. -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <!-- Roslyn: the one authorised parser dependency (P10 change-document builder). -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <!-- ML.NET: authorised for the optional ranker-mode score calibrator only (P19). -->
-    <PackageReference Include="Microsoft.ML" Version="4.0.2" />
+    <PackageReference Include="Microsoft.ML" Version="5.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Composition-root support for AddImpactMapping (P25): config binding + typed HttpClient. -->
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>

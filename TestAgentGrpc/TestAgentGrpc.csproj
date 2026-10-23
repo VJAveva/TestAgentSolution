@@ -18,14 +18,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
-    <PackageReference Include="Grpc.AspNetCore.HealthChecks" Version="2.80.0" />
-    <PackageReference Include="Grpc.Net.Client" Version="2.80.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
-    <PackageReference Include="Grpc.Tools" Version="2.81.1" PrivateAssets="All" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
-    <PackageReference Include="System.Diagnostics.EventLog" Version="10.0.9" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.84.0" />
+    <PackageReference Include="Grpc.AspNetCore.HealthChecks" Version="2.84.0" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.84.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.84.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.11.2-beta.1" />
   </ItemGroup>
 
@@ -35,10 +34,7 @@
 
   <!-- Ships to C:\TestAgentService via the agent payload; .ps1 is not in preserveFiles so /MIR keeps it current. -->
   <ItemGroup>
-    <Content Include="..\Utilites\TestAgent_SetupScripts\Watch-AgentListener.ps1"
-             Link="Watch-AgentListener.ps1"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Utilites\TestAgent_SetupScripts\Watch-AgentListener.ps1" Link="Watch-AgentListener.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

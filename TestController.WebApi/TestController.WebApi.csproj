@@ -16,19 +16,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.Net.Client" Version="2.80.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+    <PackageReference Include="Grpc.Net.Client" Version="2.84.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.13" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.OpenApi" Version="2.12.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.12.2" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.11.2-beta.1" />
-    <PackageReference Include="Polly.Core" Version="8.7.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.16.7" />
+    <PackageReference Include="Polly.Core" Version="8.8.0" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.18.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -75,12 +75,9 @@
       <ImpactRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</ImpactRepoRoot>
     </PropertyGroup>
     <ItemGroup>
-      <StrayImpactDb Include="$(ImpactRepoRoot)\**\impact-index.db;$(ImpactRepoRoot)\**\impact-outcomes.db"
-                     Exclude="$(ImpactRepoRoot)\**\bin\**;$(ImpactRepoRoot)\**\obj\**;$(ImpactRepoRoot)\publish\**" />
+      <StrayImpactDb Include="$(ImpactRepoRoot)\**\impact-index.db;$(ImpactRepoRoot)\**\impact-outcomes.db" Exclude="$(ImpactRepoRoot)\**\bin\**;$(ImpactRepoRoot)\**\obj\**;$(ImpactRepoRoot)\publish\**" />
     </ItemGroup>
-    <Warning Code="IMPACT001"
-             Condition="'@(StrayImpactDb)' != ''"
-             Text="Impact database found inside the source tree: %(StrayImpactDb.FullPath). It must live under the IImpactIndexPathProvider root (default %25ProgramData%25\TestAgentSolution\ImpactIndex). Delete or move it; see .gitignore and docs/AzureIntegration/FEATURE-ARCHITECTURE.md 'Impact Index Storage'." />
+    <Warning Code="IMPACT001" Condition="'@(StrayImpactDb)' != ''" Text="Impact database found inside the source tree: %(StrayImpactDb.FullPath). It must live under the IImpactIndexPathProvider root (default %25ProgramData%25\TestAgentSolution\ImpactIndex). Delete or move it; see .gitignore and docs/AzureIntegration/FEATURE-ARCHITECTURE.md 'Impact Index Storage'." />
   </Target>
   
    <!-- Auto-build React on publish -->
