@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pipeline-config.schema.json",
+  "title": "Layered pipeline parameter config (<Release>-<UseCase>-pipeline-config.json)",
+  "type": "object",
+  "required": ["global"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "global": { "$ref": "#/$defs/layer" },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/layer" }
+    },
+    "pipelines": {
+      "description": "Keyed by the exact WatchItem Tag (case-sensitive, max 36 chars).",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9._ -]{1,36}$" },
+      "additionalProperties": { "$ref": "#/$defs/layer" }
+    }
+  },
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "propertyNames": { "pattern": "^_[A-Za-z0-9_]+$" },
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}
