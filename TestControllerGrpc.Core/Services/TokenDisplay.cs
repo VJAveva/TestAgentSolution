@@ -54,7 +54,7 @@ public readonly record struct DisplayResult(string Text, IReadOnlyList<TokenHit>
 public static class TokenDisplay
 {
     private static readonly System.Text.RegularExpressions.Regex TokenPattern =
-        new(@"\[(\w+)\]", System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(@"\[(_\w+)\]", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>Shown in place of a secret's value.</summary>
     public const string Mask = "\u2022\u2022\u2022\u2022\u2022\u2022";
@@ -65,7 +65,8 @@ public static class TokenDisplay
     /// <summary>Whole-field text when a node has no pipeline context at all (Library nodes).</summary>
     public const string NoContextHint = "Not resolved \u2014 choose a pipeline context";
 
-    private static readonly string[] SecretMarkers = ["password", "secret", "token", "pwd"];
+    private static readonly string[] SecretMarkers =
+        ["password", "secret", "token", "pwd", "apikey", "api_key", "credential", "connectionstring"];
 
     /// <summary>True when a token's NAME marks it as a credential, regardless of its value.</summary>
     public static bool IsSecret(string tokenName)
@@ -77,7 +78,7 @@ public static class TokenDisplay
     }
 
     /// <summary>
-    /// Resolves every <c>[Token]</c> in <paramref name="raw"/>. Tokens that resolve are replaced by
+    /// Resolves every <c>[_Token]</c> in <paramref name="raw"/>. Tokens that resolve are replaced by
     /// their (masked, when secret) value; tokens that do not are kept and marked, so a partly
     /// resolved field shows real values beside the specific thing that is missing.
     /// </summary>

@@ -1,6 +1,7 @@
 <Window x:Class="TestControllerGrpc.Views.Dialogs.PipelineBuilderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:TestControllerGrpc.ViewModels.PipelineBuilder"
         Title="New pipeline"
         WindowStartupLocation="CenterOwner"
         Width="920" Height="680" MinWidth="720" MinHeight="520"
@@ -25,9 +26,17 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
             <TextBlock Text="New pipeline" FontSize="{StaticResource FontSize15}" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextP}" />
-            <TextBlock Text="Pick a target, a recipe and the agents. Nothing is written until you create."
+            <TextBlock Text="{Binding StepHint}"
                        FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}"
                        Margin="0,2,0,0" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding CatalogProblems}" MaxHeight="70">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AccRed}" FontSize="{StaticResource FontSize10}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
 
         <!-- Step indicator -->
@@ -55,6 +64,7 @@
 
         <!-- Body -->
         <Border Grid.Row="2" CornerRadius="4" Padding="12" BorderThickness="1"
+                IsEnabled="{Binding CanEdit}"
                 Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource Bdr}">
             <Grid>
                 <!-- Step 1: Target -->
@@ -252,9 +262,17 @@
                     </Grid.Style>
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock Text="Review" FontWeight="SemiBold"
+                            <TextBlock Text="Check before creating files" FontWeight="SemiBold"
                                        FontSize="{StaticResource FontSize11}" Foreground="{DynamicResource TextP}"
                                        Margin="0,0,0,6" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="Change target" Style="{StaticResource SmBtn}" Margin="0,0,6,0"
+                                        Command="{Binding ChangeStepCommand}" CommandParameter="{x:Static vm:BuilderStep.Target}" />
+                                <Button Content="Change recipe" Style="{StaticResource SmBtn}" Margin="0,0,6,0"
+                                        Command="{Binding ChangeStepCommand}" CommandParameter="{x:Static vm:BuilderStep.Recipe}" />
+                                <Button Content="Change agents" Style="{StaticResource SmBtn}"
+                                        Command="{Binding ChangeStepCommand}" CommandParameter="{x:Static vm:BuilderStep.Agents}" />
+                            </StackPanel>
 
                             <Border CornerRadius="4" Padding="10" Margin="0,0,0,10"
                                     Background="{DynamicResource InfoBoxBg}">
@@ -269,8 +287,19 @@
                                     </TextBlock>
                                     <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
                                                TextWrapping="Wrap">
+                                        <Run Text="Profile: " /><Run Text="{Binding ProfileName, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                               TextWrapping="Wrap">
+                                        <Run Text="Fragment: " /><Run Text="{Binding FragmentPath, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                               TextWrapping="Wrap">
                                         <Run Text="Trigger: " /><Run Text="{Binding Preview.TriggerFolder, Mode=OneWay}" /><Run Text="\" /><Run Text="{Binding Preview.TriggerFilter, Mode=OneWay}" />
                                     </TextBlock>
+                                    <TextBlock Text="Only the trigger folder is created, not a trigger file. Existing files are never overwritten. Import is a separate activation step."
+                                               FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0" />
                                 </StackPanel>
                             </Border>
 
@@ -286,9 +315,19 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <TextBlock Text="Verified at run time" FontWeight="SemiBold" Margin="0,0,0,4"
+                            <TextBlock Text="Warnings (do not block creation)" FontWeight="SemiBold" Margin="0,0,0,4"
                                        FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}" />
-                            <ItemsControl ItemsSource="{Binding Informational}">
+                            <ItemsControl ItemsSource="{Binding Warnings}" Margin="0,0,0,10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,1"
+                                                   FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="Required at run time (not checked here)" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}" />
+                            <ItemsControl ItemsSource="{Binding RuntimeRequirements}" Margin="0,0,0,10">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,1"
@@ -297,6 +336,31 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <TextBlock Text="Token sources and consuming actions" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}" />
+                            <TextBlock Text="Values below come from the generated config and selected profile, not a live run. Secret values are masked. Agent availability, paths and build readiness remain pre-flight checks."
+                                       TextWrapping="Wrap" Margin="0,0,0,6"
+                                       FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}" />
+                            <DataGrid ItemsSource="{Binding Tokens}" AutoGenerateColumns="False"
+                                      IsReadOnly="True" CanUserAddRows="False" MaxHeight="280"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      AutomationProperties.Name="Token source review"
+                                      Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"
+                                      RowBackground="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Token" Binding="{Binding Name}" Width="140" />
+                                    <DataGridTextColumn Header="Value" Binding="{Binding DisplayValue}" Width="140" />
+                                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="130" />
+                                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="75" />
+                                    <DataGridTemplateColumn Header="Used by" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding UsedBy}" TextWrapping="Wrap" Margin="4,2" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
@@ -309,13 +373,19 @@
 
         <!-- Actions -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Refresh choices" Command="{Binding RefreshCommand}"
+                    AutomationProperties.Name="Refresh target recipe and agent choices"
+                    Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
             <Button Content="Back" Command="{Binding BackCommand}"
                     AutomationProperties.Name="Previous step"
                     Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
             <Button Content="Next" Command="{Binding NextCommand}" IsEnabled="{Binding CanGoNext}"
                     AutomationProperties.Name="Next step"
                     Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
-            <Button Content="Create" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}"
+            <Button Content="Review again" Command="{Binding BuildPreviewCommand}"
+                    AutomationProperties.Name="Recheck pipeline configuration"
+                    Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
+            <Button Content="Create files" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}"
                     AutomationProperties.Name="Create pipeline"
                     Style="{StaticResource SmBtn}" Margin="0,0,6,0" />
             <Button Content="Close" Click="OnClose"

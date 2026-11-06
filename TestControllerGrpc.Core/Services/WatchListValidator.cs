@@ -1,4 +1,5 @@
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Core.Preflight;
 
 namespace TestControllerGrpc.Services;
 
@@ -87,8 +88,19 @@ public static class WatchListValidator
         List<IActionNode> children, string context,
         WatchListConfig config, List<WatchListValidationError> errors)
     {
+        var siblingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var node in children)
         {
+            var tag = node switch
+            {
+                ActionConfig action => action.Tag,
+                ActionGroupConfig group => group.Tag,
+                InitializeConfig init => init.Tag,
+                _ => "",
+            };
+            if (!string.IsNullOrWhiteSpace(tag) && !siblingTags.Add(tag))
+                errors.Add(new(context, tag, $"Duplicate node Tag '{tag}' within this parent."));
+
             switch (node)
             {
                 case ActionConfig action:
@@ -177,7 +189,21 @@ public static class WatchListValidator
     /// Trailing-optional so existing callers keep compiling; null means "roster unknown, do not judge".
     /// </param>
     public static IReadOnlyList<ValidationIssue> Analyze(
-        WatchListConfig config, IReadOnlyCollection<string>? knownAgents = null)
+        WatchListConfig config,
+        IReadOnlyCollection<string>? knownAgents = null,
+        IPreflightFileSystem? fileSystem = null)
+    {
+        var issues = AnalyzeStructure(config, knownAgents, fileSystem).ToList();
+        foreach (var wi in config.WatchItems)
+            AnalyzeParameterSources(config, wi, issues, fileSystem);
+        return issues;
+    }
+
+    /// <summary>Checks the document without reading parameter files that may not be written yet.</summary>
+    public static IReadOnlyList<ValidationIssue> AnalyzeStructure(
+        WatchListConfig config,
+        IReadOnlyCollection<string>? knownAgents = null,
+        IPreflightFileSystem? fileSystem = null)
     {
         // Reuse the single source of truth for blocking errors, then layer warnings.
         var issues = Validate(config)
@@ -187,8 +213,7 @@ public static class WatchListValidator
         foreach (var wi in config.WatchItems)
             AnalyzeWatchItemWarnings(wi, issues);
 
-        foreach (var wi in config.WatchItems)
-            AnalyzeParameterSources(config, wi, issues);
+        AnalyzeTriggerPaths(config, issues, fileSystem);
 
         if (knownAgents is { Count: > 0 })
             AnalyzeAgentNames(config, knownAgents, issues);
@@ -208,14 +233,17 @@ public static class WatchListValidator
     /// the XML alone, and a validator that cannot open the parameter file cannot catch the bug.
     /// </remarks>
     private static void AnalyzeParameterSources(
-        WatchListConfig config, WatchItemConfig wi, List<ValidationIssue> issues)
+        WatchListConfig config,
+        WatchItemConfig wi,
+        List<ValidationIssue> issues,
+        IPreflightFileSystem? fileSystem)
     {
         var path = $"WatchItem[{wi.Tag}]";
         var inits = ParameterResolver.CollectInitializeNodes(wi);
-        if (inits.Count == 0) return;
 
         var sawLayeredConfig = false;
         var tagHasPipelineEntry = false;
+        var sourceFailed = false;
 
         foreach (var init in inits)
         {
@@ -225,35 +253,56 @@ public static class WatchListValidator
 
             var initPath = $"{path}.Initialize[{init.Tag}]";
 
-            if (!File.Exists(init.ParameterFile))
+            var fileAccess = fileSystem?.CheckFile(init.ParameterFile);
+            if (fileAccess == PathAccess.Missing
+                || fileAccess is null && !File.Exists(init.ParameterFile))
             {
-                issues.Add(new(WatchIssueSeverity.Warning, initPath,
+                sourceFailed = true;
+                issues.Add(new(WatchIssueSeverity.Error, initPath,
                     $"Parameter file '{init.ParameterFile}' does not exist.",
                     "The run will stop before any action until this file is present."));
                 continue;
             }
 
+            if (fileAccess == PathAccess.Denied)
+            {
+                sourceFailed = true;
+                issues.Add(new(WatchIssueSeverity.Error, initPath,
+                    $"Parameter file '{init.ParameterFile}' cannot be read by the current identity.",
+                    "Grant access to the controller identity, then validate again."));
+                continue;
+            }
+
             if (!ParameterResolver.IsLayeredConfig(init.ParameterFile)) continue;
 
-            var parsed = ParameterResolver.ReadJsonConfig(init.ParameterFile);
-            if (parsed is null)
+            if (!ParameterResolver.TryReadJsonConfig(init.ParameterFile, out var parsedConfig, out var readFailure))
             {
-                issues.Add(new(WatchIssueSeverity.Warning, initPath,
-                    $"Parameter file '{init.ParameterFile}' is not valid JSON.",
+                sourceFailed = true;
+                issues.Add(new(WatchIssueSeverity.Error, initPath,
+                    readFailure ?? $"Parameter file '{init.ParameterFile}' could not be read.",
                     "The run will stop before any action until it parses."));
                 continue;
             }
 
+            var parsed = parsedConfig!;
             sawLayeredConfig = true;
             tagHasPipelineEntry |= parsed.Pipelines.ContainsKey(wi.Tag);
 
-            if (!string.IsNullOrWhiteSpace(init.Profile) && !parsed.Profiles.ContainsKey(init.Profile))
+            if (parsed.Profiles.Count > 0 && string.IsNullOrWhiteSpace(init.Profile))
             {
+                sourceFailed = true;
+                issues.Add(new(WatchIssueSeverity.Error, initPath,
+                    $"Initialize Profile is empty; file defines: {string.Join(", ", parsed.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))}.",
+                    "Choose a profile from the parameter file."));
+            }
+            else if (!string.IsNullOrWhiteSpace(init.Profile) && !parsed.Profiles.ContainsKey(init.Profile))
+            {
+                sourceFailed = true;
                 var known = parsed.Profiles.Count == 0
                     ? "that file defines no profiles"
                     : "available: " + string.Join(", ", parsed.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
-                issues.Add(new(WatchIssueSeverity.Warning, initPath,
-                    $"Profile '{init.Profile}' is not defined in '{Path.GetFileName(init.ParameterFile)}' ({known}).",
+                issues.Add(new(WatchIssueSeverity.Error, initPath,
+                    $"Initialize Profile '{init.Profile}' is not defined in '{Path.GetFileName(init.ParameterFile)}' ({known}).",
                     "Fix the Profile attribute or add the profile to the config."));
             }
         }
@@ -265,7 +314,36 @@ public static class WatchListValidator
                 "The pipelines key must match the WatchItem Tag exactly; renaming the Tag silently drops the overrides."));
         }
 
+        if (sourceFailed) return;
         AnalyzeUndefinedTokens(config, wi, path, issues);
+    }
+
+    private static void AnalyzeTriggerPaths(
+        WatchListConfig config, List<ValidationIssue> issues, IPreflightFileSystem? fileSystem)
+    {
+        foreach (var item in config.WatchItems)
+        {
+            if (string.IsNullOrWhiteSpace(item.Path) || fileSystem is null) continue;
+
+            var access = fileSystem.CheckDirectory(item.Path);
+            if (access == PathAccess.Missing)
+                issues.Add(new(WatchIssueSeverity.Error, $"WatchItem[{item.Tag}]",
+                    $"WatchItem.Path folder '{item.Path}' does not exist."));
+            else if (access == PathAccess.Denied)
+                issues.Add(new(WatchIssueSeverity.Warning, $"WatchItem[{item.Tag}]",
+                    $"WatchItem.Path folder '{item.Path}' cannot be checked by the current identity."));
+        }
+
+        var duplicatePaths = config.WatchItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.Path))
+            .GroupBy(item => $"{item.Path.TrimEnd('\\', '/')}\0{item.Filter}", StringComparer.OrdinalIgnoreCase);
+        foreach (var collision in duplicatePaths.Where(group => group.Count() > 1))
+        {
+            var tags = string.Join(", ", collision.Select(item => item.Tag));
+            foreach (var item in collision)
+                issues.Add(new(WatchIssueSeverity.Error, $"WatchItem[{item.Tag}]",
+                    $"Trigger Path + Filter collides with another WatchItem ({tags})."));
+        }
     }
 
     /// <summary>
@@ -334,7 +412,7 @@ public static class WatchListValidator
                         issues.Add(new(WatchIssueSeverity.Warning,
                             $"{path}.Action[{(!string.IsNullOrEmpty(a.Tag) ? a.Tag : a.ResolvedTag)}]",
                             $"Token [{token}] is not defined by any parameter layer (global, profile or pipelines).",
-                            "Add it to the parameter file, or the action will be refused at dispatch."));
+                            "Add it to the parameter file, or remove the step that uses it."));
                     }
                     break;
             }
@@ -464,11 +542,41 @@ public static class WatchListValidator
         // in a common unit. A poll that is longer than the whole timeout window
         // would never fire.
         if (action.PollInterval > 0 && action.Timeout > 0 &&
-            action.PollInterval > action.Timeout * 1000L)
+            action.PollInterval >= action.Timeout * 1000L)
             issues.Add(new(WatchIssueSeverity.Warning, path,
-                $"PollInterval ({action.PollInterval}ms) is larger than the whole " +
+                $"PollInterval ({action.PollInterval}ms) is greater than or equal to the whole " +
                 $"Timeout window ({action.Timeout}s); the poll would never fire.",
                 "Set PollInterval (ms) smaller than Timeout×1000 (e.g. 30000)."));
+
+        foreach (var (field, text) in new[]
+                 {
+                     (nameof(ActionConfig.Command), action.Command),
+                     (nameof(ActionConfig.Parameters), action.Parameters),
+                 })
+        {
+            if (string.IsNullOrEmpty(text)) continue;
+            var credential = InlineCredentialFinder.Find(text).FirstOrDefault();
+            if (credential is null) continue;
+            issues.Add(new(WatchIssueSeverity.Error, path,
+                $"Credential-like value appears in Action.{field}; move it to SecretEnv.",
+                $"Move the {credential.Name} value into SecretEnv and have the command read that environment variable."));
+        }
+
+        var commandContext = path;
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var text in new[] { action.Command, action.Parameters })
+        {
+            if (string.IsNullOrEmpty(text)) continue;
+            foreach (System.Text.RegularExpressions.Match match in
+                     System.Text.RegularExpressions.Regex.Matches(text, @"\[(?<name>[A-Za-z][A-Za-z0-9_-]*)\]"))
+            {
+                var name = match.Groups["name"].Value;
+                if (known.Add(name))
+                    issues.Add(new(WatchIssueSeverity.Warning, commandContext,
+                        $"Bracketed text [{name}] is treated as literal text, not a parameter token.",
+                        "Remove the brackets if they are only being used for display."));
+            }
+        }
 
         // Plaintext password stored in the XML.
         if (!string.IsNullOrEmpty(action.Password))

@@ -20,7 +20,9 @@ public sealed partial class MainViewModel
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeTemplateList(_config.Templates);
 
-        var editorVm = new TemplateXmlEditorViewModel(xml);
+        var editorAgents = GetXmlEditorAgents();
+        var editorVm = new TemplateXmlEditorViewModel(
+            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
 
         // Build window title with template IDs
         var ids = _config.Templates.Select(t => t.ID).Where(id => !string.IsNullOrEmpty(id));
@@ -86,7 +88,9 @@ public sealed partial class MainViewModel
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeTemplateList(new List<TemplateConfig> { selectedTemplate });
 
-        var editorVm = new TemplateXmlEditorViewModel(xml);
+        var editorAgents = GetXmlEditorAgents();
+        var editorVm = new TemplateXmlEditorViewModel(
+            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
         editorVm.WindowTitle = $"Template XML Editor - {selectedTemplate.ID}";
 
         var editorWindow = new Views.TemplateXmlEditorWindow(editorVm);

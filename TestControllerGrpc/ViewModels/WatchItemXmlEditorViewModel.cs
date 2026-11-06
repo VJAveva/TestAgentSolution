@@ -5,6 +5,9 @@ using System.Xml;
 using System.Xml.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Core.Preflight;
+using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -40,6 +43,12 @@ public sealed partial class WatchItemPreviewNode : ObservableObject
 public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 {
     private readonly string _originalXml;
+    private readonly WatchListConfig? _validationContext;
+    private readonly IReadOnlyCollection<string>? _knownAgents;
+    private readonly IPreflightFileSystem? _fileSystem;
+    private readonly IReadOnlyCollection<XmlEditorAgent>? _agentStatuses;
+    private readonly XmlEditorDocumentKind _documentKind;
+    private int _analysisVersion;
 
     [ObservableProperty] private string _xmlText = "";
     [ObservableProperty] private string _windowTitle = "WatchItem XML Editor";
@@ -89,15 +98,92 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
     /// <summary>Raised when the editor should navigate to a specific error line.</summary>
     public event Action<int, int>? NavigateToError;
+    public event Action<XmlEditorQuickFix>? QuickFixRequested;
 
-    public WatchItemXmlEditorViewModel(string initialXml)
+    public WatchItemXmlEditorViewModel(
+        string initialXml,
+        WatchListConfig? validationContext = null,
+        IReadOnlyCollection<string>? knownAgents = null,
+        IPreflightFileSystem? fileSystem = null,
+        IReadOnlyCollection<XmlEditorAgent>? agentStatuses = null)
     {
         _originalXml = initialXml;
+        _validationContext = validationContext;
+        _knownAgents = knownAgents;
+        _fileSystem = fileSystem;
+        _agentStatuses = agentStatuses;
+        _documentKind = DetectDocumentKind(initialXml);
         XmlText = initialXml;
         StatusMessage = "Ready";
         StatusSeverity = "Info";
         UpdateSummary();
     }
+
+    public async Task RefreshDiagnosticsAsync()
+    {
+        var version = Interlocked.Increment(ref _analysisVersion);
+        var xml = XmlText;
+        var analysis = await Task.Run(() => WatchListXmlEditorAnalyzer.Analyze(
+            xml, _documentKind, _validationContext, _knownAgents, _fileSystem));
+        if (version != Volatile.Read(ref _analysisVersion)) return;
+        ShowErrors(ToValidationErrors(analysis));
+    }
+
+    [RelayCommand]
+    private void ApplyQuickFix(XmlEditorQuickFix? fix)
+    {
+        if (fix is not null)
+            QuickFixRequested?.Invoke(fix);
+    }
+
+    public string? GetQuickFixResult(XmlEditorQuickFix fix) =>
+        WatchListXmlEditorAnalyzer.ApplyQuickFix(
+            XmlText, _documentKind, fix, _validationContext);
+
+    public IReadOnlyList<XmlEditorCompletion> GetValueCompletions(string attributeName, bool insideEvent) =>
+        WatchListXmlEditorAnalyzer.GetValueCompletions(
+            XmlText, _documentKind, attributeName, insideEvent,
+            _validationContext, _agentStatuses);
+
+    public IReadOnlyList<XmlEditorCompletion> GetTokenCompletions() =>
+        WatchListXmlEditorAnalyzer.GetTokenCompletions(
+            XmlText, _documentKind, _validationContext);
+
+    public IReadOnlyList<XmlEditorCompletion> GetElementCompletions() =>
+        WatchListXmlEditorAnalyzer.GetElementCompletions(_documentKind);
+
+    public IReadOnlyList<XmlEditorCompletion> GetAttributeCompletions(string elementName) =>
+        WatchListXmlEditorAnalyzer.GetAttributeCompletions(elementName);
+
+    public string? GetHoverText(int offset) =>
+        WatchListXmlEditorAnalyzer.GetHoverText(
+            XmlText, _documentKind, offset, _validationContext, _agentStatuses);
+
+    private static XmlEditorDocumentKind DetectDocumentKind(string xml)
+    {
+        try
+        {
+            return XDocument.Parse(xml).Root?.Name.LocalName == "WatchList"
+                ? XmlEditorDocumentKind.WatchList
+                : XmlEditorDocumentKind.WatchItem;
+        }
+        catch (XmlException)
+        {
+            return XmlEditorDocumentKind.WatchItem;
+        }
+    }
+
+    private static List<ValidationErrorViewModel> ToValidationErrors(XmlEditorAnalysis analysis) =>
+        analysis.Diagnostics.Select(d => new ValidationErrorViewModel
+        {
+            Line = d.Line,
+            Column = d.Column,
+            Length = d.Length,
+            ErrorType = d.Code,
+            Message = d.Message,
+            Severity = d.Severity.ToString(),
+            QuickFixes = d.QuickFixes,
+        }).ToList();
 
     partial void OnXmlTextChanged(string value) => UpdateSummary();
 
@@ -113,7 +199,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
             var path = doc.Attribute("Path")?.Value ?? "";
             var filter = doc.Attribute("Filter")?.Value ?? "";
-            WatchItemSummary = $"{EventCount} event(s), {TotalActionCount} action(s) — {path}{filter}";
+            WatchItemSummary = $"{EventCount} event(s), {TotalActionCount} action(s) ï¿½ {path}{filter}";
 
             if (IsPreviewVisible)
                 RebuildPreview(doc);
@@ -140,10 +226,11 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     private void Save()
     {
         var errors = RunFullValidation(XmlText);
-        if (errors.Count > 0)
+        var blockingErrors = errors.Count(error => error.Severity == "Error");
+        ShowErrors(errors);
+        if (blockingErrors > 0)
         {
-            ShowErrors(errors);
-            StatusMessage = $"Cannot save — {errors.Count} validation error(s)";
+            StatusMessage = $"Cannot save {blockingErrors} validation error(s)";
             StatusSeverity = "Error";
             IsXmlValid = false;
             return;
@@ -165,20 +252,19 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     private void Validate()
     {
         var errors = RunFullValidation(XmlText);
-        if (errors.Count == 0)
+        ShowErrors(errors);
+        var blockingErrors = errors.Count(error => error.Severity == "Error");
+        if (blockingErrors == 0)
         {
             IsXmlValid = true;
-            ErrorLine = -1;
-            ErrorPosition = -1;
-            ValidationErrors.Clear();
-            IsErrorPanelVisible = false;
-            StatusMessage = "? XML is valid — all structural rules passed";
-            StatusSeverity = "Success";
+            StatusMessage = errors.Count == 0
+                ? "XML is valid - all structural rules passed"
+                : $"XML is valid with {errors.Count} warning(s)";
+            StatusSeverity = errors.Count == 0 ? "Success" : "Info";
         }
         else
         {
-            ShowErrors(errors);
-            StatusMessage = $"? {errors.Count} validation error(s) found";
+            StatusMessage = $"{blockingErrors} validation error(s) found";
             StatusSeverity = "Error";
             IsXmlValid = false;
         }
@@ -218,13 +304,13 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             IsXmlValid = false;
             ErrorLine = ex.LineNumber;
             ErrorPosition = ex.LinePosition;
-            StatusMessage = $"? Cannot format — Line {ex.LineNumber}, Pos {ex.LinePosition}: {ex.Message}";
+            StatusMessage = $"? Cannot format ï¿½ Line {ex.LineNumber}, Pos {ex.LinePosition}: {ex.Message}";
             StatusSeverity = "Error";
             NavigateToError?.Invoke(ex.LineNumber, ex.LinePosition);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"? Cannot format — {ex.Message}";
+            StatusMessage = $"? Cannot format ï¿½ {ex.Message}";
             StatusSeverity = "Error";
         }
     }
@@ -238,7 +324,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             var root = doc.Root;
             if (root is null || root.Name.LocalName != "WatchItem")
             {
-                StatusMessage = "Cannot auto-fix — Root must be <WatchItem>";
+                StatusMessage = "Cannot auto-fix ï¿½ Root must be <WatchItem>";
                 StatusSeverity = "Error";
                 return;
             }
@@ -276,32 +362,11 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
                                 el.SetAttributeValue("ExecutionType", "Sequential");
                                 fixCount++;
                             }
-                            if (el.Attribute("FailAndContinue") is null)
-                            {
-                                el.SetAttributeValue("FailAndContinue", "true");
-                                fixCount++;
-                            }
-                            else
-                            {
+                            if (el.Attribute("FailAndContinue") is not null)
                                 fixCount += NormalizeBoolAttr(el, "FailAndContinue");
-                            }
                             break;
 
                         case "Action":
-                            var actionType = el.Attribute("Type")?.Value ?? "";
-                            if (actionType is "RunCommand" or "RunRemoteCommand")
-                            {
-                                if (el.Attribute("Timeout") is null)
-                                {
-                                    el.SetAttributeValue("Timeout", "6000");
-                                    fixCount++;
-                                }
-                                if (el.Attribute("PollInterval") is null)
-                                {
-                                    el.SetAttributeValue("PollInterval", "30");
-                                    fixCount++;
-                                }
-                            }
                             fixCount += NormalizeBoolAttr(el, "FailAndContinue");
                             fixCount += NormalizeBoolAttr(el, "IsReboot");
                             break;
@@ -335,7 +400,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             }
             else
             {
-                StatusMessage = "No issues to fix — XML reformatted";
+                StatusMessage = "No issues to fix ï¿½ XML reformatted";
                 StatusSeverity = "Info";
             }
 
@@ -357,13 +422,13 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         }
         catch (XmlException ex)
         {
-            StatusMessage = $"? Cannot auto-fix — XML is malformed: Line {ex.LineNumber}: {ex.Message}";
+            StatusMessage = $"? Cannot auto-fix ï¿½ XML is malformed: Line {ex.LineNumber}: {ex.Message}";
             StatusSeverity = "Error";
             NavigateToError?.Invoke(ex.LineNumber, ex.LinePosition);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"? Cannot auto-fix — {ex.Message}";
+            StatusMessage = $"? Cannot auto-fix ï¿½ {ex.Message}";
             StatusSeverity = "Error";
         }
     }
@@ -429,6 +494,13 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     // ???????????????????????????????????????????????????????????????
 
     private List<ValidationErrorViewModel> RunFullValidation(string xml)
+    {
+        var analysis = WatchListXmlEditorAnalyzer.Analyze(
+            xml, _documentKind, _validationContext, _knownAgents, _fileSystem);
+        return ToValidationErrors(analysis);
+    }
+
+    private List<ValidationErrorViewModel> RunLegacyValidation(string xml)
     {
         var errors = new List<ValidationErrorViewModel>();
 
@@ -554,7 +626,6 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             {
                 case "ActionGroup":
                     RequireAttr(el, "ExecutionType", errors, line, col);
-                    RequireAttr(el, "FailAndContinue", errors, line, col);
                     ValidateActionChildren(el, errors);
                     break;
 
@@ -627,13 +698,14 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             ValidationErrors.Add(e);
 
         IsErrorPanelVisible = errors.Count > 0;
-        IsXmlValid = errors.Count == 0;
+        IsXmlValid = errors.All(error => error.Severity != "Error");
 
-        if (errors.Count > 0)
+        var firstError = errors.FirstOrDefault(error => error.Severity == "Error") ?? errors.FirstOrDefault();
+        if (firstError is not null)
         {
-            ErrorLine = errors[0].Line;
-            ErrorPosition = errors[0].Column;
-            NavigateToError?.Invoke(errors[0].Line, errors[0].Column);
+            ErrorLine = firstError.Line;
+            ErrorPosition = firstError.Column;
+            NavigateToError?.Invoke(firstError.Line, firstError.Column);
         }
     }
 

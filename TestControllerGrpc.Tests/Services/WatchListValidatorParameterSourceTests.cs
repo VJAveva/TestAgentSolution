@@ -64,32 +64,47 @@ public class WatchListValidatorParameterSourceTests : IDisposable
         Command = @"C:\tools\run.bat",
     };
 
-    private static List<string> WarningsOf(WatchListConfig config) =>
+    private static List<ValidationIssue> IssuesOf(WatchListConfig config) =>
         WatchListValidator.Analyze(config)
-            .Where(i => i.Severity == WatchIssueSeverity.Warning)
-            .Select(i => i.Message)
             .ToList();
 
     [Fact]
-    public void Analyze_Should_WarnFileNotFound_When_ParameterFileIsMissing()
+    public void Analyze_Should_ErrorFileNotFound_When_ParameterFileIsMissing()
     {
         var config = Build(
             new InitializeConfig { Tag = "Init", ParameterFile = Path.Combine(_dir, "absent.json") },
             Remote("install"));
 
-        Assert.Contains(WarningsOf(config), m => m.Contains("does not exist"));
+        Assert.Contains(IssuesOf(config), i =>
+            i.Severity == WatchIssueSeverity.Error && i.Message.Contains("does not exist"));
     }
 
     [Fact]
-    public void Analyze_Should_WarnProfileMissing_When_ProfileIsNotInTheFile()
+    public void Analyze_Should_ErrorProfileMissing_When_ProfileIsNotInTheFile()
     {
         var path = WriteConfig(FullConfig);
         var config = Build(
             new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "Warm" },
             Remote("install"));
 
-        Assert.Contains(WarningsOf(config), m =>
-            m.Contains("Profile 'Warm' is not defined") && m.Contains("available: Sanity"));
+        Assert.Contains(IssuesOf(config), i =>
+            i.Severity == WatchIssueSeverity.Error
+            && i.Message.Contains("Profile 'Warm' is not defined")
+            && i.Message.Contains("available: Sanity"));
+    }
+
+    [Fact]
+    public void Analyze_Should_ErrorEmptyProfile_When_FileDefinesProfiles()
+    {
+        var path = WriteConfig(FullConfig);
+        var config = Build(
+            new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "" },
+            Remote("install"));
+
+        Assert.Contains(IssuesOf(config), i =>
+            i.Severity == WatchIssueSeverity.Error
+            && i.Message.Contains("Initialize Profile is empty")
+            && i.Message.Contains("Sanity"));
     }
 
     [Fact]
@@ -108,8 +123,9 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "Sanity" },
             Remote("install"));
 
-        Assert.Contains(WarningsOf(config), m =>
-            m.Contains("No 'pipelines' entry is keyed 'Sanity 5 Nodes'"));
+        Assert.Contains(IssuesOf(config), i =>
+            i.Severity == WatchIssueSeverity.Warning
+            && i.Message.Contains("No 'pipelines' entry is keyed 'Sanity 5 Nodes'"));
     }
 
     [Fact]
@@ -120,7 +136,7 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "Sanity" },
             Remote("install"));
 
-        Assert.DoesNotContain(WarningsOf(config), m => m.Contains("No 'pipelines' entry"));
+        Assert.DoesNotContain(IssuesOf(config), i => i.Message.Contains("No 'pipelines' entry"));
     }
 
     [Fact]
@@ -135,8 +151,9 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "Sanity" },
             action);
 
-        Assert.Contains(WarningsOf(config), m =>
-            m.Contains("[_NotDefinedAnywhere] is not defined by any parameter layer"));
+        Assert.Contains(IssuesOf(config), i =>
+            i.Severity == WatchIssueSeverity.Warning
+            && i.Message.Contains("[_NotDefinedAnywhere] is not defined by any parameter layer"));
     }
 
     [Fact]
@@ -151,7 +168,7 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "Sanity" },
             action);
 
-        Assert.DoesNotContain(WarningsOf(config), m => m.Contains("_EmailCheck"));
+        Assert.DoesNotContain(IssuesOf(config), i => i.Message.Contains("_EmailCheck"));
     }
 
     /// <summary>
@@ -172,9 +189,9 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             new InitializeConfig { Tag = "Init", ParameterFile = path, Profile = "Sanity" },
             action);
 
-        var warnings = WarningsOf(config);
-        Assert.DoesNotContain(warnings, m => m.Contains("_BuildNumber"));
-        Assert.DoesNotContain(warnings, m => m.Contains("_DropLocation"));
+        var warnings = IssuesOf(config);
+        Assert.DoesNotContain(warnings, i => i.Message.Contains("_BuildNumber"));
+        Assert.DoesNotContain(warnings, i => i.Message.Contains("_DropLocation"));
     }
 
     [Fact]
@@ -192,7 +209,8 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             Children = [Remote("smoke", agent: "[_MissingAgent]")],
         });
 
-        Assert.Contains(WarningsOf(config), m => m.Contains("[_MissingAgent] is not defined"));
+        Assert.Contains(IssuesOf(config), i =>
+            i.Severity == WatchIssueSeverity.Warning && i.Message.Contains("[_MissingAgent] is not defined"));
     }
 
     /// <summary>A tokenised ParameterFile path cannot be resolved without a run, so it must not be judged.</summary>
@@ -203,6 +221,6 @@ public class WatchListValidatorParameterSourceTests : IDisposable
             new InitializeConfig { Tag = "Init", ParameterFile = @"C:\Params\[_Release]\pipeline-config.json" },
             Remote("install"));
 
-        Assert.DoesNotContain(WarningsOf(config), m => m.Contains("does not exist"));
+        Assert.DoesNotContain(IssuesOf(config), i => i.Message.Contains("does not exist"));
     }
 }

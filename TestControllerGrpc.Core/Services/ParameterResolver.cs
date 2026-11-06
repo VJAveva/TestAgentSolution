@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
 using TestControllerGrpc.Models;
 
 namespace TestControllerGrpc.Services;
@@ -8,13 +9,13 @@ namespace TestControllerGrpc.Services;
 /// <summary>
 /// Handles [Token] parameter resolution for the action pipeline.
 ///
-/// Tokens like [BuildNumber], [EmailAddress], [DropLocation] are replaced
+/// Tokens like [_BuildNumber], [_EmailAddress], [_DropLocation] are replaced
 /// from two sources:
 ///   1. The trigger file content (CSV: _Key,Value or Key=Value per line)
 ///   2. Initialize → ParameterFile (CSV: _Key,Value or Key=Value per line)
 ///
-/// Keys with a leading underscore (e.g. _BuildNumber) are stored both with
-/// and without the prefix so [BuildNumber] and [_BuildNumber] both resolve.
+/// Underscore-prefixed names are the unambiguous token syntax. Legacy aliases without the prefix
+/// still resolve when their underscore-prefixed parameter exists; unknown bracketed prose stays literal.
 /// </summary>
 public static partial class ParameterResolver
 {
@@ -22,6 +23,9 @@ public static partial class ParameterResolver
 
     [GeneratedRegex(@"\[(\w+)\]")]
     private static partial Regex TokenRegex();
+
+    private static readonly ConcurrentDictionary<string, DateTimeOffset> LastGoodJsonReads =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Loads parameters from an Initialize ParameterFile.
@@ -200,18 +204,62 @@ public static partial class ParameterResolver
     /// <summary>Reads the layered JSON config, or null when it is missing or unreadable.</summary>
     public static PipelineParameterConfig? ReadJsonConfig(string filePath)
     {
-        if (!File.Exists(filePath)) return null;
+        TryReadJsonConfig(filePath, out var config, out _);
+        return config;
+    }
+
+    /// <summary>
+    /// Reads a layered JSON config and retains the reason when it cannot be loaded.
+    /// Successful reads are remembered only for operator diagnostics; callers still fail against
+    /// the current file rather than executing from a stale copy.
+    /// </summary>
+    public static bool TryReadJsonConfig(
+        string filePath,
+        out PipelineParameterConfig? config,
+        out string? failureReason)
+    {
+        config = null;
+        failureReason = null;
+
+        if (!File.Exists(filePath))
+        {
+            failureReason = $"parameter file '{filePath}' does not exist.";
+            return false;
+        }
 
         try
         {
-            return JsonSerializer.Deserialize<PipelineParameterConfig>(
+            config = JsonSerializer.Deserialize<PipelineParameterConfig>(
                 File.ReadAllText(filePath), JsonOptions);
+            if (config is null)
+            {
+                failureReason = $"parameter file '{filePath}' does not contain a JSON object.";
+                return false;
+            }
+
+            LastGoodJsonReads[Path.GetFullPath(filePath)] = DateTimeOffset.UtcNow;
+            return true;
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (JsonException ex)
         {
-            return null;
+            var line = ex.LineNumber is long zeroBasedLine ? zeroBasedLine + 1 : (long?)null;
+            var column = ex.BytePositionInLine is long zeroBasedColumn ? zeroBasedColumn + 1 : (long?)null;
+            var location = line is null
+                ? ""
+                : column is null ? $" at line {line}" : $" at line {line}, column {column}";
+            failureReason = $"parameter file '{filePath}' contains invalid JSON{location}: {ex.Message}";
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            failureReason = $"parameter file '{filePath}' could not be read: {ex.Message}";
+            return false;
         }
     }
+
+    /// <summary>Most recent successful JSON read for diagnostics; never used as execution input.</summary>
+    public static DateTimeOffset? LastGoodJsonReadUtc(string filePath) =>
+        LastGoodJsonReads.TryGetValue(Path.GetFullPath(filePath), out var loadedAt) ? loadedAt : null;
 
     // ── GlobalVariables.json ────────────────────────────────────────────
 
@@ -336,7 +384,11 @@ public static partial class ParameterResolver
         string? profile,
         string? pipelineTag)
     {
-        TryLoadJsonConfig(ctx, filePath, profile, pipelineTag);
+        if (!TryReadJsonConfig(filePath, out var config, out _))
+            return;
+
+        ApplyJsonLayers(ctx, config!, profile, pipelineTag);
+        TryApplyGlobalVariables(ctx);
     }
 
     /// <summary>
@@ -349,16 +401,43 @@ public static partial class ParameterResolver
         string? profile,
         string? pipelineTag)
     {
-        var config = ReadJsonConfig(filePath);
-        if (config is null) return false;
+        return TryLoadJsonConfig(ctx, filePath, profile, pipelineTag, out _);
+    }
 
-        ApplyJsonLayers(ctx, config, profile, pipelineTag);
+    public static bool TryLoadJsonConfig(
+        PipelineExecutionContext ctx,
+        string filePath,
+        string? profile,
+        string? pipelineTag,
+        out string? failureReason)
+    {
+        if (!TryReadJsonConfig(filePath, out var config, out failureReason))
+            return false;
+
+        failureReason = TryApplyJsonConfig(ctx, config!, profile, pipelineTag, filePath);
+        if (failureReason is not null)
+            return false;
 
         // Reason deliberately dropped: this bool answers "was the LAYERED config readable", and the
         // display and validation callers restore last-good tokens from it. A bad global file is
         // reported on the run path instead, by TryLoadInitializeSource.
         TryApplyGlobalVariables(ctx);
+        failureReason = null;
         return true;
+    }
+
+    /// <summary>Validates and applies an in-memory source using execution's profile and precedence rules.</summary>
+    public static string? TryApplyJsonConfig(
+        PipelineExecutionContext ctx,
+        PipelineParameterConfig config,
+        string? profile,
+        string? pipelineTag,
+        string sourceName)
+    {
+        var failure = ValidateProfile(sourceName, config, profile);
+        if (failure is not null) return failure;
+        ApplyJsonLayers(ctx, config, profile, pipelineTag);
+        return null;
     }
 
     private static void ApplyJsonLayers(
@@ -409,20 +488,33 @@ public static partial class ParameterResolver
             return TryApplyGlobalVariables(ctx);
         }
 
-        var config = ReadJsonConfig(filePath);
-        if (config is null)
-            return $"parameter file '{filePath}' could not be read as JSON.";
+        if (!TryReadJsonConfig(filePath, out var config, out var readFailure))
+            return readFailure;
+
+        var profileFailure = TryApplyJsonConfig(ctx, config!, profile, pipelineTag, filePath);
+        if (profileFailure is not null)
+            return profileFailure;
+
+        return TryApplyGlobalVariables(ctx);
+    }
+
+    private static string? ValidateProfile(
+        string filePath,
+        PipelineParameterConfig config,
+        string? profile)
+    {
+        if (config.Profiles.Count > 0 && string.IsNullOrWhiteSpace(profile))
+            return $"Initialize Profile is empty; file defines: {string.Join(", ", config.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))}.";
 
         if (!string.IsNullOrWhiteSpace(profile) && !config.Profiles.ContainsKey(profile))
         {
             var known = config.Profiles.Count == 0
-                ? "the file defines no profiles at all"
-                : "defined profiles are: " + string.Join(", ", config.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
-            return $"profile '{profile}' is not defined in '{Path.GetFileName(filePath)}' - {known}.";
+                ? "the file defines no profiles"
+                : "file defines: " + string.Join(", ", config.Profiles.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
+            return $"Initialize Profile '{profile}' is not defined in '{Path.GetFileName(filePath)}'; {known}.";
         }
 
-        ApplyJsonLayers(ctx, config, profile, pipelineTag);
-        return TryApplyGlobalVariables(ctx);
+        return null;
     }
 
     /// <summary>
@@ -456,19 +548,6 @@ public static partial class ParameterResolver
             .ToArray();
 
     /// <summary>
-    /// Fields where a bracketed word is prose unless it carries the <c>_</c> parameter prefix. An
-    /// email subject or body legitimately reads "[INFO] build finished", and refusing to run over
-    /// that would be worse than the bug this guards; "[_BuildNumber]" in the same text is still a
-    /// parameter reference and still fails. Every other substituted field is strict - a stray
-    /// bracket in a command line or a recipient address is never intentional.
-    /// </summary>
-    private static readonly HashSet<string> ProseTolerantFields = new(StringComparer.Ordinal)
-    {
-        nameof(ActionConfig.Title),
-        nameof(ActionConfig.Body),
-    };
-
-    /// <summary>
     /// Token names referenced by an action that have no value in the context. Covers every field
     /// <see cref="ResolveAction"/> substitutes — the command line AND the email delivery fields —
     /// because an unresolved token anywhere means a parameter source failed to load. A non-empty
@@ -476,28 +555,29 @@ public static partial class ParameterResolver
     /// </summary>
     public static List<string> FindUnresolvedTokens(ActionConfig action, PipelineExecutionContext ctx)
     {
-        var missing = new List<string>();
+        return ReferencedTokens(action, ctx)
+            .Select(t => t.Name)
+            .Where(name => !ctx.Parameters.ContainsKey(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
+    /// <summary>Canonical token names and consuming fields, shared by authoring and the execution gate.</summary>
+    public static IEnumerable<(string Name, string Field)> ReferencedTokens(
+        ActionConfig action, PipelineExecutionContext ctx)
+    {
         foreach (var field in SubstitutedFields)
         {
             if (field.GetValue(action) is not string value || value.Length == 0) continue;
 
-            var underscoreOnly = ProseTolerantFields.Contains(field.Name);
-
             foreach (Match match in TokenPattern.Matches(value))
             {
                 var key = match.Groups[1].Value;
-                if (underscoreOnly && !key.StartsWith('_')) continue;
-
-                if (!ctx.Parameters.ContainsKey(key)
-                    && !missing.Contains(key, StringComparer.OrdinalIgnoreCase))
-                {
-                    missing.Add(key);
-                }
+                var lookupKey = key.StartsWith('_') ? key : "_" + key;
+                if (key.StartsWith('_') || ctx.Parameters.ContainsKey(lookupKey))
+                    yield return (lookupKey, field.Name);
             }
         }
-
-        return missing;
     }
 
     /// <summary>
@@ -554,7 +634,8 @@ public static partial class ParameterResolver
         return TokenPattern.Replace(template, match =>
         {
             var key = match.Groups[1].Value;
-            return ctx.Parameters.TryGetValue(key, out var val) ? val : match.Value;
+            var lookupKey = key.StartsWith('_') ? key : "_" + key;
+            return ctx.Parameters.TryGetValue(lookupKey, out var val) ? val : match.Value;
         });
     }
 

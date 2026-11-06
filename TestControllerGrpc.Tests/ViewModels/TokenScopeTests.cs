@@ -138,11 +138,11 @@ public class TokenScopeTests : IDisposable
     }
 
     [Fact]
-    public void ResolveTokens_Should_ResolveBothAliases_When_KeyIsStoredWithoutUnderscore()
+    public void ResolveTokens_Should_ResolveOnlyTheUnderscoreForm_When_KeyIsStoredWithoutUnderscore()
     {
         TreeNodeViewModel.TokensFor("Sanity")["BuildNumber"] = "1.2.3";
 
-        Assert.Equal("1.2.3", TreeNodeViewModel.ResolveTokens("[BuildNumber]", "Sanity"));
+        Assert.Equal("[BuildNumber]", TreeNodeViewModel.ResolveTokens("[BuildNumber]", "Sanity"));
         Assert.Equal("1.2.3", TreeNodeViewModel.ResolveTokens("[_BuildNumber]", "Sanity"));
     }
 

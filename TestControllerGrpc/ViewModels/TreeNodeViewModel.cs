@@ -68,12 +68,22 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private string _retryBackoff = "Exponential";
     [ObservableProperty] private string _retryOnExitCodes = "";
     [ObservableProperty] private string _parameterFile = "";
+    [ObservableProperty] private string _profile = "";
+    [ObservableProperty] private bool _isParameterFileStale;
+    [ObservableProperty] private bool _parameterFileHasError;
+    [ObservableProperty] private string _parameterFileValidationMessage = "";
+    [ObservableProperty] private string _tagValidationMessage = "";
     [ObservableProperty] private string _templateID = "";
     [ObservableProperty] private string _templateName = "";
     [ObservableProperty] private int _childCount;
 
     /// <summary>Read-only mirror of a Ref'd template. Never written back to the model.</summary>
     [ObservableProperty] private bool _isRefExpansion;
+
+    public ObservableCollection<string> ProfileChoices { get; } = [];
+    public bool CanEditNode => !IsRefExpansion;
+    public bool IsPipelineTag => ModelObject is WatchItemConfig;
+    public bool CanRenamePipeline => !IsPipelineTag && !IsRefExpansion;
 
     // ── Phase 3b: Pipeline lock badge (per-row, bound in TreeViewSpec.xaml) ──
     [ObservableProperty] private LockBadgeViewModel? _lockBadge;
@@ -157,6 +167,12 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     /// <summary>Called by source generator when AgentName changes — refreshes ResolvedAgentName.</summary>
     partial void OnAgentNameChanged(string value) => NotifyResolvedChanged();
+
+    partial void OnIsRefExpansionChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanEditNode));
+        OnPropertyChanged(nameof(CanRenamePipeline));
+    }
 
     // ── Skip state ────────────────────────────────────────────────
     // Skip lives on the model (ISkippableNode); these mirror it so the row can bind. SkipOrigin is NOT on the
@@ -570,6 +586,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         TokenLayers.Clear();
     }
 
+    public static void ClearTokenScope(string? scope)
+    {
+        var key = scope ?? SharedScope;
+        TokenScopes.Remove(key);
+        TokenLayers.Remove(key);
+    }
+
     /// <summary>Values and layers for every scope, taken before a reload that might fail.</summary>
     public sealed record TokenSnapshot(
         Dictionary<string, Dictionary<string, string>> Values,
@@ -975,16 +998,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         var icon = ResolveCommandIcon(a.Command, a.Type);
         var tag = a.ResolvedTag;
-        var label = a.Type switch
-        {
-            ActionType.RunRemoteCommand => !string.IsNullOrWhiteSpace(a.AgentName)
-                ? $"Remote Command on '{a.AgentName}' \u2014 {a.Command}"
-                : $"Remote Command \u2014 {a.Command}",
-            ActionType.RunCommand => $"Run \u2014 {a.Command} {a.Parameters}".TrimEnd(),
-            ActionType.SendMail => $"Send Mail to {a.To}: {a.Title}",
-            _ => a.Command,
-        };
-        if (label.Length > 100) label = label[..100] + "\u2026";
+        var label = FormatActionLabel(tag, a.Type.ToString(), a.AgentName, a.Command, a.Parameters, a.To, a.Title);
         return new TreeNodeViewModel
         {
             NodeKind = NodeKinds.Action, NodeIcon = icon,
@@ -1058,9 +1072,12 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         NodeKind = NodeKinds.Initialize, NodeIcon = "i",
         NodeIconGlyph = ResolveNodeIconGlyph(NodeKinds.Initialize),
-        Tag = init.Tag,
+        Tag = init.Tag, Profile = init.Profile,
         ParameterFile = init.ParameterFile,
-        DisplayText = $"Initialize: {init.ParameterFile}", ModelObject = init,
+        DisplayText = string.IsNullOrWhiteSpace(init.Tag)
+            ? $"Initialize: {init.ParameterFile}"
+            : $"Initialize: {init.Tag} \u2014 {init.ParameterFile}",
+        ModelObject = init,
     };
 
     public static TreeNodeViewModel FromRef(RefConfig r, IReadOnlyDictionary<string, TemplateConfig>? templates = null)
@@ -1164,7 +1181,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         switch (ModelObject)
         {
             case WatchItemConfig wi:
-                wi.Tag = Tag; wi.Path = WatchPath; wi.Filter = Filter; wi.IsEnabled = IsEnabled;
+                // WatchItem.Tag is the pipeline identity used by permissions, locks, audit and
+                // parameter pins. It is intentionally not renamed through the node editor.
+                wi.Path = WatchPath; wi.Filter = Filter; wi.IsEnabled = IsEnabled;
                 wi.BuildNumberField = BuildNumberField;
                 wi.DropLocationField = DropLocationField;
                 wi.BuildBasePath = BuildBasePath;
@@ -1192,7 +1211,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 a.MaxRetries = MaxRetries; a.RetryDelaySeconds = RetryDelaySeconds;
                 a.RetryBackoff = RetryBackoff; a.RetryOnExitCodes = RetryOnExitCodes; break;
             case InitializeConfig init:
-                init.Tag = Tag; init.ParameterFile = ParameterFile; break;
+                init.Tag = Tag; init.ParameterFile = ParameterFile; init.Profile = Profile; break;
             case RefConfig r:
                 r.TemplateID = TemplateID; break;
             case TemplateConfig t:
@@ -1210,17 +1229,19 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             NodeKinds.WatchItem => !string.IsNullOrWhiteSpace(Tag) ? $"{Tag}  ({WatchPath}{Filter})" : $"{WatchPath}{Filter}",
             NodeKinds.Event => $"Event: {EventType} ({ExecutionTypeText})",
             NodeKinds.ActionGroup => $"[{ExecutionTypeText}] {Tag}",
-            NodeKinds.Action => FormatActionLabel(ActionTypeText, AgentName, Command, Parameters, To, Title),
-            NodeKinds.Initialize => $"Initialize: {ParameterFile}",
+            NodeKinds.Action => FormatActionLabel(Tag, ActionTypeText, AgentName, Command, Parameters, To, Title),
+            NodeKinds.Initialize => string.IsNullOrWhiteSpace(Tag)
+                ? $"Initialize: {ParameterFile}"
+                : $"Initialize: {Tag} \u2014 {ParameterFile}",
             NodeKinds.Ref => $"Ref > {TemplateID}",
             NodeKinds.Template => $"Template: {TemplateName}",
             _ => DisplayText,
         };
     }
 
-    private static string FormatActionLabel(string actionType, string agent, string cmd, string param, string to, string title)
+    private static string FormatActionLabel(string tag, string actionType, string agent, string cmd, string param, string to, string title)
     {
-        var label = actionType switch
+        var summary = actionType switch
         {
             "RunRemoteCommand" => !string.IsNullOrWhiteSpace(agent)
                 ? $"Remote Command on '{agent}' \u2014 {cmd}"
@@ -1229,6 +1250,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             "SendMail" => $"Send Mail to {to}: {title}",
             _ => cmd,
         };
+        var label = string.IsNullOrWhiteSpace(tag) ? summary : $"{tag} \u2014 {summary}";
         return label.Length > 100 ? label[..100] + "\u2026" : label;
     }
 

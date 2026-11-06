@@ -49,7 +49,9 @@ public sealed partial class MainViewModel
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeWatchItem(oldWi);
 
-        var editorVm = new WatchItemXmlEditorViewModel(xml);
+        var editorAgents = GetXmlEditorAgents();
+        var editorVm = new WatchItemXmlEditorViewModel(
+            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
         editorVm.WindowTitle = $"WatchItem XML Editor � {oldWi.Tag}";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
@@ -117,7 +119,9 @@ public sealed partial class MainViewModel
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeWatchList(_config);
 
-        var editorVm = new WatchItemXmlEditorViewModel(xml);
+        var editorAgents = GetXmlEditorAgents();
+        var editorVm = new WatchItemXmlEditorViewModel(
+            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
         editorVm.WindowTitle = "WatchList XML Editor � Full";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
@@ -150,6 +154,7 @@ public sealed partial class MainViewModel
                 _config.WatchItems.AddRange(newConfig.WatchItems);
                 _config.Templates.Clear();
                 _config.Templates.AddRange(newConfig.Templates);
+                _config.GlobalVariablesFile = newConfig.GlobalVariablesFile;
                 _config.FilePath = VocabFilePath;
 
                 _executor.LoadTemplates(_config.Templates);
@@ -174,4 +179,18 @@ public sealed partial class MainViewModel
             }
         }
     }
+
+    private IReadOnlyCollection<XmlEditorAgent> GetXmlEditorAgents() =>
+        RegisteredAgents.Select(agent =>
+        {
+            var status = agent.ConnectionStatus != "Online"
+                ? agent.ConnectionStatus
+                : agent.AgentState.Contains("reboot", StringComparison.OrdinalIgnoreCase)
+                    ? "Reboot required"
+                    : agent.AgentState.Contains("running", StringComparison.OrdinalIgnoreCase)
+                      || agent.AgentState.Contains("busy", StringComparison.OrdinalIgnoreCase)
+                        ? "Busy"
+                        : "Online";
+            return new XmlEditorAgent(agent.Name, status);
+        }).ToArray();
 }

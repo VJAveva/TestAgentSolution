@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using TestControllerGrpc.Helpers;
 using TestControllerGrpc.Models;
@@ -314,12 +315,14 @@ public sealed partial class MainViewModel
                     {
                         // Try*, not LoadJsonConfig: a malformed or half-written file returns false
                         // rather than throwing, so the plain loader would silently yield no values.
-                        if (!ParameterResolver.TryLoadJsonConfig(ctx, init.ParameterFile, init.Profile, pipelineTag))
+                        if (!ParameterResolver.TryLoadJsonConfig(ctx, init.ParameterFile, init.Profile, pipelineTag, out var failure))
                         {
                             TreeNodeViewModel.RestoreScopeFrom(previous, pipelineTag);
+                            var reason = failure ?? $"Parameter file '{init.ParameterFile}' could not be loaded.";
+                            SetInitializeParameterFileStatus(init, reason,
+                                considerLastGood: reason.StartsWith("parameter file", StringComparison.OrdinalIgnoreCase));
                             _appLogger.Warn("Tokens",
-                                $"Parameter file '{init.ParameterFile}' could not be read (missing, or invalid JSON "
-                                + $"- it may have been caught mid-save). Keeping the last good values for "
+                                $"Parameter file '{init.ParameterFile}' failed to load: {reason} Keeping the last good values for "
                                 + $"'{pipelineTag}'; will retry on the next change.");
                             continue;
                         }
@@ -338,11 +341,21 @@ public sealed partial class MainViewModel
                             : ParameterRank.ParameterFile;
                         TreeNodeViewModel.SetToken(pipelineTag, entry.Key, entry.Value, TokenDisplay.LayerFromRank(rank));
                     }
+
+                    SetInitializeParameterFileStatus(init,
+                        $"Loaded '{init.ParameterFile}', profile '{init.Profile}'.", considerLastGood: false);
+                    var node = WatchListRoot?.FindByModel(init);
+                    if (node is not null)
+                    {
+                        node.IsParameterFileStale = false;
+                        node.ParameterFileHasError = false;
+                    }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     // Only this pipeline rolls back - a broken file must not blank the other eight.
                     TreeNodeViewModel.RestoreScopeFrom(previous, pipelineTag);
+                    SetInitializeParameterFileStatus(init, ex.Message, considerLastGood: true);
                     _appLogger.Warn("Tokens",
                         $"Parameter file '{init.ParameterFile}' could not be read ({ex.Message}). "
                         + $"Keeping the last good values for '{pipelineTag}'; will retry on the next change.");

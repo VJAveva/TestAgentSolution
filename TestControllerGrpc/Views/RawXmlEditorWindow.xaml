@@ -92,6 +92,11 @@
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource EditorBtn}"
+                            Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                            Click="BrowseParameterFile_Click" ToolTip="Browse for a file under Parameters">
+                        <TextBlock Text="Browse Parameter File" />
+                    </Button>
+                    <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
                             Command="{Binding AutoFormatCommand}" ToolTip="Auto-format and indent WatchItem XML">
                         <StackPanel Orientation="Horizontal">
@@ -315,8 +320,27 @@
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Line" Binding="{Binding Line}" Width="50" />
                         <DataGridTextColumn Header="Col" Binding="{Binding Column}" Width="45" />
-                        <DataGridTextColumn Header="Type" Binding="{Binding ErrorType}" Width="80" />
+                        <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="75" />
+                        <DataGridTextColumn Header="Rule" Binding="{Binding ErrorType}" Width="85" />
                         <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+                        <DataGridTemplateColumn Header="Quick fix" Width="220">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ItemsControl ItemsSource="{Binding QuickFixes}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Content="{Binding Title}" Margin="2"
+                                                        Padding="5,2"
+                                                        Background="{DynamicResource AccentBtnBg}"
+                                                        Foreground="{DynamicResource Accent}"
+                                                        Command="{Binding DataContext.ApplyQuickFixCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"
+                                                        CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>

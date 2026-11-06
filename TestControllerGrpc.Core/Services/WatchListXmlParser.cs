@@ -20,7 +20,7 @@ public static class WatchListXmlParser
         var doc = XDocument.Load(filePath);
         var root = doc.Root ?? throw new InvalidOperationException("Empty XML");
 
-        var config = new WatchListConfig { FilePath = filePath };
+        var config = new WatchListConfig { FilePath = filePath, XmlSourceDocument = new XDocument(doc) };
 
         // Parse GlobalVariablesFile attribute from root element
         var globalVarsAttr = root.Attribute("GlobalVariablesFile");
@@ -42,6 +42,7 @@ public static class WatchListXmlParser
                 {
                     ID = Attr(tEl, "ID"),
                     Children = ParseChildren(tEl),
+                    XmlSourceElement = new XElement(tEl),
                 });
             }
         }
@@ -58,6 +59,7 @@ public static class WatchListXmlParser
                 BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
                 DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
                 BuildBasePath = Attr(wiEl, "BuildBasePath"),
+                XmlSourceElement = new XElement(wiEl),
             }, wiEl);
             foreach (var evEl in wiEl.Elements("Event"))
             {
@@ -246,13 +248,16 @@ public static class WatchListXmlParser
             {
                 var tEl = new XElement("Template", new XAttribute("ID", t.ID));
                 WriteChildren(tEl, t.Children);
+                PreserveComments(t.XmlSourceElement, tEl);
                 templatesEl.Add(tEl);
             }
             root.Add(templatesEl);
         }
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
+        PreserveComments(config.XmlSourceDocument, doc);
         doc.Save(filePath);
+        config.XmlSourceDocument = new XDocument(doc);
     }
 
     private static void WriteChildren(XElement parent, List<IActionNode> children)
@@ -350,6 +355,7 @@ public static class WatchListXmlParser
             WriteChildren(evEl, ev.Children);
             wiEl.Add(evEl);
         }
+        PreserveComments(wi.XmlSourceElement, wiEl);
         return wiEl.ToString(SaveOptions.None);
     }
 
@@ -367,6 +373,7 @@ public static class WatchListXmlParser
             BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
             DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
             BuildBasePath = Attr(wiEl, "BuildBasePath"),
+            XmlSourceElement = new XElement(wiEl),
         }, wiEl);
         foreach (var evEl in wiEl.Elements("Event"))
         {
@@ -389,6 +396,7 @@ public static class WatchListXmlParser
         {
             var tEl = new XElement("Template", new XAttribute("ID", t.ID));
             WriteChildren(tEl, t.Children);
+            PreserveComments(t.XmlSourceElement, tEl);
             templatesEl.Add(tEl);
         }
         return templatesEl.ToString(SaveOptions.None);
@@ -406,6 +414,7 @@ public static class WatchListXmlParser
             {
                 ID = Attr(tEl, "ID"),
                 Children = ParseChildren(tEl),
+                XmlSourceElement = new XElement(tEl),
             });
         }
         return templates;
@@ -417,6 +426,9 @@ public static class WatchListXmlParser
     {
         var root = new XElement("WatchList");
 
+        if (!string.IsNullOrWhiteSpace(config.GlobalVariablesFile))
+            root.Add(new XAttribute("GlobalVariablesFile", config.GlobalVariablesFile));
+
         foreach (var wi in config.WatchItems)
         {
             var wiEl = new XElement("WatchItem",
@@ -424,8 +436,11 @@ public static class WatchListXmlParser
                 new XAttribute("Filter", wi.Filter));
             if (!string.IsNullOrEmpty(wi.Tag))
                 wiEl.Add(new XAttribute("Tag", wi.Tag));
+            if (!wi.IsEnabled)
+                wiEl.Add(new XAttribute("IsEnabled", "false"));
             AddIfNotEmpty(wiEl, "BuildNumberField", wi.BuildNumberField);
             AddIfNotEmpty(wiEl, "DropLocationField", wi.DropLocationField);
+            AddIfNotEmpty(wiEl, "BuildBasePath", wi.BuildBasePath);
             WriteSkip(wiEl, wi);
 
             foreach (var ev in wi.Events)
@@ -447,12 +462,15 @@ public static class WatchListXmlParser
             {
                 var tEl = new XElement("Template", new XAttribute("ID", t.ID));
                 WriteChildren(tEl, t.Children);
+                PreserveComments(t.XmlSourceElement, tEl);
                 templatesEl.Add(tEl);
             }
             root.Add(templatesEl);
         }
 
-        return root.ToString(SaveOptions.None);
+        var doc = new XDocument(root);
+        PreserveComments(config.XmlSourceDocument, doc);
+        return doc.ToString(SaveOptions.None);
     }
 
     public static WatchListConfig? DeserializeWatchList(string xml)
@@ -460,7 +478,8 @@ public static class WatchListXmlParser
         var root = XElement.Parse(xml);
         if (root.Name.LocalName != "WatchList") return null;
 
-        var config = new WatchListConfig();
+        var config = new WatchListConfig { XmlSourceDocument = XDocument.Parse(xml, LoadOptions.PreserveWhitespace) };
+        config.GlobalVariablesFile = Attr(root, "GlobalVariablesFile");
 
         var templatesEl = root.Element("Templates");
         if (templatesEl is not null)
@@ -471,6 +490,7 @@ public static class WatchListXmlParser
                 {
                     ID = Attr(tEl, "ID"),
                     Children = ParseChildren(tEl),
+                    XmlSourceElement = new XElement(tEl),
                 });
             }
         }
@@ -484,6 +504,9 @@ public static class WatchListXmlParser
                 Filter = Attr(wiEl, "Filter", "*.*"),
                 BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
                 DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
+                BuildBasePath = Attr(wiEl, "BuildBasePath"),
+                IsEnabled = !string.Equals(Attr(wiEl, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase),
+                XmlSourceElement = new XElement(wiEl),
             }, wiEl);
             foreach (var evEl in wiEl.Elements("Event"))
             {
@@ -588,6 +611,74 @@ public static class WatchListXmlParser
             el.Add(new XAttribute(name, val));
     }
 
+    private static void PreserveComments(XElement? source, XElement target)
+    {
+        if (source is null) return;
+
+        foreach (var comment in source.Nodes().OfType<XComment>())
+        {
+            var nextSource = comment.NodesAfterSelf().OfType<XElement>().FirstOrDefault();
+            var nextTarget = nextSource is null ? null : FindMatchingElement(source, nextSource, target);
+            if (nextTarget is not null)
+            {
+                nextTarget.AddBeforeSelf(new XComment(comment.Value));
+                continue;
+            }
+
+            var previousSource = comment.NodesBeforeSelf().OfType<XElement>().LastOrDefault();
+            var previousTarget = previousSource is null ? null : FindMatchingElement(source, previousSource, target);
+            if (previousTarget is not null)
+                previousTarget.AddAfterSelf(new XComment(comment.Value));
+            else
+                target.Add(new XComment(comment.Value));
+        }
+
+        foreach (var sourceChild in source.Elements())
+        {
+            var targetChild = FindMatchingElement(source, sourceChild, target);
+            if (targetChild is not null)
+                PreserveComments(sourceChild, targetChild);
+        }
+    }
+
+    private static void PreserveComments(XDocument? source, XDocument target)
+    {
+        if (source?.Root is null || target.Root is null) return;
+
+        var beforeRoot = source.Nodes().TakeWhile(node => node is not XElement)
+            .OfType<XComment>().Select(comment => new XComment(comment.Value)).ToList();
+        foreach (var comment in beforeRoot.AsEnumerable().Reverse())
+            target.Root.AddBeforeSelf(comment);
+
+        foreach (var comment in source.Root.NodesAfterSelf().OfType<XComment>())
+            target.Root.AddAfterSelf(new XComment(comment.Value));
+
+        PreserveComments(source.Root, target.Root);
+    }
+
+    private static XElement? FindMatchingElement(XElement sourceParent, XElement sourceChild, XElement targetParent)
+    {
+        var key = ElementKey(sourceChild);
+        if (key is not null)
+        {
+            var match = targetParent.Elements(sourceChild.Name)
+                .FirstOrDefault(candidate => ElementKey(candidate) == key);
+            if (match is not null) return match;
+        }
+
+        var ordinal = sourceParent.Elements(sourceChild.Name)
+            .TakeWhile(candidate => !ReferenceEquals(candidate, sourceChild)).Count();
+        return targetParent.Elements(sourceChild.Name).Skip(ordinal).FirstOrDefault();
+    }
+
+    private static string? ElementKey(XElement element)
+    {
+        foreach (var attributeName in new[] { "Tag", "Type", "ID", "TemplateID", "Path" })
+            if (element.Attribute(attributeName) is { } attribute)
+                return $"{attributeName}:{attribute.Value}";
+        return null;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Partial serialization — export/import selected items
     // ═══════════════════════════════════════════════════════════════════
@@ -667,6 +758,7 @@ public static class WatchListXmlParser
             {
                 ID = Attr(tEl, "ID"),
                 Children = ParseChildren(tEl),
+                XmlSourceElement = new XElement(tEl),
             }).ToList() ?? [];
 
         return (items, templates);
@@ -695,6 +787,7 @@ public static class WatchListXmlParser
             {
                 ID = Attr(tEl, "ID"),
                 Children = ParseChildren(tEl),
+                XmlSourceElement = new XElement(tEl),
             }).ToList() ?? [];
     }
 
@@ -760,6 +853,9 @@ public static class WatchListXmlParser
             Filter = Attr(wiEl, "Filter", "*.*"),
             BuildNumberField = Attr(wiEl, "BuildNumberField", "BuildNumber"),
             DropLocationField = Attr(wiEl, "DropLocationField", "DropLocation"),
+            BuildBasePath = Attr(wiEl, "BuildBasePath"),
+            IsEnabled = !string.Equals(Attr(wiEl, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase),
+            XmlSourceElement = new XElement(wiEl),
         }, wiEl);
         foreach (var evEl in wiEl.Elements("Event"))
         {

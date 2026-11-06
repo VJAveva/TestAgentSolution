@@ -1,8 +1,12 @@
 using System.ComponentModel;
+using System.Collections.Specialized;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.Input;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.CodeCompletion;
@@ -21,6 +25,8 @@ public partial class TemplateXmlEditorWindow : Window
     private FoldingManager? _foldingManager;
     private XmlFoldingStrategy? _foldingStrategy;
     private CompletionWindow? _completionWindow;
+    private readonly DispatcherTimer _diagnosticsTimer;
+    private XmlDiagnosticBackgroundRenderer? _diagnosticRenderer;
 
     public TemplateXmlEditorWindow(TemplateXmlEditorViewModel viewModel)
     {
@@ -33,6 +39,13 @@ public partial class TemplateXmlEditorWindow : Window
 
         // Wire error navigation
         _vm.NavigateToError += NavigateToLine;
+        _vm.QuickFixRequested += ApplyQuickFix;
+        _diagnosticsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _diagnosticsTimer.Tick += async (_, _) =>
+        {
+            _diagnosticsTimer.Stop();
+            await _vm.RefreshDiagnosticsAsync();
+        };
 
         // Wire preview visibility changes
         _vm.PropertyChanged += OnViewModelPropertyChanged;
@@ -40,6 +53,11 @@ public partial class TemplateXmlEditorWindow : Window
         // Set up AvalonEdit
         ConfigureEditor();
         ApplyThemeColors();
+        _diagnosticRenderer = new XmlDiagnosticBackgroundRenderer(
+            () => _vm.ValidationErrors,
+            severity => TryFindResource(severity == "Error" ? "LogErrorBrush" : "LogWarnBrush") as Brush);
+        XmlEditor.TextArea.TextView.BackgroundRenderers.Add(_diagnosticRenderer);
+        _vm.ValidationErrors.CollectionChanged += OnDiagnosticsChanged;
 
         // Load initial text
         XmlEditor.Text = _vm.XmlText;
@@ -50,10 +68,14 @@ public partial class TemplateXmlEditorWindow : Window
             if (_vm.XmlText != XmlEditor.Text)
                 _vm.XmlText = XmlEditor.Text;
             UpdateFolding();
+            _diagnosticsTimer.Stop();
+            _diagnosticsTimer.Start();
         };
 
         // Track cursor position in status bar
         XmlEditor.TextArea.Caret.PositionChanged += (_, _) => UpdateCursorPosition();
+        XmlEditor.MouseHover += OnEditorMouseHover;
+        XmlEditor.MouseHoverStopped += OnEditorMouseHoverStopped;
 
         // IntelliSense: trigger completion on typing
         XmlEditor.TextArea.TextEntering += OnTextEntering;
@@ -72,7 +94,97 @@ public partial class TemplateXmlEditorWindow : Window
 
         // Initial folding
         SetupFolding();
+        _diagnosticsTimer.Start();
     }
+
+    private void ApplyQuickFix(XmlEditorQuickFix fix)
+    {
+        if (fix.Kind == XmlEditorQuickFixKind.OpenParameterFileGlobal)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(fix.Value) { UseShellExecute = true });
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
+                                       or InvalidOperationException or FileNotFoundException)
+            {
+                MessageBox.Show(this, ex.Message, "Could not open parameter file",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            return;
+        }
+
+        var replacement = _vm.GetQuickFixResult(fix);
+        if (replacement is null || replacement == XmlEditor.Text) return;
+
+        XmlEditorQuickFixApplier.ReplaceAsSingleUndo(XmlEditor.Document, replacement);
+    }
+
+    private void BrowseParameterFile_Click(object sender, RoutedEventArgs e)
+    {
+        var text = XmlEditor.Document.Text;
+        const string attributePrefix = "ParameterFile=\"";
+        if (text.Length < attributePrefix.Length)
+        {
+            MessageBox.Show(this, "Place the caret inside an Initialize ParameterFile value first.",
+                "Parameter file", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var searchEnd = Math.Min(XmlEditor.CaretOffset, text.Length - 1);
+        var attributeStart = text.LastIndexOf(attributePrefix, searchEnd, StringComparison.OrdinalIgnoreCase);
+        if (attributeStart < 0 || XmlEditor.CaretOffset < attributeStart + attributePrefix.Length)
+        {
+            MessageBox.Show(this, "Place the caret inside an Initialize ParameterFile value first.",
+                "Parameter file", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var valueStart = attributeStart + attributePrefix.Length;
+        var valueEnd = text.IndexOf('"', XmlEditor.CaretOffset);
+        if (valueEnd < valueStart)
+        {
+            MessageBox.Show(this, "Complete the ParameterFile attribute quotes before browsing.",
+                "Parameter file", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var parametersDirectory = Path.Combine(AppContext.BaseDirectory, "Parameters");
+        if (!Directory.Exists(parametersDirectory))
+            parametersDirectory = Path.Combine(Environment.CurrentDirectory, "Parameters");
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Parameter Files|*.json;*.txt|All Files|*.*",
+            Title = "Select Parameter File",
+            InitialDirectory = Directory.Exists(parametersDirectory)
+                ? parametersDirectory
+                : Environment.CurrentDirectory,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        var escapedPath = System.Security.SecurityElement.Escape(dialog.FileName) ?? dialog.FileName;
+        XmlEditorQuickFixApplier.ReplaceRangeAsSingleUndo(
+            XmlEditor.Document, valueStart, valueEnd - valueStart, escapedPath);
+    }
+
+    private void OnDiagnosticsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        XmlEditor.TextArea.TextView.InvalidateVisual();
+
+    private void OnEditorMouseHover(object sender, MouseEventArgs e)
+    {
+        var textView = XmlEditor.TextArea.TextView;
+        var position = textView.GetPosition(e.GetPosition(textView));
+        if (position is null) return;
+
+        var offset = XmlEditor.Document.GetOffset(position.Value.Location);
+        var tooltip = _vm.GetHoverText(offset);
+        if (tooltip is null) return;
+        XmlEditor.ToolTip = tooltip;
+        System.Windows.Controls.ToolTipService.SetShowDuration(XmlEditor, 60_000);
+    }
+
+    private void OnEditorMouseHoverStopped(object sender, MouseEventArgs e) =>
+        XmlEditor.ToolTip = null;
 
     private void ConfigureEditor()
     {
@@ -188,6 +300,11 @@ public partial class TemplateXmlEditorWindow : Window
             if (attrName is not null)
                 ShowValueCompletion(attrName);
         }
+        else if (e.Text == "_" && XmlEditor.CaretOffset >= 2
+                 && XmlEditor.Document.GetText(XmlEditor.CaretOffset - 2, 2) == "[_")
+        {
+            ShowTokenCompletion();
+        }
         else if (e.Text == ">")
         {
             // Auto-close tags
@@ -197,85 +314,53 @@ public partial class TemplateXmlEditorWindow : Window
 
     private void ShowElementCompletion()
     {
+        var entries = _vm.GetElementCompletions();
+        if (entries.Count == 0) return;
         _completionWindow = new CompletionWindow(XmlEditor.TextArea);
         var data = _completionWindow.CompletionList.CompletionData;
-        data.Add(new XmlCompletionData("Templates", "Root element for template definitions"));
-        data.Add(new XmlCompletionData("Template", "Template definition with ID"));
-        data.Add(new XmlCompletionData("ActionGroup", "Group of actions with execution type"));
-        data.Add(new XmlCompletionData("Action", "Single action (RunCommand/RunRemoteCommand/SendMail)"));
-        data.Add(new XmlCompletionData("Initialize", "Parameter file initialization"));
-        data.Add(new XmlCompletionData("Ref", "Reference to another template"));
+        foreach (var entry in entries)
+            data.Add(new XmlCompletionData(entry.Text, entry.Description));
         _completionWindow.Show();
         _completionWindow.Closed += (_, _) => _completionWindow = null;
     }
 
     private void ShowAttributeCompletion(string tagName)
     {
+        var entries = _vm.GetAttributeCompletions(tagName);
+        if (entries.Count == 0) return;
         _completionWindow = new CompletionWindow(XmlEditor.TextArea);
         var data = _completionWindow.CompletionList.CompletionData;
-
-        switch (tagName)
-        {
-            case "Template":
-                data.Add(new XmlCompletionData("ID=\"\"", "Template identifier"));
-                break;
-            case "ActionGroup":
-                data.Add(new XmlCompletionData("Tag=\"\"", "Group tag/label"));
-                data.Add(new XmlCompletionData("ExecutionType=\"\"", "Sequential or Parallel"));
-                data.Add(new XmlCompletionData("FailAndContinue=\"true\"", "Continue on failure"));
-                break;
-            case "Action":
-                data.Add(new XmlCompletionData("Type=\"\"", "RunCommand, RunRemoteCommand, or SendMail"));
-                data.Add(new XmlCompletionData("AgentName=\"\"", "Remote agent name"));
-                data.Add(new XmlCompletionData("Command=\"\"", "Command to execute"));
-                data.Add(new XmlCompletionData("Parameters=\"\"", "Command parameters"));
-                data.Add(new XmlCompletionData("Timeout=\"6000\"", "Timeout in seconds"));
-                data.Add(new XmlCompletionData("PollInterval=\"30\"", "Poll interval in seconds"));
-                data.Add(new XmlCompletionData("FailAndContinue=\"true\"", "Continue on failure"));
-                data.Add(new XmlCompletionData("From=\"\"", "Mail sender"));
-                data.Add(new XmlCompletionData("To=\"\"", "Mail recipients"));
-                data.Add(new XmlCompletionData("Title=\"\"", "Mail subject"));
-                data.Add(new XmlCompletionData("Body=\"\"", "Mail body"));
-                data.Add(new XmlCompletionData("Embed=\"\"", "Embedded content"));
-                break;
-            case "Initialize":
-                data.Add(new XmlCompletionData("Tag=\"\"", "Initialization tag"));
-                data.Add(new XmlCompletionData("ParameterFile=\"\"", "Path to parameter file"));
-                break;
-            case "Ref":
-                data.Add(new XmlCompletionData("TemplateID=\"\"", "Referenced template ID"));
-                break;
-        }
-
-        if (data.Count > 0)
-        {
-            _completionWindow.Show();
-            _completionWindow.Closed += (_, _) => _completionWindow = null;
-        }
-        else
-        {
-            _completionWindow = null;
-        }
+        foreach (var entry in entries)
+            data.Add(new XmlCompletionData(entry.Text, entry.Description));
+        _completionWindow.Show();
+        _completionWindow.Closed += (_, _) => _completionWindow = null;
     }
 
     private void ShowValueCompletion(string attrName)
     {
-        var values = attrName switch
-        {
-            "ExecutionType" => new[] { "Sequential", "Parallel" },
-            "Type" => new[] { "RunCommand", "RunRemoteCommand", "SendMail" },
-            "FailAndContinue" => new[] { "true", "false" },
-            "IsReboot" => new[] { "true", "false" },
-            _ => Array.Empty<string>()
-        };
-
-        if (values.Length == 0) return;
+        var values = _vm.GetValueCompletions(attrName, insideEvent: false);
+        if (values.Count == 0) return;
 
         _completionWindow = new CompletionWindow(XmlEditor.TextArea);
         var data = _completionWindow.CompletionList.CompletionData;
-        foreach (var v in values)
-            data.Add(new XmlCompletionData(v, $"{attrName} value"));
+        foreach (var value in values)
+            data.Add(new XmlCompletionData(value.Text, value.Description));
 
+        _completionWindow.Show();
+        _completionWindow.Closed += (_, _) => _completionWindow = null;
+    }
+
+    private void ShowTokenCompletion()
+    {
+        var values = _vm.GetTokenCompletions();
+        if (values.Count == 0) return;
+        _completionWindow = new CompletionWindow(XmlEditor.TextArea)
+        {
+            StartOffset = XmlEditor.CaretOffset - 2,
+        };
+        foreach (var value in values)
+            _completionWindow.CompletionList.CompletionData.Add(
+                new XmlCompletionData(value.Text, value.Description));
         _completionWindow.Show();
         _completionWindow.Closed += (_, _) => _completionWindow = null;
     }
@@ -428,6 +513,13 @@ public partial class TemplateXmlEditorWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _diagnosticsTimer.Stop();
+        _vm.QuickFixRequested -= ApplyQuickFix;
+        XmlEditor.MouseHover -= OnEditorMouseHover;
+        XmlEditor.MouseHoverStopped -= OnEditorMouseHoverStopped;
+        _vm.ValidationErrors.CollectionChanged -= OnDiagnosticsChanged;
+        if (_diagnosticRenderer is not null)
+            XmlEditor.TextArea.TextView.BackgroundRenderers.Remove(_diagnosticRenderer);
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
         if (_foldingManager is not null)
         {

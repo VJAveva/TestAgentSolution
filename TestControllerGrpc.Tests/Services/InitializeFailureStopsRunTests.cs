@@ -135,8 +135,8 @@ public class InitializeFailureStopsRunTests : IDisposable
             Action("after-init"));
 
         AssertNothingAttempted();
-        Assert.Contains("profile 'Warm' is not defined", LogText);
-        Assert.Contains("defined profiles are: Sanity", LogText);
+        Assert.Contains("Profile 'Warm' is not defined", LogText);
+        Assert.Contains("file defines: Sanity", LogText);
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class InitializeFailureStopsRunTests : IDisposable
             Action("after-init"));
 
         AssertNothingAttempted();
-        Assert.Contains("could not be read as JSON", LogText);
+        Assert.Contains("contains invalid JSON", LogText);
     }
 
     /// <summary>

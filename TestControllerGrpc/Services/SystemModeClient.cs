@@ -14,6 +14,7 @@ namespace TestControllerGrpc.Services;
 public class SystemModeClient : IDisposable
 {
     private readonly HttpClient? _http;
+    private readonly AuthClient? _authClient;
     private readonly IOptionsMonitor<RbacOptions>? _rbacOptions;
     private readonly IAppLogger? _logger;
     private HubConnection? _hubConnection;
@@ -23,10 +24,12 @@ public class SystemModeClient : IDisposable
 
     public SystemModeClient(
         IHttpClientFactory httpClientFactory,
+        AuthClient authClient,
         IOptionsMonitor<RbacOptions> rbacOptions,
         IAppLogger logger)
     {
         _http = httpClientFactory.CreateClient("SystemMode");
+        _authClient = authClient;
         _rbacOptions = rbacOptions;
         _logger = logger;
     }
@@ -51,15 +54,30 @@ public class SystemModeClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// Mode transitions are gated server-side by System_ChangeMode. X-Source identifies this
+    /// process as the trusted WPF host (the only caller admitted in Default mode) and the
+    /// bearer token identifies the signed-in Administrator (required in Secured mode).
+    /// </summary>
+    private HttpRequestMessage ModeChangeRequest(string path, HttpContent? content = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = content };
+        request.Headers.Add("X-Source", "WPF");
+        if (_authClient?.Token is { } token)
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
     public virtual async Task<(bool Success, string? Error)> SwitchToSecuredAsync(
         string username, string email, string password)
     {
-        var response = await _http!.PostAsJsonAsync("/api/system/mode/secured", new
+        var request = ModeChangeRequest("/api/system/mode/secured", JsonContent.Create(new
         {
             username,
             email,
             password,
-        });
+        }));
+        var response = await _http!.SendAsync(request);
 
         if (response.IsSuccessStatusCode)
             return (true, null);
@@ -69,7 +87,7 @@ public class SystemModeClient : IDisposable
 
     public virtual async Task<(bool Success, string? Error)> SwitchToDefaultAsync()
     {
-        var response = await _http!.PostAsync("/api/system/mode/default", null);
+        var response = await _http!.SendAsync(ModeChangeRequest("/api/system/mode/default"));
 
         if (response.IsSuccessStatusCode)
             return (true, null);
@@ -80,7 +98,7 @@ public class SystemModeClient : IDisposable
     /// <summary>Switch to Secured mode by reactivating existing users (no wizard needed).</summary>
     public virtual async Task<(bool Success, string? Error)> SwitchToSecuredReactivateAsync()
     {
-        var response = await _http!.PostAsync("/api/system/mode/secured/reactivate", null);
+        var response = await _http!.SendAsync(ModeChangeRequest("/api/system/mode/secured/reactivate"));
 
         if (response.IsSuccessStatusCode)
             return (true, null);

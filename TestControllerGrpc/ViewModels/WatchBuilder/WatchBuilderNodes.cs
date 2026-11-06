@@ -1,6 +1,12 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels.WatchBuilder;
 
@@ -85,11 +91,15 @@ public sealed partial class WatchItemNodeViewModel : WatchBuilderNodeViewModel
 {
     private readonly WatchItemConfig _model;
 
-    public WatchItemNodeViewModel(WatchItemConfig model, WatchBuilderNodeViewModel? parent)
+    public WatchItemNodeViewModel(
+        WatchItemConfig model,
+        WatchBuilderNodeViewModel? parent,
+        bool canEditTag = false)
         : base(parent)
     {
         _model = model;
         _tag = model.Tag;
+        _canEditTag = canEditTag;
         _path = model.Path;
         _filter = model.Filter;
         _isEnabled = model.IsEnabled;
@@ -107,6 +117,8 @@ public sealed partial class WatchItemNodeViewModel : WatchBuilderNodeViewModel
     public override IReadOnlyList<WatchNodeKind> AddableKinds => [WatchNodeKind.Event];
 
     [ObservableProperty] private string _tag;
+    [ObservableProperty] private bool _canEditTag;
+    public bool IsTagReadOnly => !CanEditTag;
     [ObservableProperty] private string _path;
     [ObservableProperty] private string _filter;
     [ObservableProperty] private bool _isEnabled;
@@ -114,7 +126,19 @@ public sealed partial class WatchItemNodeViewModel : WatchBuilderNodeViewModel
     [ObservableProperty] private string _dropLocationField;
     [ObservableProperty] private string _buildBasePath;
 
-    partial void OnTagChanged(string value) { _model.Tag = value; RaiseEdited(); }
+    partial void OnTagChanged(string value)
+    {
+        if (!CanEditTag)
+        {
+            _tag = _model.Tag;
+            OnPropertyChanged(nameof(Tag));
+            return;
+        }
+
+        _model.Tag = value;
+        RaiseEdited();
+    }
+    partial void OnCanEditTagChanged(bool value) => OnPropertyChanged(nameof(IsTagReadOnly));
     partial void OnPathChanged(string value) { _model.Path = value; RaiseEdited(); }
     partial void OnFilterChanged(string value) { _model.Filter = value; RaiseEdited(); }
     partial void OnIsEnabledChanged(bool value) { _model.IsEnabled = value; RaiseEdited(); }
@@ -379,6 +403,7 @@ public sealed partial class ActionNodeViewModel : WatchBuilderNodeViewModel, IAc
 public sealed partial class InitializeNodeViewModel : WatchBuilderNodeViewModel, IActionNodeHost
 {
     private readonly InitializeConfig _model;
+    private bool _refreshingParameterFile;
 
     public InitializeNodeViewModel(InitializeConfig model, WatchBuilderNodeViewModel? parent)
         : base(parent)
@@ -386,6 +411,8 @@ public sealed partial class InitializeNodeViewModel : WatchBuilderNodeViewModel,
         _model = model;
         _tag = model.Tag;
         _parameterFile = model.ParameterFile;
+        _profile = model.Profile;
+        RefreshParameterFileStatus();
     }
 
     public IActionNode NodeModel => _model;
@@ -395,9 +422,150 @@ public sealed partial class InitializeNodeViewModel : WatchBuilderNodeViewModel,
 
     [ObservableProperty] private string _tag;
     [ObservableProperty] private string _parameterFile;
+    [ObservableProperty] private string _profile;
+    [ObservableProperty] private string _parameterFileStatus = "";
+
+    public ObservableCollection<string> Profiles { get; } = new();
 
     partial void OnTagChanged(string value) { _model.Tag = value; RaiseEdited(); }
-    partial void OnParameterFileChanged(string value) { _model.ParameterFile = value; RaiseEdited(); }
+    partial void OnParameterFileChanged(string value)
+    {
+        _model.ParameterFile = value;
+        RaiseEdited();
+        RefreshParameterFileStatus();
+    }
+
+    partial void OnProfileChanged(string value)
+    {
+        _model.Profile = value;
+        RaiseEdited();
+        if (!_refreshingParameterFile)
+            RefreshParameterFileStatus();
+    }
+
+    [RelayCommand]
+    private void BrowseParameterFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Parameter Files|*.json;*.txt|JSON Config|*.json|Text Files|*.txt|All Files|*.*",
+            Title = "Select Parameter File"
+        };
+
+        var defaultDirectory = Path.Combine(AppContext.BaseDirectory, "Parameters");
+        if (!Directory.Exists(defaultDirectory))
+            defaultDirectory = Path.Combine(Environment.CurrentDirectory, "Parameters");
+        if (Directory.Exists(defaultDirectory))
+            dialog.InitialDirectory = defaultDirectory;
+
+        if (!string.IsNullOrWhiteSpace(ParameterFile))
+        {
+            var directory = Path.GetDirectoryName(ParameterFile);
+            if (directory is not null && Directory.Exists(directory))
+                dialog.InitialDirectory = directory;
+        }
+
+        if (dialog.ShowDialog() == true)
+            ParameterFile = dialog.FileName;
+    }
+
+    [RelayCommand]
+    private void OpenParameterFile()
+    {
+        if (string.IsNullOrWhiteSpace(ParameterFile) || !File.Exists(ParameterFile))
+        {
+            ParameterFileStatus = $"File not found: {ParameterFile}";
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = ParameterFile, UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
+        {
+            ParameterFileStatus = $"Could not open '{ParameterFile}': {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ReloadParameterFile() => RefreshParameterFileStatus();
+
+    private void RefreshParameterFileStatus()
+    {
+        if (_refreshingParameterFile)
+            return;
+
+        _refreshingParameterFile = true;
+        try
+        {
+            Profiles.Clear();
+            if (string.IsNullOrWhiteSpace(ParameterFile))
+            {
+                if (!string.IsNullOrEmpty(Profile))
+                    Profile = "";
+                ParameterFileStatus = "No ParameterFile is configured.";
+                return;
+            }
+
+            if (!File.Exists(ParameterFile))
+            {
+                ParameterFileStatus = $"File not found: {ParameterFile}";
+                return;
+            }
+
+            if (ParameterResolver.IsLayeredConfig(ParameterFile))
+            {
+                if (!ParameterResolver.TryReadJsonConfig(ParameterFile, out var config, out var readFailure))
+                {
+                    ParameterFileStatus = readFailure ?? $"Could not read '{ParameterFile}'.";
+                    return;
+                }
+
+                foreach (var profileName in config!.Profiles.Keys.OrderBy(
+                             name => name, StringComparer.OrdinalIgnoreCase))
+                    Profiles.Add(profileName);
+
+                if (Profiles.Count == 0)
+                    Profile = "";
+                else if (!Profiles.Contains(Profile, StringComparer.OrdinalIgnoreCase))
+                    Profile = Profiles[0];
+
+                var context = new PipelineExecutionContext();
+                if (!ParameterResolver.TryLoadJsonConfig(
+                        context, ParameterFile, Profile, GetPipelineTag(), out var loadFailure))
+                {
+                    ParameterFileStatus = loadFailure ?? $"Could not load '{ParameterFile}'.";
+                    return;
+                }
+
+                ParameterFileStatus = $"Valid layered parameter file; profile '{Profile}'.";
+                return;
+            }
+
+            Profiles.Clear();
+            if (!string.IsNullOrEmpty(Profile))
+                Profile = "";
+            var entries = ParameterResolver.ParseParameterFile(ParameterFile);
+            ParameterFileStatus = $"Loaded {entries.Count} parameter(s) from '{ParameterFile}'.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            ParameterFileStatus = $"Could not read '{ParameterFile}': {ex.Message}";
+        }
+        finally
+        {
+            _refreshingParameterFile = false;
+        }
+    }
+
+    private string? GetPipelineTag()
+    {
+        WatchBuilderNodeViewModel root = this;
+        while (root.Parent is not null)
+            root = root.Parent;
+        return (root as WatchItemNodeViewModel)?.Tag;
+    }
 
     public override void RemoveChild(WatchBuilderNodeViewModel child) { /* leaf */ }
 }

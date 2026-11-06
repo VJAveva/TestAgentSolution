@@ -2,6 +2,7 @@ using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Identity;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using System.Text.Json;
 
 namespace TestControllerGrpc.Core.PipelineBuilder;
 
@@ -20,6 +21,7 @@ public sealed record BuilderValidation(
     IReadOnlyList<BuilderIssue> Informational)
 {
     public bool CanCreate => Blocking.Count == 0;
+    public IReadOnlyList<BuilderTokenReview> Tokens { get; init; } = [];
 }
 
 public sealed record CreateOutcome(
@@ -32,7 +34,7 @@ public sealed record CreateOutcome(
 public sealed partial class PipelineBuilderService
 {
     /// <summary>Checks a preview against the live WatchList. Pure - writes nothing.</summary>
-    public BuilderValidation Validate(BuilderResult preview, WatchListConfig live)
+    public BuilderValidation Validate(BuilderResult preview, WatchListConfig live, string? fragmentDir = null)
     {
         var blocking = new List<BuilderIssue>();
         var info = new List<BuilderIssue>();
@@ -41,7 +43,19 @@ public sealed partial class PipelineBuilderService
             (issue.Severity == BuilderSeverity.Error ? blocking : info).Add(issue);
 
         if (preview.WatchItem is null)
+        {
+            blocking.Add(new(BuilderSeverity.Error, "Choose a target, recipe and agents before creating a pipeline."));
             return new BuilderValidation(blocking, info);
+        }
+
+        if (!PipelineTag.IsValid(preview.Tag))
+            blocking.Add(new(BuilderSeverity.Error,
+                $"Tag '{preview.Tag}' is not a safe identity key: max {PipelineTag.MaxLength} characters from [A-Za-z0-9._-]."));
+
+        if (preview.WatchItem.Tag != preview.Tag
+            || preview.WatchItem.Path != preview.TriggerFolder
+            || preview.WatchItem.Filter != preview.TriggerFilter)
+            blocking.Add(new(BuilderSeverity.Error, "The preview identity or trigger changed. Review the pipeline again."));
 
         var plan = WatchListFragmentImport.Plan(live, [preview.WatchItem], []);
         foreach (var conflict in plan.Conflicts)
@@ -52,76 +66,100 @@ public sealed partial class PipelineBuilderService
         if (File.Exists(preview.ConfigPath))
         {
             blocking.Add(new BuilderIssue(BuilderSeverity.Error,
-                $"'{preview.ConfigFileName}' already exists. Rename the recipe or remove the old config."));
+                $"'{preview.ConfigPath}' already exists. Nothing will be overwritten; choose a different recipe or edit the existing pipeline."));
         }
+        if (fragmentDir is not null && File.Exists(Path.Combine(fragmentDir, $"{preview.Tag}.watchitem.xml")))
+            blocking.Add(new(BuilderSeverity.Error,
+                $"'{Path.Combine(fragmentDir, $"{preview.Tag}.watchitem.xml")}' already exists. Import the existing fragment or choose a different recipe."));
 
         var candidate = new WatchListConfig { WatchItems = [preview.WatchItem] };
-        foreach (var issue in WatchListValidator.Analyze(candidate))
+        foreach (var issue in WatchListValidator.AnalyzeStructure(candidate))
         {
             var builderIssue = new BuilderIssue(
                 issue.Severity == WatchIssueSeverity.Error ? BuilderSeverity.Error : BuilderSeverity.Warning,
-                issue.Message);
+                $"{issue.NodePath}: {issue.Message}");
 
             (issue.Severity == WatchIssueSeverity.Error ? blocking : info).Add(builderIssue);
         }
 
-        AddTokenIssues(preview, blocking, info);
-
-        return new BuilderValidation(blocking, info);
+        var tokens = ReviewTokens(preview, blocking, info);
+        return new BuilderValidation(blocking, info) { Tokens = tokens };
     }
 
     /// <summary>
     /// Splits unresolved tokens into "authoring forgot to define it" and "a build supplies it".
     /// </summary>
-    private static void AddTokenIssues(
+    private static IReadOnlyList<BuilderTokenReview> ReviewTokens(
         BuilderResult preview, List<BuilderIssue> blocking, List<BuilderIssue> info)
     {
         var ctx = new PipelineExecutionContext { WatchItemTag = preview.Tag };
-
-        foreach (var entry in preview.Config.Global)
-            ParameterResolver.SetParameter(ctx, entry.Key, entry.Value, ParameterRank.Global);
-
-        foreach (var profile in preview.Config.Profiles.Values)
-            foreach (var entry in profile)
-                ParameterResolver.SetParameter(ctx, entry.Key, entry.Value, ParameterRank.ParameterFile);
-
-        var missing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var action in Actions(preview.WatchItem!))
-            foreach (var token in ParameterResolver.FindUnresolvedTokens(action, ctx))
-                missing.Add(token);
-
-        foreach (var token in missing.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+        var initializers = ParameterResolver.CollectInitializeNodes(preview.WatchItem!);
+        if (initializers.Count == 0)
         {
-            // The catalog drops exactly these keys from a target, so the two sets cannot drift.
-            var suppliedLater = DerivedTargetCatalog.SuppliedAtRunTime.Contains("_" + token.TrimStart('_'));
-
-            if (suppliedLater)
+            blocking.Add(new(BuilderSeverity.Error, "The generated pipeline needs an Initialize node for its parameter file."));
+            return [];
+        }
+        var sourceFailed = false;
+        foreach (var init in initializers)
+        {
+            var failure = string.Equals(init.ParameterFile, preview.ConfigPath, StringComparison.OrdinalIgnoreCase)
+                ? ParameterResolver.TryApplyJsonConfig(ctx, preview.Config, init.Profile, preview.Tag, preview.ConfigPath)
+                : ParameterResolver.TryLoadInitializeSource(ctx, init.ParameterFile, init.Profile, preview.Tag);
+            if (failure is not null)
             {
-                info.Add(new BuilderIssue(BuilderSeverity.Info,
-                    $"[{token}] is supplied at run time by GlobalVariables.json or the trigger file."));
+                blocking.Add(new(BuilderSeverity.Error, $"Initialize '{init.Tag}': {failure}"));
+                sourceFailed = true;
+            }
+        }
+        if (sourceFailed) return [];
+
+        var references = Actions(preview.WatchItem!)
+            .SelectMany(a => ParameterResolver.ReferencedTokens(a.Action, ctx)
+                .Select(t => (t.Name, Consumer: $"{a.Path} / {t.Field}")));
+        var rows = new List<BuilderTokenReview>();
+        foreach (var group in references.GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var name = group.Key;
+            var consumers = string.Join("; ", group.Select(r => r.Consumer).Distinct(StringComparer.Ordinal));
+            if (ctx.Parameters.TryGetValue(name, out var value))
+            {
+                var layer = ctx.ParameterRanks.TryGetValue(name, out var rank)
+                    ? TokenDisplay.LayerFromRank((ParameterRank)rank).ToString()
+                    : "Configuration";
+                rows.Add(new(name, TokenDisplay.MaskIfSecret(name, string.IsNullOrEmpty(value) ? "(empty)" : value),
+                    layer, BuilderTokenStatus.Defined, consumers));
+            }
+            else if (DerivedTargetCatalog.SuppliedAtRunTime.Contains(name))
+            {
+                rows.Add(new(name, "Supplied at run time", "GlobalVariables / trigger", BuilderTokenStatus.Runtime, consumers));
+                info.Add(new(BuilderSeverity.Info,
+                    $"[{name}] is supplied at run time by GlobalVariables.json or the trigger file. Used by: {consumers}."));
             }
             else
             {
-                blocking.Add(new BuilderIssue(BuilderSeverity.Error,
-                    $"[{token}] is used by this pipeline but no layer defines it."));
+                rows.Add(new(name, "Not defined", "Missing", BuilderTokenStatus.Missing, consumers));
+                blocking.Add(new(BuilderSeverity.Error,
+                    $"[{name}] is not defined. Used by: {consumers}. Add it to the target config or the selected profile, then review again."));
             }
         }
+        return rows;
     }
 
-    private static IEnumerable<ActionConfig> Actions(WatchItemConfig item)
+    private static IEnumerable<(ActionConfig Action, string Path)> Actions(WatchItemConfig item)
     {
         foreach (var ev in item.Events)
-            foreach (var node in Walk(ev.Children))
-                if (node is ActionConfig action)
-                    yield return action;
+            foreach (var action in Walk(ev.Children, $"Event[{ev.Type}]"))
+                yield return action;
 
-        static IEnumerable<IActionNode> Walk(List<IActionNode> nodes)
+        static IEnumerable<(ActionConfig Action, string Path)> Walk(List<IActionNode> nodes, string path)
         {
             foreach (var node in nodes)
             {
-                yield return node;
+                if (node is ActionConfig action)
+                    yield return (action, $"{path} / Action[{(string.IsNullOrWhiteSpace(action.Tag) ? action.Type.ToString() : action.Tag)}]");
                 if (node is ActionGroupConfig group)
-                    foreach (var child in Walk(group.Children))
+                    foreach (var child in Walk(group.Children, $"{path} / Group[{group.Tag}]"))
                         yield return child;
             }
         }
@@ -142,7 +180,8 @@ public sealed partial class PipelineBuilderService
         BuilderValidation validation,
         string fragmentDir,
         IUserContext caller,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        WatchListConfig? live = null)
     {
         var decision = await authorization.CanAsync(caller, Permission.Pipeline_Author, resourceId: null, ct);
         if (!decision.Allowed)
@@ -160,44 +199,62 @@ public sealed partial class PipelineBuilderService
                 [new BuilderIssue(BuilderSeverity.Error, "Create refused: validation is not green.")]);
         }
 
-        // Re-checked at the write boundary: BuilderResult is a record a caller can hand-build, and an
-        // unsafe tag would reach PipelineAssignments and every tag-in-path REST route.
-        if (!PipelineTag.IsValid(preview.Tag))
-        {
-            return new CreateOutcome(false, "", "", preview.TriggerFolder,
-            [
-                new BuilderIssue(BuilderSeverity.Error,
-                    $"Tag '{preview.Tag}' is not a safe identity key: max {PipelineTag.MaxLength} "
-                    + "characters from [A-Za-z0-9._-]."),
-            ]);
-        }
+        var current = Validate(preview, live ?? new WatchListConfig(), fragmentDir);
+        if (!current.CanCreate)
+            return new CreateOutcome(false, "", "", preview.TriggerFolder, current.Blocking);
 
+        ct.ThrowIfCancellationRequested();
         var issues = new List<BuilderIssue>();
-
-        Directory.CreateDirectory(Path.GetDirectoryName(preview.ConfigPath)!);
-        WriteAtomic(preview.ConfigPath, preview.ConfigJson);
-
-        Directory.CreateDirectory(fragmentDir);
         var fragmentPath = Path.Combine(fragmentDir, $"{preview.Tag}.watchitem.xml");
-        WriteAtomic(fragmentPath, WatchListXmlParser.SerializeWatchItemsToXml([preview.WatchItem], []));
+        var configTemp = preview.ConfigPath + $".{Guid.NewGuid():N}.tmp";
+        var fragmentTemp = fragmentPath + $".{Guid.NewGuid():N}.tmp";
+        var configPublished = false;
+        var fragmentPublished = false;
+        var written = false;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(preview.ConfigPath))!);
+            Directory.CreateDirectory(fragmentDir);
+            Directory.CreateDirectory(preview.TriggerFolder);
 
-        // A WatchItem whose Path does not exist fails the run before any action dispatches, so the
-        // folder is part of creating the pipeline, not a later manual step.
-        Directory.CreateDirectory(preview.TriggerFolder);
-
-        issues.Add(new BuilderIssue(BuilderSeverity.Info,
-            $"Import '{Path.GetFileName(fragmentPath)}' into the WatchList to activate '{preview.Tag}'."));
-
-        return new CreateOutcome(true, preview.ConfigPath, fragmentPath, preview.TriggerFolder, issues);
+            // Persist precisely the in-memory config we validated, not a potentially stale JSON preview.
+            File.WriteAllText(configTemp, JsonSerializer.Serialize(preview.Config, WriteOptions));
+            File.WriteAllText(fragmentTemp, WatchListXmlParser.SerializeWatchItemsToXml([preview.WatchItem], []));
+            File.Move(configTemp, preview.ConfigPath, overwrite: false);
+            configPublished = true;
+            File.Move(fragmentTemp, fragmentPath, overwrite: false);
+            fragmentPublished = true;
+            written = true;
+            issues.Add(new(BuilderSeverity.Info,
+                $"Import '{fragmentPath}' into the WatchList to activate '{preview.Tag}'. No pipeline was activated or run."));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            issues.Add(new(BuilderSeverity.Error, $"Could not create pipeline files: {ex.Message}"));
+        }
+        finally
+        {
+            if (!written)
+            {
+                if (fragmentPublished) CleanupFile(fragmentPath, issues);
+                if (configPublished) CleanupFile(preview.ConfigPath, issues);
+            }
+            CleanupFile(configTemp, issues);
+            CleanupFile(fragmentTemp, issues);
+        }
+        return new CreateOutcome(written, written ? preview.ConfigPath : "", written ? fragmentPath : "",
+            preview.TriggerFolder, issues);
     }
 
-    private static void WriteAtomic(string path, string content)
+    private static void CleanupFile(string path, List<BuilderIssue> issues)
     {
-        if (File.Exists(path))
-            File.Copy(path, $"{path}.bak-{DateTime.Now:yyyyMMdd-HHmmss}", overwrite: true);
-
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, content);
-        File.Move(temp, path, overwrite: true);
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            issues.Add(new(BuilderSeverity.Warning, $"Could not remove '{path}': {ex.Message}. Check this file before retrying."));
+        }
     }
 }

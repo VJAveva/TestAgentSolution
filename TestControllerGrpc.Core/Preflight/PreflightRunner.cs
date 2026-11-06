@@ -107,6 +107,7 @@ public sealed class PreflightRunner
 
         var pipeline = request.Pipeline;
         var initializers = ParameterResolver.CollectInitializeNodes(pipeline);
+        var parameterSourceFailed = false;
 
         if (initializers.Count == 0)
         {
@@ -119,6 +120,7 @@ public sealed class PreflightRunner
         {
             if (string.IsNullOrWhiteSpace(init.ParameterFile))
             {
+                parameterSourceFailed = true;
                 report.Checks.Add(new PreflightCheck(G, $"Initialize '{init.Tag}'", PreflightStatus.Fail,
                     "The Initialize node names no parameter file.",
                     "Set its ParameterFile attribute in the WatchList."));
@@ -128,15 +130,26 @@ public sealed class PreflightRunner
             var reason = ParameterResolver.TryLoadInitializeSource(ctx, init.ParameterFile, init.Profile, pipeline.Tag);
             if (reason is not null)
             {
+                parameterSourceFailed = true;
                 report.Checks.Add(new PreflightCheck(G, $"Parameter file '{Path.GetFileName(init.ParameterFile)}'",
                     PreflightStatus.Fail, reason,
                     $"Check '{init.ParameterFile}' exists and is valid, and that profile '{init.Profile}' is defined in it."));
+
+                if (ParameterResolver.IsLayeredConfig(init.ParameterFile)
+                    && ParameterResolver.LastGoodJsonReadUtc(init.ParameterFile) is { } lastGood)
+                {
+                    report.Checks.Add(new PreflightCheck(G, $"Last good parameter copy '{Path.GetFileName(init.ParameterFile)}'",
+                        PreflightStatus.Warn,
+                        $"Using last good copy from {lastGood.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", System.Globalization.CultureInfo.InvariantCulture)}; current file cannot be loaded: {reason}"));
+                }
                 continue;
             }
 
             report.Checks.Add(new PreflightCheck(G, $"Parameter file '{Path.GetFileName(init.ParameterFile)}'",
                 PreflightStatus.Pass,
-                string.IsNullOrWhiteSpace(init.Profile) ? "Loaded." : $"Loaded, profile '{init.Profile}'."));
+                string.IsNullOrWhiteSpace(init.Profile)
+                    ? $"Loaded '{init.ParameterFile}'."
+                    : $"Loaded '{init.ParameterFile}', profile '{init.Profile}'."));
 
             CheckPipelinesEntry(init, pipeline, report);
         }
@@ -149,7 +162,8 @@ public sealed class PreflightRunner
         }
 
         RecordTokens(ctx, report);
-        CheckUnresolvedTokens(request, ctx, report);
+        if (!parameterSourceFailed)
+            CheckUnresolvedTokens(request, ctx, report);
     }
 
     private void CheckPipelinesEntry(InitializeConfig init, WatchItemConfig pipeline, PreflightReport report)
@@ -207,11 +221,15 @@ public sealed class PreflightRunner
 
     private void CheckUnresolvedTokens(PreflightRequest request, PipelineExecutionContext ctx, PreflightReport report)
     {
-        var unresolved = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var unresolved = new SortedDictionary<string, SortedSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var action in ActionsInScope(request))
             foreach (var token in ParameterResolver.FindUnresolvedTokens(action, ctx))
-                unresolved.Add(token);
+            {
+                if (!unresolved.TryGetValue(token, out var users))
+                    unresolved[token] = users = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                users.Add(string.IsNullOrWhiteSpace(action.Tag) ? action.ResolvedTag : action.Tag);
+            }
 
         if (unresolved.Count == 0)
         {
@@ -221,7 +239,8 @@ public sealed class PreflightRunner
         }
 
         report.Checks.Add(new PreflightCheck(PreflightGroups.Settings, "Token resolution", PreflightStatus.Fail,
-            $"Unresolved: {string.Join(", ", unresolved)}.",
+            "Unresolved: " + string.Join("; ", unresolved.Select(entry =>
+                $"{entry.Key} - used by {string.Join(", ", entry.Value.Select(tag => $"'{tag}'"))}")) + ".",
             "Define these in the parameter file's global, profile or pipelines layer, or in the trigger file."));
     }
 
@@ -463,6 +482,10 @@ public sealed class PreflightRunner
 
         foreach (var issue in WatchListValidator.Analyze(request.Config))
         {
+            // Token resolution is checked above against the actual execution scope, including
+            // Ref expansion. The shared validator analyzes every WatchItem in the document.
+            if (issue.Message.StartsWith("Token [", StringComparison.Ordinal)) continue;
+
             // Analyze covers the whole WatchList; only the pipeline being run can block it.
             if (request.Pipeline is { } p && !MentionsPipeline(issue.NodePath, p.Tag)) continue;
 

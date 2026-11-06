@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Xml.Linq;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Models;
@@ -26,6 +27,9 @@ public sealed class WatchListConfig
     /// log panel after a successful load. Empty for files that parse cleanly.
     /// </summary>
     public List<string> LoadWarnings { get; } = new();
+
+    [JsonIgnore]
+    internal XDocument? XmlSourceDocument { get; set; }
 }
 
 // =============================================================================
@@ -33,6 +37,9 @@ public sealed class WatchListConfig
 // =============================================================================
 public sealed class WatchItemConfig : ISkippableNode
 {
+    [JsonIgnore]
+    internal XElement? XmlSourceElement { get; set; }
+
     public string Tag { get; set; } = "";
     public string Path { get; set; } = "";
     public string Filter { get; set; } = "*.*";
@@ -312,6 +319,9 @@ public sealed class RefConfig : IActionNode
 // =============================================================================
 public sealed class TemplateConfig
 {
+    [JsonIgnore]
+    internal XElement? XmlSourceElement { get; set; }
+
     public string ID { get; set; } = "";
     public List<IActionNode> Children { get; set; } = new();
 }

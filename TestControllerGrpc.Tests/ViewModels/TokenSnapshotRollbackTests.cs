@@ -102,7 +102,8 @@ public class TokenSnapshotRollbackTests : IDisposable
     public void TryLoadJsonConfig_Should_ReturnTrue_When_TheFileIsValid()
     {
         var path = Path.Combine(_dir, "good.json");
-        File.WriteAllText(path, "{ \"global\": { \"_Agent1\": \"jvgr1\" } }");
+        File.WriteAllText(path,
+            "{ \"global\": { \"_Agent1\": \"jvgr1\" }, \"profiles\": { \"Sanity\": {} } }");
         var ctx = new PipelineExecutionContext { WatchItemTag = "Sanity" };
 
         Assert.True(ParameterResolver.TryLoadJsonConfig(ctx, path, "Sanity", "Sanity"));

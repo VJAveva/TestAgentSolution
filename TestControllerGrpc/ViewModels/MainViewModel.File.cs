@@ -20,7 +20,11 @@ public sealed partial class MainViewModel
             var result = ThemedMessageBox.Show("Save changes before opening a new file?",
                 "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Cancel) return;
-            if (result == MessageBoxResult.Yes) SaveVocabulary();
+            if (result == MessageBoxResult.Yes)
+            {
+                SaveVocabulary();
+                if (IsDirty || HasBlockingErrors) return;
+            }
         }
 
         var dlg = new Microsoft.Win32.OpenFileDialog
@@ -48,6 +52,14 @@ public sealed partial class MainViewModel
         try
         {
             WriteBackAll();
+            RunValidation();
+            if (HasBlockingErrors)
+            {
+                AddLog($"Save blocked: {ValidationSummary}.", LogSeverity.Warning);
+                return;
+            }
+
+            RefreshAllInitializeTokenScopes();
 
             // Suppress the file-watcher reload � we're saving our own in-memory state
             _vocabMonitor.SuppressNextReload();
@@ -140,4 +152,3 @@ public sealed partial class MainViewModel
         Application.Current?.Shutdown();
     }
 }
-

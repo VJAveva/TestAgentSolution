@@ -16,7 +16,7 @@
 
         <!-- Warning header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="âš  Disable RBAC" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
+            <TextBlock Text="&#x26A0; Disable RBAC" FontSize="{StaticResource FontSize16}" FontWeight="SemiBold"
                        Foreground="{DynamicResource AccRed}"/>
             <TextBlock TextWrapping="Wrap" FontSize="{StaticResource FontSize11}" Margin="0,8,0,0" Opacity="0.9"
                        Foreground="{DynamicResource TextSecondaryBrush}"

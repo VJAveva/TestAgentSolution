@@ -186,11 +186,16 @@ public sealed partial class MainViewModel
     private void ApplyChanges()
     {
         ActiveEditNode?.ApplyToModel();
+        if (ActiveEditNode?.NodeKind == NodeKinds.Initialize)
+            LoadParameterFileEntries(ActiveEditNode.ParameterFile, ActiveEditNode.Profile);
+        ActiveEditNode?.ApplyToModel();
         ActiveEditNode?.RefreshDisplayText();
         WatchListRoot?.RefreshDisplayText();
         TemplateListRoot?.RefreshDisplayText();
         RebuildTemplateIds();
+        RefreshAllInitializeTokenScopes();
         IsDirty = true;
+        RunValidation();
         AddLog("Changes applied");
     }
 

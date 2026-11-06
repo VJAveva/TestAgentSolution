@@ -1,6 +1,9 @@
 using TestControllerGrpc.Core.PipelineBuilder;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.Core.Preflight;
+using Moq;
+using System.Text.Json;
 
 namespace TestControllerGrpc.Tests.PipelineBuilder;
 
@@ -151,6 +154,232 @@ public class PipelineBuilderCreateTests : IDisposable
 
         Assert.False(validation.CanCreate);
         Assert.Contains(validation.Blocking, b => b.Message.Contains(preview.ConfigFileName));
+    }
+
+    [Fact]
+    public void Validate_Should_ReviewSelectedProfileWithoutWriting_When_TheGeneratedFileDoesNotExist()
+    {
+        var preview = Preview();
+        preview.Config.Profiles["Unused"] = new() { ["_Agent1"] = "wrong-agent" };
+        preview.Config.Pipelines[preview.Tag] = new() { ["_ReleaseName"] = "PinnedRelease" };
+
+        var review = Service().Validate(preview, Live());
+
+        Assert.True(review.CanCreate);
+        var agent = Assert.Single(review.Tokens, t => t.Name == "_Agent1");
+        Assert.Equal("agentA", agent.DisplayValue);
+        Assert.Equal("Profile", agent.Source);
+        Assert.Contains("Group[Install]", agent.UsedBy);
+        Assert.Contains("AgentName", agent.UsedBy);
+        var release = Assert.Single(review.Tokens, t => t.Name == "_ReleaseName");
+        Assert.Equal("PinnedRelease", release.DisplayValue);
+        Assert.Equal("Pipeline", release.Source);
+        Assert.Equal(BuilderTokenStatus.Runtime, Assert.Single(review.Tokens, t => t.Name == "_BuildNumber").Status);
+        Assert.False(File.Exists(preview.ConfigPath));
+        Assert.False(Directory.Exists(preview.TriggerFolder));
+        Assert.False(Directory.Exists(_fragments));
+    }
+
+    [Fact]
+    public void Validate_Should_BlockMissingToken_When_OnlyAnUnusedProfileDefinesIt()
+    {
+        var preview = Preview();
+        preview.Config.Global.Remove("_ReleaseName");
+        preview.Config.Profiles["Unused"] = new() { ["_ReleaseName"] = "not-selected" };
+
+        var review = Service().Validate(preview, Live());
+
+        Assert.False(review.CanCreate);
+        Assert.Equal(BuilderTokenStatus.Missing, Assert.Single(review.Tokens, t => t.Name == "_ReleaseName").Status);
+        Assert.Contains(review.Blocking, b => b.Message.Contains("_ReleaseName")
+            && b.Message.Contains("Group[Install]") && b.Message.Contains("Action[install]")
+            && b.Message.Contains("Parameters"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Unknown")]
+    public void Validate_Should_ReportOnlySourceError_When_SelectedProfileIsInvalid(string profile)
+    {
+        var preview = Preview();
+        ParameterResolver.CollectInitializeNodes(preview.WatchItem!).Single().Profile = profile;
+
+        var review = Service().Validate(preview, Live());
+
+        Assert.False(review.CanCreate);
+        Assert.Single(review.Blocking);
+        Assert.Contains("Profile", review.Blocking[0].Message);
+        Assert.Empty(review.Tokens);
+    }
+
+    [Theory]
+    [InlineData("_Password")]
+    [InlineData("_ApiKey")]
+    [InlineData("_Credential")]
+    [InlineData("_ConnectionString")]
+    public void Validate_Should_MaskSecretValues_When_TokenReviewIsDisplayed(string key)
+    {
+        var preview = Preview();
+        preview.Config.Global[key] = "test-only-sensitive-value";
+        preview.WatchItem!.Events[0].Children.Add(new ActionConfig
+        {
+            Type = ActionType.RunCommand, Tag = "SecretProbe", Command = $"echo [{key}]",
+        });
+
+        var review = Service().Validate(preview, Live());
+
+        Assert.True(review.CanCreate);
+        Assert.Equal(TokenDisplay.Mask, Assert.Single(review.Tokens, t => t.Name == key).DisplayValue);
+        Assert.DoesNotContain("test-only-sensitive-value", JsonSerializer.Serialize(review));
+    }
+
+    [Fact]
+    public void Validate_Should_PreserveEmptyValues_When_OptionalParameterIsDefined()
+    {
+        var preview = Preview();
+        preview.Config.Global["_OptionalFlag"] = "";
+        preview.WatchItem!.Events[0].Children.Add(new ActionConfig
+        {
+            Type = ActionType.RunCommand, Tag = "OptionalArgument", Command = "echo [_OptionalFlag]",
+        });
+        var review = Service().Validate(preview, Live());
+        Assert.True(review.CanCreate);
+        Assert.Equal("(empty)", Assert.Single(review.Tokens, t => t.Name == "_OptionalFlag").DisplayValue);
+    }
+
+    [Fact]
+    public void Validate_Should_CheckOtherInitializeSources_When_RecipeReferencesAnExternalFile()
+    {
+        var preview = Preview();
+        preview.WatchItem!.Events[0].Children.Add(new InitializeConfig
+        {
+            Tag = "OtherInit", ParameterFile = Path.Combine(_root, "unrelated.json"),
+        });
+        var review = Service().Validate(preview, Live());
+        Assert.False(review.CanCreate);
+        Assert.Contains(review.Blocking, b => b.Message.Contains("OtherInit") && b.Message.Contains("does not exist"));
+        Assert.Empty(review.Tokens);
+    }
+
+    [Fact]
+    public void Validate_Should_LoadAdditionalSource_When_RecipeInitializesItBeforeActions()
+    {
+        var preview = Preview();
+        var path = Path.Combine(_root, "additional.txt");
+        File.WriteAllText(path, "_Agent1,external-agent");
+        preview.WatchItem!.Events[0].Children.Insert(1, new InitializeConfig
+        {
+            Tag = "OtherInit", ParameterFile = path,
+        });
+
+        var review = Service().Validate(preview, Live());
+
+        Assert.True(review.CanCreate);
+        Assert.Equal("external-agent", Assert.Single(review.Tokens, t => t.Name == "_Agent1").DisplayValue);
+        Assert.False(File.Exists(preview.ConfigPath));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Create_Should_RefuseOverwrite_When_OutputAppearsAfterReview(bool configFile)
+    {
+        var preview = Preview();
+        var review = Service().Validate(preview, Live(), _fragments);
+        var fragmentPath = Path.Combine(_fragments, $"{preview.Tag}.watchitem.xml");
+        Directory.CreateDirectory(_fragments);
+        var existing = configFile ? preview.ConfigPath : fragmentPath;
+        File.WriteAllText(existing, "keep-existing-content");
+
+        var outcome = await CreateAsAdmin(preview, review);
+
+        Assert.False(outcome.Written);
+        Assert.Equal("keep-existing-content", File.ReadAllText(existing));
+        Assert.False(File.Exists(configFile ? fragmentPath : preview.ConfigPath));
+        Assert.Empty(Directory.GetFiles(_root, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task Create_Should_RefuseStaleReview_When_ProfileChangesAfterValidation()
+    {
+        var preview = Preview();
+        var review = Service().Validate(preview, Live());
+        ParameterResolver.CollectInitializeNodes(preview.WatchItem!).Single().Profile = "Missing";
+
+        var outcome = await CreateAsAdmin(preview, review);
+
+        Assert.False(outcome.Written);
+        Assert.Contains(outcome.Issues, i => i.Message.Contains("Profile"));
+        Assert.False(File.Exists(preview.ConfigPath));
+    }
+
+    [Fact]
+    public async Task Create_Should_RecheckLiveConflicts_When_PipelineAppearsAfterReview()
+    {
+        var preview = Preview();
+        var review = Service().Validate(preview, Live());
+        var live = Live(new WatchItemConfig { Tag = preview.Tag, Path = @"C:\elsewhere" });
+
+        var outcome = await Service().CreateAsync(preview, review, _fragments, BuilderAuth.Admin, live: live);
+
+        Assert.False(outcome.Written);
+        Assert.Contains(outcome.Issues, i => i.Message.Contains("already exists"));
+        Assert.False(File.Exists(preview.ConfigPath));
+    }
+
+    [Fact]
+    public async Task Create_Should_RemoveOnlyOwnOutput_When_SecondPublishFails()
+    {
+        var preview = Preview();
+        var review = Service().Validate(preview, Live());
+        var occupiedPath = Path.Combine(_fragments, $"{preview.Tag}.watchitem.xml");
+        Directory.CreateDirectory(occupiedPath);
+
+        var outcome = await CreateAsAdmin(preview, review);
+
+        Assert.False(outcome.Written);
+        Assert.Contains(outcome.Issues, i => i.Severity == BuilderSeverity.Error);
+        Assert.False(File.Exists(preview.ConfigPath));
+        Assert.True(Directory.Exists(occupiedPath));
+        Assert.Empty(Directory.GetFiles(_root, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task Create_Should_RoundTripThroughImportAndPreflight_When_RuntimeFactsAreSupplied()
+    {
+        var preview = Preview();
+        var review = Service().Validate(preview, Live());
+        // Config is the validated source of truth, not a second potentially stale JSON representation.
+        preview = preview with { ConfigJson = "{}" };
+        var outcome = await CreateAsAdmin(preview, review);
+        Assert.True(outcome.Written);
+        var (items, templates) = WatchListXmlParser.ParseWatchItemsFromXml(File.ReadAllText(outcome.FragmentPath));
+        var live = Live();
+        var import = WatchListFragmentImport.Plan(live, items, templates);
+        Assert.True(import.CanImport);
+        live.WatchItems.AddRange(import.NewItems);
+        live.Templates.AddRange(import.NewTemplates);
+        Assert.DoesNotContain(WatchListValidator.Analyze(live), i => i.Severity == WatchIssueSeverity.Error);
+
+        var fs = new Mock<IPreflightFileSystem>();
+        fs.Setup(f => f.CheckFile(It.IsAny<string>())).Returns(PathAccess.Exists);
+        fs.Setup(f => f.CheckDirectory(It.IsAny<string>())).Returns(PathAccess.Exists);
+        fs.Setup(f => f.FreeSpaceGb(It.IsAny<string>())).Returns(200);
+        fs.SetupGet(f => f.Identity).Returns("test");
+        var runner = new PreflightRunner(fs.Object, name => new PreflightAgentFacts
+        {
+            AgentName = name, IsRegistered = true, IsOnline = true,
+            MaintenanceState = "None", DiskFreeGb = 200,
+        });
+        var pipeline = Assert.Single(live.WatchItems);
+        var report = runner.Run(new PreflightRequest
+        {
+            Config = live, Pipeline = pipeline,
+            TriggerValues = new Dictionary<string, string> { ["_BuildNumber"] = "test-build" },
+        });
+        Assert.Empty(report.Failures);
+        Assert.True(Directory.Exists(pipeline.Path));
+        Assert.False(File.Exists(Path.Combine(pipeline.Path, pipeline.Filter)));
     }
 
     // ── Create ──────────────────────────────────────────────────────────

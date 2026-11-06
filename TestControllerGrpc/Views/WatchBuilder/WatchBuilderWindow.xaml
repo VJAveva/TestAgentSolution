@@ -50,7 +50,11 @@
                 <TextBlock Text="WatchItem" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                            Foreground="{DynamicResource TextPrimaryBrush}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Tag" />
-                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Tag" />
+                <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"
+                         IsReadOnly="{Binding IsTagReadOnly}" AutomationProperties.Name="Tag" />
+                <TextBlock Text="Existing WatchItem tags are immutable identities."
+                           Foreground="{DynamicResource TextTertiaryBrush}" FontSize="{StaticResource FontSize10}"
+                           Visibility="{Binding IsTagReadOnly, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Path (folder to watch)" />
                 <TextBox Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Path (folder to watch)" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Filter" />
@@ -182,7 +186,23 @@
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Tag" />
                 <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Tag" />
                 <TextBlock Style="{StaticResource FieldLabel}" Text="Parameter File" />
-                <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}"  AutomationProperties.Name="Parameter File" />
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource ToolBtn}" Content="Browse"
+                            Command="{Binding BrowseParameterFileCommand}" AutomationProperties.Name="Browse Parameter File" />
+                    <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="Parameter File" />
+                </DockPanel>
+                <TextBlock Style="{StaticResource FieldLabel}" Text="Profile" />
+                <ComboBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding Profile, UpdateSourceTrigger=PropertyChanged}"
+                          AutomationProperties.Name="Parameter Profile" />
+                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                    <Button Style="{StaticResource ToolBtn}" Content="Open file"
+                            Command="{Binding OpenParameterFileCommand}" AutomationProperties.Name="Open Parameter File" />
+                    <Button Style="{StaticResource ToolBtn}" Content="Reload / validate"
+                            Command="{Binding ReloadParameterFileCommand}" AutomationProperties.Name="Reload Parameter File" />
+                </StackPanel>
+                <TextBlock Text="{Binding ParameterFileStatus}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Foreground="{DynamicResource TextTertiaryBrush}" AutomationProperties.Name="Parameter File Status" />
             </StackPanel>
         </DataTemplate>
 

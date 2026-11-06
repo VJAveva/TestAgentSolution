@@ -1,5 +1,6 @@
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
+using TestControllerGrpc.ViewModels.WatchBuilder;
 
 namespace TestControllerGrpc.Tests;
 
@@ -127,6 +128,66 @@ public class WatchBuilderServicesTests
         var issues = WatchListValidator.Analyze(config);
 
         Assert.DoesNotContain(issues, i => i.Message.Contains("never fire"));
+    }
+
+    [Fact]
+    public void Analyze_Should_ErrorDuplicateSiblingTags_When_TagsMatchIgnoringCase()
+    {
+        var config = CreateValidConfig();
+        var children = config.WatchItems[0].Events[0].Children;
+        children.Clear();
+        children.Add(new ActionConfig { Type = ActionType.RunCommand, Command = "echo one", Tag = "Deploy" });
+        children.Add(new ActionConfig { Type = ActionType.RunCommand, Command = "echo two", Tag = "deploy" });
+
+        var issues = WatchListValidator.Analyze(config);
+
+        Assert.Contains(issues, i =>
+            i.Severity == WatchIssueSeverity.Error && i.Message.Contains("Duplicate node Tag"));
+    }
+
+    [Fact]
+    public void WatchItemNode_Should_KeepExistingTagImmutable_When_TagIsChanged()
+    {
+        var model = new WatchItemConfig { Tag = "ExistingPipeline" };
+        var node = new WatchItemNodeViewModel(model, null);
+
+        node.Tag = "RenamedPipeline";
+
+        Assert.Equal("ExistingPipeline", node.Tag);
+        Assert.Equal("ExistingPipeline", model.Tag);
+        Assert.True(node.IsTagReadOnly);
+    }
+
+    [Fact]
+    public void InitializeNode_Should_LoadAndPersistProfile_When_LayeredParameterFileIsConfigured()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """
+            {
+              "profiles": {
+                "Warm": { "_Agent1": "warmgr" },
+                "Sanity": { "_Agent1": "jvgr1" }
+              }
+            }
+            """);
+
+        try
+        {
+            var model = new InitializeConfig { ParameterFile = path };
+            var node = new InitializeNodeViewModel(model, null);
+
+            Assert.Equal(new[] { "Sanity", "Warm" }, node.Profiles);
+            Assert.Equal("Sanity", node.Profile);
+            Assert.Contains("Valid layered parameter file", node.ParameterFileStatus);
+
+            node.Profile = "Sanity";
+
+            Assert.Equal("Sanity", model.Profile);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

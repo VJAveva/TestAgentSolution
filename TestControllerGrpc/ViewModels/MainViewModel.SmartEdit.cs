@@ -96,7 +96,22 @@ public sealed partial class MainViewModel
             or nameof(TreeNodeViewModel.IsExpanded)
             or nameof(TreeNodeViewModel.DisplayText)
             or nameof(TreeNodeViewModel.ResolvedDisplayText)
-            or nameof(TreeNodeViewModel.ExecutionStatus)) return;
+            or nameof(TreeNodeViewModel.ExecutionStatus)
+            or nameof(TreeNodeViewModel.TagValidationMessage)
+            or nameof(TreeNodeViewModel.ParameterFileValidationMessage)
+            or nameof(TreeNodeViewModel.IsParameterFileStale)
+            || _loadingParameterFileEntries) return;
+
+        IsDirty = true;
+
+        if (sender is TreeNodeViewModel node
+            && node.NodeKind == NodeKinds.Initialize
+            && e.PropertyName is nameof(TreeNodeViewModel.ParameterFile) or nameof(TreeNodeViewModel.Profile))
+        {
+            node.ApplyToModel();
+            LoadParameterFileEntries(node.ParameterFile, node.Profile);
+            node.RefreshDisplayText();
+        }
 
         QueueValidation();
     }
@@ -120,6 +135,7 @@ public sealed partial class MainViewModel
 
             ValidationIssues.Clear();
             foreach (var issue in issues) ValidationIssues.Add(issue);
+            RefreshTagValidationMessages();
 
             var errors = issues.Count(i => i.Severity == WatchIssueSeverity.Error);
             var warnings = issues.Count(i => i.Severity == WatchIssueSeverity.Warning);
@@ -130,10 +146,50 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            // Validation must never take the editor down; surface it and leave save unblocked.
+            // Validation must never take the editor down; surface it and block save.
             _logger.LogError(ex, "WatchList validation failed");
-            HasBlockingErrors = false;
+            HasBlockingErrors = true;
             ValidationSummary = $"Validation failed: {ex.Message}";
+        }
+    }
+
+    private void RefreshTagValidationMessages()
+    {
+        static bool HasTag(TreeNodeViewModel node) =>
+            node.NodeKind is NodeKinds.WatchItem or NodeKinds.Action or NodeKinds.ActionGroup or NodeKinds.Initialize;
+
+        void Clear(TreeNodeViewModel node)
+        {
+            node.TagValidationMessage = "";
+            foreach (var child in node.Children) Clear(child);
+        }
+
+        void MarkDuplicates(TreeNodeViewModel parent)
+        {
+            var duplicateGroups = parent.Children
+                .Where(n => HasTag(n) && !string.IsNullOrWhiteSpace(n.Tag))
+                .GroupBy(n => n.Tag, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1);
+            foreach (var duplicate in duplicateGroups)
+            {
+                var message = parent.NodeKind == NodeKinds.WatchList
+                    ? $"Duplicate pipeline tag '{duplicate.Key}'."
+                    : $"Duplicate node Tag '{duplicate.Key}' within this parent.";
+                foreach (var node in duplicate) node.TagValidationMessage = message;
+            }
+
+            foreach (var child in parent.Children) MarkDuplicates(child);
+        }
+
+        if (WatchListRoot is not null)
+        {
+            Clear(WatchListRoot);
+            MarkDuplicates(WatchListRoot);
+        }
+        if (TemplateListRoot is not null)
+        {
+            Clear(TemplateListRoot);
+            MarkDuplicates(TemplateListRoot);
         }
     }
 

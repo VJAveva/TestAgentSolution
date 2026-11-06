@@ -5,6 +5,9 @@ using System.Xml;
 using System.Xml.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TestControllerGrpc.Core.Preflight;
+using TestControllerGrpc.Models;
+using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.ViewModels;
 
@@ -15,8 +18,11 @@ public sealed partial class ValidationErrorViewModel : ObservableObject
 {
     [ObservableProperty] private int _line;
     [ObservableProperty] private int _column;
+    [ObservableProperty] private int _length = 1;
     [ObservableProperty] private string _errorType = "";
     [ObservableProperty] private string _message = "";
+    [ObservableProperty] private string _severity = "Error";
+    public IReadOnlyList<XmlEditorQuickFix> QuickFixes { get; set; } = [];
 }
 
 /// <summary>
@@ -38,6 +44,11 @@ public sealed partial class TemplatePreviewNode : ObservableObject
 public sealed partial class TemplateXmlEditorViewModel : ObservableObject
 {
     private readonly string _originalXml;
+    private readonly WatchListConfig? _validationContext;
+    private readonly IReadOnlyCollection<string>? _knownAgents;
+    private readonly IPreflightFileSystem? _fileSystem;
+    private readonly IReadOnlyCollection<XmlEditorAgent>? _agentStatuses;
+    private int _analysisVersion;
 
     [ObservableProperty] private string _xmlText = "";
     [ObservableProperty] private string _windowTitle = "Template XML Editor";
@@ -86,15 +97,77 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
 
     /// <summary>Raised when the editor should navigate to a specific error line.</summary>
     public event Action<int, int>? NavigateToError;
+    public event Action<XmlEditorQuickFix>? QuickFixRequested;
 
-    public TemplateXmlEditorViewModel(string initialXml)
+    public TemplateXmlEditorViewModel(
+        string initialXml,
+        WatchListConfig? validationContext = null,
+        IReadOnlyCollection<string>? knownAgents = null,
+        IPreflightFileSystem? fileSystem = null,
+        IReadOnlyCollection<XmlEditorAgent>? agentStatuses = null)
     {
         _originalXml = initialXml;
+        _validationContext = validationContext;
+        _knownAgents = knownAgents;
+        _fileSystem = fileSystem;
+        _agentStatuses = agentStatuses;
         XmlText = initialXml;
         StatusMessage = "Ready";
         StatusSeverity = "Info";
         UpdateSummary();
     }
+
+    public async Task RefreshDiagnosticsAsync()
+    {
+        var version = Interlocked.Increment(ref _analysisVersion);
+        var xml = XmlText;
+        var analysis = await Task.Run(() => WatchListXmlEditorAnalyzer.Analyze(
+            xml, XmlEditorDocumentKind.Templates, _validationContext, _knownAgents, _fileSystem));
+        if (version != Volatile.Read(ref _analysisVersion)) return;
+        ShowErrors(ToValidationErrors(analysis));
+    }
+
+    [RelayCommand]
+    private void ApplyQuickFix(XmlEditorQuickFix? fix)
+    {
+        if (fix is not null)
+            QuickFixRequested?.Invoke(fix);
+    }
+
+    public string? GetQuickFixResult(XmlEditorQuickFix fix) =>
+        WatchListXmlEditorAnalyzer.ApplyQuickFix(
+            XmlText, XmlEditorDocumentKind.Templates, fix, _validationContext);
+
+    public IReadOnlyList<XmlEditorCompletion> GetValueCompletions(string attributeName, bool insideEvent) =>
+        WatchListXmlEditorAnalyzer.GetValueCompletions(
+            XmlText, XmlEditorDocumentKind.Templates, attributeName, insideEvent,
+            _validationContext, _agentStatuses);
+
+    public IReadOnlyList<XmlEditorCompletion> GetTokenCompletions() =>
+        WatchListXmlEditorAnalyzer.GetTokenCompletions(
+            XmlText, XmlEditorDocumentKind.Templates, _validationContext);
+
+    public IReadOnlyList<XmlEditorCompletion> GetElementCompletions() =>
+        WatchListXmlEditorAnalyzer.GetElementCompletions(XmlEditorDocumentKind.Templates);
+
+    public IReadOnlyList<XmlEditorCompletion> GetAttributeCompletions(string elementName) =>
+        WatchListXmlEditorAnalyzer.GetAttributeCompletions(elementName);
+
+    public string? GetHoverText(int offset) =>
+        WatchListXmlEditorAnalyzer.GetHoverText(
+            XmlText, XmlEditorDocumentKind.Templates, offset, _validationContext, _agentStatuses);
+
+    private static List<ValidationErrorViewModel> ToValidationErrors(XmlEditorAnalysis analysis) =>
+        analysis.Diagnostics.Select(d => new ValidationErrorViewModel
+        {
+            Line = d.Line,
+            Column = d.Column,
+            Length = d.Length,
+            ErrorType = d.Code,
+            Message = d.Message,
+            Severity = d.Severity.ToString(),
+            QuickFixes = d.QuickFixes,
+        }).ToList();
 
     partial void OnXmlTextChanged(string value) => UpdateSummary();
 
@@ -136,10 +209,11 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
     private void Save()
     {
         var errors = RunFullValidation(XmlText);
-        if (errors.Count > 0)
+        var blockingErrors = errors.Count(error => error.Severity == "Error");
+        ShowErrors(errors);
+        if (blockingErrors > 0)
         {
-            ShowErrors(errors);
-            StatusMessage = $"Cannot save - {errors.Count} validation error(s)";
+            StatusMessage = $"Cannot save - {blockingErrors} validation error(s)";
             StatusSeverity = "Error";
             IsXmlValid = false;
             return;
@@ -161,20 +235,19 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
     private void Validate()
     {
         var errors = RunFullValidation(XmlText);
-        if (errors.Count == 0)
+        ShowErrors(errors);
+        var blockingErrors = errors.Count(error => error.Severity == "Error");
+        if (blockingErrors == 0)
         {
             IsXmlValid = true;
-            ErrorLine = -1;
-            ErrorPosition = -1;
-            ValidationErrors.Clear();
-            IsErrorPanelVisible = false;
-            StatusMessage = "XML is valid - all structural rules passed";
-            StatusSeverity = "Success";
+            StatusMessage = errors.Count == 0
+                ? "XML is valid - all structural rules passed"
+                : $"XML is valid with {errors.Count} warning(s)";
+            StatusSeverity = errors.Count == 0 ? "Success" : "Info";
         }
         else
         {
-            ShowErrors(errors);
-            StatusMessage = $"{errors.Count} validation error(s) found";
+            StatusMessage = $"{blockingErrors} validation error(s) found";
             StatusSeverity = "Error";
             IsXmlValid = false;
         }
@@ -253,15 +326,9 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
                                 el.SetAttributeValue("ExecutionType", "Sequential");
                                 fixCount++;
                             }
-                            if (el.Attribute("FailAndContinue") is null)
-                            {
-                                el.SetAttributeValue("FailAndContinue", "true");
-                                fixCount++;
-                            }
-                            else
+                            if (el.Attribute("FailAndContinue") is { } fac)
                             {
                                 // Normalize boolean value
-                                var fac = el.Attribute("FailAndContinue")!;
                                 if (string.Equals(fac.Value, "True", StringComparison.Ordinal))
                                 {
                                     fac.Value = "true";
@@ -276,20 +343,6 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
                             break;
 
                         case "Action":
-                            var actionType = el.Attribute("Type")?.Value ?? "";
-                            if (actionType is "RunCommand" or "RunRemoteCommand")
-                            {
-                                if (el.Attribute("Timeout") is null)
-                                {
-                                    el.SetAttributeValue("Timeout", "2700");
-                                    fixCount++;
-                                }
-                                if (el.Attribute("PollInterval") is null)
-                                {
-                                    el.SetAttributeValue("PollInterval", "30");
-                                    fixCount++;
-                                }
-                            }
                             // Normalize FailAndContinue
                             if (el.Attribute("FailAndContinue") is { } facAction)
                             {
@@ -427,6 +480,13 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
 
     private List<ValidationErrorViewModel> RunFullValidation(string xml)
     {
+        var analysis = WatchListXmlEditorAnalyzer.Analyze(
+            xml, XmlEditorDocumentKind.Templates, _validationContext, _knownAgents, _fileSystem);
+        return ToValidationErrors(analysis);
+    }
+
+    private List<ValidationErrorViewModel> RunLegacyValidation(string xml)
+    {
         var errors = new List<ValidationErrorViewModel>();
 
         if (string.IsNullOrWhiteSpace(xml))
@@ -516,7 +576,6 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
             {
                 case "ActionGroup":
                     RequireAttr(el, "ExecutionType", errors, line, col);
-                    RequireAttr(el, "FailAndContinue", errors, line, col);
                     ValidateChildren(el, errors);
                     break;
 
@@ -589,13 +648,14 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
             ValidationErrors.Add(e);
 
         IsErrorPanelVisible = errors.Count > 0;
-        IsXmlValid = errors.Count == 0;
+        IsXmlValid = errors.All(error => error.Severity != "Error");
 
-        if (errors.Count > 0)
+        var firstError = errors.FirstOrDefault(error => error.Severity == "Error") ?? errors.FirstOrDefault();
+        if (firstError is not null)
         {
-            ErrorLine = errors[0].Line;
-            ErrorPosition = errors[0].Column;
-            NavigateToError?.Invoke(errors[0].Line, errors[0].Column);
+            ErrorLine = firstError.Line;
+            ErrorPosition = firstError.Column;
+            NavigateToError?.Invoke(firstError.Line, firstError.Column);
         }
     }
 

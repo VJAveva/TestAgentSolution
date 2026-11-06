@@ -299,4 +299,72 @@ public class PipelineBuilderViewModelTests : IDisposable
         Assert.Empty(vm.Blocking);
         Assert.True(vm.CanCreate);
     }
+
+    [Fact]
+    public void Review_Should_NotifyPreviewBindings_When_ReviewIsBuilt()
+    {
+        var vm = Vm(false, nameof(Role.Administrator), "a");
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        Advance(vm, 1);
+        Assert.Contains(nameof(vm.Preview), raised);
+        Assert.Contains(nameof(vm.FragmentPath), raised);
+        Assert.Contains(nameof(vm.ProfileName), raised);
+        Assert.NotEmpty(vm.Tokens);
+        Assert.Equal("SmokeE2E", vm.ProfileName);
+        Assert.EndsWith("SP2026R2-SmokeE2E.watchitem.xml", vm.FragmentPath);
+    }
+
+    [Fact]
+    public async Task Create_Should_WriteNothing_When_SelectionsChangeAfterReview()
+    {
+        var vm = Advance(Vm(false, nameof(Role.Administrator), "a", "b"), 1);
+        vm.Agents[1].IsSelected = true;
+        Assert.Null(vm.Preview);
+        Assert.Null(vm.Validation);
+        Assert.Empty(vm.Tokens);
+        Assert.False(vm.CreateCommand.CanExecute(null));
+        await vm.CreateCommand.ExecuteAsync(null);
+        Assert.False(Directory.Exists(Path.Combine(_root, "fragments")));
+
+        vm.BuildPreviewCommand.Execute(null);
+        Assert.True(vm.CanCreate);
+        Assert.Contains(vm.Tokens, t => t.Name == "_Agent2" && t.DisplayValue == "b");
+    }
+
+    [Fact]
+    public void Back_Should_DisableCreate_When_LeavingReview()
+    {
+        var vm = Advance(Vm(false, nameof(Role.Administrator), "a"), 1);
+        vm.BackCommand.Execute(null);
+        Assert.False(vm.CanCreate);
+        Assert.False(vm.CreateCommand.CanExecute(null));
+        Assert.Contains("Step 3 of 4", vm.StepHint);
+    }
+
+    [Fact]
+    public async Task Create_Should_DisableRepeatCreation_When_FilesAreCreated()
+    {
+        var vm = Advance(Vm(false, nameof(Role.Administrator), "a"), 1);
+        await vm.CreateCommand.ExecuteAsync(null);
+        Assert.True(vm.IsCreated);
+        Assert.False(vm.CanCreate);
+        Assert.False(vm.CreateCommand.CanExecute(null));
+        Assert.Contains("No pipeline was activated or run", vm.Status);
+        Assert.Contains("Import", vm.StepHint);
+    }
+
+    [Fact]
+    public void Refresh_Should_PreserveSelectionsAndReportCatalogProblems_When_ChoicesAreReloaded()
+    {
+        var vm = Advance(Vm(false, nameof(Role.Administrator), "a", "b"), 1);
+        File.WriteAllText(Path.Combine(_parameters, "broken.json"), "{ broken");
+        vm.RefreshCommand.Execute(null);
+        Assert.Equal("SP2026R2-pipeline-config", vm.SelectedTarget!.Id);
+        Assert.Equal("SmokeE2E", vm.SelectedRecipe!.Name);
+        Assert.Equal(1, vm.SelectedAgentCount);
+        Assert.Contains(vm.CatalogProblems, p => p.Contains("broken.json"));
+        Assert.Null(vm.Preview);
+        Assert.False(vm.CanCreate);
+    }
 }

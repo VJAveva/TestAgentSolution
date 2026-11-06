@@ -291,6 +291,7 @@ public class PipelineBuilderPreviewTests : IDisposable
     public void Preview_Should_ProduceAWatchItemTheValidatorAccepts()
     {
         var result = Service().Preview(Request(5));
+        File.WriteAllText(result.ConfigPath, result.ConfigJson);
 
         var config = new WatchListConfig { WatchItems = [result.WatchItem!] };
         var errors = WatchListValidator.Analyze(config)

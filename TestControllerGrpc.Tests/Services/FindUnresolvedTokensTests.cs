@@ -54,15 +54,15 @@ public class FindUnresolvedTokensTests
         Assert.Equal(["_MissingToken"], missing);
     }
 
-    /// <summary>A stray bracket in a command line or a recipient address is never intentional.</summary>
+    /// <summary>Bracketed prose is not a parameter unless the name starts with an underscore.</summary>
     [Theory]
     [MemberData(nameof(StrictFieldNames))]
-    public void FindUnresolvedTokens_Should_ReportPlainToken_When_FieldIsStrict(string fieldName)
+    public void FindUnresolvedTokens_Should_IgnorePlainBracketedText_When_FieldIsStrict(string fieldName)
     {
         var action = new ActionConfig { Type = ActionType.SendMail };
         typeof(ActionConfig).GetProperty(fieldName)!.SetValue(action, "[EmailAddress]");
 
-        Assert.Equal(["EmailAddress"], ParameterResolver.FindUnresolvedTokens(action, Empty()));
+        Assert.Empty(ParameterResolver.FindUnresolvedTokens(action, Empty()));
     }
 
     /// <summary>
@@ -104,6 +104,17 @@ public class FindUnresolvedTokensTests
         };
 
         Assert.Empty(ParameterResolver.FindUnresolvedTokens(action, With(("_BuildNumber", "1.2.3"))));
+    }
+
+    [Fact]
+    public void FindUnresolvedTokens_Should_ResolveLegacyAlias_When_UnderscoreParameterExists()
+    {
+        var action = new ActionConfig { Command = "run.bat [BuildNumber]" };
+        var context = new PipelineExecutionContext();
+        context.Parameters["_BuildNumber"] = "1.2.3";
+
+        Assert.Empty(ParameterResolver.FindUnresolvedTokens(action, context));
+        Assert.Equal("run.bat 1.2.3", ParameterResolver.Resolve(action.Command, context));
     }
 
     /// <summary>

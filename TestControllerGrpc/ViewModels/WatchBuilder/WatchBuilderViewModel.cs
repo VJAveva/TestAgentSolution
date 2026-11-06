@@ -95,7 +95,7 @@ public sealed partial class WatchBuilderViewModel : ObservableObject
         Roots.Clear();
         foreach (var item in _config.WatchItems)
         {
-            var vm = new WatchItemNodeViewModel(item, null);
+            var vm = new WatchItemNodeViewModel(item, null, canEditTag: true);
             vm.WireEdited(OnNodeEdited);
             Roots.Add(vm);
         }
@@ -216,6 +216,8 @@ public sealed partial class WatchBuilderViewModel : ObservableObject
             _config.FilePath = path;
             _monitor.SuppressNextReload();
             _parser.Save(_config, path);
+            foreach (var root in Roots.OfType<WatchItemNodeViewModel>())
+                root.CanEditTag = false;
             StatusMessage = $"Saved to {path}.";
             _logger.Info("WatchBuilder", $"Saved {_config.WatchItems.Count} WatchItem(s) to '{path}'.");
         }

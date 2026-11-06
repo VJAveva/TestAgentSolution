@@ -94,3 +94,67 @@ Nothing touches a live production pipeline before the builder is proven, because
 - Editing an existing pipeline in place.
 - Migrating the existing shared templates to agent-generic (separate, proven task).
 - Running 50 agents at runtime (separate hardening track).
+
+## 12. Guided review and safe creation
+
+The WPF wizard keeps **Review -> Create files -> explicit import -> run-time pre-flight**
+as separate steps. Creating a pipeline must not activate a file watcher or dispatch work.
+This follows the write boundary in §8 rather than automatically importing a new pipeline.
+
+### Authoring is not run-time readiness
+
+- `WatchListValidator.AnalyzeStructure` provides the same structural errors and advisory
+  rules used by the existing editors, without requiring the generated parameter file to
+  exist. `Analyze` retains its disk-backed parameter-source checks for saved WatchLists.
+- The builder validates the generated config in memory through
+  `ParameterResolver.TryApplyJsonConfig`, sharing execution's profile validation and layer
+  precedence. Only profiles selected by Initialize are applied; unused profiles cannot
+  satisfy missing tokens. Any additional Initialize sources referenced by a recipe are
+  checked against their actual files through the same resolver.
+- Token references come from the resolver's substituted fields, not another regex in the
+  wizard. Review lists the value, winning layer and consuming stage/action/field. Secret
+  values are masked. Missing tokens block creation; explicitly empty parameter values
+  remain supported and are displayed as `(empty)`. The existing
+  `DerivedTargetCatalog.SuppliedAtRunTime` allowlist remains informational.
+- An invalid Initialize source produces its own error without a cascade of derived missing
+  tokens. Authoring does not probe agents or claim that install paths, builds, locks or disk
+  space are ready. Those remain run-time pre-flight checks.
+
+### Operator workflow
+
+1. Choose target, recipe and agents. **Refresh choices** preserves selections still present
+   in the catalogs and reports unreadable catalog files.
+2. Review the exact config, fragment and trigger paths, selected profile, token evidence,
+   blocking errors, warnings and deferred run-time requirements.
+3. Use **Change target / recipe / agents** to correct selections; changing an input invalidates
+   the old review. **Review again** rebuilds the preview without writing anything.
+4. **Create files** is available only for an authorized user with a current review. Creation
+   revalidates the preview and the caller's current WatchList snapshot, then uses no-overwrite
+   publication. The persisted config is serialized from the validated model, not an earlier
+   JSON preview.
+5. On success, the wizard gives the fragment path and explicit import instructions and
+   disables repeat creation. Only the trigger folder is created, never a trigger file.
+
+Expected write failures are reported. Temporary files and files published by the failed attempt
+are removed; cleanup failures name the file needing attention. Existing output is never replaced.
+Empty directories may remain after a failed attempt because trigger folders can be shared.
+This is not a crash-atomic transaction across multiple directories: an abrupt process or machine
+failure still requires checking the reported output paths before retrying.
+
+### Verification
+
+Regression tests cover selected-profile isolation, source-error suppression, masked token
+evidence, stale input/review invalidation, late output/live conflicts, write rollback, and
+preview -> create -> parse/import -> pre-flight using simulated runtime facts. No live agent
+operation or production WatchList mutation is part of these tests.
+
+### Research basis
+
+- [GOV.UK: Check answers](https://design-system.service.gov.uk/patterns/check-answers/) -
+  review the consequences before committing, with direct routes back to earlier choices.
+- [GOV.UK: Error summary](https://design-system.service.gov.uk/components/error-summary/) -
+  keep errors specific and actionable. Here each token error names its consuming action
+  and field; structural errors retain their node path.
+- [Microsoft: RelayCommand](https://learn.microsoft.com/en-us/dotnet/communitytoolkit/mvvm/generators/relaycommand) -
+  bind command availability to validated state and notify when that state changes, rather
+  than relying solely on a button's appearance.

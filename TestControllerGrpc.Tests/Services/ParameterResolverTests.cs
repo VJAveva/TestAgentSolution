@@ -35,11 +35,11 @@ public class ParameterResolverTests : IDisposable
     {
         // Arrange
         var ctx = new PipelineExecutionContext();
-        ctx.Parameters["BuildNumber"] = "1.2.3";
-        ctx.Parameters["DropLocation"] = @"\\share\drop";
+        ctx.Parameters["_BuildNumber"] = "1.2.3";
+        ctx.Parameters["_DropLocation"] = @"\\share\drop";
 
         // Act
-        var result = ParameterResolver.Resolve(@"[DropLocation]\Install_[BuildNumber].bat", ctx);
+        var result = ParameterResolver.Resolve(@"[_DropLocation]\Install_[_BuildNumber].bat", ctx);
 
         // Assert
         Assert.Equal(@"\\share\drop\Install_1.2.3.bat", result);
@@ -49,11 +49,11 @@ public class ParameterResolverTests : IDisposable
     public void Resolve_Should_LeaveUnknownTokens_When_KeyNotFound()
     {
         var ctx = new PipelineExecutionContext();
-        ctx.Parameters["Known"] = "value";
+        ctx.Parameters["_Known"] = "value";
 
-        var result = ParameterResolver.Resolve("[Known] and [Unknown]", ctx);
+        var result = ParameterResolver.Resolve("[_Known] and [_Unknown]", ctx);
 
-        Assert.Equal("value and [Unknown]", result);
+        Assert.Equal("value and [_Unknown]", result);
     }
 
     [Fact]
@@ -82,10 +82,19 @@ public class ParameterResolverTests : IDisposable
     public void Resolve_Should_BeCaseInsensitive_When_LookingUpKeys()
     {
         var ctx = new PipelineExecutionContext();
-        ctx.Parameters["buildnumber"] = "42";
+        ctx.Parameters["_buildnumber"] = "42";
 
-        var result = ParameterResolver.Resolve("[BuildNumber]", ctx);
+        var result = ParameterResolver.Resolve("[_BuildNumber]", ctx);
         Assert.Equal("42", result);
+    }
+
+    [Fact]
+    public void Resolve_Should_LeaveBracketedText_When_ItDoesNotUseTheParameterPrefix()
+    {
+        var ctx = new PipelineExecutionContext();
+        ctx.Parameters["PASS"] = "unexpected";
+
+        Assert.Equal("echo [PASS] [DEMO]", ParameterResolver.Resolve("echo [PASS] [DEMO]", ctx));
     }
 
     // ???????????????????????????????????????????????????????????????????
@@ -476,17 +485,17 @@ public class ParameterResolverTests : IDisposable
     public void ResolveAction_Should_ResolveAllFields_When_TokensArePresent()
     {
         var ctx = new PipelineExecutionContext();
-        ctx.Parameters["Agent1"] = "Vinodjhist";
-        ctx.Parameters["DropLocation"] = @"\\server\drop";
-        ctx.Parameters["R2SetupPath"] = @"C:\Setup";
-        ctx.Parameters["R2ResponsePath"] = "auto.rsp";
+        ctx.Parameters["_Agent1"] = "Vinodjhist";
+        ctx.Parameters["_DropLocation"] = @"\\server\drop";
+        ctx.Parameters["_R2SetupPath"] = @"C:\Setup";
+        ctx.Parameters["_R2ResponsePath"] = "auto.rsp";
 
         var action = new ActionConfig
         {
             Type = ActionType.RunRemoteCommand,
-            AgentName = "[Agent1]",
-            Command = @"[R2SetupPath]\BuildInstall\Install_WSP.bat",
-            Parameters = "[DropLocation] [Agent1] [R2SetupPath]\\BuildInstall\\[R2ResponsePath]",
+            AgentName = "[_Agent1]",
+            Command = @"[_R2SetupPath]\BuildInstall\Install_WSP.bat",
+            Parameters = "[_DropLocation] [_Agent1] [_R2SetupPath]\\BuildInstall\\[_R2ResponsePath]",
             Timeout = 600000,
             PollInterval = 30,
             FailAndContinue = true,
@@ -507,13 +516,13 @@ public class ParameterResolverTests : IDisposable
     public void ResolveAction_Should_NotMutateOriginal_When_Resolving()
     {
         var ctx = new PipelineExecutionContext();
-        ctx.Parameters["X"] = "resolved";
+        ctx.Parameters["_X"] = "resolved";
 
-        var original = new ActionConfig { AgentName = "[X]", Command = "[X]" };
+        var original = new ActionConfig { AgentName = "[_X]", Command = "[_X]" };
         var resolved = ParameterResolver.ResolveAction(original, ctx);
 
-        Assert.Equal("[X]", original.AgentName);
-        Assert.Equal("[X]", original.Command);
+        Assert.Equal("[_X]", original.AgentName);
+        Assert.Equal("[_X]", original.Command);
         Assert.Equal("resolved", resolved.AgentName);
         Assert.Equal("resolved", resolved.Command);
     }

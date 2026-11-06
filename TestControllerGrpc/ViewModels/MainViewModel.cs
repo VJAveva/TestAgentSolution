@@ -1109,6 +1109,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void ApplyWatchListSelection(TreeNodeViewModel value)
     {
+        TrackNodeEditsForValidation(value);
         _selection.ActivateWatchList(value);
         ActiveEditNode = value;
         if (value.NodeKind == NodeKinds.Action)
@@ -1131,8 +1132,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ? Visibility.Visible : Visibility.Collapsed;
 
         // Load Initialize parameter file entries
-        if (value.NodeKind == NodeKinds.Initialize && !string.IsNullOrWhiteSpace(value.ParameterFile))
-            LoadParameterFileEntries(value.ParameterFile, (value.ModelObject as InitializeConfig)?.Profile ?? "");
+        if (value.NodeKind == NodeKinds.Initialize)
+            LoadParameterFileEntries(value.ParameterFile, value.Profile);
         else
             ParameterFileEntries.Clear();
 
@@ -1145,6 +1146,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedTemplateNodeChanged(TreeNodeViewModel? value)
     {
+        TrackNodeEditsForValidation(value);
         NotifyExecutionCanExecuteChanged();
         if (value is null) return;
 
@@ -1162,14 +1164,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void ApplyTemplateSelection(TreeNodeViewModel value)
     {
+        TrackNodeEditsForValidation(value);
         _selection.ActivateTemplate(value);
         ActiveEditNode = value;
         ActiveEditingContext = "Templates";
 
         // The Templates tree must refresh the grid too. Without this it keeps whatever the
         // WatchList tree last loaded, so a Warm template shows Sanity parameters.
-        if (value.NodeKind == NodeKinds.Initialize && !string.IsNullOrWhiteSpace(value.ParameterFile))
-            LoadParameterFileEntries(value.ParameterFile, (value.ModelObject as InitializeConfig)?.Profile ?? "");
+        if (value.NodeKind == NodeKinds.Initialize)
+            LoadParameterFileEntries(value.ParameterFile, value.Profile);
         else
             ParameterFileEntries.Clear();
 

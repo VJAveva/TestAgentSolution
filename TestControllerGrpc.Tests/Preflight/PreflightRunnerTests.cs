@@ -83,6 +83,13 @@ public class PreflightRunnerTests : IDisposable
         return path;
     }
 
+    private string WriteRawParameterFile(string content)
+    {
+        var path = Path.Combine(_temp, "raw-params.json");
+        File.WriteAllText(path, content);
+        return path;
+    }
+
     private WatchListConfig Config(string parameterFile, string watchPath = @"C:\Triggers\SP2023R2SP2") => new()
     {
         WatchItems =
@@ -268,6 +275,19 @@ public class PreflightRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Run_Should_IgnoreBracketedCommandText_When_ItIsNotAnUnderscoreParameter()
+    {
+        SeedHealthyDisk();
+        var config = Config(WriteParameterFile());
+        var action = config.WatchItems[0].Events[0].Children.OfType<ActionGroupConfig>().Single().Children[0] as ActionConfig;
+        action!.Command = "echo [PASS] [FAIL] [DEMO]";
+
+        var report = Runner().Run(Request(config));
+
+        Assert.Equal(PreflightStatus.Pass, Find(report, PreflightGroups.Settings, "Token resolution")!.Status);
+    }
+
+    [Fact]
     public void Run_Should_Fail_When_TheParameterFileIsMissing()
     {
         SeedHealthyDisk();
@@ -287,6 +307,83 @@ public class PreflightRunnerTests : IDisposable
 
         Assert.False(report.CanRun);
         Assert.Contains(report.Failures, f => f.Detail.Contains("profile", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Run_Should_FailWithAvailableProfiles_When_ProfileIsEmpty()
+    {
+        SeedHealthyDisk();
+        var config = Config(WriteParameterFile());
+        config.WatchItems[0].Events[0].Children.OfType<InitializeConfig>().Single().Profile = "";
+
+        var report = Runner().Run(Request(config));
+        var check = Find(report, PreflightGroups.Settings, "Parameter file");
+
+        Assert.Equal(PreflightStatus.Fail, check!.Status);
+        Assert.Contains("Initialize Profile is empty", check.Detail);
+        Assert.Contains("Sanity", check.Detail);
+    }
+
+    [Fact]
+    public void Run_Should_ReportOneRootCause_When_ParameterFileIsInvalid()
+    {
+        SeedHealthyDisk();
+        var file = WriteRawParameterFile("{ \"global\": { ");
+        var config = Config(file);
+        var action = config.WatchItems[0].Events[0].Children.OfType<ActionGroupConfig>().Single().Children[0] as ActionConfig;
+        action!.Command = "[_MissingFolder]\\run.bat";
+
+        var report = Runner().Run(Request(config));
+
+        Assert.Single(report.Failures, f => f.Group == PreflightGroups.Settings);
+        Assert.DoesNotContain(report.Checks, c => c.Name == "Token resolution");
+        var check = Find(report, PreflightGroups.Settings, "Parameter file");
+        Assert.Contains("line", check!.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Run_Should_NameTheActionUsingAnUnresolvedToken()
+    {
+        SeedHealthyDisk();
+        var config = Config(WriteParameterFile());
+        var action = config.WatchItems[0].Events[0].Children.OfType<ActionGroupConfig>().Single().Children[0] as ActionConfig;
+        action!.Tag = "Run Prepare-Agent on aut2";
+        action.Command = "[_MissingFolder]\\run.bat";
+
+        var report = Runner().Run(Request(config));
+        var check = Find(report, PreflightGroups.Settings, "Token resolution");
+
+        Assert.Contains("_MissingFolder - used by 'Run Prepare-Agent on aut2'", check!.Detail);
+    }
+
+    [Fact]
+    public void Run_Should_NameLoadedParameterPathAndProfile_When_SourceIsValid()
+    {
+        SeedHealthyDisk();
+        var file = WriteParameterFile();
+        var report = Runner().Run(Request(Config(file)));
+        var check = Find(report, PreflightGroups.Settings, "Parameter file");
+
+        Assert.Contains(file, check!.Detail);
+        Assert.Contains("profile 'Sanity'", check.Detail);
+    }
+
+    [Fact]
+    public void Run_Should_WarnWhenLastGoodParameterValuesAreRetained_When_CurrentJsonBecomesInvalid()
+    {
+        SeedHealthyDisk();
+        var file = WriteParameterFile();
+        var config = Config(file);
+        Runner().Run(Request(config));
+
+        File.WriteAllText(file, "{ \"global\": { ");
+        var report = Runner().Run(Request(config));
+        var warning = report.Warnings.FirstOrDefault(c => c.Name.StartsWith("Last good parameter copy"));
+
+        Assert.NotNull(warning);
+        Assert.Contains("Using last good copy from", warning!.Detail);
+        Assert.Contains("current file cannot be loaded", warning.Detail);
+        Assert.Contains("line", warning.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

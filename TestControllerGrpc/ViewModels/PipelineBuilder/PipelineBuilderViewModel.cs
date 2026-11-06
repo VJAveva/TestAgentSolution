@@ -64,6 +64,10 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
     [ObservableProperty] private string _agentFilter = "";
     [ObservableProperty] private bool _onlineOnly;
     [ObservableProperty] private string _status = "";
+    [ObservableProperty] private BuilderResult? _preview;
+    [ObservableProperty] private BuilderValidation? _validation;
+    [ObservableProperty] private bool _isCreating;
+    [ObservableProperty] private bool _isCreated;
 
     public ObservableCollection<TargetDescriptor> Targets { get; } = [];
     public ObservableCollection<Recipe> Recipes { get; } = [];
@@ -71,32 +75,51 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
     public ObservableCollection<AgentPickItem> VisibleAgents { get; } = [];
     public ObservableCollection<BuilderIssue> Blocking { get; } = [];
     public ObservableCollection<BuilderIssue> Informational { get; } = [];
-
-    public BuilderResult? Preview { get; private set; }
-    public BuilderValidation? Validation { get; private set; }
+    public ObservableCollection<BuilderIssue> Warnings { get; } = [];
+    public ObservableCollection<BuilderIssue> RuntimeRequirements { get; } = [];
+    public ObservableCollection<BuilderTokenReview> Tokens { get; } = [];
+    public ObservableCollection<string> CatalogProblems { get; } = [];
+    public string FragmentPath => Preview is null ? "" : Path.Combine(_fragmentDir, $"{Preview.Tag}.watchitem.xml");
+    public string ProfileName => Preview?.WatchItem is { } item
+        ? string.Join(", ", ParameterResolver.CollectInitializeNodes(item).Select(i => i.Profile).Distinct())
+        : "";
 
     /// <summary>Authoring is Administrator-only; the panel is read-only for everyone else.</summary>
     public bool CanAuthor => _capabilities.Can(Permission.Pipeline_Author);
 
     public int SelectedAgentCount => Agents.Count(a => a.IsSelected);
 
+    [RelayCommand(CanExecute = nameof(CanEdit))]
     public void Refresh()
     {
+        var targetId = SelectedTarget?.Id;
+        var recipeName = SelectedRecipe?.Name;
+        var chosenAgents = Agents.Where(a => a.IsSelected).Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        InvalidatePreview();
+        CatalogProblems.Clear();
+        var targets = _builder.Targets();
+        var recipes = _builder.Recipes();
+        foreach (var problem in targets.Problems.Concat(recipes.Problems))
+            CatalogProblems.Add(problem);
         Targets.Clear();
-        foreach (var target in _builder.Targets().Targets) Targets.Add(target);
+        foreach (var target in targets.Targets) Targets.Add(target);
 
         Recipes.Clear();
-        foreach (var recipe in _builder.Recipes().Recipes) Recipes.Add(recipe);
+        foreach (var recipe in recipes.Recipes) Recipes.Add(recipe);
+        SelectedTarget = Targets.FirstOrDefault(t => t.Id == targetId);
+        SelectedRecipe = Recipes.FirstOrDefault(r => r.Name == recipeName);
 
+        foreach (var agent in Agents) agent.PropertyChanged -= OnAgentPicked;
         Agents.Clear();
         foreach (var agent in _agentSource.GetAgents())
         {
-            var item = new AgentPickItem(agent);
+            var item = new AgentPickItem(agent) { IsSelected = chosenAgents.Contains(agent.Name) };
             item.PropertyChanged += OnAgentPicked;
             Agents.Add(item);
         }
 
         ApplyAgentFilter();
+        NotifyNavigation();
     }
 
     /// <summary>
@@ -108,14 +131,23 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
         if (e.PropertyName != nameof(AgentPickItem.IsSelected)) return;
 
         OnPropertyChanged(nameof(SelectedAgentCount));
-        OnPropertyChanged(nameof(CanGoNext));
+        InvalidatePreview();
     }
 
-    partial void OnCurrentStepChanged(BuilderStep value) => OnPropertyChanged(nameof(CanGoNext));
+    partial void OnCurrentStepChanged(BuilderStep value) => NotifyNavigation();
 
-    partial void OnSelectedTargetChanged(TargetDescriptor? value) => OnPropertyChanged(nameof(CanGoNext));
+    partial void OnSelectedTargetChanged(TargetDescriptor? value) => InvalidatePreview();
 
-    partial void OnSelectedRecipeChanged(Recipe? value) => OnPropertyChanged(nameof(CanGoNext));
+    partial void OnSelectedRecipeChanged(Recipe? value) => InvalidatePreview();
+    partial void OnIsCreatingChanged(bool value) => NotifyNavigation();
+    partial void OnIsCreatedChanged(bool value) => NotifyNavigation();
+    partial void OnPreviewChanged(BuilderResult? value)
+    {
+        OnPropertyChanged(nameof(FragmentPath));
+        OnPropertyChanged(nameof(ProfileName));
+        NotifyNavigation();
+    }
+    partial void OnValidationChanged(BuilderValidation? value) => NotifyNavigation();
 
     partial void OnAgentFilterChanged(string value) => ApplyAgentFilter();
 
@@ -154,15 +186,65 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedAgentCount));
     }
 
-    public bool CanGoNext => CurrentStep switch
+    public bool CanEdit => !IsCreating;
+    public bool CanGoBack => CanEdit && CurrentStep != BuilderStep.Target;
+    public bool CanReview => CanEdit && !IsCreated && CurrentStep == BuilderStep.Review;
+    public bool CanGoNext => CanEdit && (CurrentStep switch
     {
         BuilderStep.Target => SelectedTarget is not null,
         BuilderStep.Recipe => SelectedRecipe is not null,
         BuilderStep.Agents => SelectedAgentCount > 0,
         _ => false,
-    };
+    });
 
-    [RelayCommand]
+    public string StepHint => IsCreating ? "Creating files. No pipeline will be activated or run."
+        : IsCreated ? "Files created. Import the fragment in the WatchList editor, then run pre-flight before execution."
+        : CurrentStep switch
+        {
+            BuilderStep.Target => "Step 1 of 4: choose a target / release to continue.",
+            BuilderStep.Recipe => "Step 2 of 4: choose the stages to generate.",
+            BuilderStep.Agents => "Step 3 of 4: select at least one agent. Availability is checked again at run time.",
+            _ => "Step 4 of 4: check the files and token sources. Creating files does not activate or run the pipeline.",
+        };
+
+    private void NotifyNavigation()
+    {
+        OnPropertyChanged(nameof(CanGoNext));
+        OnPropertyChanged(nameof(CanGoBack));
+        OnPropertyChanged(nameof(CanCreate));
+        OnPropertyChanged(nameof(CanReview));
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(StepHint));
+        NextCommand.NotifyCanExecuteChanged();
+        BackCommand.NotifyCanExecuteChanged();
+        CreateCommand.NotifyCanExecuteChanged();
+        BuildPreviewCommand.NotifyCanExecuteChanged();
+        RefreshCommand.NotifyCanExecuteChanged();
+        ChangeStepCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private void ChangeStep(BuilderStep step)
+    {
+        if (CanEdit && step != BuilderStep.Review) CurrentStep = step;
+    }
+
+    private void InvalidatePreview()
+    {
+        var hadPreview = Preview is not null;
+        Preview = null;
+        Validation = null;
+        IsCreated = false;
+        Blocking.Clear();
+        Informational.Clear();
+        Warnings.Clear();
+        RuntimeRequirements.Clear();
+        Tokens.Clear();
+        if (hadPreview) Status = "Selections changed. Review again before creating files.";
+        NotifyNavigation();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanGoNext))]
     private void Next()
     {
         if (!CanGoNext) return;
@@ -178,23 +260,30 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
         if (CurrentStep == BuilderStep.Review) BuildPreview();
     }
 
-    [RelayCommand]
-    private void Back() => CurrentStep = CurrentStep switch
+    [RelayCommand(CanExecute = nameof(CanGoBack))]
+    private void Back()
     {
-        BuilderStep.Review => BuilderStep.Agents,
-        BuilderStep.Agents => BuilderStep.Recipe,
-        BuilderStep.Recipe => BuilderStep.Target,
-        _ => CurrentStep,
-    };
+        if (!CanGoBack) return;
+        CurrentStep = CurrentStep switch
+        {
+            BuilderStep.Review => BuilderStep.Agents,
+            BuilderStep.Agents => BuilderStep.Recipe,
+            BuilderStep.Recipe => BuilderStep.Target,
+            _ => CurrentStep,
+        };
+    }
 
+    [RelayCommand(CanExecute = nameof(CanReview))]
     public void BuildPreview()
     {
-        Blocking.Clear();
-        Informational.Clear();
-        Preview = null;
-        Validation = null;
+        if (!CanReview) return;
+        InvalidatePreview();
 
-        if (SelectedTarget is null || SelectedRecipe is null) return;
+        if (SelectedTarget is null || SelectedRecipe is null || SelectedAgentCount == 0)
+        {
+            Status = "Choose a target, recipe and at least one agent before reviewing.";
+            return;
+        }
 
         var request = new BuilderRequest(
             SelectedTarget.Id,
@@ -202,21 +291,25 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
             [.. Agents.Where(a => a.IsSelected).Select(a => a.Name)]);
 
         Preview = _builder.Preview(request);
-        Validation = _builder.Validate(Preview, _liveConfig());
+        Validation = _builder.Validate(Preview, _liveConfig(), _fragmentDir);
 
         foreach (var issue in Validation.Blocking) Blocking.Add(issue);
         foreach (var issue in Validation.Informational) Informational.Add(issue);
+        foreach (var issue in Validation.Informational.Where(i => i.Severity == BuilderSeverity.Warning)) Warnings.Add(issue);
+        foreach (var issue in Validation.Informational.Where(i => i.Severity == BuilderSeverity.Info)) RuntimeRequirements.Add(issue);
+        foreach (var token in Validation.Tokens) Tokens.Add(token);
 
         Status = Validation.CanCreate
-            ? $"Ready: '{Preview.Tag}' will be created."
+            ? $"Ready to create files for '{Preview.Tag}'. Run-time readiness has not been checked."
             : $"{Validation.Blocking.Count} problem(s) must be fixed first.";
 
         OnPropertyChanged(nameof(CanCreate));
     }
 
-    public bool CanCreate => CanAuthor && Validation is { CanCreate: true };
+    public bool CanCreate => CanEdit && !IsCreated && CurrentStep == BuilderStep.Review
+        && CanAuthor && Preview is not null && Validation is { CanCreate: true };
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCreate))]
     private async Task CreateAsync()
     {
         if (!CanCreate || Preview is null || Validation is null)
@@ -227,11 +320,23 @@ public sealed partial class PipelineBuilderViewModel : ObservableObject
             return;
         }
 
-        // The service authorizes again against the caller identity; this gate is only the affordance.
-        var outcome = await _builder.CreateAsync(Preview, Validation, _fragmentDir, _userHolder.User);
-
-        Status = outcome.Written
-            ? $"Created. Import '{Path.GetFileName(outcome.FragmentPath)}' to activate '{Preview.Tag}'."
-            : string.Join(" ", outcome.Issues.Select(i => i.Message));
+        IsCreating = true;
+        try
+        {
+            var outcome = await _builder.CreateAsync(Preview, Validation, _fragmentDir, _userHolder.User, live: _liveConfig());
+            IsCreated = outcome.Written;
+            if (!outcome.Written)
+            {
+                Validation = null;
+                Blocking.Clear();
+                foreach (var issue in outcome.Issues.Where(i => i.Severity == BuilderSeverity.Error))
+                    Blocking.Add(issue);
+            }
+            Status = string.Join(" ", outcome.Issues.Select(i => i.Message));
+        }
+        finally
+        {
+            IsCreating = false;
+        }
     }
 }

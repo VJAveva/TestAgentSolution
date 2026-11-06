@@ -2368,7 +2368,7 @@
                                       Visibility="{Binding DataContext.ShowWatermark,
                                           RelativeSource={RelativeSource AncestorType=Window},
                                           Converter={StaticResource InvBoolVis}}">
-                            <StackPanel>
+                            <StackPanel IsEnabled="{Binding CanEditNode}">
                                 <!-- Values actually used by a run outrank anything the editor would predict. -->
                                 <Border CornerRadius="4" Padding="8,5" Margin="0,0,0,8"
                                         Background="{DynamicResource SuccessBadgeBg}"
@@ -2454,11 +2454,19 @@
                                     <StackPanel Margin="0,4,0,0">
                                         <Label Content="TAG" Style="{StaticResource Lbl}" />
                                         <Grid>
-                                            <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontSize="{StaticResource FontSize14}" FontWeight="Bold"  AutomationProperties.Name="TAG" />
+                                            <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}" FontSize="{StaticResource FontSize14}" FontWeight="Bold" IsReadOnly="{Binding IsPipelineTag}" AutomationProperties.Name="TAG" />
                                             <TextBlock Text="e.g. MyWatchItem" IsHitTestVisible="False" FontSize="{StaticResource FontSize12}" Padding="8,6"
                                                        Foreground="{DynamicResource PlaceholderFg}" VerticalAlignment="Center"
                                                        Visibility="{Binding Tag, Converter={StaticResource EmptyVis}}" />
                                         </Grid>
+                                        <TextBlock Text="{Binding TagValidationMessage}" Foreground="{DynamicResource AccRed}"
+                                                   FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                                   Visibility="{Binding TagValidationMessage, Converter={StaticResource NonEmptyVis}}" />
+                                        <TextBlock Text="Pipeline name is its ID; renaming would orphan permissions and history."
+                                                   FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
+                                                   TextWrapping="Wrap" Margin="0,3,0,0"
+                                                   Visibility="{Binding IsPipelineTag, Converter={StaticResource BoolVis}}"
+                                                   AutomationProperties.Name="Pipeline tag is immutable" />
                                         <CheckBox Content="Enabled" IsChecked="{Binding IsEnabled}" Foreground="{DynamicResource TextP}" Margin="0,4" />
                                     </StackPanel>
                                 </Expander>
@@ -2624,6 +2632,9 @@
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=ActionGroup, FallbackValue=Collapsed}">
                                 <Label Content="TAG" Style="{StaticResource Lbl}" />
                                 <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"  AutomationProperties.Name="TAG" />
+                                <TextBlock Text="{Binding TagValidationMessage}" Foreground="{DynamicResource AccRed}"
+                                           FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                           Visibility="{Binding TagValidationMessage, Converter={StaticResource NonEmptyVis}}" />
                                 <Label Content="EXECUTION TYPE" Style="{StaticResource Lbl}" />
                                 <ComboBox ItemsSource="{StaticResource ExecModes}" SelectedItem="{Binding ExecutionTypeText}" Style="{StaticResource Cmb}"  AutomationProperties.Name="EXECUTION TYPE" />
                                 <CheckBox Content="FailAndContinue" IsChecked="{Binding FailAndContinue}" Foreground="{DynamicResource TextP}" Margin="0,6" />
@@ -2632,6 +2643,9 @@
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Action, FallbackValue=Collapsed}">
                                 <Label Content="TAG" Style="{StaticResource Lbl}" />
                                 <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"  AutomationProperties.Name="TAG" />
+                                <TextBlock Text="{Binding TagValidationMessage}" Foreground="{DynamicResource AccRed}"
+                                           FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                           Visibility="{Binding TagValidationMessage, Converter={StaticResource NonEmptyVis}}" />
                                 <Label Content="ACTION TYPE" Style="{StaticResource Lbl}" />
                                 <ComboBox ItemsSource="{StaticResource ActionTypes}" SelectedItem="{Binding ActionTypeText}" Style="{StaticResource Cmb}"  AutomationProperties.Name="ACTION TYPE" />
                                 <StackPanel Visibility="{Binding ActionTypeText, Converter={StaticResource ActionVis}, ConverterParameter=RunCommand|RunRemoteCommand}">
@@ -2846,20 +2860,62 @@
                             <StackPanel Visibility="{Binding NodeKind, Converter={StaticResource VisWhen}, ConverterParameter=Initialize, FallbackValue=Collapsed}">
                                 <Label Content="TAG" Style="{StaticResource Lbl}" />
                                 <TextBox Text="{Binding Tag, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Fld}"  AutomationProperties.Name="TAG" />
+                                <TextBlock Text="{Binding TagValidationMessage}" Foreground="{DynamicResource AccRed}"
+                                           FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                           Visibility="{Binding TagValidationMessage, Converter={StaticResource NonEmptyVis}}" />
 
                                 <Label Content="PARAMETER FILE" Style="{StaticResource Lbl}" Margin="0,8,0,0" />
                                 <DockPanel>
-                                    <Button Content="Browse..." DockPanel.Dock="Right" Margin="6,2,0,5"
-                                            Style="{StaticResource SmBtn}"
-                                            Command="{Binding DataContext.BrowseParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                        <Button Content="Browse..." Margin="6,2,0,5"
+                                                Style="{StaticResource SmBtn}"
+                                                Command="{Binding DataContext.BrowseParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                        <Button Content="Open file" Margin="4,2,0,5"
+                                                Style="{StaticResource SmBtn}"
+                                                Command="{Binding DataContext.OpenParameterFileCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </StackPanel>
                                     <TextBox Text="{Binding ParameterFile, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource Fld}" FontFamily="Consolas"  AutomationProperties.Name="Parameter file" />
                                 </DockPanel>
 
+                                <Label Content="PROFILE" Style="{StaticResource Lbl}" Margin="0,6,0,0" />
+                                <ComboBox ItemsSource="{Binding ProfileChoices}" SelectedItem="{Binding Profile, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False" Style="{StaticResource Cmb}"
+                                          AutomationProperties.Name="Initialize profile" />
+                                <TextBlock Text="{Binding ParameterFileValidationMessage}"
+                                           FontSize="{StaticResource FontSize9}" TextWrapping="Wrap" Margin="0,3,0,0"
+                                           Visibility="{Binding IsParameterFileStale, Converter={StaticResource InvBoolVis}}"
+                                           AutomationProperties.Name="Parameter file validation">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextS}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ParameterFileHasError}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AccRed}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Border CornerRadius="4" Padding="6,4" Margin="0,4,0,0"
+                                        Background="{DynamicResource InfoBoxBg}"
+                                        Visibility="{Binding IsParameterFileStale, Converter={StaticResource BoolVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="LAST GOOD COPY" Foreground="{DynamicResource AccPeach}"
+                                                   FontSize="{StaticResource FontSize9}" FontWeight="Bold" />
+                                        <TextBlock Text="{Binding ParameterFileValidationMessage}"
+                                                   Foreground="{DynamicResource AccPeach}" FontSize="{StaticResource FontSize9}"
+                                                   TextWrapping="Wrap" AutomationProperties.Name="Last good parameter file warning" />
+                                    </StackPanel>
+                                </Border>
+
                                 <!-- Parameters header + action buttons -->
                                 <DockPanel Margin="0,12,0,4">
-                                    <TextBlock Text="PARAMETERS" Foreground="{DynamicResource TextS}"
-                                               FontSize="{StaticResource FontSize9}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock Foreground="{DynamicResource TextS}"
+                                               FontSize="{StaticResource FontSize9}" FontWeight="SemiBold" VerticalAlignment="Center">
+                                        <Run Text="PARAMETERS | "/><Run Text="{Binding ParameterFile}"/>
+                                        <Run Text=" | Profile: "/><Run Text="{Binding Profile}"/>
+                                    </TextBlock>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
                                         <Button Content="Reload" Style="{StaticResource SmBtn}"
                                                 Command="{Binding DataContext.LoadParameterFileFromNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -2977,7 +3033,7 @@
                                 <!-- Help text -->
                                 <TextBlock TextWrapping="Wrap" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}">
                                     <Run Text="ⓘ" FontWeight="Bold" />
-                                    <Run Text=" Use [Key] tokens in sibling Action commands. Example: [ServerName] resolves to the value defined above." />
+                                    <Run Text=" Use [_Key] tokens in sibling Action commands. Example: [_ServerName] resolves to the value defined above." />
                                 </TextBlock>
                             </StackPanel>
                             <!-- ===== Ref ===== -->
