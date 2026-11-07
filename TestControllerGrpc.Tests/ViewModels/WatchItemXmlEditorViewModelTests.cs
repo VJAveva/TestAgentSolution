@@ -78,6 +78,33 @@ public class WatchItemXmlEditorViewModelTests
         Assert.True(vm.DialogAccepted);
     }
 
+    [Fact]
+    public async Task RefreshDiagnosticsAsync_Should_NotMoveTheCaret_When_ErrorsFoundWhileTyping()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Original.Replace("Tag=\"Old\"", "Tag=\"\""),
+            fileSystem: new AlwaysExistsFileSystem());
+        var navigations = 0;
+        vm.NavigateToError += (_, _) => navigations++;
+
+        await vm.RefreshDiagnosticsAsync();
+
+        Assert.NotEmpty(vm.ValidationErrors);
+        Assert.Equal(0, navigations);
+    }
+
+    [Fact]
+    public void Validate_Should_MoveTheCaretToTheFirstError_When_UserAsks()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Original.Replace("Tag=\"Old\"", "Tag=\"\""),
+            fileSystem: new AlwaysExistsFileSystem());
+        var navigations = 0;
+        vm.NavigateToError += (_, _) => navigations++;
+
+        vm.ValidateCommand.Execute(null);
+
+        Assert.Equal(1, navigations);
+    }
+
     private sealed class AlwaysExistsFileSystem : IPreflightFileSystem
     {
         public PathAccess CheckFile(string path) => PathAccess.Exists;

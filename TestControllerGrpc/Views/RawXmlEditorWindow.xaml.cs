@@ -269,43 +269,36 @@ public partial class RawXmlEditorWindow : Window
 
     private void OnTextEntering(object sender, TextCompositionEventArgs e)
     {
-        if (_completionWindow is not null && e.Text.Length > 0)
-        {
-            if (!char.IsLetterOrDigit(e.Text[0]))
-                _completionWindow.CompletionList.RequestInsertion(e);
-        }
+        // Committing on punctuation inserted a suggestion whenever a space or quote was typed.
+        if (_completionWindow is not null && e.Text.Length > 0
+            && !XmlEditorTyping.KeepsCompletionOpen(e.Text[0]))
+            _completionWindow.Close();
     }
 
     private void OnTextEntered(object sender, TextCompositionEventArgs e)
     {
+        var before = TextBeforeCaret();
         if (e.Text == "<")
         {
             ShowElementCompletion();
         }
         else if (e.Text == " ")
         {
-            var offset = XmlEditor.CaretOffset;
-            var lineText = GetCurrentLineTextUpToCaret(offset);
-            var tagName = ExtractCurrentTagName(lineText);
-            if (tagName is not null)
+            if (XmlEditorTyping.CurrentElementName(before) is { } tagName)
                 ShowAttributeCompletion(tagName);
         }
         else if (e.Text == "\"")
         {
-            var offset = XmlEditor.CaretOffset;
-            var lineText = GetCurrentLineTextUpToCaret(offset);
-            var attrName = ExtractCurrentAttributeName(lineText);
-            if (attrName is not null)
+            if (XmlEditorTyping.AttributeOpenedByQuote(before) is { } attrName)
                 ShowValueCompletion(attrName);
         }
-        else if (e.Text == "_" && XmlEditor.CaretOffset >= 2
-                 && XmlEditor.Document.GetText(XmlEditor.CaretOffset - 2, 2) == "[_")
+        else if (e.Text == "_" && before.EndsWith("[_", StringComparison.Ordinal))
         {
             ShowTokenCompletion();
         }
         else if (e.Text == ">")
         {
-            TryAutoCloseTag();
+            TryAutoCloseTag(before);
         }
     }
 
@@ -363,80 +356,31 @@ public partial class RawXmlEditorWindow : Window
     }
 
     /// <summary>Checks if the caret is currently inside a specific tag name.</summary>
-    private bool IsInsideTag(string tagName)
+    private bool IsInsideTag(string tagName) =>
+        string.Equals(XmlEditorTyping.CurrentElementName(TextBeforeCaret()), tagName, StringComparison.Ordinal);
+
+    // Not just the current line: attributes are often written one per line.
+    private string TextBeforeCaret()
     {
         var offset = XmlEditor.CaretOffset;
-        var lineText = GetCurrentLineTextUpToCaret(offset);
-        var extractedTag = ExtractCurrentTagName(lineText);
-        return string.Equals(extractedTag, tagName, StringComparison.Ordinal);
+        var start = Math.Max(0, offset - XmlEditorTyping.LookBehind);
+        return XmlEditor.Document.GetText(start, offset - start);
     }
 
-    private string GetCurrentLineTextUpToCaret(int caretOffset)
-    {
-        var line = XmlEditor.Document.GetLineByOffset(caretOffset);
-        var start = line.Offset;
-        var length = caretOffset - start;
-        if (length <= 0) return "";
-        return XmlEditor.Document.GetText(start, length);
-    }
-
-    private static string? ExtractCurrentTagName(string lineText)
-    {
-        var lastOpen = lineText.LastIndexOf('<');
-        if (lastOpen < 0) return null;
-        var afterOpen = lineText[(lastOpen + 1)..].TrimStart();
-        if (afterOpen.StartsWith('/') || afterOpen.StartsWith('!') || afterOpen.StartsWith('?'))
-            return null;
-
-        var end = afterOpen.IndexOfAny([' ', '>', '/', '\t', '\n']);
-        var tagName = end > 0 ? afterOpen[..end] : afterOpen;
-        return tagName.Length > 0 && !tagName.Contains('=') ? tagName : null;
-    }
-
-    private static string? ExtractCurrentAttributeName(string lineText)
-    {
-        var eqIdx = lineText.LastIndexOf("=\"");
-        if (eqIdx < 1) return null;
-        var beforeEq = lineText[..eqIdx].TrimEnd();
-        var spaceIdx = beforeEq.LastIndexOfAny([' ', '\t']);
-        var attrName = spaceIdx >= 0 ? beforeEq[(spaceIdx + 1)..] : beforeEq;
-        return attrName.Length > 0 && attrName.All(c => char.IsLetterOrDigit(c) || c == '_') ? attrName : null;
-    }
-
-    private void TryAutoCloseTag()
+    private void TryAutoCloseTag(string before)
     {
         var offset = XmlEditor.CaretOffset;
-        if (offset < 2) return;
+        var after = XmlEditor.Document.GetText(offset, Math.Min(200, XmlEditor.Document.TextLength - offset));
+        if (XmlEditorTyping.AutoClose(before, after) is not { } close) return;
 
-        var textBefore = XmlEditor.Document.GetText(0, offset);
-        var lastOpenBracket = textBefore.LastIndexOf('<');
-        if (lastOpenBracket < 0) return;
-
-        var tagContent = textBefore[(lastOpenBracket + 1)..^1]; // exclude the '>'
-        if (tagContent.StartsWith('/') || tagContent.StartsWith('!') || tagContent.StartsWith('?'))
-            return;
-        if (tagContent.EndsWith('/'))
-            return; // self-closing
-
-        var spaceIdx = tagContent.IndexOfAny([' ', '\t', '\n']);
-        var tagName = spaceIdx > 0 ? tagContent[..spaceIdx] : tagContent;
-        if (string.IsNullOrWhiteSpace(tagName)) return;
-
-        // Self-closing elements that typically don't need closing tags
-        var selfClosing = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "Action", "Initialize", "Ref"
-        };
-
-        if (selfClosing.Contains(tagName))
+        if (close.SelfClose)
         {
             XmlEditorQuickFixApplier.ReplaceRangeAsSingleUndo(XmlEditor.Document, offset - 1, 1, " />");
             XmlEditor.CaretOffset = offset + 2;
         }
         else
         {
-            var closingTag = $"</{tagName}>";
-            XmlEditor.Document.Insert(offset, closingTag);
+            XmlEditor.Document.Insert(offset, $"</{close.Name}>");
             XmlEditor.CaretOffset = offset; // Keep caret between tags
         }
     }
@@ -458,13 +402,9 @@ public partial class RawXmlEditorWindow : Window
         }
     }
 
-    // Setting TextEditor.Text clears the undo stack, so Format/Auto-fix/Revert go through the document instead.
-    private void ReplaceTextUndoable(string text)
-    {
-        var caret = XmlEditor.CaretOffset;
+    // Setting TextEditor.Text clears the undo stack and resets the caret, so Format/Auto-fix/Revert go through the document.
+    private void ReplaceTextUndoable(string text) =>
         XmlEditorQuickFixApplier.ReplaceAsSingleUndo(XmlEditor.Document, text);
-        XmlEditor.CaretOffset = Math.Min(caret, XmlEditor.Document.TextLength);
-    }
 
     private void NavigateToLine(int line, int position)
     {

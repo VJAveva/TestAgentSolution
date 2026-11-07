@@ -212,7 +212,7 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
     {
         var errors = RunFullValidation(XmlText);
         var blockingErrors = errors.Count(error => error.Severity == "Error");
-        ShowErrors(errors);
+        ShowErrors(errors, navigate: blockingErrors > 0);
         if (blockingErrors > 0)
         {
             StatusMessage = $"Cannot save - {blockingErrors} validation error(s)";
@@ -237,7 +237,7 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
     private void Validate()
     {
         var errors = RunFullValidation(XmlText);
-        ShowErrors(errors);
+        ShowErrors(errors, navigate: true);
         var blockingErrors = errors.Count(error => error.Severity == "Error");
         if (blockingErrors == 0)
         {
@@ -643,7 +643,9 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
     // ERROR PANEL
     // ???????????????????????????????????????????????????????????????
 
-    private void ShowErrors(List<ValidationErrorViewModel> errors)
+    // navigate: only for an explicit Validate/Save. The background re-check runs while the user types,
+    // and moving the caret then sent it to the first error (often line 1) mid-edit.
+    private void ShowErrors(List<ValidationErrorViewModel> errors, bool navigate = false)
     {
         ValidationErrors.Clear();
         foreach (var e in errors)
@@ -657,7 +659,8 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
         {
             ErrorLine = firstError.Line;
             ErrorPosition = firstError.Column;
-            NavigateToError?.Invoke(firstError.Line, firstError.Column);
+            if (navigate)
+                NavigateToError?.Invoke(firstError.Line, firstError.Column);
         }
     }
 

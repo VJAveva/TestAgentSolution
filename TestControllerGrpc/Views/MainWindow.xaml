@@ -3005,6 +3005,9 @@
                                             Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                             ElementStyle="{StaticResource ParamCellText}"
                                             EditingElementStyle="{StaticResource ParamCellEditor}" />
+                                        <DataGridTextColumn Header="Section" Width="Auto" IsReadOnly="True"
+                                            Binding="{Binding LayerLabel, Mode=OneWay}"
+                                            ElementStyle="{StaticResource ParamCellText}" />
                                         <DataGridTemplateColumn Header="" Width="30">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>

@@ -186,14 +186,31 @@ public sealed partial class MainViewModel
     private void ApplyChanges()
     {
         ActiveEditNode?.ApplyToModel();
+        string? parameterSaveStatus = null;
         if (ActiveEditNode?.NodeKind == NodeKinds.Initialize)
-            LoadParameterFileEntries(ActiveEditNode.ParameterFile, ActiveEditNode.Profile);
+        {
+            // Reloading here used to overwrite unsaved grid edits with the file's old values, silently.
+            if (HasUnsavedParameterEdits)
+            {
+                if (!SaveParameterEdits())
+                {
+                    RunValidation();
+                    return;
+                }
+                parameterSaveStatus = ParameterFileStatus;
+            }
+            else
+            {
+                LoadParameterFileEntries(ActiveEditNode.ParameterFile, ActiveEditNode.Profile);
+            }
+        }
         ActiveEditNode?.ApplyToModel();
         ActiveEditNode?.RefreshDisplayText();
         WatchListRoot?.RefreshDisplayText();
         TemplateListRoot?.RefreshDisplayText();
         RebuildTemplateIds();
         RefreshAllInitializeTokenScopes();
+        if (parameterSaveStatus is not null) ParameterFileStatus = parameterSaveStatus;
         IsDirty = true;
         RunValidation();
         AddLog("Changes applied");

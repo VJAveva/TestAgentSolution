@@ -12,6 +12,7 @@ namespace TestControllerGrpc.ViewModels;
 public sealed partial class MainViewModel
 {
     private bool _loadingParameterFileEntries;
+    private readonly List<ParameterEntryViewModel> _removedParameterEntries = [];
 
     /// <summary>Browse for a parameter file and set it on the active Initialize node.</summary>
     [RelayCommand]
@@ -102,6 +103,7 @@ public sealed partial class MainViewModel
         try
         {
             ParameterFileEntries.Clear();
+            _removedParameterEntries.Clear();
             ParameterFileStatus = "";
             node.ProfileChoices.Clear();
 
@@ -117,7 +119,7 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            List<(string Key, string Value)> entries;
+            List<(string Key, string Value, ParameterLayer Layer)> entries;
             if (ParameterResolver.IsLayeredConfig(filePath))
             {
                 if (!ParameterResolver.TryReadJsonConfig(filePath, out var config, out var readFailure))
@@ -151,21 +153,27 @@ public sealed partial class MainViewModel
 
                 entries = ctx.Parameters
                     .Where(p => p.Key.StartsWith('_'))
-                    .Select(p => (p.Key, p.Value))
+                    .Select(p => (p.Key, p.Value, ParameterFileWriter.LayerFromRank(
+                        ctx.ParameterRanks.TryGetValue(p.Key, out var rank) ? rank : (int)ParameterRank.Global)))
                     .ToList();
             }
             else
             {
-                entries = ParameterResolver.ParseParameterFile(filePath);
+                entries = ParameterResolver.ParseParameterFile(filePath)
+                    .Select(e => (e.Key, e.Value, ParameterLayer.Global))
+                    .ToList();
                 node.Profile = "";
             }
 
-            foreach (var (key, value) in entries)
-                ParameterFileEntries.Add(new ParameterEntryViewModel { Key = key, Value = value });
+            foreach (var (key, value, layer) in entries)
+                ParameterFileEntries.Add(new ParameterEntryViewModel
+                {
+                    Key = key, Value = value, OriginalKey = key, OriginalValue = value, Layer = layer,
+                });
 
             node.ApplyToModel();
             ParameterFileStatus = ParameterResolver.IsLayeredConfig(filePath)
-                ? $"Loaded {entries.Count} resolved parameters from '{filePath}', profile '{node.Profile}' (edit JSON directly)."
+                ? $"Loaded {entries.Count} resolved parameters from '{filePath}', profile '{node.Profile}'."
                 : $"Loaded {entries.Count} parameters from '{filePath}'.";
             node.ParameterFileValidationMessage = ParameterFileStatus;
             node.IsParameterFileStale = false;
@@ -256,29 +264,30 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void RemoveParameterEntry(ParameterEntryViewModel? entry)
     {
-        if (entry is not null)
-            ParameterFileEntries.Remove(entry);
+        if (entry is not null && ParameterFileEntries.Remove(entry))
+            _removedParameterEntries.Add(entry);
     }
+
+    /// <summary>True when the Parameters grid holds edits that are not yet in the file.</summary>
+    internal bool HasUnsavedParameterEdits =>
+        ParameterGridEdits.HasChanges(ParameterFileEntries, _removedParameterEntries);
 
     /// <summary>Saves all parameter entries back to the parameter file.</summary>
     [RelayCommand]
-    private void SaveParameterFile()
+    private void SaveParameterFile() => SaveParameterEdits();
+
+    /// <summary>Writes grid edits to the parameter file. Returns false (and says why) when nothing was written.</summary>
+    private bool SaveParameterEdits()
     {
-        if (ActiveEditNode?.NodeKind != NodeKinds.Initialize) return;
+        if (ActiveEditNode?.NodeKind != NodeKinds.Initialize) return false;
         if (string.IsNullOrWhiteSpace(ActiveEditNode.ParameterFile))
         {
             ParameterFileStatus = "No parameter file path set. Use Browse to select a file.";
-            return;
+            return false;
         }
 
-        // Writing this flat grid over a layered JSON config would replace global/profiles/pipelines
-        // with Key,Value lines and destroy every other pipeline's settings.
-        if (ActiveEditNode.ParameterFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            ParameterFileStatus = "Layered JSON config - saving a flat list here would discard its structure. Edit the file directly.";
-            AddLog(ParameterFileStatus, LogSeverity.Warning);
-            return;
-        }
+        if (ParameterResolver.IsLayeredConfig(ActiveEditNode.ParameterFile))
+            return SaveLayeredParameterEdits(ActiveEditNode);
 
         try
         {
@@ -295,15 +304,47 @@ public sealed partial class MainViewModel
             ParameterResolver.SaveParameterFile(ActiveEditNode.ParameterFile, entries);
 
             // Mark all as not new after save
-            foreach (var e in ParameterFileEntries) e.IsNew = false;
+            foreach (var e in ParameterFileEntries)
+            {
+                e.IsNew = false;
+                e.OriginalKey = e.Key;
+                e.OriginalValue = e.Value;
+            }
+            _removedParameterEntries.Clear();
 
-            ParameterFileStatus = $"Saved {entries.Count} parameters to {Path.GetFileName(ActiveEditNode.ParameterFile)}";
+            ParameterFileStatus = $"Saved {entries.Count} parameters to {ActiveEditNode.ParameterFile} at {DateTime.Now:HH:mm:ss}";
             AddLog($"Saved parameter file: {ActiveEditNode.ParameterFile}", LogSeverity.Success);
+            return true;
         }
         catch (Exception ex)
         {
             ParameterFileStatus = $"Save error: {ex.Message}";
             AddLog($"Failed to save parameter file: {ex.Message}", LogSeverity.Error);
+            return false;
         }
+    }
+
+    private bool SaveLayeredParameterEdits(TreeNodeViewModel node)
+    {
+        var edits = ParameterGridEdits.Compute(ParameterFileEntries, _removedParameterEntries, node.Profile);
+        if (edits.Count == 0)
+        {
+            ParameterFileStatus = "No parameter changes to save.";
+            return true;
+        }
+
+        var result = ParameterFileWriter.SaveJsonEdits(node.ParameterFile, node.Profile, node.TokenScope, edits);
+        if (!result.Success)
+        {
+            ParameterFileStatus = $"Save failed: {result.Message}";
+            AddLog(ParameterFileStatus, LogSeverity.Error);
+            return false;
+        }
+
+        // Re-read so the grid, the layer column and every [Token] label show what is now on disk.
+        LoadParameterFileEntries(node.ParameterFile, node.Profile);
+        ParameterFileStatus = result.Message;
+        AddLog($"{result.Message} {edits.Count} change(s).", LogSeverity.Success);
+        return true;
     }
 }
