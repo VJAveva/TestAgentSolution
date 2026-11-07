@@ -23,9 +23,14 @@ public sealed partial class FeatureFlagsViewModel : ObservableObject
     /// <summary>True when any feature in the Results/Report Card ribbon group is on, so the group never shows empty.</summary>
     [ObservableProperty] private bool _anyResultsGroup = true;
 
-    public FeatureFlagsViewModel(IFeatureGate? gate)
+    private readonly Action<Action> _toUiThread;
+
+    public FeatureFlagsViewModel(IFeatureGate? gate) : this(gate, PostToDispatcher) { }
+
+    internal FeatureFlagsViewModel(IFeatureGate? gate, Action<Action> toUiThread)
     {
         _gate = gate;
+        _toUiThread = toUiThread;
         Refresh();
         if (_gate is not null)
             _gate.Changed += OnGateChanged;
@@ -33,11 +38,13 @@ public sealed partial class FeatureFlagsViewModel : ObservableObject
 
     public bool IsEnabled(string key) => _gate?.IsEnabled(key) ?? true;
 
-    private void OnGateChanged()
+    private void OnGateChanged() => _toUiThread(Refresh);
+
+    private static void PostToDispatcher(Action action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess()) Refresh();
-        else dispatcher.InvokeAsync(Refresh);
+        if (dispatcher is null || dispatcher.CheckAccess()) action();
+        else dispatcher.InvokeAsync(action);
     }
 
     public void Refresh()

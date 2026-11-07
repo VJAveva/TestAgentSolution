@@ -29,7 +29,8 @@ public sealed class FeatureFlagsViewModelTests : IDisposable
     {
         File.WriteAllText(_file, """{ "Features": { } }""");
         using var gate = new FeatureGate(_file, watch: false);
-        var vm = new FeatureFlagsViewModel(gate);
+        // Run inline: another test may have left a WPF Application whose dispatcher would defer the refresh.
+        var vm = new FeatureFlagsViewModel(gate, run => run());
         Assert.True(vm.CodeChurn);
 
         File.WriteAllText(_file, """{ "Features": { "CodeChurn": false, "Results": false } }""");
