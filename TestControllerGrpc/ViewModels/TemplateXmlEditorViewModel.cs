@@ -92,6 +92,8 @@ public sealed partial class TemplateXmlEditorViewModel : ObservableObject
     /// <summary>The final XML text to return to the caller after a successful save.</summary>
     public string ResultXml { get; private set; } = "";
 
+    public bool HasUnsavedChanges => !DialogAccepted && XmlText != _originalXml;
+
     /// <summary>Raised to request the owning Window to close.</summary>
     public event Action? RequestClose;
 

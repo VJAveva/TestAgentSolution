@@ -119,6 +119,13 @@ public sealed class FileWatcherManager : IFileWatcherManager
                 string.Equals(w.Config.Tag, tag, StringComparison.OrdinalIgnoreCase));
     }
 
+    internal WatchItemConfig? GetWatchedConfig(string tag)
+    {
+        lock (_lock)
+            return _watchers.FirstOrDefault(w =>
+                string.Equals(w.Config.Tag, tag, StringComparison.OrdinalIgnoreCase))?.Config;
+    }
+
     /// <summary>
     /// Applies a diff: removes watchers for deleted items, adds/updates watchers
     /// for new or changed items. Running watchers for unchanged items are untouched.
@@ -148,6 +155,7 @@ public sealed class FileWatcherManager : IFileWatcherManager
                     string.Equals(w.Config.Tag, item.Tag, StringComparison.OrdinalIgnoreCase));
 
                 var needsUpdate = existing is null
+                    || !ReferenceEquals(existing.Config, item)
                     || !string.Equals(existing.Config.Path, item.Path, StringComparison.OrdinalIgnoreCase)
                     || !string.Equals(existing.Config.Filter, item.Filter, StringComparison.OrdinalIgnoreCase)
                     || existing.Config.IsEnabled != item.IsEnabled;

@@ -35,6 +35,11 @@ public partial class RawXmlEditorWindow : Window
 
         // Wire close request
         _vm.RequestClose += () => DialogResult = _vm.DialogAccepted;
+        Closing += OnWindowClosing;
+        _vm.ConfirmTagRename ??= (oldTag, newTag) => Dialogs.ThemedMessageBox.Show(
+            $"Renaming pipeline '{oldTag}' to '{newTag}' will unassign every engineer assigned to '{oldTag}', " +
+            $"and a pipelines['{oldTag}'] override in its parameter file will stop applying.\n\nContinue?",
+            "Pipeline Tag Rename", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
         // Wire error navigation
         _vm.NavigateToError += NavigateToLine;
@@ -91,6 +96,15 @@ public partial class RawXmlEditorWindow : Window
         // Initial folding
         SetupFolding();
         _diagnosticsTimer.Start();
+    }
+
+    private void OnWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (!_vm.HasUnsavedChanges) return;
+        var answer = Dialogs.ThemedMessageBox.Show(
+            "You have unsaved XML changes. Discard them and close?",
+            "Unsaved Changes", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        e.Cancel = answer != MessageBoxResult.Yes;
     }
 
     private void ApplyQuickFix(XmlEditorQuickFix fix)
@@ -416,8 +430,7 @@ public partial class RawXmlEditorWindow : Window
 
         if (selfClosing.Contains(tagName))
         {
-            XmlEditor.Document.Remove(offset - 1, 1);
-            XmlEditor.Document.Insert(offset - 1, " />");
+            XmlEditorQuickFixApplier.ReplaceRangeAsSingleUndo(XmlEditor.Document, offset - 1, 1, " />");
             XmlEditor.CaretOffset = offset + 2;
         }
         else
@@ -437,12 +450,20 @@ public partial class RawXmlEditorWindow : Window
         if (e.PropertyName == nameof(WatchItemXmlEditorViewModel.XmlText))
         {
             if (XmlEditor.Text != _vm.XmlText)
-                XmlEditor.Text = _vm.XmlText;
+                ReplaceTextUndoable(_vm.XmlText);
         }
         else if (e.PropertyName == nameof(WatchItemXmlEditorViewModel.IsPreviewVisible))
         {
             PreviewColumn.Width = _vm.IsPreviewVisible ? new GridLength(280) : new GridLength(0);
         }
+    }
+
+    // Setting TextEditor.Text clears the undo stack, so Format/Auto-fix/Revert go through the document instead.
+    private void ReplaceTextUndoable(string text)
+    {
+        var caret = XmlEditor.CaretOffset;
+        XmlEditorQuickFixApplier.ReplaceAsSingleUndo(XmlEditor.Document, text);
+        XmlEditor.CaretOffset = Math.Min(caret, XmlEditor.Document.TextLength);
     }
 
     private void NavigateToLine(int line, int position)
@@ -459,13 +480,11 @@ public partial class RawXmlEditorWindow : Window
                 var offset = docLine.Offset + Math.Max(0, position - 1);
                 offset = Math.Min(offset, docLine.EndOffset);
 
+                // Caret only: a selected line is replaced by the next keystroke. The diagnostic renderer marks the error.
+                XmlEditor.TextArea.ClearSelection();
                 XmlEditor.CaretOffset = offset;
                 XmlEditor.ScrollToLine(line);
                 XmlEditor.TextArea.Caret.BringCaretToView();
-
-                // Select the line to highlight the error
-                XmlEditor.Select(docLine.Offset, docLine.Length);
-                XmlEditor.TextArea.Focus();
             }
             catch
             {

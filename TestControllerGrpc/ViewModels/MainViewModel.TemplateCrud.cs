@@ -53,6 +53,8 @@ public sealed partial class MainViewModel
                 TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
                 RebuildTemplateIds();
                 _executor.LoadTemplates(_config.Templates);
+                IsDirty = true;
+                RunValidation();
 
                 AddLog($"Templates updated via XML editor: {parsed.Count} template(s)", LogSeverity.Success);
             }

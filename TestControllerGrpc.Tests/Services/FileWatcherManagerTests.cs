@@ -251,7 +251,7 @@ public class FileWatcherManagerTests : IDisposable
         };
         _manager.ApplyConfig(config);
 
-        // Apply diff with same item — watcher count should remain 1
+        // Apply diff with same item ï¿½ watcher count should remain 1
         _manager.ApplyDiff(
         [
             new WatchItemConfig { Tag = "Stable", Path = dir, Filter = "*.txt", IsEnabled = true,
@@ -260,6 +260,35 @@ public class FileWatcherManagerTests : IDisposable
 
         Assert.Equal(1, _manager.ActiveWatcherCount);
         Assert.True(_manager.HasWatcher("Stable"));
+    }
+
+    [Fact]
+    public void ApplyDiff_Should_WatchTheNewConfig_When_WatchItemObjectReplacedWithSamePath()
+    {
+        var dir = CreateSubDir("edited");
+        var original = new WatchItemConfig { Tag = "Edited", Path = dir, Filter = "*.txt", IsEnabled = true,
+            Events = [new EventConfig { Type = "Renamed" }] };
+        _manager.ApplyConfig(new WatchListConfig { WatchItems = [original] });
+
+        var edited = new WatchItemConfig { Tag = "Edited", Path = dir, Filter = "*.txt", IsEnabled = true,
+            Events = [new EventConfig { Type = "Created" }] };
+        _manager.ApplyDiff([edited]);
+
+        Assert.Equal(1, _manager.ActiveWatcherCount);
+        Assert.Same(edited, _manager.GetWatchedConfig("Edited"));
+    }
+
+    [Fact]
+    public void ApplyDiff_Should_KeepTheWatcher_When_SameObjectReapplied()
+    {
+        var dir = CreateSubDir("same");
+        var item = new WatchItemConfig { Tag = "Same", Path = dir, Filter = "*.txt", IsEnabled = true,
+            Events = [new EventConfig { Type = "Renamed" }] };
+        _manager.ApplyConfig(new WatchListConfig { WatchItems = [item] });
+
+        _manager.ApplyDiff([item]);
+
+        Assert.Same(item, _manager.GetWatchedConfig("Same"));
     }
 
     // ???????????????????????????????????????????????????????????????????

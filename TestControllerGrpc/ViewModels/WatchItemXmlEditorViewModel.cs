@@ -93,6 +93,13 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     /// <summary>The final XML text to return to the caller after a successful save.</summary>
     public string ResultXml { get; private set; } = "";
 
+    public bool HasUnsavedChanges => !DialogAccepted && XmlText != _originalXml;
+
+    /// <summary>Asked (oldTag, newTag) before saving a renamed WatchItem; returning false keeps the editor open.</summary>
+    public Func<string, string, bool>? ConfirmTagRename { get; set; }
+
+    private readonly string _originalTag;
+
     /// <summary>Raised to request the owning Window to close.</summary>
     public event Action? RequestClose;
 
@@ -113,6 +120,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         _fileSystem = fileSystem;
         _agentStatuses = agentStatuses;
         _documentKind = DetectDocumentKind(initialXml);
+        _originalTag = RootTag(initialXml) ?? "";
         XmlText = initialXml;
         StatusMessage = "Ready";
         StatusSeverity = "Info";
@@ -158,6 +166,12 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     public string? GetHoverText(int offset) =>
         WatchListXmlEditorAnalyzer.GetHoverText(
             XmlText, _documentKind, offset, _validationContext, _agentStatuses);
+
+    private static string? RootTag(string xml)
+    {
+        try { return XDocument.Parse(xml).Root?.Attribute("Tag")?.Value; }
+        catch (XmlException) { return null; }
+    }
 
     private static XmlEditorDocumentKind DetectDocumentKind(string xml)
     {
@@ -233,6 +247,17 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             StatusMessage = $"Cannot save {blockingErrors} validation error(s)";
             StatusSeverity = "Error";
             IsXmlValid = false;
+            return;
+        }
+
+        if (_documentKind == XmlEditorDocumentKind.WatchItem
+            && _originalTag.Length > 0
+            && RootTag(XmlText) is { } newTag
+            && !string.Equals(_originalTag, newTag, StringComparison.OrdinalIgnoreCase)
+            && ConfirmTagRename?.Invoke(_originalTag, newTag) == false)
+        {
+            StatusMessage = "Save cancelled - Tag rename not confirmed";
+            StatusSeverity = "Info";
             return;
         }
 
@@ -322,57 +347,47 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         {
             var doc = XDocument.Parse(XmlText);
             var root = doc.Root;
-            if (root is null || root.Name.LocalName != "WatchItem")
+            var watchItems = root?.Name.LocalName switch
             {
-                StatusMessage = "Cannot auto-fix � Root must be <WatchItem>";
+                "WatchItem" => new[] { root },
+                "WatchList" => root.Elements("WatchItem").ToArray(),
+                _ => null,
+            };
+            if (root is null || watchItems is null)
+            {
+                StatusMessage = "Cannot auto-fix - Root must be <WatchItem> or <WatchList>";
                 StatusSeverity = "Error";
                 return;
             }
 
             var fixCount = 0;
 
-            // Fix WatchItem defaults
-            if (root.Attribute("Filter") is null)
+            foreach (var watchItem in watchItems)
             {
-                root.SetAttributeValue("Filter", "*.*");
-                fixCount++;
-            }
-
-            foreach (var ev in root.Elements("Event"))
-            {
-                // Fix Event defaults
-                if (ev.Attribute("Type") is null)
+                if (watchItem.Attribute("Filter") is null)
                 {
-                    ev.SetAttributeValue("Type", "Renamed");
-                    fixCount++;
-                }
-                if (ev.Attribute("ExecutionType") is null)
-                {
-                    ev.SetAttributeValue("ExecutionType", "Sequential");
+                    watchItem.SetAttributeValue("Filter", "*.*");
                     fixCount++;
                 }
 
-                foreach (var el in ev.Descendants())
+                foreach (var ev in watchItem.Elements("Event"))
                 {
-                    switch (el.Name.LocalName)
+                    if (ev.Attribute("Type") is null)
                     {
-                        case "ActionGroup":
-                            if (el.Attribute("ExecutionType") is null)
-                            {
-                                el.SetAttributeValue("ExecutionType", "Sequential");
-                                fixCount++;
-                            }
-                            if (el.Attribute("FailAndContinue") is not null)
-                                fixCount += NormalizeBoolAttr(el, "FailAndContinue");
-                            break;
-
-                        case "Action":
-                            fixCount += NormalizeBoolAttr(el, "FailAndContinue");
-                            fixCount += NormalizeBoolAttr(el, "IsReboot");
-                            break;
+                        ev.SetAttributeValue("Type", "Renamed");
+                        fixCount++;
                     }
+                    if (ev.Attribute("ExecutionType") is null)
+                    {
+                        ev.SetAttributeValue("ExecutionType", "Sequential");
+                        fixCount++;
+                    }
+                    fixCount += FixActionNodes(ev.Descendants());
                 }
             }
+
+            if (root.Element("Templates") is { } templates)
+                fixCount += FixActionNodes(templates.Descendants());
 
             // Re-serialize with formatting
             var settings = new XmlWriterSettings
@@ -409,7 +424,15 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             if (remaining.Count > 0)
             {
                 ShowErrors(remaining);
-                StatusMessage += $" ({remaining.Count} remaining error(s))";
+                var remainingErrors = remaining.Count(error => error.Severity == "Error");
+                var withQuickFix = remaining.Count(error => error.QuickFixes.Count > 0);
+                StatusMessage += $" ({remainingErrors} error(s), {remaining.Count - remainingErrors} warning(s) need manual edits"
+                    + (withQuickFix > 0 ? $"; {withQuickFix} have a one-click fix in the error panel)" : ")");
+                if (remainingErrors > 0)
+                {
+                    IsXmlValid = false;
+                    StatusSeverity = "Error";
+                }
             }
             else
             {
@@ -431,6 +454,31 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             StatusMessage = $"? Cannot auto-fix � {ex.Message}";
             StatusSeverity = "Error";
         }
+    }
+
+    private static int FixActionNodes(IEnumerable<XElement> nodes)
+    {
+        var fixCount = 0;
+        foreach (var el in nodes)
+        {
+            switch (el.Name.LocalName)
+            {
+                case "ActionGroup":
+                    if (el.Attribute("ExecutionType") is null)
+                    {
+                        el.SetAttributeValue("ExecutionType", "Sequential");
+                        fixCount++;
+                    }
+                    fixCount += NormalizeBoolAttr(el, "FailAndContinue");
+                    break;
+
+                case "Action":
+                    fixCount += NormalizeBoolAttr(el, "FailAndContinue");
+                    fixCount += NormalizeBoolAttr(el, "IsReboot");
+                    break;
+            }
+        }
+        return fixCount;
     }
 
     /// <summary>Normalize True/False ? true/false for a boolean attribute. Returns 1 if fixed, 0 otherwise.</summary>

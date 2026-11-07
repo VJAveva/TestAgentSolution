@@ -93,9 +93,13 @@ public sealed partial class MainViewModel
                     }
                 }
                 WatchListRoot?.RefreshDisplayText();
-                XmlEditorStatus = "Applied successfully.";
+                // The watcher captured the old WatchItem object; without this a file drop runs the pre-edit pipeline.
+                _watcherManager.ApplyDiff(_config.WatchItems);
+                IsDirty = true;
+                RunValidation();
+                XmlEditorStatus = "Applied - press Save (Ctrl+S) to write WatchList.xml.";
                 IsXmlEditorOpen = false;
-                AddLog($"WatchItem updated via XML editor: {parsed.Tag}", LogSeverity.Success);
+                AddLog($"WatchItem updated via XML editor: {parsed.Tag} (unsaved)", LogSeverity.Success);
             }
             catch (Exception ex)
             {
@@ -163,6 +167,7 @@ public sealed partial class MainViewModel
                     try
                     {
                         RebuildAllTrees();
+                        RunValidation();
                         StatusMessage = $"{_config.WatchItems.Count} WatchItems, {_config.Templates.Count} Templates";
                     }
                     catch (Exception ex)
@@ -171,7 +176,8 @@ public sealed partial class MainViewModel
                     }
                 });
 
-                AddLog("? WatchList updated from XML editor.", LogSeverity.Success);
+                IsDirty = true;
+                AddLog("? WatchList updated from XML editor (unsaved - press Save to write the file).", LogSeverity.Success);
             }
             catch (Exception ex)
             {
