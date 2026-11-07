@@ -98,6 +98,15 @@ public sealed class AdoOptions
     /// </summary>
     public string? SecretEnvVarName { get; set; }
 
+    /// <summary>Component map (repos, build definitions, use cases). Empty = docs\impact\component-usecase-map.v1.json beside the host.</summary>
+    public string? ComponentMapPath { get; set; }
+
+    /// <summary>Runtime/Config categories. Empty = docs\impact\component-categories.xml beside the host.</summary>
+    public string? ComponentCategoriesPath { get; set; }
+
+    /// <summary>Prefix tried when a path hint does not name a component directly. Empty disables it.</summary>
+    public string RepositoryPrefix { get; set; } = "AppServer.";
+
     /// <summary>
     /// Entra app (client) id of the SPA registration used by the WebClient for delegated ADO sign-in.
     /// Must be a separate registration from <see cref="ClientId"/> unless that one also has a SPA redirect URI.

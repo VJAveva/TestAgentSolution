@@ -87,6 +87,7 @@ public partial class BuildResultsViewModel
         var generation = ++_firGeneration;
 
         if (_firService is null || string.IsNullOrWhiteSpace(buildNumber)) return Task.CompletedTask;
+        if (_featureGate?.IsEnabled(TestControllerGrpc.Features.FeatureKeys.FirReport) == false) return Task.CompletedTask;
         if (!FirAnalyzer.IsFailure(test.Outcome)) return Task.CompletedTask;
 
         var testName = test.TestName;

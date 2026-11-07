@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Eye, Server, Play, BarChart3, Activity, ScrollText, AlertTriangle, RotateCw, Award, GitPullRequest } from 'lucide-react';import WatchListTree from '../watchlist/WatchListTree';
+import { Eye, Server, Play, BarChart3, Activity, ScrollText, AlertTriangle, RotateCw, Award, GitPullRequest, ToggleLeft } from 'lucide-react';import WatchListTree from '../watchlist/WatchListTree';
 import NodeProperties from '../watchlist/NodeProperties';
 import WatchListToolbar from '../watchlist/WatchListToolbar';
 import AgentWorkspace from '../agents/AgentWorkspace';
@@ -14,6 +14,7 @@ import BuildDetail from '../results/BuildDetail';
 import TrendCharts from '../results/TrendCharts';
 import ReportCardView from '../reportcard/ReportCardView';
 import RegressionView from '../regression/RegressionView';
+import FeatureSettingsPanel from '../admin/FeatureSettingsPanel';
 import Sidebar from './Sidebar';
 import ConnectionStatus from './ConnectionStatus';
 import DefaultModeBanner from '../header/DefaultModeBanner';
@@ -25,19 +26,21 @@ import { useExecution } from '../../hooks/useExecution';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import { useCan } from '../../hooks/useCapabilities';
 import { useSystemModeStore } from '../../stores/systemModeStore';
+import { useFeatureStore, isFeatureOn, type FeatureKey } from '../../stores/featureStore';
 import { mark, measure } from '../../lib/uiPerf';
 
-type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results' | 'report' | 'regression';
+type Tab = 'watchlist' | 'agents' | 'execution' | 'monitor' | 'logs' | 'results' | 'report' | 'regression' | 'features';
 
-const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const tabs: { id: Tab; label: string; icon: React.ReactNode; feature?: FeatureKey; adminOnly?: boolean }[] = [
   { id: 'watchlist', label: 'WatchList', icon: <Eye size={16} /> },
   { id: 'agents',    label: 'Agents',    icon: <Server size={16} /> },
   { id: 'execution', label: 'Execution', icon: <Play size={16} /> },
   { id: 'monitor',   label: 'Monitor',   icon: <Activity size={16} /> },
   { id: 'logs',      label: 'Logs',      icon: <ScrollText size={16} /> },
-  { id: 'results',   label: 'Results',   icon: <BarChart3 size={16} /> },
-  { id: 'report',    label: 'Report Card', icon: <Award size={16} /> },
-  { id: 'regression', label: 'CodeChurn', icon: <GitPullRequest size={16} /> },
+  { id: 'results',   label: 'Results',   icon: <BarChart3 size={16} />, feature: 'Results' },
+  { id: 'report',    label: 'Report Card', icon: <Award size={16} />, feature: 'Reports' },
+  { id: 'regression', label: 'CodeChurn', icon: <GitPullRequest size={16} />, feature: 'CodeChurn' },
+  { id: 'features',  label: 'Features',  icon: <ToggleLeft size={16} />, adminOnly: true },
 ];
 
 export default function AppShell() {
@@ -58,6 +61,23 @@ export default function AppShell() {
     report: !isSecured || !canReportCard,
     regression: !isSecured || !canCodeChurn,
   };
+
+  const canConfigure = useCan('System_ConfigureFeatures');
+  const canConfigureFeatures = isSecured && canConfigure;
+  const featureMap = useFeatureStore((s) => s.map);
+  const fetchFeatures = useFeatureStore((s) => s.fetchFeatures);
+  const visibleTabs = tabs.filter(t =>
+    (!t.feature || isFeatureOn(featureMap, t.feature)) && (!t.adminOnly || canConfigureFeatures));
+  const activeFeature = tabs.find(t => t.id === activeTab)?.feature;
+  const featureOff = activeFeature !== undefined && !isFeatureOn(featureMap, activeFeature);
+
+  // Once at start and whenever the window regains focus, so an admin's toggle shows up without a reload.
+  useEffect(() => {
+    void fetchFeatures();
+    const onFocus = () => { void fetchFeatures(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchFeatures]);
 
   const loadAll = useCallback(() => {
     setLoadError(null);
@@ -86,7 +106,7 @@ export default function AppShell() {
       <header className="flex items-center bg-bg-ribbon border-b border-bdr px-4 h-11 shrink-0">
         <span className="text-accent font-bold text-sm tracking-wide mr-4 lg:mr-8">TestController</span>
         <nav className="flex gap-1">
-          {tabs.map(t => {
+          {visibleTabs.map(t => {
             const isDenied = denied[t.id] === true;
             return (
               <button
@@ -134,6 +154,7 @@ export default function AppShell() {
 
       {/* Tab content */}
       <div className="flex flex-1 overflow-hidden">
+        {featureOff ? <FeatureOff /> : (<>
         {activeTab === 'watchlist' && <WatchListPage />}
         {activeTab === 'agents'    && <AgentsPage />}
         {activeTab === 'execution' && <ExecutionPage />}
@@ -142,6 +163,20 @@ export default function AppShell() {
         {activeTab === 'results'   && <ResultsPage />}
         {activeTab === 'report'    && (denied.report ? <PermissionDenied /> : <ReportCardPage />)}
         {activeTab === 'regression' && (denied.regression ? <PermissionDenied /> : <RegressionPage />)}
+        {activeTab === 'features'  && (canConfigureFeatures ? <FeatureSettingsPanel /> : <PermissionDenied />)}
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+// Reached by a bookmarked or typed URL; the nav button is already hidden.
+export function FeatureOff() {
+  return (
+    <div role="status" className="flex flex-1 items-center justify-center text-xs text-text-secondary">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={14} className="text-acc-yellow" />
+        This feature is turned off on this controller.
       </div>
     </div>
   );

@@ -14,7 +14,8 @@ public sealed record RegressionConnectionInfo(
     string OmiProject,
     string AuthMode,
     string CredentialSource,
-    bool CredentialConfigured);
+    bool CredentialConfigured,
+    string? Warning = null);
 
 /// <summary>Deploy/health snapshot for the Regression tab: config state, loaded component count, and a live ADO probe.</summary>
 public sealed record RegressionHealth(
@@ -96,8 +97,12 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
             OmiProject: string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject,
             AuthMode: _options.AuthMode.ToString(),
             CredentialSource: credentialSource,
-            CredentialConfigured: configured);
+            CredentialConfigured: configured,
+            Warning: _map.All().Count == 0 ? NoRepositoriesMessage : null);
     }
+
+    public const string NoRepositoriesMessage =
+        "No repositories configured for Code Churn: the component map is missing or empty (set Ado:ComponentMapPath).";
 
     public IReadOnlyList<RegressionComponentRef> GetComponents() =>
         _map.All()

@@ -12,6 +12,8 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private async Task OpenResults()
     {
+        if (!Features.Results) return;
+
         // Singleton pattern: reuse existing window if still open
         if (_resultsDashboardWindow is not null && _resultsDashboardWindow.IsLoaded)
         {

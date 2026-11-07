@@ -168,6 +168,11 @@ ParameterResolver.UseGlobalVariablesFile(
 PipelineConcurrency.Configure(builder.Configuration.GetValue(
     PipelineConcurrency.ConfigKey, PipelineConcurrency.DefaultMaxConcurrentActions));
 
+// Per-team feature toggles. Point Features:ConfigPath at the controller's file so both tiers agree.
+// Saves are forwarded to the controller, which owns the file and the audit log.
+builder.Services.AddSingleton<TestControllerGrpc.Features.IFeatureSettingsService, ProxyFeatureSettingsService>();
+TestControllerGrpc.Features.FeatureGateServiceCollectionExtensions.AddFeatureGate(builder.Services);
+
 // Shared API library: controllers for execution, watchlist, agents, health, results + SignalR hub + bridge
 builder.Services.AddControllerApi()
     .ConfigureApplicationPartManager(apm =>
@@ -514,12 +519,14 @@ app.MapGroup("/api").MapLockEndpoints().RequireAuthorization(SecurityPolicies.Us
 // login/guest reach the controller, which performs the real authentication.
 app.MapGroup("/api").MapAuthEndpoints().AllowAnonymous();
 app.MapGroup("/api/notifications").MapNotificationEndpoints().RequireAuthorization(SecurityPolicies.User);
-app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/results").MapResultsEndpoints().RequireRateLimiting("telemetry").RequireAuthorization(SecurityPolicies.User)
+    .RequireFeature(TestControllerGrpc.Features.FeatureKeys.Results);
 app.MapGroup("/api/deployment").MapDeploymentEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 app.MapGroup("/api/tokens").MapTokenManagementEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.Admin);
 
 // Impact test mapping engine: REST + SSE surface plus the progress hub.
-app.MapGroup("/api/impact-mapping").MapImpactMappingEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User);
+app.MapGroup("/api/impact-mapping").MapImpactMappingEndpoints().RequireRateLimiting("mutation").RequireAuthorization(SecurityPolicies.User)
+    .RequireFeature(TestControllerGrpc.Features.FeatureKeys.ImpactMapping);
 app.MapHub<TestController.WebApi.Hubs.ImpactProgressHub>("/hubs/impact");
 
 // Client-side error logs ingestion (WebClient AppLogPanel → server logs)

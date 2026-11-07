@@ -32,10 +32,10 @@ public sealed class ComponentBuildMap : IComponentBuildMap
     private readonly IAppLogger _logger;
     private readonly List<ComponentBuildInfo> _entries = [];
 
-    public ComponentBuildMap(IAppLogger logger)
+    public ComponentBuildMap(IAppLogger logger, Microsoft.Extensions.Options.IOptions<AdoOptions>? options = null)
     {
         _logger = logger;
-        Load(ComponentMapLocator.FindMapPath());
+        Load(ComponentMapLocator.FindMapPath(options?.Value.ComponentMapPath));
     }
 
     public IReadOnlyList<ComponentBuildInfo> All() => _entries;
@@ -130,16 +130,23 @@ public sealed class ComponentBuildMap : IComponentBuildMap
 /// <summary>Shared lookup for the component map file, walking up from the executing assembly.</summary>
 internal static class ComponentMapLocator
 {
-    public static string FindMapPath()
+    public static string FindMapPath(string? configured = null) =>
+        FindDocsImpactFile(configured, "component-usecase-map.v1.json");
+
+    /// <summary>A configured path wins; otherwise walk up from the host to docs\impact\<paramref name="fileName"/>.</summary>
+    public static string FindDocsImpactFile(string? configured, string fileName)
     {
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
         var dir = AppContext.BaseDirectory;
         for (var i = 0; i < 8 && dir is not null; i++)
         {
-            var candidate = Path.Combine(dir, "docs", "impact", "component-usecase-map.v1.json");
+            var candidate = Path.Combine(dir, "docs", "impact", fileName);
             if (File.Exists(candidate))
                 return candidate;
             dir = Directory.GetParent(dir)?.FullName;
         }
-        return Path.Combine(AppContext.BaseDirectory, "docs", "impact", "component-usecase-map.v1.json");
+        return Path.Combine(AppContext.BaseDirectory, "docs", "impact", fileName);
     }
 }

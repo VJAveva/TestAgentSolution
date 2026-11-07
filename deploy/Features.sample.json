@@ -1,0 +1,12 @@
+{
+  "TeamName": "<your-team>",
+  "Features": {
+    "Results": true,
+    "FirReport": true,
+    "CodeChurn": true,
+    "ImpactMapping": true,
+    "PipelineBuilder": true,
+    "GlobalVariables": true,
+    "Reports": true
+  }
+}

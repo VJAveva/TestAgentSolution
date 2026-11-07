@@ -57,6 +57,23 @@ public sealed partial class MainViewModel
 
     private AuditViewerWindow? _auditViewerWindow;
 
+    public bool CanOpenFeatureSettings => _capabilityChecker.Can(Permission.System_ConfigureFeatures);
+
+    [RelayCommand(CanExecute = nameof(CanOpenFeatureSettings))]
+    private void OpenFeatureSettings()
+    {
+        if (!CanOpenFeatureSettings) return;
+        var gate = App.Services.GetService<TestControllerGrpc.Features.IFeatureGate>();
+        var settings = App.Services.GetService<TestControllerGrpc.Features.IFeatureSettingsService>();
+        if (gate is null || settings is null) return;
+
+        var window = new FeatureSettingsWindow(new FeatureSettingsViewModel(gate, settings, _currentUserHolder.User))
+        {
+            Owner = FindOwnerWindow(),
+        };
+        window.ShowDialog();
+    }
+
     [RelayCommand]
     private void OpenAuditViewer()
     {

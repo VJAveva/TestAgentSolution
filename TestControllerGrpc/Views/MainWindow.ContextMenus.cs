@@ -117,18 +117,22 @@ public partial class MainWindow : Window
             menu.Items.Add(CreateMenuItemWithIcon("Add WatchItem", _vm.AddWatchItemCommand, "\uE710", "Accent"));
 
             var canAuthor = _capabilityChecker.Can(Permission.Pipeline_Author);
-            var newPipelineItem = CreateMenuItemWithIcon("New Pipeline\u2026", null, "\uE710", "Accent");
-            newPipelineItem.IsEnabled = canAuthor;
-            newPipelineItem.ToolTip = canAuthor ? null : "Administrator only";
-            newPipelineItem.Click += (_, _) => new Dialogs.PipelineBuilderWindow { Owner = this }.ShowDialog();
-            menu.Items.Add(newPipelineItem);
+            if (_vm.Features.PipelineBuilder)
+            {
+                var newPipelineItem = CreateMenuItemWithIcon("New Pipeline\u2026", null, "\uE710", "Accent");
+                newPipelineItem.IsEnabled = canAuthor;
+                newPipelineItem.ToolTip = canAuthor ? null : "Administrator only";
+                newPipelineItem.Click += (_, _) => new Dialogs.PipelineBuilderWindow { Owner = this }.ShowDialog();
+                menu.Items.Add(newPipelineItem);
+            }
 
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Import WatchItems…", _vm.ImportWatchItemsCommand, "\uE8B5", "Accent"));
             menu.Items.Add(CreateMenuItemWithIcon("Export All WatchItems…", _vm.ExportWatchItemsCommand, "\uE898", "Accent"));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItemWithIcon("Edit WatchList XML…", _vm.OpenWatchListEditorCommand, "\uE70F", "AccMauve"));
-            menu.Items.Add(CreateMenuItemWithIcon("Edit Global Variables…", _vm.EditGlobalVariablesCommand, "\uE8A1", "AccYellow"));
+            if (_vm.Features.GlobalVariables)
+                menu.Items.Add(CreateMenuItemWithIcon("Edit Global Variables…", _vm.EditGlobalVariablesCommand, "\uE8A1", "AccYellow"));
         }
         else if (node.NodeKind is "WatchItem")
         {

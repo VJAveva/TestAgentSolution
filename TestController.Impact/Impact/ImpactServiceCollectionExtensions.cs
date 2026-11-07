@@ -17,6 +17,7 @@ using TestControllerGrpc.Core.Impact.Rerank;
 using TestControllerGrpc.Core.Impact.Retrieval;
 using TestControllerGrpc.Core.Impact.Risk;
 using TestControllerGrpc.Core.Impact.Selection;
+using TestControllerGrpc.Features;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Core.Impact;
@@ -179,13 +180,13 @@ public static class ImpactServiceCollectionExtensions
         // Index maintenance runs only on the writer host.
         if (role == ImpactHostRole.ReaderWriter)
         {
-            services.AddHostedService<IndexMaintenanceService>();
+            services.AddFeatureGatedHostedService<IndexMaintenanceService>(FeatureKeys.ImpactMapping);
         }
 
         // Persistence runs on EVERY host: a reader still accumulates its own run outcomes, and losing those
         // to a snapshot revert is the failure this exists to prevent. Safe to run everywhere because each
         // host writes its own folder and the merge is an idempotent set union, not a read-modify-write.
-        services.AddHostedService<ImpactPersistenceWorker>();
+        services.AddFeatureGatedHostedService<ImpactPersistenceWorker>(FeatureKeys.ImpactMapping);
 
         return services;
     }

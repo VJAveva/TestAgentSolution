@@ -18,10 +18,10 @@ public sealed class ComponentCategorizer : IComponentCategorizer
     private readonly IAppLogger _logger;
     private readonly Dictionary<string, RegressionCategoryKind> _map = new(StringComparer.OrdinalIgnoreCase);
 
-    public ComponentCategorizer(IAppLogger logger)
+    public ComponentCategorizer(IAppLogger logger, Microsoft.Extensions.Options.IOptions<AdoOptions>? options = null)
     {
         _logger = logger;
-        Load(FindCategoriesPath());
+        Load(ComponentMapLocator.FindDocsImpactFile(options?.Value.ComponentCategoriesPath, "component-categories.xml"));
     }
 
     public RegressionCategoryKind Categorize(string component) =>
@@ -53,18 +53,5 @@ public sealed class ComponentCategorizer : IComponentCategorizer
         {
             _logger.Error("Ado", $"ComponentCategorizer: failed to parse '{path}'.", ex);
         }
-    }
-
-    private static string FindCategoriesPath()
-    {
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8 && dir is not null; i++)
-        {
-            var candidate = Path.Combine(dir, "docs", "impact", "component-categories.xml");
-            if (File.Exists(candidate))
-                return candidate;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        return Path.Combine(AppContext.BaseDirectory, "docs", "impact", "component-categories.xml");
     }
 }

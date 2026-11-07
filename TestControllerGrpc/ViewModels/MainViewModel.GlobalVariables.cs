@@ -25,6 +25,8 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void EditGlobalVariables()
     {
+        if (!Features.GlobalVariables) return;
+
         GlobalVariablesFilePath = _config.GlobalVariablesFile;
         LoadGlobalVariables();
 

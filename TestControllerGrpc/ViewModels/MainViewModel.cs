@@ -336,6 +336,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // ── Constructor ─────────────────────────────────────────────────
 
+    /// <summary>Per-team feature toggles; XAML binds tab/button Visibility to these.</summary>
+    public FeatureFlagsViewModel Features { get; }
+
     public MainViewModel(IVocabularyMonitor vocabMonitor, IFileWatcherManager watcherManager,
         IActionPipelineExecutor executor, IAgentGrpcDispatcher dispatcher,
         ExecutionSessionManager sessionManager, ILogger<MainViewModel> logger,
@@ -356,8 +359,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TestControllerGrpc.Core.Maintenance.UpdatePolicyStore? updatePolicy = null,
         TestControllerGrpc.Core.Maintenance.INodeUpdateInstaller? updateInstaller = null,
         TestControllerGrpc.Core.Preflight.PreflightService? preflight = null,
-        TestControllerGrpc.Core.Maintenance.MaintenanceOptions? maintenanceOptions = null)
+        TestControllerGrpc.Core.Maintenance.MaintenanceOptions? maintenanceOptions = null,
+        TestControllerGrpc.Features.IFeatureGate? featureGate = null)
     {
+        Features = new FeatureFlagsViewModel(featureGate);
+        Features.Changed += RefreshToolsPermissions;
         _vocabMonitor = vocabMonitor;
         _watcherManager = watcherManager;
         _executor = executor;

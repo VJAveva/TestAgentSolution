@@ -11,7 +11,7 @@ public sealed partial class MainViewModel
 {
     private BuildReportCardWindow? _reportCardWindow;
 
-    public bool CanOpenReportCard => _capabilityChecker.Can(Permission.ReportCard_View);
+    public bool CanOpenReportCard => Features.Reports && _capabilityChecker.Can(Permission.ReportCard_View);
 
     public string OpenReportCardToolTip => CanOpenReportCard
         ? "Open the Build Report Card"

@@ -17,6 +17,7 @@ namespace TestController.Api.Controllers;
 [ApiController]
 [Route("api/reportcard")]
 [Authorize(Policy = SecurityPolicies.User)]
+[RequireFeature(TestControllerGrpc.Features.FeatureKeys.Reports)]
 public class BuildReportCardController : ControllerBase
 {
     private readonly BuildReportAggregator _aggregator;

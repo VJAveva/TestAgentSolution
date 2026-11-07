@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using TestControllerGrpc.Features;
 using TestControllerGrpc.Services;
 
 namespace TestControllerGrpc.Ado;
@@ -26,7 +27,7 @@ public static class AdoServiceCollectionExtensions
 
         // Startup diagnostic: logs whether mock or live ADO is active and why. Registered
         // unconditionally so it also reports the mock-is-active case.
-        services.AddHostedService<AdoStartupDiagnostics>();
+        services.AddFeatureGatedHostedService<AdoStartupDiagnostics>(TestControllerGrpc.Features.FeatureKeys.CodeChurn);
 
         // Component map + source catalog are registered unconditionally so the Regression tab's status bar
         // and definition picker work even when ADO ingest is disabled (they read config + the vobs map only).

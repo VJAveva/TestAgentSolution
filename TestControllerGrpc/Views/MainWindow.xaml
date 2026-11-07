@@ -1310,10 +1310,12 @@
 
                         <!-- Tools -->
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenResultsCommand}"
+                                Visibility="{Binding Features.Results, Converter={StaticResource BoolVis}}"
                                 AutomationProperties.Name="Results Viewer" ToolTip="Results Viewer" Height="28" MinWidth="28" Padding="4,2">
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" FontSize="{StaticResource FontSize14}" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenReportCardCommand}"
+                                Visibility="{Binding Features.Reports, Converter={StaticResource BoolVis}}"
                                 ToolTip="{Binding OpenReportCardToolTip}" ToolTipService.ShowOnDisabled="True"
                                 Height="28" MinWidth="28" Padding="4,2" AutomationProperties.Name="Build Report Card" >
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" FontSize="{StaticResource FontSize14}" Foreground="{DynamicResource AccGreen}" />
@@ -1323,6 +1325,7 @@
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F5;" FontSize="{StaticResource FontSize14}" Foreground="{DynamicResource AccGreen}" />
                         </Button>
                         <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenRegressionCommand}"
+                                Visibility="{Binding Features.CodeChurn, Converter={StaticResource BoolVis}}"
                                 ToolTip="{Binding OpenRegressionToolTip}" ToolTipService.ShowOnDisabled="True"
                                 Height="28" MinWidth="28" Padding="4,2" AutomationProperties.Name="Code Churn" >
                             <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" FontSize="{StaticResource FontSize14}" Foreground="{DynamicResource AccGreen}" />
@@ -1873,10 +1876,12 @@
                         <Border Background="{DynamicResource RibbonTabBg}" Padding="6,2" ClipToBounds="True">
                             <ScrollViewer Style="{StaticResource RibbonScrollViewer}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="6,2" Margin="2,1">
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="6,2" Margin="2,1"
+                                        Visibility="{Binding Features.AnyResultsGroup, Converter={StaticResource BoolVis}}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenResultsCommand}"
+                                                    Visibility="{Binding Features.Results, Converter={StaticResource BoolVis}}"
                                                     ToolTip="Open the Results Dashboard window">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D9;" Foreground="{DynamicResource AccGreen}" />
@@ -1884,6 +1889,7 @@
                                                 </StackPanel>
                                             </Button>
                                             <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding OpenReportCardCommand}"
+                                                    Visibility="{Binding Features.Reports, Converter={StaticResource BoolVis}}"
                                                     ToolTip="{Binding OpenReportCardToolTip}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Build Report Card" >
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9F9;" Foreground="{DynamicResource AccGreen}" />
@@ -1893,11 +1899,14 @@
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
-                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="6,2" Margin="2,1">
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3"
+                                        Visibility="{Binding Features.AnyResultsGroup, Converter={StaticResource BoolVis}}" />
+                                <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="6,2" Margin="2,1"
+                                        Visibility="{Binding Features.CodeChurn, Converter={StaticResource BoolVis}}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding OpenRegressionCommand}"
+                                                    Visibility="{Binding Features.CodeChurn, Converter={StaticResource BoolVis}}"
                                                     ToolTip="{Binding OpenRegressionToolTip}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Code Churn" >
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9D2;" Foreground="{DynamicResource AccMauve}" />
@@ -1907,7 +1916,8 @@
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
-                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3" />
+                                <Border Width="1" Background="{DynamicResource Bdr}" Margin="4,3"
+                                        Visibility="{Binding Features.CodeChurn, Converter={StaticResource BoolVis}}" />
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="6,2" Margin="2,1">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
@@ -1961,6 +1971,14 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE7BA;" Foreground="{DynamicResource AccMauve}" />
                                                     <TextBlock Text="Audit Log" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,1,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Style="{StaticResource RibbonBtnMauve}" Command="{Binding OpenFeatureSettingsCommand}"
+                                                    ToolTip="Turn features on or off for this controller (Administrator only)"
+                                                    ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Features">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE9E9;" Foreground="{DynamicResource AccMauve}" />
+                                                    <TextBlock Text="Features" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,1,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>

@@ -14,7 +14,7 @@ public sealed partial class MainViewModel
     // A greyed-out button with no reason generates a support ticket; a hidden one generates two.
     private const string ToolsRestrictedToolTip = "Requires Administrator or Sr Manager";
 
-    public bool CanOpenRegression => _capabilityChecker.Can(Permission.CodeChurn_View);
+    public bool CanOpenRegression => Features.CodeChurn && _capabilityChecker.Can(Permission.CodeChurn_View);
 
     public string OpenRegressionToolTip => CanOpenRegression
         ? "Open the CodeChurn tab (build/change impact planning)"
@@ -29,6 +29,7 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(OpenReportCardToolTip));
         OpenRegressionCommand.NotifyCanExecuteChanged();
         OpenReportCardCommand.NotifyCanExecuteChanged();
+        OpenFeatureSettingsCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenRegression))]

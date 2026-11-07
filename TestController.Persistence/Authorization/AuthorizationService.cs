@@ -156,7 +156,8 @@ public sealed class AuthorizationService : IAuthorizationService
         Permission.Audit_Export or
         Permission.System_ChangeMode or
         Permission.Fleet_InstallUpdates or
-        Permission.Pipeline_Author;
+        Permission.Pipeline_Author or
+        Permission.System_ConfigureFeatures;
 
     // Not IsReadPermission: that bucket also grants Guests, and Code Churn / Report Card are
     // Administrator + Senior Manager only.

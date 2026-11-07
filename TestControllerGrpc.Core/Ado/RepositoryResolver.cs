@@ -19,12 +19,14 @@ public sealed class RepositoryResolver : IRepositoryResolver
 {
     private readonly IAppLogger _logger;
     private readonly Dictionary<string, string> _byIdOrAlias;
+    private readonly string _prefix;
 
     public RepositoryResolver(IAppLogger logger, IOptions<AdoOptions> options)
     {
         _logger = logger;
         _byIdOrAlias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        LoadMap(FindMapPath());
+        _prefix = options.Value.RepositoryPrefix ?? "";
+        LoadMap(ComponentMapLocator.FindMapPath(options.Value.ComponentMapPath));
     }
 
     public string? ResolveComponent(string pathHint)
@@ -35,8 +37,7 @@ public sealed class RepositoryResolver : IRepositoryResolver
         if (_byIdOrAlias.TryGetValue(pathHint, out var exact))
             return exact;
 
-        var withPrefix = $"AppServer.{pathHint}";
-        if (_byIdOrAlias.TryGetValue(withPrefix, out var prefixed))
+        if (_prefix.Length > 0 && _byIdOrAlias.TryGetValue(_prefix + pathHint, out var prefixed))
             return prefixed;
 
         _logger.Warn("Ado", $"RepositoryResolver: could not resolve component hint '{pathHint}' \u2014 leaving unmapped rather than guessing (ADR-06).");
@@ -80,20 +81,5 @@ public sealed class RepositoryResolver : IRepositoryResolver
         {
             _logger.Error("Ado", $"RepositoryResolver: failed to parse component map at '{mapPath}'.", ex);
         }
-    }
-
-    private static string FindMapPath()
-    {
-        // Walk up from the executing assembly looking for docs/impact/component-usecase-map.v1.json,
-        // since the WPF host and WebApi host have different base directories.
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8 && dir is not null; i++)
-        {
-            var candidate = Path.Combine(dir, "docs", "impact", "component-usecase-map.v1.json");
-            if (File.Exists(candidate))
-                return candidate;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        return Path.Combine(AppContext.BaseDirectory, "docs", "impact", "component-usecase-map.v1.json");
     }
 }

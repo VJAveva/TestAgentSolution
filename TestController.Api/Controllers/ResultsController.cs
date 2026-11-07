@@ -14,6 +14,7 @@ namespace TestController.Api.Controllers;
 [ApiController]
 [Route("api/results")]
 [Authorize(Policy = SecurityPolicies.User)]
+[RequireFeature(TestControllerGrpc.Features.FeatureKeys.Results)]
 public class ResultsController : ControllerBase
 {
     private readonly CachedBuildResultsProvider _buildResults;
@@ -401,6 +402,7 @@ public class ResultsController : ControllerBase
     /// The First Information Report for a failed test, computed on demand and cached beside the TRX.
     /// </summary>
     [HttpGet("builds/{build}/test/{testName}/fir")]
+    [RequireFeature(TestControllerGrpc.Features.FeatureKeys.FirReport)]
     public IActionResult GetFir(string build, string testName, [FromQuery] bool refresh = false)
     {
         var corr = Corr;

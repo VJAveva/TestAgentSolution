@@ -40,5 +40,8 @@ public enum Permission
     /// authoring decides which commands run on which agents, so it is strictly more powerful than
     /// triggering a pipeline somebody else authored.
     /// </summary>
-    Pipeline_Author
+    Pipeline_Author,
+
+    /// <summary>Turn per-team features on or off (Features.json). Administrator only.</summary>
+    System_ConfigureFeatures
 }

@@ -14,11 +14,14 @@ namespace TestControllerGrpc.Tests.PipelineBuilder;
 public class PipelineAuthorPermissionTests
 {
     [Fact]
-    public void Pipeline_Author_Should_BeTheLastMember_So_AuditHistoryIsNotRenumbered()
+    public void Pipeline_Author_Should_KeepItsValue_So_AuditHistoryIsNotRenumbered()
     {
         var all = Enum.GetValues<Permission>();
 
-        Assert.Equal(Permission.Pipeline_Author, all[^1]);
+        Assert.Equal(24, (int)Permission.Pipeline_Author);
+        // Later members are appended after it, never inserted before it.
+        Assert.Equal(25, (int)Permission.System_ConfigureFeatures);
+        Assert.Equal(Permission.System_ConfigureFeatures, all[^1]);
     }
 
     [Fact]

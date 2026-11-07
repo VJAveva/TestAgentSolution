@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using TestController.Api;
 using TestControllerGrpc.Configuration;
 using TestControllerGrpc.Core.Maintenance;
+using TestControllerGrpc.Features;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
@@ -177,7 +178,10 @@ public partial class App : Application
                 services.AddHostedService<NotificationDispatcher>();
 
                 // One summary email per completed full pipeline (BuildResults:SendConsolidatedEmail).
-                services.AddHostedService<ConsolidatedRunMailer>();
+                services.AddFeatureGatedHostedService<ConsolidatedRunMailer>(TestControllerGrpc.Features.FeatureKeys.Reports);
+
+                // Per-team feature toggles (Config\Features.json). Missing file = everything on.
+                services.AddFeatureGate();
 
                 // P2-4: Fleet alerting (agent-down + run-overrun)
                 services.AddHostedService<FleetAlertDispatcher>();

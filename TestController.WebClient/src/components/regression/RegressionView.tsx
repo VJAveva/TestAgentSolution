@@ -421,6 +421,11 @@ export default function RegressionView() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-bg">
+      {connection?.warning && (
+        <div role="status" className="px-4 py-1.5 text-xs text-acc-yellow bg-acc-yellow/10 border-b border-bdr shrink-0">
+          {connection.warning}
+        </div>
+      )}
       {/* CC-H2 — identity, inline stats, actions */}
       <div className="flex items-center gap-2.5 px-4 h-11 border-b border-bdr bg-bg-panel shrink-0">
         <span className="text-sm font-semibold text-text-primary shrink-0">Code churn</span>

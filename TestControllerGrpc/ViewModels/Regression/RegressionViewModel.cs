@@ -215,6 +215,8 @@ public sealed partial class RegressionViewModel : ObservableObject
             ? $"ADO ON · {info.Organization}/{info.OmiProject} · mode={info.Mode} · {info.CredentialSource}" +
               (info.CredentialConfigured ? "" : " · NO CREDENTIAL")
             : "ADO OFF · showing mock/empty data (set Ado:Enabled=true)";
+        if (info.Warning is { } warning)
+            ConnectionText += $" · {warning}";
         IsConnected = info.Enabled && info.CredentialConfigured;
     }
 

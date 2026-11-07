@@ -25,6 +25,7 @@ namespace TestController.Api.Controllers;
 [ApiController]
 [Route("api/impact")]
 [Authorize(Policy = SecurityPolicies.User)]
+[RequireFeature(TestControllerGrpc.Features.FeatureKeys.CodeChurn)]
 public class ImpactController : ControllerBase
 {
     private readonly IRegressionDataProvider _provider;
@@ -121,6 +122,7 @@ public class ImpactController : ControllerBase
 
     /// <summary>POST /api/impact/test-matches — impact-mapped Test Cases + change-analysis fallback for one component (grid row-expand).</summary>
     [HttpPost("test-matches")]
+    [RequireFeature(TestControllerGrpc.Features.FeatureKeys.ImpactMapping)]
     [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<ImpactedComponentAnalysis>> PostTestMatches([FromBody] SubsystemRow row, CancellationToken ct)
     {

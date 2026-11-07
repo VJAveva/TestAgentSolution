@@ -630,6 +630,8 @@ export interface RegressionConnectionInfo {
   authMode: string;
   credentialSource: string;
   credentialConfigured: boolean;
+  /** e.g. no repositories configured for this team's controller. */
+  warning?: string | null;
 }
 
 export interface RegressionComponentRef {
