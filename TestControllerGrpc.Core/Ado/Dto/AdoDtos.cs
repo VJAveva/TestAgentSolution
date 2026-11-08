@@ -84,6 +84,12 @@ public sealed class AdoRepositoryDto
     [JsonPropertyName("defaultBranch")] public string? DefaultBranch { get; set; }
 }
 
+/// <summary>A git ref (refs/heads/... for branches).</summary>
+public sealed class AdoGitRefDto
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = "";
+}
+
 /// <summary>A git tree item (used to find .sln files under /src for the Subsystems column).</summary>
 public sealed class AdoGitItemDto
 {

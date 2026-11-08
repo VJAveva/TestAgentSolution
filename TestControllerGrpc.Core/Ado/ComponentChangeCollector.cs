@@ -28,6 +28,7 @@ public sealed class ComponentChangeCollector
     private readonly IComponentCategorizer _categorizer;
     private readonly AdoOptions _options;
     private readonly IAppLogger _logger;
+    private readonly ICodeChurnScope _scope;
 
     // Cached OMI repo map (name -> id + default branch), fetched once per process.
     private readonly SemaphoreSlim _repoMapGate = new(1, 1);
@@ -43,7 +44,8 @@ public sealed class ComponentChangeCollector
         IComponentBuildMap map,
         IComponentCategorizer categorizer,
         IOptions<AdoOptions> options,
-        IAppLogger logger)
+        IAppLogger logger,
+        ICodeChurnScope? scope = null)
     {
         _builds = builds;
         _git = git;
@@ -52,6 +54,7 @@ public sealed class ComponentChangeCollector
         _categorizer = categorizer;
         _options = options.Value;
         _logger = logger;
+        _scope = scope ?? new CodeChurnScope();
     }
 
     private async Task<Dictionary<string, (string Id, string? Branch)>> GetRepoMapAsync(string project, CancellationToken ct)
@@ -81,7 +84,7 @@ public sealed class ComponentChangeCollector
         DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
     {
         var omiProject = string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject;
-        var components = _map.All().Where(c => c.BuildDefinitionId > 0).ToList();
+        var components = _map.All().Where(c => c.BuildDefinitionId > 0 && _scope.IncludesComponent(c)).ToList();
         _logger.Info("Ado", $"Component scan: {components.Count} components in '{omiProject}', window={(from.HasValue ? $"{from}..{to}" : "latest")}, concurrency={MaxConcurrentComponentScans}.");
 
         var rows = new ConcurrentBag<SubsystemRow>();
@@ -152,7 +155,7 @@ public sealed class ComponentChangeCollector
         string branch, CancellationToken ct)
     {
         var omiProject = string.IsNullOrWhiteSpace(_options.OmiProject) ? _options.Project : _options.OmiProject;
-        var components = _map.All().Where(c => c.BuildDefinitionId > 0).ToList();
+        var components = _map.All().Where(c => c.BuildDefinitionId > 0 && _scope.IncludesComponent(c)).ToList();
         _logger.Info("Ado", $"Branch scan: {components.Count} components on '{branch}' since first build, concurrency={MaxConcurrentComponentScans}.");
 
         var rows = new ConcurrentBag<SubsystemRow>();
@@ -245,10 +248,11 @@ public sealed class ComponentChangeCollector
         foreach (var c in commits)
         {
             var when = c.Author?.Date ?? c.Committer?.Date ?? headerBuild.FinishTime ?? DateTimeOffset.UtcNow;
-            var paths = fileLookups < MaxFileLookupsPerComponent
-                ? await SafeGetFilesAsync(omiProject, repoId, c.CommitId, ct)
-                : [];
-            if (paths.Count > 0) fileLookups++;
+            var (paths, outOfScope) = fileLookups < MaxFileLookupsPerComponent
+                ? await GetScopedFilesAsync(omiProject, repoId, comp.Repository, c.CommitId, ct)
+                : ([], false);
+            if (paths.Count > 0 || outOfScope) fileLookups++;
+            if (outOfScope) continue;
             allFiles.AddRange(paths);
             changeRefs.Add(new RegressionChangeRef(
                 ChangeId: c.CommitId,
@@ -363,10 +367,11 @@ public sealed class ComponentChangeCollector
         foreach (var ch in changes)
         {
             // Cap per-commit file lookups so a component with dozens of commits doesn't stall the load.
-            var paths = fileLookups < MaxFileLookupsPerComponent
-                ? await SafeGetFilesAsync(omiProject, repoId, ch.Id, ct)
-                : [];
-            if (paths.Count > 0) fileLookups++;
+            var (paths, outOfScope) = fileLookups < MaxFileLookupsPerComponent
+                ? await GetScopedFilesAsync(omiProject, repoId, comp.Repository, ch.Id, ct)
+                : ([], false);
+            if (paths.Count > 0 || outOfScope) fileLookups++;
+            if (outOfScope) continue;
             allFiles.AddRange(paths);
             changeRefs.Add(new RegressionChangeRef(
                 ChangeId: ch.Id,
@@ -379,6 +384,8 @@ public sealed class ComponentChangeCollector
         }
 
         var solutionNames = await GetSolutionNamesCachedAsync(omiProject, repoId, ct);
+        if (changeRefs.Count == 0 && skipIfNoChanges)
+            return null; // every change touched only files outside the repository's configured paths
         return BuildRow(omiProject, comp, build, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames, manualSuites);
     }
 
@@ -426,10 +433,11 @@ public sealed class ComponentChangeCollector
                 if (!seenChangeIds.Add(ch.Id))
                     continue; // the same commit can appear on adjacent builds — count it once
 
-                var paths = fileLookups < MaxFileLookupsPerComponent
-                    ? await SafeGetFilesAsync(omiProject, repoId, ch.Id, ct)
-                    : [];
-                if (paths.Count > 0) fileLookups++;
+                var (paths, outOfScope) = fileLookups < MaxFileLookupsPerComponent
+                    ? await GetScopedFilesAsync(omiProject, repoId, comp.Repository, ch.Id, ct)
+                    : ([], false);
+                if (paths.Count > 0 || outOfScope) fileLookups++;
+                if (outOfScope) continue;
                 allFiles.AddRange(paths);
                 changeRefs.Add(new RegressionChangeRef(
                     ChangeId: ch.Id,
@@ -447,6 +455,19 @@ public sealed class ComponentChangeCollector
 
         var solutionNames = await GetSolutionNamesCachedAsync(omiProject, repoId, ct);
         return BuildRow(omiProject, comp, headerBuild, latestSuccessful, changeRefs, allFiles.Distinct().ToList(), defaultBranch, solutionNames, manualSuitesForRow);
+    }
+
+    /// <summary>
+    /// Files of one commit, limited to the repository's Include/ExcludePaths. OutOfScope is true only when the
+    /// commit had files and none of them are in scope, so the caller can drop the change.
+    /// </summary>
+    private async Task<(IReadOnlyList<string> Paths, bool OutOfScope)> GetScopedFilesAsync(
+        string project, string? repoId, string? repository, string commitId, CancellationToken ct)
+    {
+        var all = await SafeGetFilesAsync(project, repoId, commitId, ct);
+        if (all.Count == 0) return (all, false);
+        var inScope = all.Where(p => _scope.InScope(repository, p)).ToList();
+        return (inScope, inScope.Count == 0);
     }
 
     private async Task<IReadOnlyList<string>> SafeGetFilesAsync(string project, string? repoId, string commitId, CancellationToken ct)

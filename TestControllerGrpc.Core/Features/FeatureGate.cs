@@ -55,6 +55,9 @@ public interface IFeatureGate
     /// <summary>Why the last reload was rejected; null when the file loaded (or is absent).</summary>
     string? LastError { get; }
 
+    /// <summary>Code Churn repositories from Features.json. Null when the section is absent: the component map decides.</summary>
+    IReadOnlyList<CodeChurnRepository>? CodeChurnRepositories => null;
+
     event Action? Changed;
 }
 
@@ -77,6 +80,7 @@ public sealed class FeatureGate : IFeatureGate, IDisposable
     private CancellationTokenSource? _debounce;
     private Dictionary<string, bool> _configured = new(StringComparer.OrdinalIgnoreCase);
     private string _teamName = "";
+    private IReadOnlyList<CodeChurnRepository>? _repositories;
 
     public FeatureGate(string configPath, IAppLogger? logger = null, bool watch = true)
     {
@@ -89,6 +93,7 @@ public sealed class FeatureGate : IFeatureGate, IDisposable
     public string ConfigPath { get; }
     public string TeamName { get { lock (_gate) return _teamName; } }
     public string? LastError { get; private set; }
+    public IReadOnlyList<CodeChurnRepository>? CodeChurnRepositories { get { lock (_gate) return _repositories; } }
     public event Action? Changed;
 
     public bool IsEnabled(string key)
@@ -106,7 +111,7 @@ public sealed class FeatureGate : IFeatureGate, IDisposable
     {
         if (!File.Exists(ConfigPath))
         {
-            Apply("", new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), null);
+            Apply("", new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), null, null);
             return;
         }
 
@@ -141,7 +146,8 @@ public sealed class FeatureGate : IFeatureGate, IDisposable
                 }
             }
 
-            Apply(team, configured, null);
+            var repositories = CodeChurnRepositoryRules.Parse(root, msg => _logger?.Warn(LogCategory, msg));
+            Apply(team, configured, repositories, null);
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -151,16 +157,20 @@ public sealed class FeatureGate : IFeatureGate, IDisposable
         }
     }
 
-    private void Apply(string team, Dictionary<string, bool> configured, string? error)
+    private void Apply(string team, Dictionary<string, bool> configured, IReadOnlyList<CodeChurnRepository>? repositories, string? error)
     {
         bool changed;
+        bool reposChanged;
         lock (_gate)
         {
-            changed = !string.Equals(_teamName, team, StringComparison.Ordinal)
+            reposChanged = CodeChurnRepositoryRules.Fingerprint(_repositories) != CodeChurnRepositoryRules.Fingerprint(repositories);
+            changed = reposChanged
+                || !string.Equals(_teamName, team, StringComparison.Ordinal)
                 || _configured.Count != configured.Count
                 || _configured.Any(kv => !configured.TryGetValue(kv.Key, out var v) || v != kv.Value);
             _teamName = team;
             _configured = configured;
+            _repositories = repositories;
         }
         LastError = error;
 
@@ -170,6 +180,10 @@ public sealed class FeatureGate : IFeatureGate, IDisposable
             _logger?.Info(LogCategory, off.Count == 0
                 ? "All features enabled."
                 : $"Features turned off on this controller: {string.Join(", ", off)}.");
+            if (reposChanged)
+                _logger?.Info(LogCategory, repositories is null
+                    ? "Code Churn repositories: not configured in this file; the component map decides."
+                    : $"Code Churn repositories: {(repositories.Count == 0 ? "none" : string.Join(", ", repositories.Select(r => r.Name)))}.");
             Changed?.Invoke();
         }
     }

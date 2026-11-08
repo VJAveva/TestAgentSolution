@@ -8,5 +8,17 @@
     "PipelineBuilder": true,
     "GlobalVariables": true,
     "Reports": true
+  },
+  "CodeChurn": {
+    "Repositories": [
+      {
+        "Name": "<RepoName>",
+        "Url": "https://dev.azure.com/<org>/<project>/_git/<RepoName>",
+        "Branches": [ "main", "release/<version>" ],
+        "IncludePaths": [ "src/" ],
+        "ExcludePaths": [ "src/tests/" ],
+        "CredentialRef": "ADO_PAT"
+      }
+    ]
   }
 }

@@ -11,14 +11,21 @@ namespace TestController.WebApi.Services;
 /// </summary>
 public sealed class ProxyFeatureSettingsService(ControllerProxyService proxy) : IFeatureSettingsService
 {
-    public async Task<FeatureSaveResult> SaveAsync(
-        IReadOnlyDictionary<string, bool> desired, IUserContext? user, string? authorizationHeader, CancellationToken ct)
+    public Task<FeatureSaveResult> SaveAsync(
+        IReadOnlyDictionary<string, bool> desired, IUserContext? user, string? authorizationHeader, CancellationToken ct) =>
+        ForwardAsync("/api/features", new { features = desired }, authorizationHeader, ct);
+
+    public Task<FeatureSaveResult> SaveCodeChurnAsync(
+        IReadOnlyList<CodeChurnRepository> repositories, IUserContext? user, string? authorizationHeader, CancellationToken ct) =>
+        ForwardAsync("/api/features/code-churn", new { repositories }, authorizationHeader, ct);
+
+    private async Task<FeatureSaveResult> ForwardAsync(string path, object payload, string? authorizationHeader, CancellationToken ct)
     {
         if (!proxy.IsConfigured)
             return new FeatureSaveResult(false, "No controller is configured to save feature settings to.", []);
 
-        var body = JsonSerializer.Serialize(new { features = desired });
-        var response = await proxy.ForwardWithBodyAsync(HttpMethod.Put, "/api/features", authorizationHeader, body, "application/json");
+        var body = JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var response = await proxy.ForwardWithBodyAsync(HttpMethod.Put, path, authorizationHeader, body, "application/json");
         if (response is null)
             return new FeatureSaveResult(false, "The controller could not be reached; nothing was saved.", []);
 

@@ -54,6 +54,13 @@ public interface IRegressionSourceCatalog
 
     /// <summary>Deploy sanity probe: loaded-component count + a real lightweight authenticated ADO call.</summary>
     Task<RegressionHealth> CheckHealthAsync(CancellationToken ct);
+
+    /// <summary>Branches for one repository. With Features.json repositories configured, only the listed branches.</summary>
+    Task<IReadOnlyList<string>> GetBranchesAsync(string? repository, CancellationToken ct) => GetBranchesAsync(ct);
+
+    /// <summary>Configured Code Churn repositories with their problems. Empty when Features.json lists none.</summary>
+    Task<IReadOnlyList<CodeChurnRepositoryStatus>> GetRepositoriesAsync(bool refresh, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<CodeChurnRepositoryStatus>>([]);
 }
 
 public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
@@ -63,12 +70,15 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
     private readonly AdoOptions _options;
     private readonly IComponentBuildMap _map;
     private readonly IServiceProvider _services;
+    private readonly ICodeChurnScope _scope;
 
-    public RegressionSourceCatalog(IOptions<AdoOptions> options, IComponentBuildMap map, IServiceProvider services)
+    public RegressionSourceCatalog(
+        IOptions<AdoOptions> options, IComponentBuildMap map, IServiceProvider services, ICodeChurnScope? scope = null)
     {
         _options = options.Value;
         _map = map;
         _services = services;
+        _scope = scope ?? new CodeChurnScope();
     }
 
     public RegressionConnectionInfo GetConnectionInfo()
@@ -98,15 +108,39 @@ public sealed class RegressionSourceCatalog : IRegressionSourceCatalog
             AuthMode: _options.AuthMode.ToString(),
             CredentialSource: credentialSource,
             CredentialConfigured: configured,
-            Warning: _map.All().Count == 0 ? NoRepositoriesMessage : null);
+            Warning: _scope.IsConfigured && _scope.Repositories.Count == 0 ? NoConfiguredRepositoriesMessage
+                : _map.All().Count == 0 ? NoRepositoriesMessage
+                : null);
     }
 
     public const string NoRepositoriesMessage =
         "No repositories configured for Code Churn: the component map is missing or empty (set Ado:ComponentMapPath).";
 
+    public const string NoConfiguredRepositoriesMessage =
+        "No repositories configured for Code Churn. An administrator can add them under Admin > Features.";
+
+    public async Task<IReadOnlyList<string>> GetBranchesAsync(string? repository, CancellationToken ct)
+    {
+        if (!_scope.IsConfigured) return await GetBranchesAsync(ct);
+
+        var repos = string.IsNullOrWhiteSpace(repository)
+            ? _scope.Repositories
+            : _scope.Find(repository) is { } one ? [one] : [];
+        return repos.SelectMany(r => r.Branches)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(b => b, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public Task<IReadOnlyList<CodeChurnRepositoryStatus>> GetRepositoriesAsync(bool refresh, CancellationToken ct) =>
+        _services.GetService(typeof(CodeChurnRepositoryValidator)) is CodeChurnRepositoryValidator validator
+            ? validator.ValidateAsync(refresh, ct)
+            : Task.FromResult<IReadOnlyList<CodeChurnRepositoryStatus>>(
+                _scope.Repositories.Select(r => new CodeChurnRepositoryStatus(r.Name, r.Url, r.Branches, r.CredentialRef, true, [])).ToList());
+
     public IReadOnlyList<RegressionComponentRef> GetComponents() =>
         _map.All()
-            .Where(c => c.BuildDefinitionId > 0)
+            .Where(c => c.BuildDefinitionId > 0 && _scope.IncludesComponent(c))
             .OrderBy(c => c.ComponentId, StringComparer.OrdinalIgnoreCase)
             .Select(c => new RegressionComponentRef(c.ComponentId, c.BuildDefinitionId))
             .ToList();

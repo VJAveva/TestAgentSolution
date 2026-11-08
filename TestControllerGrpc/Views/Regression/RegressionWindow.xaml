@@ -392,6 +392,14 @@
             </DockPanel>
         </Border>
 
+        <!-- Code Churn repository problems (unknown repo, missing branch, unset credential). -->
+        <Border DockPanel.Dock="Top" Padding="12,5" BorderThickness="0,0,0,1"
+                Background="{DynamicResource BgWarningBrush}" BorderBrush="{DynamicResource BorderWarningBrush}"
+                Visibility="{Binding RepositoryProblems, Converter={StaticResource EmptyToCollapsed}}">
+            <TextBlock Text="{Binding RepositoryProblems}" TextWrapping="Wrap" FontSize="{StaticResource FontSize10}"
+                       Foreground="{DynamicResource TextPrimaryBrush}" AutomationProperties.Name="Code Churn repository problems" />
+        </Border>
+
         <!-- Impact index rebuild: non-modal so a job this long never blocks the rest of the app. -->
         <Border x:Name="IndexRebuildStrip" DockPanel.Dock="Top"
                 Visibility="{Binding IsRebuilding, Converter={StaticResource BoolToVis}}"
@@ -420,12 +428,20 @@
                     <!-- ═══ Scope (R2–R5): branch · component · compare pair ═══ -->
                     <StackPanel Orientation="Vertical">
                         <StackPanel Margin="4,2,4,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4"
+                                        Visibility="{Binding HasConfiguredRepositories, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="Repo" Width="44" />
+                                <ComboBox Width="280" VerticalAlignment="Center" ItemsSource="{Binding Repositories}"
+                                          SelectedItem="{Binding SelectedRepository}"
+                                          ToolTip="Code Churn repository. Administrators configure repositories and branches in Admin > Features."
+                                          AutomationProperties.Name="Repository" />
+                            </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                 <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="Branch" Width="44" />
                                 <ComboBox Width="280" VerticalAlignment="Center" ItemsSource="{Binding Branches}"
                                           SelectedItem="{Binding SelectedBranch}"
                                           IsEditable="True" IsTextSearchEnabled="True" StaysOpenOnEdit="True"
-                                          ToolTip="Switch release branch (type to search). Configure Ado:Branches in appsettings."  AutomationProperties.Name="Branch" />
+                                          ToolTip="Switch branch (type to search). Branches come from Admin > Features, or Ado:Branches when no repositories are configured."  AutomationProperties.Name="Branch" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                 <TextBlock Style="{StaticResource RibbonFieldLbl}" Text="Comp" Width="44" />

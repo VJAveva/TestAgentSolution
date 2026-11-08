@@ -33,6 +33,8 @@ public static class AdoServiceCollectionExtensions
         // and definition picker work even when ADO ingest is disabled (they read config + the vobs map only).
         services.TryAddSingleton<IComponentBuildMap, ComponentBuildMap>();
         services.TryAddSingleton<IComponentCategorizer, ComponentCategorizer>();
+        services.TryAddSingleton<ICodeChurnScope>(sp => new CodeChurnScope(sp.GetService<IFeatureGate>()));
+        services.TryAddSingleton<CodeChurnRepositoryValidator>();
         services.TryAddSingleton<IRegressionSourceCatalog, RegressionSourceCatalog>();
 
         // Churn report / AI summary are pure functions over the rows — no ADO dependency, so they're

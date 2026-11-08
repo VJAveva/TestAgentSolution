@@ -27,6 +27,9 @@ public sealed class PreflightRequest
     public string? PipelineLockedBy { get; init; }
 
     public double MinimumDiskGb { get; init; } = 15;
+
+    /// <summary>This controller's feature toggles. Null means every feature is on.</summary>
+    public TestControllerGrpc.Features.IFeatureGate? Features { get; init; }
 }
 
 /// <summary>
@@ -72,6 +75,7 @@ public sealed class PreflightRunner
         };
 
         CheckSettings(request, ctx, report);
+        CheckFeatureUsage(request, ctx, report);
         CheckControllerFiles(request, ctx, report);
         CheckInstallSources(request, ctx, report);
         CheckAgents(request, ctx, report);
@@ -242,6 +246,26 @@ public sealed class PreflightRunner
             "Unresolved: " + string.Join("; ", unresolved.Select(entry =>
                 $"{entry.Key} - used by {string.Join(", ", entry.Value.Select(tag => $"'{tag}'"))}")) + ".",
             "Define these in the parameter file's global, profile or pipelines layer, or in the trigger file."));
+    }
+
+    private void CheckFeatureUsage(PreflightRequest request, PipelineExecutionContext ctx, PreflightReport report)
+    {
+        if (request.Features is not { } gate) return;
+        var states = gate.All().ToDictionary(s => s.Key, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var action in ActionsInScope(request))
+        {
+            foreach (var (feature, what) in TestControllerGrpc.Features.FeatureUsage.Detect(action, s => ParameterResolver.Resolve(s, ctx)))
+            {
+                if (gate.IsEnabled(feature)) continue;
+
+                var step = string.IsNullOrWhiteSpace(action.Tag) ? action.ResolvedTag : action.Tag;
+                var why = states.TryGetValue(feature, out var state) && state.OffBecause is { } because ? " (" + because + ")" : "";
+                report.Checks.Add(new PreflightCheck(PreflightGroups.Settings, $"Feature '{feature}'", PreflightStatus.Warn,
+                    $"Step '{step}' calls {what}, but {feature} is turned off on this controller{why}. The step will get 404.",
+                    $"Turn {feature} on in Admin > Features, or skip step '{step}'."));
+            }
+        }
     }
 
     // ── 2. Controller files ─────────────────────────────────────────

@@ -16,9 +16,13 @@ public interface IFeatureSettingsService
 {
     Task<FeatureSaveResult> SaveAsync(
         IReadOnlyDictionary<string, bool> desired, IUserContext? user, string? authorizationHeader, CancellationToken ct);
+
+    /// <summary>Replaces the Code Churn repository list. Administrator only.</summary>
+    Task<FeatureSaveResult> SaveCodeChurnAsync(
+        IReadOnlyList<CodeChurnRepository> repositories, IUserContext? user, string? authorizationHeader, CancellationToken ct);
 }
 
-/// <summary>Writes Features.json in place: only "Features" entries change, unknown keys survive, backup first.</summary>
+/// <summary>Writes Features.json in place: only the edited section changes, unknown keys survive, backup first.</summary>
 public static class FeatureFileWriter
 {
     public static FeatureSaveResult Save(
@@ -28,36 +32,11 @@ public static class FeatureFileWriter
         if (unknown is not null)
             return new FeatureSaveResult(false, $"'{unknown}' is not a toggleable feature.", []);
 
-        JsonObject root;
-        string? original = null;
-        try
-        {
-            if (File.Exists(path))
-            {
-                original = File.ReadAllText(path);
-                root = JsonNode.Parse(original, documentOptions: new JsonDocumentOptions
-                {
-                    CommentHandling = JsonCommentHandling.Skip,
-                    AllowTrailingCommas = true,
-                }) as JsonObject ?? throw new JsonException("the file does not contain a JSON object.");
-            }
-            else
-            {
-                root = new JsonObject { ["TeamName"] = "", ["Features"] = new JsonObject() };
-            }
-        }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-        {
-            return new FeatureSaveResult(false, $"Could not read '{path}': {ex.Message}. Fix or delete it first.", []);
-        }
+        var (root, original, error) = Load(path);
+        if (root is null)
+            return new FeatureSaveResult(false, error!, []);
 
-        var featuresKey = root.Select(p => p.Key).FirstOrDefault(k => k.Equals("Features", StringComparison.OrdinalIgnoreCase));
-        if (featuresKey is null || root[featuresKey] is not JsonObject features)
-        {
-            features = new JsonObject();
-            root[featuresKey ?? "Features"] = features;
-        }
-
+        var features = Section(root, "Features");
         var changes = new List<string>();
         foreach (var (key, on) in desired)
         {
@@ -71,6 +50,86 @@ public static class FeatureFileWriter
         if (changes.Count == 0)
             return new FeatureSaveResult(true, "No feature changes to save.", []);
 
+        return Write(path, root, original, changes, clock);
+    }
+
+    /// <summary>Replaces "CodeChurn": { "Repositories": [...] }; other keys inside "CodeChurn" survive.</summary>
+    public static FeatureSaveResult SaveCodeChurn(
+        string path, IReadOnlyList<CodeChurnRepository> repositories, Func<DateTimeOffset>? clock = null)
+    {
+        if (CodeChurnRepositoryRules.Validate(repositories) is { } invalid)
+            return new FeatureSaveResult(false, invalid, []);
+
+        var (root, original, error) = Load(path);
+        if (root is null)
+            return new FeatureSaveResult(false, error!, []);
+
+        var churn = Section(root, "CodeChurn");
+        var listKey = churn.Select(p => p.Key).FirstOrDefault(k => k.Equals("Repositories", StringComparison.OrdinalIgnoreCase));
+        var before = new List<CodeChurnRepository>();
+        if (listKey is not null)
+        {
+            using var doc = JsonDocument.Parse(new JsonObject { ["CodeChurn"] = churn.DeepClone() }.ToJsonString());
+            before = CodeChurnRepositoryRules.Parse(doc.RootElement, _ => { })?.ToList() ?? [];
+        }
+
+        var changes = DescribeRepositoryChanges(listKey is null ? null : before, repositories);
+        if (changes.Count == 0)
+            return new FeatureSaveResult(true, "No Code Churn repository changes to save.", []);
+
+        churn[listKey ?? "Repositories"] = new JsonArray(repositories.Select(r => (JsonNode?)CodeChurnRepositoryRules.ToJson(r)).ToArray());
+        return Write(path, root, original, changes, clock);
+    }
+
+    private static List<string> DescribeRepositoryChanges(
+        IReadOnlyList<CodeChurnRepository>? before, IReadOnlyList<CodeChurnRepository> after)
+    {
+        var changes = new List<string>();
+        var old = (before ?? []).ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var r in after)
+        {
+            if (!old.Remove(r.Name, out var previous)) changes.Add($"added repository {r.Name}");
+            else if (CodeChurnRepositoryRules.Fingerprint([previous]) != CodeChurnRepositoryRules.Fingerprint([r with { Name = previous.Name }]))
+                changes.Add($"changed repository {r.Name}");
+        }
+        changes.AddRange(old.Keys.Select(name => $"removed repository {name}"));
+        if (before is null && changes.Count == 0) changes.Add("configured an empty repository list");
+        return changes;
+    }
+
+    private static (JsonObject? Root, string? Original, string? Error) Load(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return (new JsonObject { ["TeamName"] = "", ["Features"] = new JsonObject() }, null, null);
+
+            var original = File.ReadAllText(path);
+            var root = JsonNode.Parse(original, documentOptions: new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            }) as JsonObject ?? throw new JsonException("the file does not contain a JSON object.");
+            return (root, original, null);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return (null, null, $"Could not read '{path}': {ex.Message}. Fix or delete it first.");
+        }
+    }
+
+    private static JsonObject Section(JsonObject root, string name)
+    {
+        var key = root.Select(p => p.Key).FirstOrDefault(k => k.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (key is not null && root[key] is JsonObject existing) return existing;
+        var created = new JsonObject();
+        root[key ?? name] = created;
+        return created;
+    }
+
+    private static FeatureSaveResult Write(
+        string path, JsonObject root, string? original, List<string> changes, Func<DateTimeOffset>? clock)
+    {
         var newLine = original?.Contains("\r\n", StringComparison.Ordinal) == false ? "\n" : "\r\n";
         var json = root.ToJsonString(new JsonSerializerOptions
         {
@@ -138,6 +197,42 @@ public sealed class FeatureSettingsService(
                 ResourceId = parts[0],
                 Allowed = true,
                 ReasonCode = $"feature-{parts[1]}",
+                TimestampUtc = DateTime.UtcNow,
+                ClientKind = user?.ClientKind ?? ClientKind.Wpf,
+            });
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<FeatureSaveResult> SaveCodeChurnAsync(
+        IReadOnlyList<CodeChurnRepository> repositories, IUserContext? user, string? authorizationHeader, CancellationToken ct)
+    {
+        var result = FeatureFileWriter.SaveCodeChurn(gate.ConfigPath, repositories, clock);
+        if (!result.Success)
+        {
+            logger?.Warn("Features", $"Code Churn repositories not saved: {result.Message}");
+            return Task.FromResult(result);
+        }
+        if (result.Changes.Count == 0) return Task.FromResult(result);
+
+        if (gate is FeatureGate concrete) concrete.Reload();
+
+        var who = user?.DisplayName is { Length: > 0 } name ? name : user?.UserId ?? "unknown user";
+        foreach (var change in result.Changes)
+        {
+            logger?.Info("Features", $"{who} {change} for Code Churn.");
+            var m = System.Text.RegularExpressions.Regex.Match(change, "^(added|changed|removed) repository (.+)$");
+            var isRepo = m.Success;
+            auditWriter?.Enqueue(new AuditEntry
+            {
+                UserId = user?.UserId,
+                GuestId = user?.GuestId,
+                RoleAtTime = Enum.TryParse<Role>(user?.Roles.FirstOrDefault(), out var role) ? role : null,
+                ActionName = nameof(Permission.System_ConfigureFeatures),
+                ResourceId = isRepo ? $"CodeChurn.Repositories/{m.Groups[2].Value}" : "CodeChurn.Repositories",
+                Allowed = true,
+                ReasonCode = isRepo ? $"codechurn-{m.Groups[1].Value}" : "codechurn-emptied",
                 TimestampUtc = DateTime.UtcNow,
                 ClientKind = user?.ClientKind ?? ClientKind.Wpf,
             });

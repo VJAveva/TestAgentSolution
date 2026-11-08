@@ -7,6 +7,7 @@ import type {
   RegressionComponentRef,
   ChurnSummary,
   ImpactIndexHealth,
+  CodeChurnRepositoryStatus,
 } from '../types/api';
 
 interface RegressionState {
@@ -18,6 +19,7 @@ interface RegressionState {
   indexHealth: ImpactIndexHealth | null;
   branches: string[];
   components: RegressionComponentRef[];
+  repositories: CodeChurnRepositoryStatus[];
   showRuntime: boolean;
   showConfig: boolean;
   hideAutomated: boolean;
@@ -36,6 +38,7 @@ interface RegressionState {
   setIndexHealth: (v: ImpactIndexHealth | null) => void;
   setBranches: (v: string[]) => void;
   setComponents: (v: RegressionComponentRef[]) => void;
+  setRepositories: (v: CodeChurnRepositoryStatus[]) => void;
   setShowRuntime: (v: boolean) => void;
   setShowConfig: (v: boolean) => void;
   setHideAutomated: (v: boolean) => void;
@@ -57,6 +60,7 @@ export const useRegressionStore = create<RegressionState>((set) => ({
   indexHealth: null,
   branches: [],
   components: [],
+  repositories: [],
   showRuntime: true,
   showConfig: true,
   hideAutomated: true,
@@ -76,6 +80,7 @@ export const useRegressionStore = create<RegressionState>((set) => ({
   setAiLoading: (aiLoading) => set({ aiLoading }),
   setBranches: (branches) => set({ branches }),
   setComponents: (components) => set({ components }),
+  setRepositories: (repositories) => set({ repositories }),
   setShowRuntime: (showRuntime) => set({ showRuntime }),
   setShowConfig: (showConfig) => set({ showConfig }),
   setHideAutomated: (hideAutomated) => set({ hideAutomated }),

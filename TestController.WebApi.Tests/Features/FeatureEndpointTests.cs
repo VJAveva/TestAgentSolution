@@ -145,4 +145,129 @@ public sealed class FeatureEndpointTests : IClassFixture<TestWebAppFactory>, IDi
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    // ── Code Churn repositories ────────────────────────────────────
+
+    private const string TwoRepos = """
+        { "CodeChurn": { "Repositories": [
+          { "Name": "TeamX.Alpha", "Branches": ["main", "release/2026"], "CredentialRef": "CREDREF_NAME" },
+          { "Name": "TeamX.Beta", "Branches": ["develop"] }
+        ] } }
+        """;
+
+    private static object[] OneRepo(string? credentialRef = null) =>
+        [new { name = "TeamX.Alpha", branches = new[] { "main" }, credentialRef }];
+
+    [Fact]
+    public async Task GetFeatures_Should_ReturnRepositoriesWithCredentialNameOnly_When_CodeChurnConfigured()
+    {
+        const string secret = "fgw-credential-value-never-returned";
+        Environment.SetEnvironmentVariable("CREDREF_NAME", secret);
+        try
+        {
+            var body = await (await ClientWith(TwoRepos).GetAsync("/api/features")).Content.ReadAsStringAsync();
+
+            using var doc = JsonDocument.Parse(body);
+            var churn = doc.RootElement.GetProperty("codeChurn");
+            Assert.True(churn.GetProperty("configured").GetBoolean());
+            var alpha = churn.GetProperty("repositories")[0];
+            Assert.Equal("TeamX.Alpha", alpha.GetProperty("name").GetString());
+            Assert.Equal("CREDREF_NAME", alpha.GetProperty("credentialRef").GetString());
+            Assert.DoesNotContain(secret, body);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CREDREF_NAME", null);
+        }
+    }
+
+    [Fact]
+    public async Task GetRepositories_Should_ListEachRepositoryWithItsBranchesAndNoSecret_When_Configured()
+    {
+        const string secret = "fgw-repo-endpoint-secret";
+        Environment.SetEnvironmentVariable("CREDREF_NAME", secret);
+        try
+        {
+            var response = await ClientWith(TwoRepos).GetAsync("/api/impact/repositories");
+
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.DoesNotContain(secret, body);
+            using var doc = JsonDocument.Parse(body);
+            var repos = doc.RootElement.GetProperty("repositories").EnumerateArray().ToList();
+            Assert.Equal(["TeamX.Alpha", "TeamX.Beta"], repos.Select(r => r.GetProperty("name").GetString()));
+            Assert.Equal(["develop"], repos[1].GetProperty("branches").EnumerateArray().Select(b => b.GetString()));
+            Assert.True(repos[0].GetProperty("credentialSet").GetBoolean());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CREDREF_NAME", null);
+        }
+    }
+
+    [Fact]
+    public async Task GetBranches_Should_ReturnOnlyTheRepositorysBranches_When_RepositoryGiven()
+    {
+        var branches = await ClientWith(TwoRepos).GetFromJsonAsync<string[]>("/api/impact/branches?repository=TeamX.Beta");
+
+        Assert.Equal(["develop"], branches);
+    }
+
+    [Fact]
+    public async Task GetRepositories_Should_SayNoRepositoriesConfigured_When_ListIsEmpty()
+    {
+        var body = await (await ClientWith("""{ "CodeChurn": { "Repositories": [] } }""").GetAsync("/api/impact/repositories"))
+            .Content.ReadAsStringAsync();
+
+        Assert.Contains("No repositories configured", body);
+    }
+
+    [Theory]
+    [InlineData("/api/impact/consolidated?repository=TeamX.Alpha&branch=develop", "Branch 'develop' is not configured for repository 'TeamX.Alpha'")]
+    [InlineData("/api/impact/consolidated?repository=TeamX.Unknown", "Repository 'TeamX.Unknown' is not configured")]
+    [InlineData("/api/impact/scope?branch=feature/x", "Branch 'feature/x' is not configured for any Code Churn repository")]
+    public async Task Churn_Should_Return400WithAClearMessage_When_RepositoryOrBranchIsNotConfigured(string url, string message)
+    {
+        var response = await ClientWith(TwoRepos).GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(message, await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task PutCodeChurn_Should_Return403_When_CallerIsNotAdmin()
+    {
+        var response = await SecuredClient("Pipeline_View", "CodeChurn_View")
+            .PutAsJsonAsync("/api/features/code-churn", new { repositories = OneRepo() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PutCodeChurn_Should_Return403_When_DefaultModeWebClient()
+    {
+        var response = await _factory.CreateClient().PutAsJsonAsync("/api/features/code-churn", new { repositories = OneRepo() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PutCodeChurn_Should_PassTheGateAndForward_When_CallerIsAdmin()
+    {
+        var response = await SecuredClient("System_ConfigureFeatures")
+            .PutAsJsonAsync("/api/features/code-churn", new { repositories = OneRepo("ADO_PAT") });
+
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("No controller is configured", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task PutCodeChurn_Should_Return400_When_TokenIsPastedAsCredentialRef()
+    {
+        var response = await SecuredClient("System_ConfigureFeatures")
+            .PutAsJsonAsync("/api/features/code-churn", new { repositories = OneRepo(new string('k', 52)) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("looks like a token", await response.Content.ReadAsStringAsync());
+    }
 }

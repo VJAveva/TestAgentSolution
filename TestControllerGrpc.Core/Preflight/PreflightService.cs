@@ -23,6 +23,7 @@ public sealed class PreflightService
     private readonly INodeUpdateStatusStore? _updates;
     private readonly ILockRegistry _lockRegistry;
     private readonly IPreflightFileSystem _fs;
+    private readonly TestControllerGrpc.Features.IFeatureGate? _features;
 
     public PreflightService(
         IAgentGrpcDispatcher dispatcher,
@@ -31,7 +32,8 @@ public sealed class PreflightService
         IAgentTelemetryCache? telemetry = null,
         IMaintenanceStateStore? maintenance = null,
         INodeUpdateStatusStore? updates = null,
-        IPreflightFileSystem? fileSystem = null)
+        IPreflightFileSystem? fileSystem = null,
+        TestControllerGrpc.Features.IFeatureGate? features = null)
     {
         _dispatcher = dispatcher;
         _agentLocks = agentLocks;
@@ -40,6 +42,7 @@ public sealed class PreflightService
         _maintenance = maintenance;
         _updates = updates;
         _fs = fileSystem ?? new PreflightFileSystem();
+        _features = features;
     }
 
     /// <summary>Minimum free space before a run is warned about. Configurable per deployment.</summary>
@@ -65,6 +68,7 @@ public sealed class PreflightService
             TriggerValues = triggerValues,
             PipelineLockedBy = DescribeLockHolder(pipeline?.Tag),
             MinimumDiskGb = MinimumDiskGb,
+            Features = _features,
         });
     }
 

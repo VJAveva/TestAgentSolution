@@ -23,6 +23,7 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
     private readonly AdoOptions _options;
     private readonly IAppLogger _logger;
     private readonly IAdoUserTokenAccessor? _userToken;
+    private readonly ICodeChurnScope _scope;
 
     private readonly ConcurrentDictionary<string, RegressionSuiteEdit> _suiteEdits = new();
     private DateTimeOffset? _lastSyncUtc;
@@ -44,7 +45,8 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         ComponentChangeCollector componentCollector,
         Microsoft.Extensions.Options.IOptions<AdoOptions> options,
         IAppLogger logger,
-        IAdoUserTokenAccessor? userToken = null)
+        IAdoUserTokenAccessor? userToken = null,
+        ICodeChurnScope? scope = null)
     {
         _builds = builds;
         _git = git;
@@ -56,11 +58,19 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         _options = options.Value;
         _logger = logger;
         _userToken = userToken;
+        _scope = scope ?? new CodeChurnScope();
     }
 
-    public async Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, CancellationToken ct)
+    public Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, CancellationToken ct) =>
+        GetConsolidatedAsync(from, to, branch, null, ct);
+
+    public Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, CancellationToken ct) =>
+        GetScopeAsync(from, to, category, branch, null, ct);
+
+    public async Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, string? repository, CancellationToken ct)
     {
         var (rows, unresolved) = await FetchRowsAsync(from, to, branch, ct);
+        rows = ForRepository(rows, repository);
         _lastUnresolved = unresolved;
         _lastSyncUtc = DateTimeOffset.UtcNow;
 
@@ -75,9 +85,10 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         return new ConsolidatedImpact(summary, rows);
     }
 
-    public async Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, CancellationToken ct)
+    public async Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, string? repository, CancellationToken ct)
     {
         var (rows, unresolved) = await FetchRowsAsync(from, to, branch, ct);
+        rows = ForRepository(rows, repository);
         if (category is not null)
             rows = rows.Where(r => r.Category == category).ToList();
 
@@ -109,7 +120,7 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         // The credential is part of the key: delegated web users see different ADO data from each other and from
         // the host credential, so sharing one memo across them would serve another user's results.
         var credential = _userToken?.CredentialFingerprint ?? "host";
-        var key = $"{credential}|{_options.CollectionMode}|{branch}|{(from?.ToString("o") ?? "latest")}|{(to?.ToString("o") ?? "latest")}";
+        var key = $"{credential}|{_options.CollectionMode}|{branch}|{(from?.ToString("o") ?? "latest")}|{(to?.ToString("o") ?? "latest")}|{_scope.Fingerprint}";
         await _fetchGate.WaitAsync(ct);
         try
         {
@@ -190,6 +201,11 @@ public sealed class AdoRegressionDataProvider : IRegressionDataProvider
         var merged = MergeBySubsystem(allRows);
         return (merged, allUnresolved.ToList());
     }
+
+    internal static IReadOnlyList<SubsystemRow> ForRepository(IReadOnlyList<SubsystemRow> rows, string? repository) =>
+        string.IsNullOrWhiteSpace(repository)
+            ? rows
+            : rows.Where(r => string.Equals(r.Repository, repository, StringComparison.OrdinalIgnoreCase)).ToList();
 
     private static List<SubsystemRow> MergeBySubsystem(List<SubsystemRow> rows)
     {

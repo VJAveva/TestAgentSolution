@@ -16,6 +16,7 @@ public sealed class RegressionRowFilterOptions
     public bool FilterStory { get; set; }
     public bool FilterIms { get; set; }
     public string? Component { get; set; }
+    public string? Repository { get; set; }
 }
 
 /// <summary>
@@ -33,6 +34,9 @@ public static class RegressionRowFilter
 
         if (!string.IsNullOrWhiteSpace(f.Component))
             q = q.Where(r => string.Equals(r.Component, f.Component, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(f.Repository))
+            q = q.Where(r => string.Equals(r.Repository, f.Repository, StringComparison.OrdinalIgnoreCase));
 
         if (f.HideAutomated)
             q = q.Select(StripAutomated).Where(r => r.Changes.Count > 0);

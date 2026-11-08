@@ -63,14 +63,17 @@ public class ImpactController : ControllerBase
     [HttpGet("consolidated")]
     [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<ConsolidatedImpact>> GetConsolidated(
-        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? branch, CancellationToken ct)
+        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] string? branch,
+        [FromQuery] string? repository, CancellationToken ct)
     {
         var to_ = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var from_ = from ?? to_.AddDays(-7);
         if (from_ > to_)
             return ValidationProblem("'from' must not be after 'to'.");
+        if (await RepositoryProblemAsync(repository, branch, ct) is { } problem)
+            return ValidationProblem(problem);
 
-        var result = await _provider.GetConsolidatedAsync(from_, to_, branch, ct);
+        var result = await _provider.GetConsolidatedAsync(from_, to_, branch, repository, ct);
         return Ok(result);
     }
 
@@ -79,15 +82,40 @@ public class ImpactController : ControllerBase
     [RequirePermission(Permission.CodeChurn_View)]
     public async Task<ActionResult<RegressionScope>> GetScope(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
-        [FromQuery] RegressionCategoryKind? category, [FromQuery] string? branch, CancellationToken ct)
+        [FromQuery] RegressionCategoryKind? category, [FromQuery] string? branch,
+        [FromQuery] string? repository, CancellationToken ct)
     {
         var to_ = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var from_ = from ?? to_.AddDays(-7);
         if (from_ > to_)
             return ValidationProblem("'from' must not be after 'to'.");
+        if (await RepositoryProblemAsync(repository, branch, ct) is { } problem)
+            return ValidationProblem(problem);
 
-        var result = await _provider.GetScopeAsync(from_, to_, category, branch, ct);
+        var result = await _provider.GetScopeAsync(from_, to_, category, branch, repository, ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// With Features.json repositories configured, a repository or branch outside that list is a clear 400
+    /// instead of an empty grid.
+    /// </summary>
+    private async Task<string?> RepositoryProblemAsync(string? repository, string? branch, CancellationToken ct)
+    {
+        var scope = HttpContext.RequestServices.GetService<ICodeChurnScope>();
+        if (scope is not { IsConfigured: true }) return null;
+
+        if (!string.IsNullOrWhiteSpace(repository) && scope.Find(repository) is null)
+            return $"Repository '{repository}' is not configured for Code Churn on this controller.";
+        if (!string.IsNullOrWhiteSpace(branch))
+        {
+            var branches = await _catalog.GetBranchesAsync(repository, ct);
+            if (!branches.Contains(branch, StringComparer.OrdinalIgnoreCase))
+                return string.IsNullOrWhiteSpace(repository)
+                    ? $"Branch '{branch}' is not configured for any Code Churn repository."
+                    : $"Branch '{branch}' is not configured for repository '{repository}'.";
+        }
+        return null;
     }
 
     /// <summary>GET /api/impact/sync-status — R14 status bar.</summary>
@@ -179,11 +207,38 @@ public class ImpactController : ControllerBase
         return row is null ? NotFound() : Ok(row);
     }
 
-    /// <summary>GET /api/impact/branches — release branches for the parallel-dev switcher.</summary>
+    /// <summary>GET /api/impact/branches?repository= — branches for the switcher (configured ones when Features.json lists repositories).</summary>
     [HttpGet("branches")]
     [RequirePermission(Permission.CodeChurn_View)]
-    public async Task<ActionResult<IReadOnlyList<string>>> GetBranches(CancellationToken ct)
-        => Ok(await _catalog.GetBranchesAsync(ct));
+    public async Task<ActionResult<IReadOnlyList<string>>> GetBranches([FromQuery] string? repository, CancellationToken ct)
+        => Ok(await _catalog.GetBranchesAsync(repository, ct));
+
+    /// <summary>
+    /// GET /api/impact/repositories?refresh= — configured Code Churn repositories with anything that stops them
+    /// working (unknown repo, missing branch, unset credential). CredentialRef is a variable name, never its value.
+    /// </summary>
+    [HttpGet("repositories")]
+    [RequirePermission(Permission.CodeChurn_View)]
+    public async Task<ActionResult<object>> GetRepositories([FromQuery] bool refresh, CancellationToken ct)
+    {
+        var scope = HttpContext.RequestServices.GetService<ICodeChurnScope>();
+        var statuses = await _catalog.GetRepositoriesAsync(refresh, ct);
+        return Ok(new
+        {
+            configured = scope?.IsConfigured == true,
+            message = scope is { IsConfigured: true, Repositories.Count: 0 } ? RegressionSourceCatalog.NoConfiguredRepositoriesMessage : null,
+            repositories = statuses.Select(s => new
+            {
+                name = s.Name,
+                url = s.Url,
+                branches = s.Branches,
+                credentialRef = s.CredentialRef,
+                credentialSet = s.CredentialSet,
+                ok = s.Ok,
+                problems = s.Problems,
+            }),
+        });
+    }
 
     /// <summary>GET /api/impact/health — verified ADO probe + loaded-component count (deploy sanity check).</summary>
     [HttpGet("health")]
@@ -307,7 +362,7 @@ public class ImpactController : ControllerBase
 
     private async Task<ChurnReport> BuildReportAsync(DateOnly from, DateOnly to, string? branch, RegressionRowFilterOptions filter, CancellationToken ct)
     {
-        var consolidated = await _provider.GetConsolidatedAsync(from, to, branch, ct);
+        var consolidated = await _provider.GetConsolidatedAsync(from, to, branch, filter.Repository, ct);
         // Apply the grid's active filters so exports/emails match what the user sees.
         var rows = RegressionRowFilter.Apply(consolidated.Rows, filter);
         return new ChurnReport(

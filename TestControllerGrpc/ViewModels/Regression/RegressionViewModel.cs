@@ -149,6 +149,62 @@ public sealed partial class RegressionViewModel : ObservableObject
 
     private const string AllBranches = "(all branches)";
 
+    /// <summary>Code Churn repositories from Features.json (first entry is the "(all repositories)" sentinel).</summary>
+    public ObservableCollection<string> Repositories { get; } = new();
+
+    private const string AllRepositories = "(all repositories)";
+
+    [ObservableProperty] private string? _selectedRepository;
+
+    /// <summary>True when Features.json lists repositories, so the repository picker is shown.</summary>
+    [ObservableProperty] private bool _hasConfiguredRepositories;
+
+    /// <summary>Unknown repository, missing branch, unset credential… one line per problem; empty when all is well.</summary>
+    [ObservableProperty] private string _repositoryProblems = "";
+
+    private bool _suppressRepositoryReload;
+
+    partial void OnSelectedRepositoryChanged(string? value)
+    {
+        if (_suppressRepositoryReload)
+            return;
+        _ = ReloadForRepositoryAsync();
+    }
+
+    private async Task ReloadForRepositoryAsync()
+    {
+        await RefreshBranchesAsync();
+        await LoadAsync();
+    }
+
+    private string? RepositoryFilter => SelectedRepository is null || SelectedRepository == AllRepositories ? null : SelectedRepository;
+
+    private async Task RefreshRepositoriesAsync()
+    {
+        try
+        {
+            var statuses = await _catalog.GetRepositoriesAsync(refresh: false, CancellationToken.None);
+            _suppressRepositoryReload = true;
+            var keep = SelectedRepository;
+            Repositories.Clear();
+            Repositories.Add(AllRepositories);
+            foreach (var s in statuses)
+                Repositories.Add(s.Name);
+            SelectedRepository = keep is not null && Repositories.Contains(keep) ? keep : AllRepositories;
+            HasConfiguredRepositories = statuses.Count > 0;
+            RepositoryProblems = string.Join(Environment.NewLine,
+                statuses.SelectMany(s => s.Problems.Select(p => $"{s.Name}: {p}")));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Regression", $"Repository list load failed: {ex.Message}");
+        }
+        finally
+        {
+            _suppressRepositoryReload = false;
+        }
+    }
+
     /// <summary>Latest build number across the loaded rows — shown under the ribbon "Build" scope button.</summary>
     [ObservableProperty] private string _latestBuildText = "";
 
@@ -167,7 +223,7 @@ public sealed partial class RegressionViewModel : ObservableObject
     {
         try
         {
-            var live = await _catalog.GetBranchesAsync(CancellationToken.None);
+            var live = await _catalog.GetBranchesAsync(RepositoryFilter, CancellationToken.None);
             _suppressBranchReload = true;
             var keep = SelectedBranch;
             Branches.Clear();
@@ -205,6 +261,10 @@ public sealed partial class RegressionViewModel : ObservableObject
         Branches.Clear();
         Branches.Add(AllBranches);
         _selectedBranch = AllBranches;
+
+        Repositories.Clear();
+        Repositories.Add(AllRepositories);
+        _selectedRepository = AllRepositories;
 #pragma warning restore MVVMTK0034
     }
 
@@ -243,6 +303,7 @@ public sealed partial class RegressionViewModel : ObservableObject
                 return;
             }
         }
+        await RefreshRepositoriesAsync();
         await RefreshBranchesAsync();
         await LoadAsync();
     }
@@ -266,6 +327,7 @@ public sealed partial class RegressionViewModel : ObservableObject
 
     private async Task ReloadAfterSignInAsync()
     {
+        await RefreshRepositoriesAsync();
         await RefreshBranchesAsync();
         await LoadAsync();
     }
@@ -497,10 +559,11 @@ public sealed partial class RegressionViewModel : ObservableObject
             DateOnly? fromDate = DateOnly.FromDateTime(From);
             DateOnly? toDate = DateOnly.FromDateTime(To);
             var branch = SelectedBranch == AllBranches ? null : SelectedBranch;
+            var repository = RepositoryFilter;
 
             // Offload to a background thread so the UI thread is free to paint the busy indicator,
             // even when the provider completes synchronously (mock data or a warm cache).
-            var consolidated = await Task.Run(() => _provider.GetConsolidatedAsync(fromDate, toDate, branch, CancellationToken.None));
+            var consolidated = await Task.Run(() => _provider.GetConsolidatedAsync(fromDate, toDate, branch, repository, CancellationToken.None));
             if (myGeneration != _loadGeneration) return;
             _allRows = consolidated.Rows;
             UpdateLatestBuild();
@@ -511,7 +574,7 @@ public sealed partial class RegressionViewModel : ObservableObject
             SubsystemCount = consolidated.Summary.SubsystemCount;
             FileCount = consolidated.Summary.FileCount;
 
-            var scope = await _provider.GetScopeAsync(fromDate, toDate, category: null, branch, CancellationToken.None);
+            var scope = await _provider.GetScopeAsync(fromDate, toDate, category: null, branch, repository, CancellationToken.None);
             if (myGeneration != _loadGeneration) return;
             PlanRuntimeSubsystems = scope.Runtime.Subsystems;
             PlanRuntimeSuites = scope.Runtime.AutomatedSuites;
@@ -550,7 +613,8 @@ public sealed partial class RegressionViewModel : ObservableObject
                 $"Filters: HideAutomated={HideAutomatedChanges}, ShowAllChanges={ShowAllChanges}, " +
                 $"Runtime={ShowRuntime}, Config={ShowConfig}, " +
                 $"Component={(SelectedComponent is { DefinitionId: > 0 } c ? c.Name : "(all)")}, " +
-                $"Branch={(string.IsNullOrWhiteSpace(branch) ? "(all)" : branch)}.");
+                $"Branch={(string.IsNullOrWhiteSpace(branch) ? "(all)" : branch)}, " +
+                $"Repository={repository ?? "(all)"}.");
         }
         catch (Exception ex)
         {

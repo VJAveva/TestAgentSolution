@@ -41,6 +41,20 @@ public class FeaturesController : ControllerBase
             }),
             map = features.ToDictionary(f => f.Key, f => f.Enabled),
             lastError = gate?.LastError,
+            codeChurn = new
+            {
+                configured = gate?.CodeChurnRepositories is not null,
+                // CredentialRef is an environment variable NAME; the value never leaves the controller.
+                repositories = (gate?.CodeChurnRepositories ?? []).Select(r => new
+                {
+                    name = r.Name,
+                    url = r.Url,
+                    branches = r.Branches,
+                    includePaths = r.IncludePaths,
+                    excludePaths = r.ExcludePaths,
+                    credentialRef = r.CredentialRef,
+                }),
+            },
         });
     }
 
@@ -60,24 +74,72 @@ public class FeaturesController : ControllerBase
 
         var source = Request.Headers["X-Source"].FirstOrDefault();
         var isWpf = string.Equals(source, "WPF", StringComparison.OrdinalIgnoreCase);
-        var rbacOn = HttpContext.RequestServices.GetService<IOptionsMonitor<RbacOptions>>()?.CurrentValue.Enabled == true;
-        // RequirePermission fails open in Default mode, where the web client is read-only by design.
-        if (!rbacOn && !isWpf)
-            return StatusCode(StatusCodes.Status403Forbidden, ApiErrorFactory.Forbidden(
-                "Features can only be changed by an Administrator in Secured mode, or from the controller app."));
+        if (ForbiddenInDefaultMode(isWpf) is { } forbidden) return forbidden;
 
         var settings = HttpContext.RequestServices.GetService<IFeatureSettingsService>();
         if (settings is null)
             return NotFound(ApiErrorFactory.NotFound("Feature settings are not available on this host."));
 
         var authHeader = Request.Headers.Authorization.FirstOrDefault();
-        IUserContext? user = null;
-        if (HttpContext.RequestServices.GetService<SessionAuthInterceptor>() is { } interceptor)
-            user = await interceptor.ResolveUserAsync(authHeader, isWpf ? ClientKind.Wpf : ClientKind.Web, ct);
+        var user = await ResolveUserAsync(authHeader, isWpf, ct);
 
         var result = await settings.SaveAsync(desired, user, authHeader, ct);
-        return result.Success
+        return Saved(result);
+    }
+
+    public sealed record CodeChurnRepositoryDto(
+        string? Name, string? Url, List<string>? Branches, List<string>? IncludePaths, List<string>? ExcludePaths, string? CredentialRef);
+
+    public sealed record CodeChurnUpdateRequest(List<CodeChurnRepositoryDto>? Repositories);
+
+    /// <summary>PUT /api/features/code-churn — replace the Code Churn repository list. Administrator only.</summary>
+    [HttpPut("code-churn")]
+    [RequirePermission(Permission.System_ConfigureFeatures)]
+    public async Task<IActionResult> PutCodeChurn([FromBody] CodeChurnUpdateRequest? body, CancellationToken ct)
+    {
+        var isWpf = string.Equals(Request.Headers["X-Source"].FirstOrDefault(), "WPF", StringComparison.OrdinalIgnoreCase);
+        if (ForbiddenInDefaultMode(isWpf) is { } forbidden) return forbidden;
+
+        if (body?.Repositories is null)
+            return BadRequest(ApiErrorFactory.BadRequest("Body must be { \"repositories\": [ { \"name\": ..., \"branches\": [...] } ] }."));
+
+        var repositories = body.Repositories.Select(r => new CodeChurnRepository(
+            r.Name?.Trim() ?? "",
+            string.IsNullOrWhiteSpace(r.Url) ? null : r.Url.Trim(),
+            Clean(r.Branches), Clean(r.IncludePaths), Clean(r.ExcludePaths),
+            string.IsNullOrWhiteSpace(r.CredentialRef) ? null : r.CredentialRef.Trim())).ToList();
+        if (CodeChurnRepositoryRules.Validate(repositories) is { } invalid)
+            return BadRequest(ApiErrorFactory.BadRequest(invalid));
+
+        var settings = HttpContext.RequestServices.GetService<IFeatureSettingsService>();
+        if (settings is null)
+            return NotFound(ApiErrorFactory.NotFound("Feature settings are not available on this host."));
+
+        var authHeader = Request.Headers.Authorization.FirstOrDefault();
+        var user = await ResolveUserAsync(authHeader, isWpf, ct);
+        return Saved(await settings.SaveCodeChurnAsync(repositories, user, authHeader, ct));
+
+        static List<string> Clean(List<string>? values) =>
+            (values ?? []).Select(v => v?.Trim() ?? "").Where(v => v.Length > 0).ToList();
+    }
+
+    // RequirePermission fails open in Default mode, where the web client is read-only by design.
+    private IActionResult? ForbiddenInDefaultMode(bool isWpf)
+    {
+        var rbacOn = HttpContext.RequestServices.GetService<IOptionsMonitor<RbacOptions>>()?.CurrentValue.Enabled == true;
+        return !rbacOn && !isWpf
+            ? StatusCode(StatusCodes.Status403Forbidden, ApiErrorFactory.Forbidden(
+                "Features can only be changed by an Administrator in Secured mode, or from the controller app."))
+            : null;
+    }
+
+    private async Task<IUserContext?> ResolveUserAsync(string? authHeader, bool isWpf, CancellationToken ct) =>
+        HttpContext.RequestServices.GetService<SessionAuthInterceptor>() is { } interceptor
+            ? await interceptor.ResolveUserAsync(authHeader, isWpf ? ClientKind.Wpf : ClientKind.Web, ct)
+            : null;
+
+    private IActionResult Saved(FeatureSaveResult result) =>
+        result.Success
             ? Ok(new { saved = true, message = result.Message, changes = result.Changes, savedAt = result.SavedAt })
             : StatusCode(StatusCodes.Status500InternalServerError, ApiErrorFactory.ServerError(result.Message));
-    }
 }

@@ -13,6 +13,7 @@ import type {
   ImpactedComponentAnalysis,
   SubsystemRow,
   ImpactIndexHealth,
+  CodeChurnRepositoriesResponse,
 } from '../types/api';
 import type { FilterState } from '../components/regression/helpers';
 
@@ -26,6 +27,10 @@ function branchParam(branch: string | null): string {
   return branch ? `&branch=${encodeURIComponent(branch)}` : '';
 }
 
+function repositoryParam(repository: string | null | undefined): string {
+  return repository ? `&repository=${encodeURIComponent(repository)}` : '';
+}
+
 function filterQuery(f: FilterState): string {
   const p = new URLSearchParams({
     showRuntime: String(f.showRuntime),
@@ -37,6 +42,7 @@ function filterQuery(f: FilterState): string {
     filterIms: String(f.filterIms),
   });
   if (f.component) p.set('component', f.component);
+  if (f.repository) p.set('repository', f.repository);
   return p.toString();
 }
 
@@ -50,14 +56,15 @@ export function useRegression() {
   const setAiLoading = useRegressionStore((s) => s.setAiLoading);
   const setBranches = useRegressionStore((s) => s.setBranches);
   const setComponents = useRegressionStore((s) => s.setComponents);
+  const setRepositories = useRegressionStore((s) => s.setRepositories);
   const setLoading = useRegressionStore((s) => s.setLoading);
   const setError = useRegressionStore((s) => s.setError);
 
   const loadAll = useCallback(
-    async (from: Date, to: Date, branch: string | null) => {
+    async (from: Date, to: Date, branch: string | null, repository: string | null = null) => {
       setLoading(true);
       setError(null);
-      const range = `?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}`;
+      const range = `?from=${toDateParam(from)}&to=${toDateParam(to)}${branchParam(branch)}${repositoryParam(repository)}`;
       try {
         const [consolidated, scope, sync, connection, summary, health] = await Promise.all([
           apiFetch<ConsolidatedImpact>(`/api/impact/consolidated${range}`),
@@ -82,13 +89,22 @@ export function useRegression() {
     [setConsolidated, setScope, setSyncStatus, setConnection, setSummary, setIndexHealth, setLoading, setError],
   );
 
-  const fetchBranches = useCallback(async () => {
+  const fetchBranches = useCallback(async (repository: string | null = null) => {
     try {
-      setBranches(await apiFetch<string[]>('/api/impact/branches'));
+      const query = repository ? `?repository=${encodeURIComponent(repository)}` : '';
+      setBranches(await apiFetch<string[]>(`/api/impact/branches${query}`));
     } catch {
       /* best-effort */
     }
   }, [setBranches]);
+
+  const fetchRepositories = useCallback(async () => {
+    try {
+      setRepositories((await apiFetch<CodeChurnRepositoriesResponse>('/api/impact/repositories')).repositories);
+    } catch {
+      /* older controller without the endpoint: no repository picker */
+    }
+  }, [setRepositories]);
 
   const fetchComponents = useCallback(async () => {
     try {
@@ -171,5 +187,5 @@ export function useRegression() {
     [setSummary, setAiLoading, setError],
   );
 
-  return { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, fetchTestMatches, downloadReport, emailReport, applySuiteEdit, summarizeWithAi };
+  return { loadAll, fetchBranches, fetchRepositories, fetchComponents, fetchBuilds, fetchBuildImpact, fetchTestMatches, downloadReport, emailReport, applySuiteEdit, summarizeWithAi };
 }

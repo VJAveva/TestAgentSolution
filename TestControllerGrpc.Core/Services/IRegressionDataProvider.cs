@@ -18,6 +18,14 @@ public interface IRegressionDataProvider
     /// <summary>R14 — sync freshness / unresolved-repository status bar.</summary>
     Task<RegressionSyncStatus> GetSyncStatusAsync(CancellationToken ct);
 
+    /// <summary>Rollup limited to one Code Churn repository; null or empty means all. Sources without repositories ignore it.</summary>
+    Task<ConsolidatedImpact> GetConsolidatedAsync(DateOnly? from, DateOnly? to, string? branch, string? repository, CancellationToken ct) =>
+        GetConsolidatedAsync(from, to, branch, ct);
+
+    /// <summary>Plan limited to one Code Churn repository; null or empty means all.</summary>
+    Task<RegressionScope> GetScopeAsync(DateOnly? from, DateOnly? to, RegressionCategoryKind? category, string? branch, string? repository, CancellationToken ct) =>
+        GetScopeAsync(from, to, category, branch, ct);
+
     /// <summary>R7/R9 col 8-9 — persist an inline Automation/Manual suite chip edit.</summary>
     Task ApplySuiteEditAsync(RegressionSuiteEdit edit, CancellationToken ct);
 }

@@ -634,6 +634,24 @@ export interface RegressionConnectionInfo {
   warning?: string | null;
 }
 
+/** A Code Churn repository from Features.json with anything that stops it working. */
+export interface CodeChurnRepositoryStatus {
+  name: string;
+  url: string | null;
+  branches: string[];
+  /** Environment variable name only; the value never leaves the controller. */
+  credentialRef: string | null;
+  credentialSet: boolean;
+  ok: boolean;
+  problems: string[];
+}
+
+export interface CodeChurnRepositoriesResponse {
+  configured: boolean;
+  message: string | null;
+  repositories: CodeChurnRepositoryStatus[];
+}
+
 export interface RegressionComponentRef {
   name: string;
   definitionId: number;

@@ -11,6 +11,8 @@ export interface FilterState {
   filterStory: boolean;
   filterIms: boolean;
   component: string | null;
+  /** Code Churn repository from Features.json; null or absent means all. */
+  repository?: string | null;
 }
 
 function isPackageNoiseChange(c: RegressionChangeRef): boolean {
@@ -38,6 +40,7 @@ export function applyFilters(rows: SubsystemRow[], f: FilterState): SubsystemRow
       (r.category === 'Config' && f.showConfig),
   );
   if (f.component) out = out.filter((r) => r.component === f.component);
+  if (f.repository) out = out.filter((r) => (r.repository ?? '').toLowerCase() === f.repository!.toLowerCase());
   if (f.hideAutomated) out = out.map(stripAutomated).filter((r) => r.changes.length > 0);
   // Hide Universal-Packages manifest bumps by default; "All changes" restores them.
   if (!f.showAllChanges) out = out.map(stripPackageNoise).filter((r) => r.changes.length > 0);

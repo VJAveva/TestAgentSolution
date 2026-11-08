@@ -17,6 +17,7 @@ import {
 import type { FilterState } from './helpers';
 
 const ALL_BRANCHES = '(all branches)';
+const ALL_REPOSITORIES = '(all repositories)';
 const ALL_COMPONENTS = '(all components)';
 const COL_SPAN = 13;
 // A component can match dozens of test cases; show the highest-ranked few until the user asks for the rest.
@@ -213,7 +214,7 @@ function InlineStat({ label, value, flag, ok, active, onClick }: { label: string
 
 export default function RegressionView() {
   useRenderCount('RegressionView');
-  const { loadAll, fetchBranches, fetchComponents, fetchBuilds, fetchBuildImpact, downloadReport, emailReport, summarizeWithAi } = useRegression();
+  const { loadAll, fetchBranches, fetchRepositories, fetchComponents, fetchBuilds, fetchBuildImpact, downloadReport, emailReport, summarizeWithAi } = useRegression();
   const consolidated = useRegressionStore((s) => s.consolidated);
   const scope = useRegressionStore((s) => s.scope);
   const syncStatus = useRegressionStore((s) => s.syncStatus);
@@ -222,6 +223,7 @@ export default function RegressionView() {
   const indexHealth = useRegressionStore((s) => s.indexHealth);
   const branches = useRegressionStore((s) => s.branches);
   const components = useRegressionStore((s) => s.components);
+  const repositories = useRegressionStore((s) => s.repositories);
   const showRuntime = useRegressionStore((s) => s.showRuntime);
   const showConfig = useRegressionStore((s) => s.showConfig);
   const hideAutomated = useRegressionStore((s) => s.hideAutomated);
@@ -248,6 +250,7 @@ export default function RegressionView() {
   });
   const [to, setTo] = useState(() => new Date());
   const [branch, setBranch] = useState<string | null>(null);
+  const [repository, setRepository] = useState<string | null>(null);
   const [selectedDefId, setSelectedDefId] = useState<number | null>(null);
   const [selectedComponentName, setSelectedComponentName] = useState<string | null>(null);
   // Empty = "all branches" (shown via placeholder). A non-empty sentinel here would filter the native datalist and hide every real branch.
@@ -267,6 +270,7 @@ export default function RegressionView() {
 
   useEffect(() => {
     loadAll(from, to, null);
+    fetchRepositories();
     fetchBranches();
     fetchComponents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -277,14 +281,14 @@ export default function RegressionView() {
   useEffect(() => { setComponentText(selectedComponentName ?? ''); }, [selectedComponentName]);
   useEffect(() => { if (consolidated) setLastLoadedAt(new Date()); }, [consolidated]);
 
-  const reload = (f: Date, t: Date, b: string | null) => {
+  const reload = (f: Date, t: Date, b: string | null, repo: string | null = repository) => {
     setFocusedRow(null);
     setSelectedBuildId(null);
     // These load once on mount and swallow their errors, so a single failed load would otherwise leave the
     // pickers empty until a full page reload.
-    if (branches.length === 0) fetchBranches();
+    if (branches.length === 0) fetchBranches(repo);
     if (components.length === 0) fetchComponents();
-    loadAll(f, t, b);
+    loadAll(f, t, b, repo);
   };
 
   const selectScope = (kind: RegressionScopeKind) => {
@@ -310,6 +314,17 @@ export default function RegressionView() {
     setBranch(b);
     reload(from, to, b);
   };
+
+  // A branch belongs to a repository, so switching repository resets the branch and reloads its list.
+  const changeRepository = (value: string) => {
+    const repo = value === ALL_REPOSITORIES ? null : value;
+    setRepository(repo);
+    setBranch(null);
+    fetchBranches(repo);
+    reload(from, to, null, repo);
+  };
+
+  const repositoryProblems = repositories.flatMap((r) => r.problems.map((p) => `${r.name}: ${p}`));
 
   const onComponentPick = async (defIdStr: string) => {
     const defId = Number(defIdStr);
@@ -355,7 +370,7 @@ export default function RegressionView() {
   };
 
   const filterState: FilterState = {
-    showRuntime, showConfig, hideAutomated, showAllChanges, filterBug, filterStory, filterIms, component: selectedComponentName,
+    showRuntime, showConfig, hideAutomated, showAllChanges, filterBug, filterStory, filterIms, component: selectedComponentName, repository,
   };
 
   const runExport = async (format: 'csv' | 'html' | 'xlsx') => {
@@ -426,6 +441,12 @@ export default function RegressionView() {
           {connection.warning}
         </div>
       )}
+      {repositoryProblems.length > 0 && (
+        <div role="alert" aria-label="Code Churn repository problems"
+          className="px-4 py-1.5 text-xs text-acc-yellow bg-acc-yellow/10 border-b border-bdr shrink-0">
+          {repositoryProblems.map((p) => <div key={p}>{p}</div>)}
+        </div>
+      )}
       {/* CC-H2 — identity, inline stats, actions */}
       <div className="flex items-center gap-2.5 px-4 h-11 border-b border-bdr bg-bg-panel shrink-0">
         <span className="text-sm font-semibold text-text-primary shrink-0">Code churn</span>
@@ -483,6 +504,10 @@ export default function RegressionView() {
             </button>
           ))}
         </div>
+        {repositories.length > 0 && (
+          <SearchSelect label="Repo" value={repository ?? ''} placeholder="all" width="w-[190px]"
+            options={[ALL_REPOSITORIES, ...repositories.map((r) => r.name)]} onPick={changeRepository} />
+        )}
         <SearchSelect label="Branch" value={!branch || branch === ALL_BRANCHES ? '' : branch} placeholder="all" width="w-[190px]"
           options={[ALL_BRANCHES, ...branches]} onPick={(v) => { setBranchText(v); changeBranch(v); }} />
         <SearchSelect label="Component" value={selectedComponentName ?? ''} placeholder="all" width="w-[190px]"

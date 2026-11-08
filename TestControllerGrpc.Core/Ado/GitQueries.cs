@@ -30,6 +30,10 @@ public interface IGitQueries
 
     /// <summary>Work item ids linked to a pull request.</summary>
     Task<IReadOnlyList<int>> GetPullRequestWorkItemIdsAsync(string project, string repositoryId, int pullRequestId, CancellationToken ct);
+
+    /// <summary>Branch names (without refs/heads/) in a repository. Null when this source cannot list them.</summary>
+    Task<IReadOnlyList<string>?> GetBranchNamesAsync(string project, string repositoryId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<string>?>(null);
 }
 
 public sealed class GitQueries : IGitQueries
@@ -103,6 +107,15 @@ public sealed class GitQueries : IGitQueries
         var result = await _client.GetAsync<AdoListResponse<AdoRepositoryDto>>(
             _client.ProjectApiPath(project, "git/repositories?api-version=7.1"), ct);
         return result.Value;
+    }
+
+    public async Task<IReadOnlyList<string>?> GetBranchNamesAsync(string project, string repositoryId, CancellationToken ct)
+    {
+        var result = await _client.GetAsync<AdoListResponse<AdoGitRefDto>>(
+            _client.ProjectApiPath(project, $"git/repositories/{repositoryId}/refs?filter=heads/&api-version=7.1"), ct);
+        return result.Value
+            .Select(r => r.Name.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase) ? r.Name["refs/heads/".Length..] : r.Name)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<string>> GetSolutionNamesAsync(string project, string repositoryId, CancellationToken ct)

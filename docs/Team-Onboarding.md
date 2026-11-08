@@ -17,6 +17,9 @@ On each agent machine:
 .\Utilites\TestAgent_SetupScripts\Prepare-AgentNode-Full.ps1 -ControllerAddress http://<controller>:5100 -LogonUser <domain\account>
 ```
 
+Use `-ControllerAddress` in full: `-Controller` on its own is ambiguous (it also matches `-ControllerPort`) and
+PowerShell refuses it.
+
 Then deploy the build with `deploy\Invoke-Patch.ps1` (controller) and `deploy\Invoke-FleetDeployment.ps1` (agents).
 Start `TestControllerGrpc.exe` on the controller by hand; it is a desktop app, not a service.
 
@@ -24,6 +27,8 @@ Start `TestControllerGrpc.exe` on the controller by hand; it is a desktop app, n
 
 1. Copy `deploy\Features.sample.json` to `C:\TestControllerService\Config\Features.json`.
 2. Set `TeamName` and switch off what you do not use (`false`). A missing file or a missing key means **on**.
+   Replace the placeholder `CodeChurn` repository with yours, or delete the whole `CodeChurn` section to keep
+   scanning every component in the component map (see section 3).
 3. Pipelines, Agents, Library, Pre-flight and Admin are always on and cannot be listed.
 
 | Key | What it covers | Depends on |
@@ -40,6 +45,8 @@ Start `TestControllerGrpc.exe` on the controller by hand; it is a desktop app, n
   refresh or window focus, and the API returns `404 Feature disabled` for a turned-off feature.
 - Background work of a disabled feature (impact index, churn diagnostics, run email) is skipped **at startup**;
   restart the controller after turning one of those back on.
+- Pre-flight warns, naming the step and the feature, when a pipeline step calls a turned-off feature (for example
+  a `RunCommand` that calls `/api/impact/...` or `Rebuild-ImpactIndex.ps1`).
 - Administrators can also switch features in **ADMIN > Features** (WPF, Secured mode) or the **Features** tab
   (web, Secured mode). Saving makes a timestamped `Features.json.bak-yyyyMMdd-HHmmss` and writes an audit entry.
 - The IIS web tier reads its own copy unless you point it at the controller's file. In the web tier's
@@ -48,20 +55,49 @@ Start `TestControllerGrpc.exe` on the controller by hand; it is a desktop app, n
 
 ## 3. Code Churn: your repositories and branches
 
-Code Churn is configured in the `Ado` section of the controller's `appsettings.json` (and the web tier's,
-if it serves Code Churn):
+Repositories and branches are team configuration in the same `Features.json` (one file per controller, one
+admin screen, one backup and audit trail):
+
+```json
+"CodeChurn": {
+  "Repositories": [
+    { "Name": "<RepoName>", "Url": "https://dev.azure.com/<org>/<project>/_git/<RepoName>",
+      "Branches": ["main", "release/<version>"], "IncludePaths": ["src/"], "ExcludePaths": ["src/tests/"],
+      "CredentialRef": "ADO_PAT" }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `Name` | Azure DevOps repository name. Only components whose `repository` in the component map matches are scanned |
+| `Url` | Optional. Must be in the organization/project Code Churn reads (`Ado:Organization` / `Ado:OmiProject`) |
+| `Branches` | The branches offered in the Code Churn branch picker for this repository |
+| `IncludePaths` / `ExcludePaths` | Folder prefixes (`src/`) or globs (`*.cs`). Exclude wins. A change whose files are all out of scope is dropped |
+| `CredentialRef` | **Name** of an environment variable on the controller. Never the token: a value that looks like a PAT is rejected |
+
+- **No `CodeChurn` section**: Code Churn scans every component in the component map, as before.
+- **`"Repositories": []`**: the Code Churn screen says **"No repositories configured"**.
+- Administrators edit the list in **ADMIN > Features** (WPF) or the **Features** tab (web).
+- The Code Churn screen has a repository picker and shows, per repository, anything that stops it working:
+  repository not found in Azure DevOps, a branch that does not exist, a `Url` outside the organization/project,
+  a credential variable that is not set, or Azure DevOps unreachable. The same lines go to the controller log.
+- Azure DevOps calls use the controller's ADO credential (`Ado:AuthMode` / `Ado:SecretEnvVarName`).
+  `CredentialRef` is checked so a missing secret is reported; per-repository tokens are not used yet.
+
+The Azure DevOps connection itself stays in the `Ado` section of `appsettings.json`:
 
 | Setting | Meaning |
 |---|---|
 | `Organization`, `Project`, `OmiProject` | Your Azure DevOps organization and projects |
-| `Branches`, `BranchIncludePatterns`, `DefaultBranch` | Branch list and filters for the branch picker |
+| `Branches`, `BranchIncludePatterns`, `DefaultBranch` | Branch list when `Features.json` has no repositories |
 | `AuthMode`, `SecretEnvVarName` | How to authenticate; **the name of** the environment variable that holds the PAT, never the PAT itself |
 | `ComponentMapPath` | Your component map (components, repositories, build definitions, use cases). Copy `docs\impact\component-usecase-map.v1.json` as a template |
 | `ComponentCategoriesPath` | Runtime/Config categories per component (template: `docs\impact\component-categories.xml`) |
 | `RepositoryPrefix` | Prefix used when a hint is a short component name (default `AppServer.`; set `""` to disable) |
 
-With no component map the Code Churn screen says **"No repositories configured"**. Credentials are only ever
-referenced by environment-variable name; set the variable at **Machine** scope and run `iisreset` for the web tier.
+Credentials are only ever referenced by environment-variable name; set the variable at **Machine** scope and run
+`iisreset` for the web tier.
 
 ## 4. Parameters
 
