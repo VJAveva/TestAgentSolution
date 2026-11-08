@@ -1,4 +1,14 @@
-# Save as: C:\TestAgentService\Diagnose-AgentPort.ps1
+﻿<#
+.SYNOPSIS
+    ARCHIVED - superseded by ..\Test-NodeConnectivity.ps1 and ..\Watch-AgentListener.ps1.
+    Shows what is (or is not) listening on the agent port and why.
+
+.PARAMETER Port
+    Agent gRPC port. Default: 5200
+
+.EXAMPLE
+    .\Diagnose-AgentPort.ps1 -Port 5200
+#>
 param([int]$Port = 5200)
 
 Write-Host "═══════════════════════════════════════" -ForegroundColor Cyan

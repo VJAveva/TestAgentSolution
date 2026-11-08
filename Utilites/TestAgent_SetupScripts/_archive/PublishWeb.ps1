@@ -1,5 +1,6 @@
-<#
+﻿<#
 .SYNOPSIS
+    ARCHIVED - superseded by PublishWeb.ps1 in the repo root (and deploy\Invoke-Patch.ps1).
     Build and deploy TestController WebAPI + WebClient to IIS (single site).
 
 .DESCRIPTION
@@ -36,6 +37,9 @@
 .PARAMETER DeployPath
     Physical path on the target server. Default: C:\inetpub\TestControllerWeb
 
+.PARAMETER Configuration
+    dotnet build configuration. Default: Release
+
 .PARAMETER ControllerUrl
     URL of the WPF Controller host that the WebAPI proxies to (the sole DB owner).
     Default: http://localhost:5200  (use a real host:5200 if the Controller runs
@@ -43,9 +47,7 @@
 
 .PARAMETER ControllerUrlConfigKey
     The appsettings key (colon-delimited path) the WebAPI reads for the Controller
-    upstream address. Default: "Controller:BaseUrl".
-    CONFIRM this matches the key your TestController.WebApi actually reads (search
-    Program.cs / the proxy or gRPC channel setup) and override if different.
+    upstream address. Default: "ControllerProxyUrl" (the top-level key ControllerProxyService reads).
 
 .PARAMETER HealthPath
     Anonymous health endpoint used for validation. Default: "/api/health".
@@ -89,7 +91,7 @@ param(
     [string]$Configuration = "Release",
     # ── NEW (db / proxy context) ─────────────────────────────────────
     [string]$ControllerUrl = "http://localhost:5200",
-    [string]$ControllerUrlConfigKey = "Controller:BaseUrl",
+    [string]$ControllerUrlConfigKey = "ControllerProxyUrl",
     [string]$HealthPath = "/api/health",
     [switch]$RequireBackend,
     # ─────────────────────────────────────────────────────────────────

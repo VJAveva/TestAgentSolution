@@ -23,8 +23,32 @@
     node with WinRM stopped is still measured rather than reported as unknown.
 
 .PARAMETER Nodes
-    Agent node names. Defaults to the agents in deploy\fleet-inventory.json when that
-    file can be found, otherwise to the known fleet.
+    Agent node names. Accepts an array or one comma-separated string (as Run-NodeConnectivity.bat
+    passes it). Defaults to the agents in -InventoryPath or deploy\fleet-inventory.json, otherwise
+    to the known fleet.
+
+.PARAMETER Controller
+    Controller machine name. Default: JVGR22
+
+.PARAMETER ControllerGrpcPort
+    Controller gRPC port checked from each node (C5100). Default: 5100
+
+.PARAMETER ControllerHttpPort
+    Controller embedded HTTP API port checked from each node (C5200) and used for the
+    registered-agent list (REG). Default: 5200
+
+.PARAMETER AgentPort
+    Agent gRPC port checked from here (APORT). Default: 5200
+
+.PARAMETER MinDotNet
+    Minimum ASP.NET Core / Windows Desktop runtime (NET). Default: 10.0.12
+
+.PARAMETER InventoryPath
+    fleet-inventory.json to read node names from. Default: next to this script, then
+    ..\..\deploy\fleet-inventory.json.
+
+.PARAMETER TimeoutSeconds
+    Per-check timeout. Default: 5
 
 .PARAMETER ReportPath
     Optional path for a JSON copy of the results.
@@ -35,11 +59,14 @@
     .\Test-NodeConnectivity.ps1 -Nodes JVGR1,WARMGR -Controller JVGR22
 .EXAMPLE
     .\Test-NodeConnectivity.ps1 -ReportPath C:\Temp\fleet.json
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-NodeConnectivity.ps1 -Controller AUT1 -Nodes "JVGR1,WARMGR"
 
 .NOTES
     Target framework : .NET 10 (LTS) - runtime 10.0.12 or newer required
     Compatibility    : Windows PowerShell 5.1 and PowerShell 7+ (ASCII-only)
-    Version          : 1.0  |  October 2026
+    Version          : 1.1  |  November 2026
+    Exit codes       : 0 = all checks passed, non-zero = one or more FAIL
 #>
 [CmdletBinding()]
 param(
@@ -53,6 +80,9 @@ param(
     [int]      $TimeoutSeconds     = 5,
     [string]   $ReportPath
 )
+
+# powershell -File (Run-NodeConnectivity.bat) passes "a,b" as ONE string.
+$Nodes = @($Nodes | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim().Trim('"', "'") } | Where-Object { $_ })
 
 $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'

@@ -8,8 +8,27 @@
     monitor_<time>.log        state changes in plain words
     snapshot_<time>.txt       full detail captured each time the listener stops or recovers
 
-  Usage:
-    powershell -NoProfile -ExecutionPolicy Bypass -File Watch-AgentListener.ps1 [-Minutes 120] [-IntervalSeconds 10]
+.PARAMETER Minutes
+  How long to watch. Default: 120
+
+.PARAMETER IntervalSeconds
+  Seconds between samples. Default: 10
+
+.PARAMETER Port
+  Listener port to watch. Default: 5200
+
+.PARAMETER OutDir
+  Output folder. Default: C:\AgentMonitor
+
+.PARAMETER AgentLogDirs
+  Folders searched for the freshest agent log. Default: C:\TestControllerService\Logs,
+  C:\TestAgentService\Logs, C:\TestAgentSolution\Logs\audit
+
+.EXAMPLE
+  powershell -NoProfile -ExecutionPolicy Bypass -File Watch-AgentListener.ps1 -Minutes 120 -IntervalSeconds 10
+
+.EXAMPLE
+  .\Watch-AgentListener.ps1 -Minutes 30 -OutDir D:\AgentMonitor
 #>
 param(
     [int]$Minutes = 120,

@@ -21,6 +21,7 @@ last-verified: 2026-11-08
 
 ## Config / files
 - Fleet roster: `deploy/fleet-inventory.json`.
+- Revert / VM scripts the engine calls: `Utilites/RevertAgents/` (`Revert-AgentVM.ps1`, `Vm-Ops.vcloud.ps1`), deployed to `C:\TestSetup\RevertAgents\`. Run commands: [Utilites/README.md](../../../Utilites/README.md).
 - Agent side: `WindowsUpdate` section in the agent's `appsettings.json`.
 - Revert credentials come from the shared automation account (see the `vm-revert-snapshot` skill), never from files in the repo.
 
@@ -30,7 +31,7 @@ dotnet test TestControllerGrpc.Tests --filter "FullyQualifiedName~Maintenance"
 ```
 
 ## Known gaps
-- The UI update install is a full persisted operation now (`MachineUpdateOperation`: precheck, out of rotation, search, install, reboot if needed, verify, quarantine on failure), gated by `Fleet_InstallUpdates`. The "Partial" rows for that path in [FLEET-UPDATE-SNAPSHOT.md](FLEET-UPDATE-SNAPSHOT.md) are out of date.
+- The UI update install is a full persisted operation now (`MachineUpdateOperation`: precheck, out of rotation, search, install, reboot if needed, verify, quarantine on failure), gated by `Fleet_InstallUpdates`. [FLEET-UPDATE-SNAPSHOT.md](FLEET-UPDATE-SNAPSHOT.md) section 3 carries a dated status note saying so.
 - Golden-image refresh is **not reachable**: `GoldenImageRefreshOperation` exists but `IGoldenImageRefreshOperation` is deliberately not registered (`FleetMaintenanceExtensions`), and the trigger from [NodeUpdateInstaller_Build_Spec.md](NodeUpdateInstaller_Build_Spec.md) Part 4 (`StartRefreshAsync`, `POST /refresh`, `AllowBaselineReplace` flag) is not built.
 
 ## Links

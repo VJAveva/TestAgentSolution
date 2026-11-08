@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
     TestAgent CONTROLLER Node - one-click, self-healing prep for the
@@ -30,21 +29,129 @@
     needed for the default run; it is only requested when you also pass
     -ConfigureAppPoolIdentity (to stamp an existing IIS app pool with wwApps).
 
+    List parameters (-AgentIPs, -ExtraInboundPorts, -ExtraTrustedHosts, -DotNetArchitectures)
+    accept an array OR one comma-separated string, so they also work through
+    powershell -File (Run-ControllerSetup.bat) and through the elevated relaunch.
+
+.PARAMETER ControllerPort
+    Inbound port agents use to reach the controller (gRPC register/heartbeat/events). Default: 5100
+
+.PARAMETER AgentPort
+    Outbound port the controller dispatches commands to on each agent. Default: 5200
+
+.PARAMETER AgentIPs
+    Agent addresses to pre-register in appsettings.json and allow through the firewall.
+    Default: none (a placeholder is written).
+
+.PARAMETER ExtraInboundPorts
+    Extra inbound TCP ports to open, e.g. the IIS WebApi/React binding (81). Default: none.
+
+.PARAMETER InstallDir
+    Folder holding TestControllerGrpc.exe and appsettings.json. Default: C:\TestControllerService
+
+.PARAMETER VocabularyDir
+    Folder holding WatchList.xml and Logs. Default: C:\TestControllerService
+
+.PARAMETER ControllerExeName
+    Controller executable name. Default: TestControllerGrpc.exe
+
+.PARAMETER LogonUser
+    Run-as account granted local admin and the service/batch logon rights. Default: magellandev2000\wwApps
+
+.PARAMETER LogonCredential
+    Credential for -LogonUser. Only needed with -ConfigureAppPoolIdentity; prompted (masked) if omitted.
+
+.PARAMETER ConfigureAppPoolIdentity
+    Set the existing IIS app pool -AppPoolName to run as -LogonUser.
+
+.PARAMETER AppPoolName
+    IIS app pool to stamp. Default: TestControllerWeb (the pool Deploy-WebToIIS.ps1 creates).
+
+.PARAMETER DotNetInstallDir
+    x64 .NET shared-framework root. Default: C:\Program Files\dotnet
+
+.PARAMETER DotNetArchitectures
+    Runtimes to install: x64, x86 or both (default both).
+
+.PARAMETER UseStandaloneAspNet
+    Install the standalone ASP.NET Core runtime instead of the Hosting Bundle (no IIS module).
+
+.PARAMETER SkipNetCore
+    Do not also install the base .NET runtime.
+
+.PARAMETER ReleaseMetadataUrl
+    Override the .NET release feed URL.
+
+.PARAMETER OfflineInstallerDir
+    Folder of pre-staged .NET installers for machines without internet access.
+
+.PARAMETER ControllerHost
+    Host added to the trusted zone. Default: rcloud.dev.wonderware.com
+
+.PARAMETER ExtraTrustedHosts
+    More hosts to add to the trusted zone.
+
+.PARAMETER LogFile
+    Transcript file. Default: C:\TestControllerService\Logs\Prepare-ControllerNode.log
+
+.PARAMETER SkipIIS
+    Skip phase 1 (IIS features).
+
+.PARAMETER SkipDotNet
+    Skip phase 2 (.NET 10).
+
+.PARAMETER SkipFirewall
+    Skip phase 3 (firewall).
+
+.PARAMETER SkipRunAsAccount
+    Skip phase 4 (run-as account rights).
+
+.PARAMETER SkipUacDisable
+    Keep UAC on (skip phase 6). Use on any machine that is not a lab box.
+
+.PARAMETER SkipSecurityPrompts
+    Keep SmartScreen / zone prompts (skip phase 7).
+
+.PARAMETER Uninstall
+    Remove what this script added.
+
+.PARAMETER RebootWhenDone
+    Reboot automatically at the end if a reboot is needed.
+
+.PARAMETER NoElevate
+    Fail instead of relaunching elevated.
+
+.EXAMPLE
+    .\Prepare-ControllerNode.ps1
+    Default run on the controller: IIS, .NET 10, firewall, wwApps rights, config, UAC off, trusted URLs.
+
+.EXAMPLE
+    .\Prepare-ControllerNode.ps1 -AgentIPs 10.48.190.213,10.228.117.101 -ExtraInboundPorts 81
+
+.EXAMPLE
+    .\Prepare-ControllerNode.ps1 -ConfigureAppPoolIdentity -SkipUacDisable -SkipSecurityPrompts
+    After Deploy-WebToIIS.ps1: run the TestControllerWeb pool as wwApps (prompts for the password), keep UAC.
+
+.EXAMPLE
+    # From cmd, as Run-ControllerSetup.bat does:
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\Prepare-ControllerNode.ps1 -AgentIPs "10.48.190.213,10.228.117.101"
+
 .NOTES
     LAB / TEST posture: disables UAC and relaxes SmartScreen / zone checks so the
     controller and its tooling run unattended. On a daily-driver workstation pass
     -SkipUacDisable (and -SkipSecurityPrompts) to keep those protections.
     appcmd.exe is used exclusively for IIS; this script only ENSURES IIS + appcmd
-    exist - actual site/app-pool creation is done by Deploy-TestController.ps1.
-    Version 1.0
+    exist - actual site/app-pool creation is done by Deploy-WebToIIS.ps1.
+    Version 1.1 - list parameters accept comma-separated strings (fixes the elevated relaunch).
 #>
+#Requires -Version 5.1
 
 param(
     # --- Controller identity / ports ---
     [int]      $ControllerPort      = 5100,                       # agents -> controller (gRPC register/heartbeat/events)
     [int]      $AgentPort           = 5200,                       # controller -> agents (gRPC command dispatch)
     [string[]] $AgentIPs            = @(),                        # pre-register agents, e.g. @('10.48.190.213','10.228.117.101')
-    [int[]]    $ExtraInboundPorts   = @(),                        # extra inbound ports to open (e.g. the WebApi/React http binding)
+    [string[]] $ExtraInboundPorts   = @(),                        # port numbers; validated and converted below
 
     # --- Paths ---
     [string]   $InstallDir          = 'C:\TestControllerService', # where TestControllerGrpc.exe + appsettings.json live
@@ -55,12 +162,11 @@ param(
     [string]   $LogonUser           = 'magellandev2000\wwApps',
     [pscredential] $LogonCredential,                              # only needed with -ConfigureAppPoolIdentity
     [switch]   $ConfigureAppPoolIdentity,                         # stamp an existing IIS app pool with the run-as account
-    [string]   $AppPoolName         = 'TestControllerPool',
+    [string]   $AppPoolName         = 'TestControllerWeb',
 
     # --- .NET 10 ---
     [string]   $DotNetInstallDir    = 'C:\Program Files\dotnet',  # x64 shared-framework root (installer-managed)
-    [ValidateSet('x64','x86')]
-    [string[]] $DotNetArchitectures = @('x64','x86'),             # both, so 32- and 64-bit apps each resolve a runtime
+    [string[]] $DotNetArchitectures = @('x64','x86'),             # x64 / x86 / both; validated below (ValidateSet rejects "x64,x86")
     [switch]   $UseStandaloneAspNet,                              # default = ASP.NET Core Hosting Bundle (IIS needs the ANCM module)
     [switch]   $SkipNetCore,                                      # default = also install the lean .NET Core runtime
     [string]   $ReleaseMetadataUrl,                               # override the .NET release feed
@@ -84,6 +190,19 @@ param(
     [switch]   $RebootWhenDone,
     [switch]   $NoElevate
 )
+
+# powershell -File (the .bat wrapper and the elevated relaunch) passes "a,b" as ONE string: split every list.
+function Split-List($v) { @($v | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim().Trim('"', "'") } | Where-Object { $_ }) }
+$AgentIPs            = Split-List $AgentIPs
+$ExtraTrustedHosts   = Split-List $ExtraTrustedHosts
+$DotNetArchitectures = Split-List $DotNetArchitectures
+$ExtraInboundPorts   = @(Split-List $ExtraInboundPorts | ForEach-Object {
+    if ($_ -notmatch '^\d{1,5}$') { Write-Host "  [FAIL] -ExtraInboundPorts: '$_' is not a port number." -ForegroundColor Red; exit 1 }
+    [int]$_
+})
+foreach ($a in $DotNetArchitectures) {
+    if ($a -notin 'x64', 'x86') { Write-Host "  [FAIL] -DotNetArchitectures: '$a' is not x64 or x86." -ForegroundColor Red; exit 1 }
+}
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'   # makes Invoke-WebRequest downloads fast under PS 5.1
@@ -540,7 +659,7 @@ function Set-RunAsAccount {
         if (-not (Test-Path $appcmd)) { Add-Warn 'appcmd.exe missing - cannot set the app pool identity.'; return }
         $exists = (& $appcmd list apppool /name:"$AppPoolName" 2>$null)
         if (-not $exists) {
-            Write-Note "App pool '$AppPoolName' not found yet - run Deploy-TestController.ps1 first, then re-run with -ConfigureAppPoolIdentity."
+            Write-Note "App pool '$AppPoolName' not found yet - run Deploy-WebToIIS.ps1 first, then re-run with -ConfigureAppPoolIdentity."
             return
         }
         # $pwd is a PowerShell automatic variable (current location) - never assign to it.
@@ -813,7 +932,7 @@ function Write-Summary {
     Write-Host ''
     Write-Host ' NEXT:' -ForegroundColor Yellow
     Write-Host ("   1. Copy the published controller binaries to {0}" -f $InstallDir)
-    Write-Host '   2. Deploy the WebApi to IIS with Deploy-TestController.ps1 (uses appcmd).'
+    Write-Host '   2. Deploy the WebApi to IIS with Deploy-WebToIIS.ps1 (uses appcmd).'
     Write-Host ("   3. To run the WebApi app pool as {0}, re-run this with:" -f $LogonUser)
     Write-Host '        -ConfigureAppPoolIdentity -AppPoolName <yourPool>'
     Write-Host ("   4. Start the controller: {0}  (as Administrator or as {1})" -f $ControllerExePath, $LogonUser)

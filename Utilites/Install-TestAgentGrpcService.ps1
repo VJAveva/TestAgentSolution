@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
     Installs and configures the TestAgent gRPC Windows Service,
@@ -13,12 +12,15 @@
     securely (masked) instead of taking it on the command line.
 
 .EXAMPLE
-    .\Install-TestAgentGrpcService.ps1 -ServiceUser "Magellandev2000\wwuApps" -ServicePassword "P@ssw0rd"
-
-.EXAMPLE
-    # Omit the password to be prompted for it (kept out of history):
+    # Recommended: omit the password and type it at the masked prompt (kept out of history):
     .\Install-TestAgentGrpcService.ps1 -ServiceUser "Magellandev2000\wwuApps"
+
+.NOTES
+    The production fleet runs the agent as the scheduled task "TestAgentGrpc Interactive"
+    (see TestAgent_SetupScripts\Prepare-AgentNode-Full.ps1), not as a service. Undo with
+    Uninstall-TestAgentGrpcService.ps1.
 #>
+#Requires -Version 5.1
 
 param(
     [Parameter(Mandatory)]

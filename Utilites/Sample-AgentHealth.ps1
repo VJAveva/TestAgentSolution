@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Continuous lightweight sampler for the TestAgentGrpc process. Records key
   health metrics every N seconds to a CSV so that WHEN the zombie-listener
@@ -17,10 +17,17 @@
   Sampling interval (default 15s). Lower = finer resolution, more rows.
 
 .PARAMETER OutputCsv
-  Where to write samples.
+  Where to write samples. Default: C:\TestAgentService\Logs\health-samples.csv
+
+.PARAMETER Port
+  Agent gRPC port probed each sample. Default: 5200
 
 .EXAMPLE
   .\Sample-AgentHealth.ps1 -IntervalSeconds 15
+
+.EXAMPLE
+  powershell -NoProfile -ExecutionPolicy Bypass -File C:\TestAgentService\Sample-AgentHealth.ps1 -IntervalSeconds 30 -OutputCsv D:\health.csv
+  Same, as the command line of a scheduled task. Runs until stopped (Ctrl+C or end the task).
 #>
 
 param(

@@ -1,5 +1,10 @@
 # Patch-AgentFleet — Setup Guide
 
+> **Superseded for the real fleet (2026-11-08).** `Utilites/Patch-AgentFleet.ps1` stops and starts a Windows
+> service, but fleet nodes run the agent as the scheduled task "TestAgentGrpc Interactive". Use
+> `deploy/Invoke-FleetDeployment.ps1` (canary first; see the `patch-agent-fleet` skill). Full parameter list:
+> `Get-Help .\Utilites\Patch-AgentFleet.ps1 -Full`.
+
 This guide gets you from zero to running `Patch-AgentFleet.ps1` against
 your real agent fleet. **Estimated setup time: 15 minutes.**
 

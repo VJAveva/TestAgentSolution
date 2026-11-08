@@ -1,5 +1,15 @@
-# Start-TestAgent.ps1
-# Ensures TestAgentGrpc starts cleanly, handling zombie processes
+<#
+.SYNOPSIS
+    Starts TestAgentGrpc cleanly: kills a "zombie" process that runs but does not listen
+    on 5200, starts the exe from C:\TestAgentService and waits up to 15 s for the port.
+
+.DESCRIPTION
+    Takes no parameters (path, port and wait are fixed at the top of the script).
+    Exit codes: 0 = listening, 1 = did not start listening in time.
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File C:\TestAgentService\Start-TestAgent.ps1
+#>
 
 $exeName = "TestAgentGrpc"
 $exePath = "C:\TestAgentService\TestAgentGrpc.exe"

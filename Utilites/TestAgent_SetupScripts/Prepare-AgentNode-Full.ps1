@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
     TestAgent AGENT node - one-click, self-healing prep for a fresh / reverted VM
@@ -27,16 +26,124 @@
       [8] Credentials + scheduled task .......... "TestAgentGrpc Interactive" (AtLogon/Interactive/Highest) + optional auto-logon
       [9] Start the agent + verify port 5200
 
+    List parameters (-DotNetArchitectures, -ExtraTrustedHosts) accept an array OR one
+    comma-separated string, so they survive powershell -File and the elevated relaunch.
+
+.PARAMETER Controller
+    Controller machine name, e.g. AUT1 or JVGR22. Becomes http://<name>:<ControllerPort>.
+    If neither -Controller nor -ControllerAddress is given you are asked (the current value
+    in appsettings.json is offered as the default); with -NoPrompt the current value is kept.
+
+.PARAMETER ControllerAddress
+    Full controller URL, e.g. http://aut1:5100. Overrides -Controller.
+
+.PARAMETER ControllerPort
+    Controller gRPC port. Default: 5100
+
+.PARAMETER NoAgentRestart
+    Do not restart a running agent after the controller address changes.
+
+.PARAMETER AgentPort
+    Port this agent listens on for controller commands. Default: 5200
+
+.PARAMETER InstallDir
+    Folder holding TestAgentGrpc.exe and appsettings.json. Default: C:\TestAgentService
+
+.PARAMETER AgentExeName
+    Agent executable name. Default: TestAgentGrpc.exe
+
+.PARAMETER TaskName
+    Logon scheduled task that starts the agent. Default: TestAgentGrpc Interactive
+
+.PARAMETER LogonUser
+    Run-as account, e.g. magellandev2000\wwApps. Blank = taken from the credential prompt.
+
+.PARAMETER LogonCredential
+    Run-as credential for unattended use. Otherwise a masked Get-Credential prompt asks for it.
+
+.PARAMETER NoPrompt
+    Never prompt. Without -LogonCredential the scheduled task and auto-logon are skipped.
+
+.PARAMETER EnableAutoLogon
+    Also set auto-logon (uses Autologon.exe, which stores the password as an LSA secret).
+
+.PARAMETER AutologonPath
+    Path to Sysinternals Autologon.exe.
+
+.PARAMETER DotNetInstallDir
+    x64 .NET shared-framework root. Default: C:\Program Files\dotnet
+
+.PARAMETER DotNetArchitectures
+    Runtimes to install: x64, x86 or both (default both).
+
+.PARAMETER SkipNetCore
+    Do not also install the base .NET runtime.
+
+.PARAMETER ReleaseMetadataUrl
+    Override the .NET release feed URL.
+
+.PARAMETER OfflineInstallerDir
+    Folder of pre-staged .NET installers for machines without internet access.
+
+.PARAMETER ExtraTrustedHosts
+    More hosts to add to the trusted zone.
+
+.PARAMETER LogFile
+    Transcript file. Default: C:\TestAgentService\Logs\Prepare-AgentNode.log
+
+.PARAMETER SkipDotNet
+    Skip phase 2 (.NET 10).
+
+.PARAMETER SkipFirewall
+    Skip phase 3 (firewall).
+
+.PARAMETER SkipRunAsAccount
+    Skip phase 5 (run-as account rights).
+
+.PARAMETER SkipUacDisable
+    Keep UAC on (skip phase 6).
+
+.PARAMETER SkipSecurityPrompts
+    Keep the trusted-URL and open-file prompts (skip phase 7).
+
+.PARAMETER SkipStart
+    Do not start the agent at the end (phase 9).
+
+.PARAMETER Uninstall
+    Remove what this script added.
+
+.PARAMETER RebootWhenDone
+    Reboot automatically at the end if a reboot is needed.
+
+.PARAMETER NoElevate
+    Fail instead of relaunching elevated.
+
+.EXAMPLE
+    .\Prepare-AgentNode-Full.ps1 -Controller AUT1
+    Prepares this agent for controller AUT1 and asks for the run-as account.
+
+.EXAMPLE
+    .\Prepare-AgentNode-Full.ps1 -Controller JVGR22 -LogonCredential (Get-Credential magellandev2000\wwApps) -EnableAutoLogon -AutologonPath C:\Tools\Autologon.exe
+
+.EXAMPLE
+    .\Prepare-AgentNode-Full.ps1 -ControllerAddress http://aut1:5100 -NoPrompt -SkipDotNet
+    Re-point an already-prepared agent at another controller without any prompt.
+
 .NOTES
     LAB / TEST posture only (reverted automation VMs). Do NOT apply to a shared or
     production machine. Mirrors the floor in Prepare-ControllerNode.ps1 (.NET 10.0.12).
-    Version 1.0
+    Version 1.1 - controller is a parameter (-Controller / -ControllerAddress), never hard-coded;
+                  merges AgentSettings.ControllerAddress into appsettings.json with a backup.
+                  List parameters accept comma-separated strings (fixes the elevated relaunch).
 #>
+#Requires -Version 5.1
 
 param(
-    # --- Controller / ports ---
-    [string]   $ControllerAddress   = 'http://jvgr22:5100',       # agent -> controller (register / heartbeat / events)
+    # --- Controller / ports (NO default host: pass -Controller, or you are asked) ---
+    [string]   $Controller           = '',                        # controller machine name, e.g. AUT1 or JVGR22
+    [string]   $ControllerAddress    = '',                        # optional full URL; overrides -Controller (e.g. http://aut1:5100)
     [int]      $ControllerPort       = 5100,
+    [switch]   $NoAgentRestart,                                   # do not restart the agent after the controller changes
     [int]      $AgentPort            = 5200,                       # controller -> this agent (gRPC command dispatch)
 
     # --- Paths ---
@@ -53,8 +160,7 @@ param(
 
     # --- .NET 10 ---
     [string]   $DotNetInstallDir     = 'C:\Program Files\dotnet',
-    [ValidateSet('x64','x86')]
-    [string[]] $DotNetArchitectures  = @('x64','x86'),
+    [string[]] $DotNetArchitectures  = @('x64','x86'),            # x64 / x86 / both; validated below (ValidateSet rejects "x64,x86")
     [switch]   $SkipNetCore,
     [string]   $ReleaseMetadataUrl,
     [string]   $OfflineInstallerDir,
@@ -77,6 +183,14 @@ param(
     [switch]   $NoElevate
 )
 
+# powershell -File (the elevated relaunch) passes "a,b" as ONE string: split every list.
+function Split-List($v) { @($v | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim().Trim('"', "'") } | Where-Object { $_ }) }
+$ExtraTrustedHosts   = Split-List $ExtraTrustedHosts
+$DotNetArchitectures = Split-List $DotNetArchitectures
+foreach ($a in $DotNetArchitectures) {
+    if ($a -notin 'x64', 'x86') { Write-Host "  [FAIL] -DotNetArchitectures: '$a' is not x64 or x86." -ForegroundColor Red; exit 1 }
+}
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
 
@@ -88,10 +202,8 @@ $script:Warnings         = New-Object System.Collections.Generic.List[string]
 $script:RebootNeeded     = $false
 $script:Phase            = 0
 $script:TotalPhases      = 9
-
-# Derive controller host for firewall / zone rules.
-$script:ControllerHost = $ControllerAddress
-try { $script:ControllerHost = ([Uri]$ControllerAddress).Host } catch { }
+$script:ControllerChanged = $false
+$AppSettingsPath         = Join-Path $InstallDir 'appsettings.json'
 
 # ----------------------------------------------------------------------------
 #  Console helpers (ASCII-only)
@@ -134,7 +246,6 @@ if (-not (Test-Admin)) {
     Write-Host 'Not running as Administrator - relaunching elevated...' -ForegroundColor Yellow
     $fwd = @(
         '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File', "`"$PSCommandPath`"",
-        '-ControllerAddress', "`"$ControllerAddress`"",
         '-ControllerPort',     $ControllerPort,
         '-AgentPort',          $AgentPort,
         '-InstallDir',        "`"$InstallDir`"",
@@ -144,12 +255,14 @@ if (-not (Test-Admin)) {
         '-DotNetArchitectures', ($DotNetArchitectures -join ','),
         '-LogFile',           "`"$LogFile`""
     )
+    if ($Controller)              { $fwd += @('-Controller', "`"$Controller`"") }
+    if ($ControllerAddress)       { $fwd += @('-ControllerAddress', "`"$ControllerAddress`"") }
     if ($LogonUser)               { $fwd += @('-LogonUser', "`"$LogonUser`"") }
     if ($ExtraTrustedHosts.Count) { $fwd += @('-ExtraTrustedHosts', ($ExtraTrustedHosts -join ',')) }
     if ($ReleaseMetadataUrl)      { $fwd += @('-ReleaseMetadataUrl', "`"$ReleaseMetadataUrl`"") }
     if ($OfflineInstallerDir)     { $fwd += @('-OfflineInstallerDir', "`"$OfflineInstallerDir`"") }
     if ($AutologonPath)           { $fwd += @('-AutologonPath', "`"$AutologonPath`"") }
-    foreach ($sw in 'NoPrompt','EnableAutoLogon','SkipNetCore','SkipDotNet','SkipFirewall','SkipRunAsAccount','SkipUacDisable','SkipSecurityPrompts','SkipStart','Uninstall','RebootWhenDone') {
+    foreach ($sw in 'NoAgentRestart','NoPrompt','EnableAutoLogon','SkipNetCore','SkipDotNet','SkipFirewall','SkipRunAsAccount','SkipUacDisable','SkipSecurityPrompts','SkipStart','Uninstall','RebootWhenDone') {
         if ($PSBoundParameters[$sw]) { $fwd += "-$sw" }
     }
     Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $fwd
@@ -158,6 +271,45 @@ if (-not (Test-Admin)) {
 
 try { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null } catch { }
 try { Start-Transcript -Path $LogFile -Append -ErrorAction Stop | Out-Null } catch { }
+
+# ----------------------------------------------------------------------------
+#  Resolve the controller (no hard-coded host)
+#  Order: -ControllerAddress  >  -Controller  >  ask (current value offered as default)
+# ----------------------------------------------------------------------------
+function Get-CurrentControllerAddress {
+    if (-not (Test-Path -LiteralPath $AppSettingsPath)) { return $null }
+    try {
+        $c = Get-Content -Raw -LiteralPath $AppSettingsPath | ConvertFrom-Json
+        if ($c.AgentSettings -and $c.AgentSettings.ControllerAddress) { return [string]$c.AgentSettings.ControllerAddress }
+    } catch { }
+    return $null
+}
+
+if (-not $Uninstall) {
+    $current = Get-CurrentControllerAddress
+    if (-not $ControllerAddress) {
+        if (-not $Controller) {
+            if ($NoPrompt) {
+                if ($current) { $ControllerAddress = $current }
+                else { Write-Err 'No controller given. Re-run with -Controller <name> (e.g. -Controller AUT1).'; exit 2 }
+            } else {
+                $hint = if ($current) { " [Enter = keep $current]" } else { '' }
+                $answer = Read-Host "Controller machine name (e.g. AUT1 or JVGR22)$hint"
+                if ([string]::IsNullOrWhiteSpace($answer)) {
+                    if ($current) { $ControllerAddress = $current }
+                    else { Write-Err 'No controller given - nothing to connect the agent to.'; exit 2 }
+                } else { $Controller = $answer.Trim() }
+            }
+        }
+        if (-not $ControllerAddress) {
+            $h = $Controller -replace '^https?://','' -replace '/.*$',''
+            if ($h -notmatch ':\d+$') { $h = "${h}:$ControllerPort" }
+            $ControllerAddress = "http://$h"
+        }
+    }
+}
+$script:ControllerHost = $ControllerAddress
+try { $script:ControllerHost = ([Uri]$ControllerAddress).Host } catch { }
 
 # ----------------------------------------------------------------------------
 #  Uninstall: remove the firewall rules this script adds (files/runtimes left).
@@ -359,35 +511,62 @@ function Set-Networking {
 #  PHASE 4 - appsettings.json (controller address + agent port)
 # ============================================================================
 function Ensure-AgentConfig {
-    $appSettings = Join-Path $InstallDir 'appsettings.json'
-    $needWrite = $true
-    if (Test-Path $appSettings) {
-        try {
-            $cfg = Get-Content -Raw -LiteralPath $appSettings | ConvertFrom-Json
-            if ($cfg.ControllerAddress -and $cfg.AgentGrpcPort) { $needWrite = $false }
-        } catch {
-            Copy-Item -LiteralPath $appSettings -Destination "$appSettings.bak" -Force
-            Add-Warn "Existing appsettings.json was invalid - backed up to appsettings.json.bak and regenerating."
+    # Agent reads AgentSettings.ControllerAddress. MERGE into the existing file - never overwrite it.
+    $desired = $ControllerAddress
+    if (Test-Path -LiteralPath $AppSettingsPath) {
+        try { $cfg = Get-Content -Raw -LiteralPath $AppSettingsPath | ConvertFrom-Json }
+        catch { Add-Warn "appsettings.json is not valid JSON - left untouched. Fix it, then re-run."; return }
+
+        $changed = $false
+        if (-not $cfg.PSObject.Properties['AgentSettings']) { $cfg | Add-Member AgentSettings ([pscustomobject]@{}) -Force; $changed = $true }
+        $as = $cfg.AgentSettings
+        $old = if ($as.PSObject.Properties['ControllerAddress']) { [string]$as.ControllerAddress } else { '' }
+        if ($old -ne $desired) {
+            $as | Add-Member ControllerAddress $desired -Force; $changed = $true; $script:ControllerChanged = $true
+            Write-Note ("ControllerAddress: '{0}' -> '{1}'" -f $old, $desired)
         }
+        if (-not $as.PSObject.Properties['GrpcPort'])  { $as | Add-Member GrpcPort $AgentPort -Force; $changed = $true }
+        if (-not $as.PSObject.Properties['AgentName']) { $as | Add-Member AgentName $env:COMPUTERNAME -Force; $changed = $true }
+        # Keep the agent endpoint cleartext HTTP/2 (h2c) - the jvkbak SSL-handshake fix.
+        if (-not $cfg.PSObject.Properties['Kestrel'])                  { $cfg | Add-Member Kestrel ([pscustomobject]@{}) -Force; $changed = $true }
+        if (-not $cfg.Kestrel.PSObject.Properties['EndpointDefaults']) { $cfg.Kestrel | Add-Member EndpointDefaults ([pscustomobject]@{}) -Force; $changed = $true }
+        if ($cfg.Kestrel.EndpointDefaults.Protocols -ne 'Http2')       { $cfg.Kestrel.EndpointDefaults | Add-Member Protocols 'Http2' -Force; $changed = $true }
+
+        if (-not $changed) { Write-Ok "appsettings.json already points at $desired (kept)"; return }
+        $bak = "$AppSettingsPath.{0:yyyyMMdd_HHmmss}.bak" -f (Get-Date)
+        Copy-Item -LiteralPath $AppSettingsPath -Destination $bak -Force
+        [IO.File]::WriteAllText($AppSettingsPath, ($cfg | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
+        Write-Ok "Updated appsettings.json (controller $desired); backup: $bak"
+        return
     }
-    if ($needWrite) {
-        $json = @"
-{
-  "ControllerAddress": "$ControllerAddress",
-  "AgentGrpcPort": $AgentPort,
-  "Kestrel": {
-    "EndpointDefaults": { "Protocols": "Http2" }
-  },
-  "Logging": {
-    "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" }
-  }
+
+    $settings = [ordered]@{
+        Kestrel       = [ordered]@{ EndpointDefaults = [ordered]@{ Protocols = 'Http2' } }
+        AgentSettings = [ordered]@{
+            AgentName                        = $env:COMPUTERNAME
+            GrpcPort                         = $AgentPort
+            ControllerAddress                = $desired
+            AgentEndpoint                    = $null
+            RegistrationRetryCount           = 3
+            RegistrationRetryIntervalSeconds = 30
+            HeartbeatIntervalSeconds         = 15
+            MaxExecutionHistoryCount         = 200
+            MaxOutputLinesPerExecution       = 5000
+            CollectSystemMetrics             = $true
+        }
+        Logging       = [ordered]@{ LogLevel = [ordered]@{ 'Default' = 'Information'; 'Microsoft.AspNetCore' = 'Warning' } }
+    }
+    [IO.File]::WriteAllText($AppSettingsPath, ($settings | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
+    $script:ControllerChanged = $true
+    Write-Ok "Created appsettings.json (controller $desired)"
 }
-"@
-        [IO.File]::WriteAllText($appSettings, $json, (New-Object Text.UTF8Encoding($false)))
-        Write-Ok "Wrote appsettings.json (controller $ControllerAddress, port $AgentPort)"
-    } else {
-        Write-Note 'appsettings.json already consistent (kept)'
-    }
+
+function Test-ControllerReachable {
+    try {
+        $ok = Test-NetConnection -ComputerName $script:ControllerHost -Port $ControllerPort -InformationLevel Quiet -WarningAction SilentlyContinue
+        if ($ok) { Write-Ok "Controller $($script:ControllerHost):$ControllerPort is reachable." }
+        else     { Add-Warn "Controller $($script:ControllerHost):$ControllerPort is NOT reachable from this agent (name, DNS, firewall, or controller not running)." }
+    } catch { Add-Warn "Could not test the controller connection ($($_.Exception.Message))." }
 }
 
 # ============================================================================
@@ -507,9 +686,12 @@ function Ensure-Credential {
     # Returns a PSCredential or $null. Prompts (masked) unless -NoPrompt or one was passed.
     if ($LogonCredential) { return $LogonCredential }
     if ($NoPrompt)        { return $null }
-    $u = if ($LogonUser) { $LogonUser } else { $null }
-    try { return (Get-Credential -UserName $u -Message 'Run-as account for the TestAgentGrpc Interactive task (username + password)') }
-    catch { return $null }
+    $msg = 'Run-as account for the TestAgentGrpc Interactive task (DOMAIN\user + password)'
+    try {
+        $c = if ($LogonUser) { Get-Credential -UserName $LogonUser -Message $msg } else { Get-Credential -Message $msg }
+        if (-not $c) { Add-Warn 'Credential prompt was cancelled.' }
+        return $c
+    } catch { Add-Warn "Credential prompt failed ($($_.Exception.Message)). Re-run with -LogonCredential (Get-Credential)."; return $null }
 }
 
 function Register-AgentTask {
@@ -565,6 +747,15 @@ function Start-AndVerify {
         if (-not $running) {
             if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue; Write-Note "Started task '$TaskName'." }
             else { Start-Process -FilePath $AgentExePath -WorkingDirectory $InstallDir; Write-Note 'Launched agent exe directly.' }
+        } elseif ($script:ControllerChanged -and -not $NoAgentRestart) {
+            Write-Note 'Controller changed - restarting the agent so it registers with the new controller.'
+            if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue }
+            $running | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
+            if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue }
+            else { Start-Process -FilePath $AgentExePath -WorkingDirectory $InstallDir }
+        } elseif ($script:ControllerChanged) {
+            Add-Warn 'Controller changed but -NoAgentRestart was given - restart the agent yourself so it registers with the new controller.'
         } else { Write-Note 'Agent already running.' }
     } catch { Add-Warn "Could not start the agent ($($_.Exception.Message))." }
 
@@ -584,11 +775,12 @@ Write-Host ''
 Write-Host '  ============================================================' -ForegroundColor Green
 Write-Host '   TestAgent AGENT NODE PREP  (self-hosted gRPC, self-healing)' -ForegroundColor Green
 Write-Host ('   Host: {0}  Agent port: {1}  Controller: {2}  .NET {3}+' -f $env:COMPUTERNAME, $AgentPort, $ControllerAddress, $script:DotNetMinVersion) -ForegroundColor Green
+Write-Host '   Usage: .\Prepare-AgentNode-Full.ps1 -Controller AUT1   (asks for the run-as account)' -ForegroundColor Gray
 Write-Host '  ============================================================' -ForegroundColor Green
 
 # Ask for the run-as credential up front (masked) so phases 5 and 8 can use it.
 $cred = $null
-if (-not $SkipRunAsAccount -or -not $NoPrompt) { $cred = Ensure-Credential }
+if (-not $NoPrompt) { $cred = Ensure-Credential } elseif ($LogonCredential) { $cred = $LogonCredential }
 if ($cred -and -not $LogonUser) { $LogonUser = $cred.UserName }
 
 Write-Phase 'Folders'
@@ -600,8 +792,8 @@ if ($SkipDotNet) { Write-Note 'Skipped (-SkipDotNet)' } else { try { Ensure-DotN
 Write-Phase 'Firewall allow rules (agent in / controller out / exe / ping)'
 if ($SkipFirewall) { Write-Note 'Skipped (-SkipFirewall)' } else { try { Set-Networking } catch { Add-Warn "Networking phase: $($_.Exception.Message)" } }
 
-Write-Phase 'appsettings.json (controller address + agent port)'
-try { Ensure-AgentConfig } catch { Add-Warn "Config phase: $($_.Exception.Message)" }
+Write-Phase "Agent settings: connect to controller $ControllerAddress"
+try { Ensure-AgentConfig; Test-ControllerReachable } catch { Add-Warn "Config phase: $($_.Exception.Message)" }
 
 Write-Phase 'Run-as account (local admin + logon rights)'
 if ($SkipRunAsAccount) { Write-Note 'Skipped (-SkipRunAsAccount)' } else { try { Set-RunAsAccount } catch { Add-Warn "Run-as phase: $($_.Exception.Message)" } }
@@ -628,7 +820,8 @@ Write-Host ' AGENT PREP COMPLETE' -ForegroundColor Green
 Write-Host '============================================================' -ForegroundColor Green
 Write-Host (' Install dir : {0}' -f $InstallDir)
 Write-Host (' Agent port  : {0} (controller dispatches here)' -f $AgentPort)
-Write-Host (' Controller  : {0}' -f $ControllerAddress)
+$inFile = Get-CurrentControllerAddress
+Write-Host (' Controller  : {0}  (in appsettings.json: {1})' -f $ControllerAddress, $(if ($inFile) { $inFile } else { 'not set' }))
 Write-Host (' Run-as      : {0}' -f $(if ($LogonUser) { $LogonUser } else { '(none)' }))
 Write-Host (' Task        : {0}' -f $TaskName)
 Write-Host ''
@@ -640,7 +833,7 @@ Write-Host ''
 Write-Host ' NEXT:' -ForegroundColor Yellow
 Write-Host ("   1. Copy the published agent binaries to {0} (if not already there)." -f $InstallDir)
 Write-Host '   2. Reboot so UAC-off + the interactive logon task bring the agent up on the desktop.'
-Write-Host ("   3. On the controller, confirm {0} appears online in the Fleet panel." -f $env:COMPUTERNAME)
+Write-Host ("   3. On controller {0}, confirm {1} appears online in the Fleet panel." -f $script:ControllerHost, $env:COMPUTERNAME)
 Write-Host ''
 
 if ($script:RebootNeeded) {

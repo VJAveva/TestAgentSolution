@@ -1,4 +1,3 @@
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     TestAgent DISPLAY (Dashboard) Node - Setup & firewall.
@@ -9,14 +8,41 @@
     so only outbound firewall rules are required. Validates the .NET 10.0.12 Desktop
     runtime and tests reachability to any agents supplied via -AgentIPs.
 
+.PARAMETER InstallDir
+    Folder holding TestAgentDisplay. Default: C:\TestAgentService\Display
+
+.PARAMETER AgentPort
+    Agent gRPC port the dashboard connects out to. Default: 5200
+
+.PARAMETER AgentIPs
+    Agent addresses to test reachability to. Accepts an array or one comma-separated string
+    (needed when called with powershell -File, e.g. from Run-DisplaySetup.bat).
+
+.PARAMETER SkipFirewall
+    Leave the firewall rules untouched.
+
+.PARAMETER SkipDotNetCheck
+    Skip the .NET 10.0.12 Desktop runtime check.
+
+.PARAMETER LogFile
+    Transcript file. Blank (default) = no transcript.
+
+.PARAMETER Uninstall
+    Remove the firewall rules this script added.
+
 .EXAMPLE
     .\Setup-DisplayNode.ps1 -AgentIPs 10.48.190.60,10.48.190.254
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-DisplayNode.ps1 -AgentIPs "10.48.190.60,10.48.190.254" -WhatIf
 
 .NOTES
     Target framework : .NET 10 (LTS) - runtime 10.0.12 or newer required
     Compatibility    : Windows PowerShell 5.1 and PowerShell 7+ (ASCII-only)
     Version          : 3.1  |  October 2026
+    Exit codes       : 0 = OK, 2 = completed with warnings, 1 = failed
 #>
+#Requires -RunAsAdministrator
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -28,6 +54,9 @@ param(
     [string]   $LogFile    = "",
     [switch]   $Uninstall
 )
+
+# powershell -File passes "a,b" as ONE string; split it so each address is checked separately.
+$AgentIPs = @($AgentIPs | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().Trim('"', "'") } | Where-Object { $_ })
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest

@@ -1,25 +1,42 @@
-# ==============================================================
-#  Revert-AgentVM.ps1  (v1.0)
-#  Fleet-panel revert ADAPTER. The maintenance engine invokes the
-#  configured revert script as:  script.ps1 <VmName> <Snapshot>
-#  (positional). The real vCloud worker Revert-RcloudMachines.ps1
-#  instead needs -OrgName / -Machines / -User / -Password and has
-#  no snapshot parameter (vCloud VMs keep a single snapshot). This
-#  adapter maps the fleet contract onto that worker and resolves
-#  credentials from environment variables so no secret is ever
-#  stored in appsettings or passed on a command line by the app.
-#
-#  Credentials (set once on the controller, per user or machine):
-#    setx RCLOUD_USER     <vcloud-user>
-#    setx RCLOUD_PASSWORD <vcloud-password>
-#    setx RCLOUD_ORG      <org>          # optional; default below
-#
-#  Usage (as the engine calls it):
-#    .\Revert-AgentVM.ps1 JVGR2 "Clean-SP2023R2SP1P03"
-#
-#  Exit codes: 0 = ready, 1 = revert failed, 2 = credentials missing,
-#              5 = worker script not found (matches the .bat launcher)
-# ==============================================================
+<#
+.SYNOPSIS
+    Revert-AgentVM.ps1 (v1.0) - Fleet-panel revert ADAPTER.
+
+.DESCRIPTION
+    The maintenance engine invokes the configured revert script as:
+    script.ps1 <VmName> <Snapshot>  (positional). The real vCloud worker
+    Revert-RcloudMachines.ps1 instead needs -OrgName / -Machines / -User / -Password and
+    has no snapshot parameter (vCloud VMs keep a single snapshot). This adapter maps the
+    fleet contract onto that worker and resolves credentials from environment variables
+    so no secret is ever stored in appsettings or passed on a command line by the app.
+
+    Credentials (set once on the controller, per user or machine):
+      setx RCLOUD_USER     <vcloud-user>
+      setx RCLOUD_PASSWORD <vcloud-password>
+      setx RCLOUD_ORG      <org>          # optional; default AppServerPool2
+
+    Exit codes: 0 = ready, 1 = revert failed, 2 = credentials missing,
+                5 = worker script not found (matches the .bat launcher)
+
+.PARAMETER VmName
+    VM to revert (position 0).
+
+.PARAMETER Snapshot
+    Snapshot label (position 1). Informational only: vCloud keeps one snapshot per VM.
+
+.PARAMETER OrgName
+    vCloud organisation. Default: $env:RCLOUD_ORG, else AppServerPool2.
+
+.PARAMETER User
+    vCloud user. Default: $env:RCLOUD_USER.
+
+.PARAMETER Password
+    vCloud password. Default: $env:RCLOUD_PASSWORD.
+
+.EXAMPLE
+    .\Revert-AgentVM.ps1 JVGR2 "Clean-SP2023R2SP1P03"
+    As the engine calls it.
+#>
 param(
     [Parameter(Mandatory, Position = 0)][string]$VmName,
     [Parameter(Position = 1)][string]$Snapshot = "",

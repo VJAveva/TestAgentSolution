@@ -18,7 +18,7 @@ set "AGENT_INSTALL_DIR=C:\TestAgentSolution\Agent"
 REM =============================================================
 
 set "NET_PS=%~dp0Test-TestAgentNetwork.ps1"
-set "H2_PS=%~dp0Diagnose-Http2Protocol.ps1"
+set "H2_PS=%~dp0..\Diagnose-Http2Protocol.ps1"
 set "STEP1_RC=0"
 set "STEP2_RC=0"
 

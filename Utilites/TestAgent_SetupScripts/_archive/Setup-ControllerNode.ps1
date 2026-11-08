@@ -1,14 +1,44 @@
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
+    ARCHIVED - superseded by ..\Prepare-ControllerNode.ps1.
     TestAgent CONTROLLER Node - Setup, firewall and configuration.
 
 .DESCRIPTION
     Run on the CONTROLLER machine. Configures Windows Firewall, validates the
-    .NET 10 runtime (ASP.NET Core for the inbound gRPC server, Windows Desktop
+    runtime (.NET 10 ASP.NET Core for the inbound gRPC server, Windows Desktop
     for the WPF UI), prepares directories, and generates appsettings.json plus a
     starter WatchList.xml. Per-agent outbound rules are added when -AgentIPs is
     supplied.
+
+.PARAMETER ControllerPort
+    Inbound gRPC port. Default: 5100
+
+.PARAMETER InstallDir
+    Controller folder. Default: C:\TestAgentSolution\Controller (the live controller uses C:\TestControllerService).
+
+.PARAMETER VocabularyDir
+    WatchList.xml folder. Default: C:\TestControllerService
+
+.PARAMETER AgentIPs
+    Agents to add outbound rules for.
+
+.PARAMETER AgentPort
+    Agent gRPC port. Default: 5200
+
+.PARAMETER SkipFirewall
+    Leave the firewall untouched.
+
+.PARAMETER SkipDotNetCheck
+    Skip the .NET 10 runtime check.
+
+.PARAMETER LogFile
+    Transcript file. Blank (default) = none.
+
+.PARAMETER Uninstall
+    Remove the firewall rules this script added.
+
+.EXAMPLE
+    .\Setup-ControllerNode.ps1 -InstallDir C:\TestControllerService -AgentIPs 10.228.117.101,10.228.117.102
 
 .NOTES
     Target framework : .NET 10 (LTS)
@@ -21,6 +51,7 @@
         AppContext.SetSwitch(
             "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 #>
+#Requires -RunAsAdministrator
 
 [CmdletBinding()]
 param(

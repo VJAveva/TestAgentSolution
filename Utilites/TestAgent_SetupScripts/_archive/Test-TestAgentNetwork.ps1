@@ -1,11 +1,27 @@
 <#
 .SYNOPSIS
+    ARCHIVED - superseded by ..\Test-NodeConnectivity.ps1.
     TestAgent Network Diagnostic - test connectivity between all nodes.
 
 .DESCRIPTION
     Run on ANY machine to test reachability to the Controller and Agent nodes.
     Does NOT require Administrator. Returns exit code 0 when every tested
     endpoint passes, 1 when one or more fail, so a batch wrapper can branch on it.
+
+.PARAMETER ControllerIP
+    Controller address to test.
+
+.PARAMETER ControllerPort
+    Controller gRPC port. Default: 5100
+
+.PARAMETER AgentIPs
+    Agent addresses to test.
+
+.PARAMETER AgentPort
+    Agent gRPC port. Default: 5200
+
+.PARAMETER ExportReport
+    Also write the results to a report file.
 
 .EXAMPLE
     .\Test-TestAgentNetwork.ps1 -ControllerIP 10.108.46.171 -AgentIPs 10.228.117.101,10.228.117.102 -ExportReport

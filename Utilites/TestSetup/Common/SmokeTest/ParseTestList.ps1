@@ -23,6 +23,13 @@
 
 .PARAMETER OutPath
     Output file path for the flat list
+
+.EXAMPLE
+    .\ParseTestList.ps1 -JsonPath C:\TestSetup\Common\SmokeTest\TestCaseList.json -SetName Set1 -OutPath C:\Temp\parsed.txt
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File ParseTestList.ps1 -JsonPath TestCaseList.json -SetName All -OutPath parsed.txt
+    As Run-WASTests.bat calls it.
 #>
 param(
     [Parameter(Mandatory=$true)] [string]$JsonPath,

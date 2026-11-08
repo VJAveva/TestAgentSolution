@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
     Cleanly removes the TestAgent gRPC Windows Service.
@@ -11,8 +10,12 @@
     4. Deletes the service.
     5. Verifies the service is gone and reports the result.
 
-    Safe to re-run.
+    Safe to re-run. Takes no parameters; removes the service named 'TestAgentGrpc'.
+
+.EXAMPLE
+    .\Uninstall-TestAgentGrpcService.ps1
 #>
+#Requires -Version 5.1
 
 # ----------------------- Configuration ------------------------------
 $ServiceName = 'TestAgentGrpc'

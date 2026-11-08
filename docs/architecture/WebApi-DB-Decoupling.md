@@ -1,7 +1,12 @@
 # WebApi Database Decoupling — Architecture Report
 
 > **Date:** 2026-06-14  
-> **Status:** Investigation complete — no code changes made
+> **Status:** Investigation complete — no code changes made  
+> **Update 2026-11-08:** Step 1 was built as written (`AddRbacFeature(..., isPrimaryHost: false)` with
+> `ThrowingDbContextFactory`, in `TestController.Api/RbacFeatureExtensions.cs`). Steps 3-7 were built differently:
+> there are no `*ProxyEndpoints.cs` files. The WebApi instead drops the DB-backed controllers with
+> `ProxiedControllerExclusionProvider` and forwards to the controller through `ControllerProxyService`,
+> `ControllerExecutionForwardingMiddleware` and `ImpactForwardingMiddleware` (all in `TestController.WebApi/Services/`).
 
 ---
 

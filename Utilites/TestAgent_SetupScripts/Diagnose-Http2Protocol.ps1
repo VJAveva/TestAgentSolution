@@ -14,8 +14,22 @@
       3  HTTP_1_1_REQUIRED confirmed (server speaks HTTP/1.1 only)
       4  Neither HTTP/1.1 nor HTTP/2 responded
 
+.PARAMETER AgentHost
+    Agent host name or address, as the controller dials it. Default: localhost
+
+.PARAMETER AgentPort
+    Agent gRPC port. Default: 5200
+
+.PARAMETER AgentInstallDir
+    Agent folder whose appsettings*.json is inspected for the Kestrel protocol setting
+    (only when -AgentHost is this machine). Default: C:\TestAgentService
+
 .EXAMPLE
     .\Diagnose-Http2Protocol.ps1 -AgentHost JVGR1
+
+.EXAMPLE
+    .\Diagnose-Http2Protocol.ps1
+    Run ON the agent: checks localhost:5200 and C:\TestAgentService\appsettings.json.
 
 .NOTES
     Compatibility : Windows PowerShell 5.1 and PowerShell 7+ (ASCII-only)

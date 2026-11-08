@@ -14,7 +14,7 @@ On the controller machine (elevated PowerShell):
 On each agent machine:
 
 ```powershell
-.\Utilites\TestAgent_SetupScripts\Prepare-AgentNode-Full.ps1 -ControllerAddress http://<controller>:5100 -LogonUser <domain\account>
+.\Utilites\TestAgent_SetupScripts\Prepare-AgentNode-Full.ps1 -Controller <controller> -LogonUser <domain\account>
 ```
 
 Use `-ControllerAddress` in full: `-Controller` on its own is ambiguous (it also matches `-ControllerPort`) and

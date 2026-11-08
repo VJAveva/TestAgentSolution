@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Mines existing logs on a TestAgent machine to find evidence of WHY the gRPC
   listener went Unavailable. Run AFTER an incident, pointing at the time window
@@ -11,8 +11,17 @@
 .PARAMETER WindowMinutes
   How many minutes BEFORE the incident to examine (default 15).
 
+.PARAMETER AgentLogDir
+  Folder with the agent's *.log files. Default: C:\TestAgentService\Logs
+
+.PARAMETER Port
+  Agent gRPC port to inspect. Default: 5200
+
 .EXAMPLE
   .\Diagnose-ZombieListener.ps1 -IncidentTime "2026-06-15 21:56:00" -WindowMinutes 15
+
+.EXAMPLE
+  .\Diagnose-ZombieListener.ps1 -IncidentTime "2026-06-15 21:56:00" -AgentLogDir C:\TestControllerService\Logs
 #>
 
 param(

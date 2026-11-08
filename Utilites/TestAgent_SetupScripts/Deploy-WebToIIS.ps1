@@ -29,19 +29,33 @@
     wwwroot\, appsettings.json). IIS is pointed at THIS folder.
     Default: C:\Deployment\TestController.WebApi
 
-.PARAMETER SiteName              Default: TestControllerWeb
-.PARAMETER SitePort              Default: 8080
-.PARAMETER ControllerUrl         Default: http://localhost:5200
-.PARAMETER ControllerUrlConfigKey  Default: Controller:BaseUrl  (confirm the WebAPI reads this key)
-.PARAMETER HealthPath            Default: /api/health
-.PARAMETER EnsureWebSockets      Switch. Install the IIS WebSocket feature (slow). Off by default.
-.PARAMETER RequireBackend        Switch. Fail if the WPF Controller is not reachable. Off by default (warns).
+.PARAMETER SiteName
+    IIS site AND app pool name. Default: TestControllerWeb
+
+.PARAMETER SitePort
+    HTTP binding port. Default: 8080 (JVGR22 production uses 81).
+
+.PARAMETER ControllerUrl
+    WPF controller embedded API the WebApi proxies to. Default: http://localhost:5200
+
+.PARAMETER ControllerUrlConfigKey
+    appsettings.Production.json key that receives -ControllerUrl. Default: ControllerProxyUrl
+    (the top-level key ControllerProxyService reads). Use ":" for nested keys.
+
+.PARAMETER HealthPath
+    Path probed after deploy. Default: /api/health
+
+.PARAMETER EnsureWebSockets
+    Install the IIS WebSocket feature (slow). Off by default.
+
+.PARAMETER RequireBackend
+    Fail if the WPF controller is not reachable. Off by default (warns).
 
 .EXAMPLE
     .\Deploy-WebToIIS.ps1 -SitePort 8080
 
 .EXAMPLE
-    .\Deploy-WebToIIS.ps1 -AppPath C:\Deployment\TestController.WebApi -SitePort 8080 -ControllerUrl http://localhost:5200
+    .\Deploy-WebToIIS.ps1 -AppPath C:\inetpub\TestControllerWeb -SitePort 81 -ControllerUrl http://localhost:5200
 
 .EXAMPLE
     .\Deploy-WebToIIS.ps1 -WhatIf
@@ -54,7 +68,7 @@ param(
     [string]$SiteName = "TestControllerWeb",
     [int]$SitePort = 8080,
     [string]$ControllerUrl = "http://localhost:5200",
-    [string]$ControllerUrlConfigKey = "Controller:BaseUrl",
+    [string]$ControllerUrlConfigKey = "ControllerProxyUrl",
     [string]$HealthPath = "/api/health",
     [switch]$EnsureWebSockets,
     [switch]$RequireBackend
@@ -149,7 +163,9 @@ Log "Found published app in $AppPath" "OK"
 Log "=== Step 2: Write production config ===" "STEP"
 $cfg = Write-ProductionConfig $AppPath $ControllerUrlConfigKey $ControllerUrl
 Log "Set '$ControllerUrlConfigKey' = '$ControllerUrl' in $(Split-Path $cfg -Leaf)" "OK"
-Log "CONFIRM '$ControllerUrlConfigKey' is the key TestController.WebApi reads for the Controller address." "WARN"
+if ($ControllerUrlConfigKey -ne 'ControllerProxyUrl') {
+    Log "TestController.WebApi reads 'ControllerProxyUrl'; '$ControllerUrlConfigKey' will be ignored by the app." "WARN"
+}
 
 # --- Step 3: web.config + logs ---
 Log "=== Step 3: Ensure web.config + logs ===" "STEP"

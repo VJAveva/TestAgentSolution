@@ -1,11 +1,19 @@
 @echo off
 setlocal EnableExtensions
 REM ==============================================================
-REM  RevertRcloudMachine.bat  (launcher, v1.0)
+REM  RevertRcloudMachine.bat  (launcher, v1.1)
 REM  Put this in C:\TestSetup\RevertAgents\ next to the .ps1 and
-REM  point the Controller pipeline at THIS file instead of the ps1:
+REM  point the Controller pipeline at THIS file instead of the ps1.
 REM
-REM    cmd /c C:\TestSetup\RevertAgents\RevertRcloudMachine.bat AppServerPool2 warmhist teamautotest1 popcorn
+REM  Usage:   RevertRcloudMachine.bat OrgName Machines [User Password]
+REM    OrgName   vCloud organisation, e.g. AppServerPool2
+REM    Machines  one VM, or several as "VM1,VM2" (quoted)
+REM    User / Password  optional; omit them and set RCLOUD_USER / RCLOUD_PASSWORD
+REM                     on the controller instead (never put the password in a pipeline)
+REM
+REM  Examples:
+REM    cmd /c C:\TestSetup\RevertAgents\RevertRcloudMachine.bat AppServerPool2 warmhist
+REM    cmd /c C:\TestSetup\RevertAgents\RevertRcloudMachine.bat AppServerPool2 "warmhist,warmgr"
 REM
 REM  Why: calling "powershell script.ps1 args" without -File makes
 REM  PowerShell parse the path as a COMMAND. If the file is missing
@@ -19,6 +27,12 @@ REM ==============================================================
 
 set "HERE=%~dp0"
 set "PS1="
+
+if "%~2"=="" (
+    echo [FAIL] Usage: RevertRcloudMachine.bat OrgName Machines [User Password]
+    echo        Example: RevertRcloudMachine.bat AppServerPool2 "warmhist,warmgr"
+    exit /b 1
+)
 
 REM Accept either the old or the new script name (first match wins)
 for %%N in ("Revert-RcloudMachines.ps1" "RevertRcloudMachine.ps1" "RevertRcloudMachines.ps1") do (

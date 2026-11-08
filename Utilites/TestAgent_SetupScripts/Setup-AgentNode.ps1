@@ -1,4 +1,3 @@
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     TestAgent AGENT Node - setup, firewall, WinRM, HTTP/2 endpoint and launch registration.
@@ -17,23 +16,68 @@
     "TestAgentGrpc Interactive", not as a Windows service. -InstallAsService is retained
     for standalone boxes only. Use Configure-AgentTaskRecovery.ps1 for the task-based fleet.
 
+.PARAMETER AgentPort
+    Port the agent listens on for controller commands (gRPC). Default: 5200
+
+.PARAMETER AgentName
+    Name the agent registers with. Default: this computer's name.
+
+.PARAMETER ControllerAddress
+    Controller URL the agent registers with, e.g. http://JVGR22:5100. If blank, a
+    placeholder is written and you must edit AgentSettings.ControllerAddress yourself.
+
+.PARAMETER ControllerPort
+    Controller gRPC port, used for the outbound firewall rule and the placeholder. Default: 5100
+
+.PARAMETER InstallDir
+    Folder holding TestAgentGrpc.exe and appsettings.json. Default: C:\TestAgentService
+
+.PARAMETER HeartbeatSeconds
+    AgentSettings.HeartbeatIntervalSeconds written to appsettings.json. Default: 15
+
+.PARAMETER InstallAsService
+    Also install TestAgentGrpc as a Windows service (standalone boxes only; copy the binaries first).
+
+.PARAMETER ServiceUser
+    Account for the service: LocalSystem (default) or DOMAIN\user.
+
+.PARAMETER ServiceCredential
+    Credential for a non-LocalSystem -ServiceUser. Prompted (masked) if omitted.
+
+.PARAMETER SkipFirewall
+    Leave the firewall rules untouched.
+
+.PARAMETER SkipWinRM
+    Leave the WinRM service and its firewall rules untouched.
+
+.PARAMETER SkipDotNetCheck
+    Skip the .NET 10.0.12 runtime check.
+
 .PARAMETER VerifyEndpoint
     After setup, probe the local agent port with curl to confirm the endpoint
     actually negotiates HTTP/2 (catches the HTTP_1_1_REQUIRED / 0xd condition).
 
-.PARAMETER SkipWinRM
-    Leave the WinRM service and its firewall rules untouched.
+.PARAMETER LogFile
+    Transcript file. Blank (default) = no transcript.
+
+.PARAMETER Uninstall
+    Remove what this script added (firewall rules, URL reservation, service).
 
 .EXAMPLE
     .\Setup-AgentNode.ps1 -ControllerAddress http://JVGR22:5100 -WhatIf
 .EXAMPLE
     .\Setup-AgentNode.ps1 -ControllerAddress http://JVGR22:5100 -VerifyEndpoint
+.EXAMPLE
+    # From cmd (what Run-AgentSetup.bat does):
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-AgentNode.ps1 -ControllerAddress http://JVGR22:5100 -LogFile .\Setup-AgentNode.log
 
 .NOTES
     Target framework : .NET 10 (LTS) - runtime 10.0.12 or newer required
     Compatibility    : Windows PowerShell 5.1 and PowerShell 7+ (ASCII-only)
     Version          : 4.0  |  October 2026
+    Exit codes       : 0 = OK, 2 = completed with warnings, 1 = failed
 #>
+#Requires -RunAsAdministrator
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(

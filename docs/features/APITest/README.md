@@ -27,7 +27,7 @@ $env:API_TEST_MODE = 'Live'; $env:API_TEST_BASEURL = 'https://localhost:7240'; d
 - This project is itself the test suite.
 
 ## Known gaps
-- Live mode is wired (`TestConfig`, `ApiTestFixture`), but it differs from the spec: the URL variable is `API_TEST_BASEURL` (spec says `API_TEST_URL`), and fake-dependent tests `return` early in Live mode, so they report as passed rather than skipped.
+- Live mode is wired (`TestConfig`, `ApiTestFixture`; URL from `API_TEST_BASEURL`), but fake-dependent tests `return` early in Live mode, so they report as passed rather than skipped.
 - No CI pipeline runs Live mode.
 
 ## Links

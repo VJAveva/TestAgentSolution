@@ -1,32 +1,69 @@
-# ==============================================================
-#  Revert-RcloudMachines.ps1  (v2.0)
-#  Reverts ONE or MANY vCloud (Rcloud) machines SIMULTANEOUSLY
-#  over a SINGLE PowerCLI session. PS 5.1 compatible. ASCII-only.
-#
-#  Design: phased fan-out. Stop is issued to ALL machines (async),
-#  then reverts, then power-on, each followed by ONE polling loop
-#  that watches every machine together - 10 VMs cost about the
-#  same wall time as 1. Importing PowerCLI and connecting happens
-#  exactly once (this was the slowest part of the old per-machine
-#  script).
-#
-#  Auto-heal:
-#    - PowerCLI missing        -> auto-install (NuGet/PSGallery),
-#                                 PS7 edition fallback, PSSnapin fallback
-#    - Connect fails           -> 3 attempts, 10s apart
-#    - Session drops mid-run   -> automatic reconnect on next query
-#    - Stop/revert/power-on    -> per-machine retries; one failure
-#                                 never aborts the other machines
-#    - Ping lost during boot   -> consecutive-ping counter resets,
-#                                 keeps waiting until deadline
-#
-#  Usage (single):
-#    .\Revert-RcloudMachines.ps1 -OrgName MyOrg -Machines AGENT01 -User u -Password p
-#  Usage (multiple):
-#    .\Revert-RcloudMachines.ps1 -OrgName MyOrg -Machines AGENT01,AGENT02,AGENT03 -User u -Password p
-#
-#  Exit codes: 0 = all ready, 1 = one or more failed
-# ==============================================================
+<#
+.SYNOPSIS
+    Revert-RcloudMachines.ps1 (v2.1) - reverts ONE or MANY vCloud (Rcloud) machines
+    SIMULTANEOUSLY over a SINGLE PowerCLI session. PS 5.1 compatible. ASCII-only.
+
+.DESCRIPTION
+    Design: phased fan-out. Stop is issued to ALL machines (async), then reverts, then
+    power-on, each followed by ONE polling loop that watches every machine together -
+    10 VMs cost about the same wall time as 1. Importing PowerCLI and connecting happens
+    exactly once (this was the slowest part of the old per-machine script).
+
+    Auto-heal:
+      - PowerCLI missing        -> auto-install (NuGet/PSGallery),
+                                   PS7 edition fallback, PSSnapin fallback
+      - Connect fails           -> 3 attempts, 10s apart
+      - Session drops mid-run   -> automatic reconnect on next query
+      - Stop/revert/power-on    -> per-machine retries; one failure
+                                   never aborts the other machines
+      - Ping lost during boot   -> consecutive-ping counter resets,
+                                   keeps waiting until deadline
+
+    Exit codes: 0 = all ready, 1 = one or more failed
+
+.PARAMETER OrgName
+    vCloud organisation (position 0), e.g. AppServerPool2.
+
+.PARAMETER Machines
+    VM names (position 1). An array or one comma-separated string ("A,B"), which is how
+    RevertRcloudMachine.bat passes several machines.
+
+.PARAMETER User
+    vCloud user (position 2). Default: $env:RCLOUD_USER. Prefer the environment variable:
+    a command-line argument is visible in the process list.
+
+.PARAMETER Password
+    vCloud password (position 3). Default: $env:RCLOUD_PASSWORD. Same advice as -User.
+
+.PARAMETER vCloudURL
+    vCloud server. Default: rcloud.dev.wonderware.com
+
+.PARAMETER ReadyWaitSeconds
+    Settle time after ping answers. Default: 120
+
+.PARAMETER StopTimeoutMinutes
+    Default: 5
+
+.PARAMETER RevertTimeoutMinutes
+    Default: 10
+
+.PARAMETER ReadyTimeoutMinutes
+    Default: 15
+
+.PARAMETER LogDir
+    Log folder. Default: C:\TestSetup\Logs
+
+.EXAMPLE
+    # Credentials from RCLOUD_USER / RCLOUD_PASSWORD (recommended):
+    .\Revert-RcloudMachines.ps1 -OrgName AppServerPool2 -Machines AGENT01
+
+.EXAMPLE
+    .\Revert-RcloudMachines.ps1 -OrgName AppServerPool2 -Machines AGENT01,AGENT02,AGENT03
+
+.EXAMPLE
+    cmd /c RevertRcloudMachine.bat AppServerPool2 "AGENT01,AGENT02"
+    Through the launcher, with credentials from the environment.
+#>
 param(
     [Parameter(Mandatory, Position = 0)][string]$OrgName,
     [Parameter(Mandatory, Position = 1)][string[]]$Machines,
@@ -41,6 +78,9 @@ param(
     [int]$ReadyTimeoutMinutes = 15,
     [string]$LogDir = "C:\TestSetup\Logs"
 )
+
+# powershell -File (RevertRcloudMachine.bat) passes "A,B" as ONE string.
+$Machines = @($Machines | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $ErrorActionPreference = "Continue"
 $startTime = Get-Date

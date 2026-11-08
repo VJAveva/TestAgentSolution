@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
     Prepares an agent node to run UI / Coded UI tests by running TestAgentGrpc
@@ -31,9 +30,18 @@
     Optional path to Sysinternals Autologon.exe.
     Download: https://learn.microsoft.com/sysinternals/downloads/autologon
 
+.PARAMETER TaskName
+    Name of the logon-triggered scheduled task. Default: TestAgentGrpc Interactive
+    (the name the controller's fleet tooling expects).
+
 .EXAMPLE
-    .\Setup-InteractiveAgent.ps1 -LogonUser "Magellandev2000\wwApps" -LogonPassword "P@ssw0rd"
+    # Recommended: omit -LogonPassword and type it at the masked prompt (kept out of history):
+    .\Setup-InteractiveAgent.ps1 -LogonUser "Magellandev2000\wwApps"
+
+.EXAMPLE
+    .\Setup-InteractiveAgent.ps1 -LogonUser "Magellandev2000\wwApps" -AutologonPath C:\Tools\Autologon.exe
 #>
+#Requires -Version 5.1
 
 param(
     [Parameter(Mandatory)]

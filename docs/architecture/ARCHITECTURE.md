@@ -275,7 +275,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | **Services** | `ActionPipelineExecutor.cs` | Full `IActionPipelineExecutor` with WPF-aware logging |
 | **Services** | `VocabularyMonitor.cs` | `FileSystemWatcher`-based vocabulary reload |
 | **Services** | `FileWatcherManager.cs` | Per-WatchItem file trigger watchers |
-| **ViewModel** | `MainViewModel.cs` + 10 partials | MVVM ViewModel: `.Execution.cs`, `.Agents.cs`, `.Log.cs`, `.WatchListCrud.cs`, `.TemplateCrud.cs`, `.File.cs`, `.Results.cs`, `.Helpers.cs`, `.InitParameters.cs`, `.XmlEditor.cs`, `.ImportExport.cs`, `.BuildBrowse.cs` |
+| **ViewModel** | `MainViewModel.cs` + 19 partials | MVVM ViewModel: `.Execution.cs`, `.Agents.cs`, `.Log.cs`, `.WatchListCrud.cs`, `.TemplateCrud.cs`, `.File.cs`, `.Results.cs`, `.Helpers.cs`, `.InitParameters.cs`, `.XmlEditor.cs`, `.ImportExport.cs`, `.BuildBrowse.cs`, `.GlobalVariables.cs`, `.Preflight.cs`, `.Regression.cs`, `.ReportCard.cs`, `.Security.cs`, `.SmartEdit.cs`, `.WatchBuilder.cs` |
 | **ViewModel** | `TreeNodeViewModel.cs` | Recursive tree node with execution status propagation |
 | **ViewModel** | `BuildResultsViewModel.cs` | TRX results dashboard VM |
 | **ViewModel** | `AgentLockDisplayItem.cs` | Lock display model for WPF admin panel |

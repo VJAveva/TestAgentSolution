@@ -170,7 +170,7 @@ public static class TestConfig
             : TestMode.InMemory;
 
     public static string LiveBaseUrl =>
-        Environment.GetEnvironmentVariable("API_TEST_URL")
+        Environment.GetEnvironmentVariable("API_TEST_BASEURL")
         // ===== PLUG IN: your real controller URL =====
         ?? "https://rcloud.dev.wonderware.com";
 
@@ -826,7 +826,7 @@ dotnet test --filter "FullyQualifiedName~Trigger_Execute_Results_HappyPath"
 ### Run against the live fleet
 
 ```bash
-API_TEST_MODE=Live API_TEST_URL=https://rcloud.dev.wonderware.com dotnet test
+API_TEST_MODE=Live API_TEST_BASEURL=https://rcloud.dev.wonderware.com dotnet test
 ```
 
 ---
@@ -855,7 +855,7 @@ API_TEST_MODE=Live API_TEST_URL=https://rcloud.dev.wonderware.com dotnet test
     projects: '**/TestController.ApiTests.csproj'
   env:
     API_TEST_MODE: Live
-    API_TEST_URL: https://rcloud.dev.wonderware.com
+    API_TEST_BASEURL: https://rcloud.dev.wonderware.com
     API_TEST_TIMEOUT_SECONDS: 300
 ```
 

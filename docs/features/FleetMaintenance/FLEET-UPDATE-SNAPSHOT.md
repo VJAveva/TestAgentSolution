@@ -72,6 +72,14 @@ unreachable. **Most of the work below is wiring and gating, not new capability.*
 | 8 | Return to rotation | **Partial** | Works for reboot/revert; the UI install path never left rotation, so there is nothing to return |
 | 9 | Report in Fleet UI | **Partial** | Per-node transient action state only. No operation row, so nothing in history and nothing after a restart |
 
+> **Status update 2026-11-08 (this table is the 2026-10-02 audit and is kept as written).** The first slice in
+> section 9 has since been built. The UI install now calls `IFleetMaintenanceService.StartInstallUpdatesAsync`
+> ([FleetUpdatesVM.cs](../../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs)), which runs
+> `MachineUpdateOperation`: Precheck -> Quarantine (`Updating`) -> Search -> Install -> reboot if required -> Verify,
+> quarantining the node on any failure, capped by `MaxConcurrentUpdates` (default 1). So steps 1, 4, 6, 8 and 9 are
+> now **Works** on the UI path. Step 7 (snapshot) is still **Missing**: `IGoldenImageRefreshOperation` and
+> `BaselineReplacer` remain unregistered and there is no refresh trigger.
+
 ---
 
 ## 4. Integrity risks

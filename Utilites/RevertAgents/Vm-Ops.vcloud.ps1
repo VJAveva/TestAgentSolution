@@ -1,37 +1,82 @@
-# ==============================================================
-#  Vm-Ops.vcloud.ps1  (v1.0)
-#  Verb-dispatched vCloud (Rcloud) VM operations for the fleet
-#  maintenance engine. PS 5.1 compatible. ASCII-only.
-#
-#  Contract (called by ScriptBackedVirtualizationProvider):
-#    .\Vm-Ops.vcloud.ps1 -Verb <verb> -Vm "a,b,c" [options]
-#
-#  Verbs:
-#    State     -Vm a,b,c
-#    PowerOn   -Vm a,b,c
-#    PowerOff  -Vm a,b,c [-Graceful true|false]
-#    List      -Vm a
-#    Create    -Vm a,b,c -Snapshot <name> [-Description <text>]
-#    Revert    -Vm a,b,c
-#    Delete    -Vm a -SnapshotId <id>
-#
-#  vCloud specifics this script encodes:
-#    - A VM holds exactly ONE snapshot; it is unnamed. -Snapshot is
-#      recorded in the description only, and Revert ignores names.
-#    - Create SUPERSEDES the existing snapshot in a single call, so
-#      the VM is never left without one. Delete is only needed to
-#      reclaim the superseded snapshot's space.
-#
-#  Credentials (same variables the revert worker already uses):
-#    RCLOUD_USER, RCLOUD_PASSWORD, RCLOUD_ORG (default AppServerPool2)
-#
-#  Output: human-readable [TAG] lines, then ONE compact JSON object
-#  as the final line. The caller takes the last well-formed JSON
-#  object, so log lines above it are safe.
-#
-#  Exit codes: 0 = every VM succeeded, 1 = one or more failed,
-#              2 = credentials missing, 3 = PowerCLI/connect failure
-# ==============================================================
+<#
+.SYNOPSIS
+    Vm-Ops.vcloud.ps1 (v1.0) - verb-dispatched vCloud (Rcloud) VM operations for the
+    fleet maintenance engine. PS 5.1 compatible. ASCII-only.
+
+.DESCRIPTION
+    Contract (called by ScriptBackedVirtualizationProvider):
+      .\Vm-Ops.vcloud.ps1 -Verb <verb> -Vm "a,b,c" [options]
+
+    Verbs:
+      State     -Vm a,b,c
+      PowerOn   -Vm a,b,c
+      PowerOff  -Vm a,b,c [-Graceful true|false]
+      List      -Vm a
+      Create    -Vm a,b,c -Snapshot <name> [-Description <text>]
+      Revert    -Vm a,b,c
+      Delete    -Vm a -SnapshotId <id>
+
+    vCloud specifics this script encodes:
+      - A VM holds exactly ONE snapshot; it is unnamed. -Snapshot is
+        recorded in the description only, and Revert ignores names.
+      - Create SUPERSEDES the existing snapshot in a single call, so
+        the VM is never left without one. Delete is only needed to
+        reclaim the superseded snapshot's space.
+
+    Output: human-readable [TAG] lines, then ONE compact JSON object
+    as the final line. The caller takes the last well-formed JSON
+    object, so log lines above it are safe.
+
+    Exit codes: 0 = every VM succeeded, 1 = one or more failed,
+                2 = credentials missing, 3 = PowerCLI/connect failure
+
+.PARAMETER Verb
+    State | PowerOn | PowerOff | List | Create | Revert | Delete
+
+.PARAMETER Vm
+    VM name, or several as one comma-separated string.
+
+.PARAMETER Snapshot
+    Create: label recorded in the snapshot description.
+
+.PARAMETER Description
+    Create: extra description text.
+
+.PARAMETER SnapshotId
+    Delete: id of the snapshot to remove (from List).
+
+.PARAMETER Graceful
+    PowerOff: "true" (default) = guest shutdown, "false" = hard power-off.
+
+.PARAMETER OrgName
+    vCloud organisation. Default: $env:RCLOUD_ORG, else AppServerPool2.
+
+.PARAMETER User
+    vCloud user. Default: $env:RCLOUD_USER.
+
+.PARAMETER Password
+    vCloud password. Default: $env:RCLOUD_PASSWORD. Never pass it on the command line.
+
+.PARAMETER vCloudURL
+    vCloud server. Default: rcloud.dev.wonderware.com
+
+.PARAMETER TaskTimeoutMinutes
+    Per-task wait. Default: 10
+
+.PARAMETER LogDir
+    Log folder. Default: C:\TestSetup\Logs (falls back to %TEMP%).
+
+.EXAMPLE
+    .\Vm-Ops.vcloud.ps1 -Verb State -Vm "JVGR1,JVGR2"
+
+.EXAMPLE
+    .\Vm-Ops.vcloud.ps1 -Verb PowerOff -Vm JVGR1 -Graceful false
+
+.EXAMPLE
+    .\Vm-Ops.vcloud.ps1 -Verb Create -Vm JVGR1 -Snapshot "Clean-SP2026" -Description "Patched 2026-11"
+    Replaces the VM's single snapshot. Use only with your own vCloud credentials (see the
+    vm-revert-snapshot skill).
+#>
 param(
     [Parameter(Mandatory)][ValidateSet("State", "PowerOn", "PowerOff", "List", "Create", "Revert", "Delete")]
     [string]$Verb,

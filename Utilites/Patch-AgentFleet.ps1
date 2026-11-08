@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Patches the TestAgentGrpc.exe binary on multiple agent nodes
 in parallel and verifies each agent comes back online.
@@ -40,6 +40,40 @@ Default 5. Increase to 10 for faster fleet patching.
 .PARAMETER LogPath
 Folder for per-run log file. Default: C:\Patches\logs\
 
+.PARAMETER ServiceName
+Windows service stopped and started on each agent. Default: TestAgentService.
+The fleet runs the agent as the scheduled task "TestAgentGrpc Interactive", not a service,
+so on a standard node this script cannot stop/start the agent. See .NOTES.
+
+.PARAMETER GrpcPort
+Agent port that must listen after the patch. Default: 5200
+
+.PARAMETER PortCheckTimeoutSeconds
+How long to wait for the port to listen. Default: 60
+
+.PARAMETER PortSustainSeconds
+How long the port must stay up (catches crash-on-start). 0 = skip. Default: 30
+
+.PARAMETER RebootTimeoutSeconds
+With -Reboot: how long to wait for each agent to come back. Default: 300
+
+.PARAMETER vCloudServer
+With -Snapshot: vCloud server. Default: vcloud.dev.wonderware.com
+
+.PARAMETER vCloudOrg
+With -Snapshot: vCloud organisation. Default: AppServerPool2
+
+.PARAMETER AgentCredential
+Admin credential for the agents. Prompted (masked) if omitted, except with -DryRun.
+
+.PARAMETER DryRun
+Report what would be patched; change nothing and ask for no credential.
+
+.EXAMPLE
+.\Patch-AgentFleet.ps1 -BinaryPath \\jvgr22\share\TestAgentGrpc.exe -DryRun
+
+Shows which agents would be patched, without touching them.
+
 .EXAMPLE
 .\Patch-AgentFleet.ps1 -BinaryPath \\jvgr22\share\TestAgentGrpc.exe
 
@@ -57,6 +91,10 @@ Patches every agent listed in fleet.txt, reboots them, takes
 snapshots, with 10 running in parallel.
 
 .NOTES
+SUPERSEDED by deploy\Invoke-FleetDeployment.ps1 (canary first, scheduled-task launch mode,
+hash + re-registration checks; see the patch-agent-fleet skill). Use that for the real fleet.
+This script assumes the agent runs as a Windows service, which is no longer how nodes are set up.
+
 Prerequisites on the Controller machine:
   - PowerShell 7.0+ (ForEach-Object -Parallel)
   - Admin credentials on the agent machines

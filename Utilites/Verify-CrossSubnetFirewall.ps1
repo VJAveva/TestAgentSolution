@@ -6,11 +6,33 @@
 
 .DESCRIPTION
   Confirms the failure is inter-subnet TCP filtering and NOT a host-firewall
-  issue on either end. Run the relevant section on each host.
+  issue on either end. Run it on both hosts: it runs Section A when this machine
+  owns -AgentIp and Section B when it owns -ControllerIp.
+
+.PARAMETER ControllerIp
+  Controller address. Default: 10.48.190.248 (JVGR22)
+
+.PARAMETER AgentIp
+  Agent address. Default: 10.48.220.132 (W25s22Grr1)
+
+.PARAMETER ControllerPort
+  Controller gRPC port. Default: 5100
+
+.PARAMETER AgentPort
+  Agent gRPC port. Default: 5200
+
+.PARAMETER WinRmPort
+  WinRM port tested from the agent to show all TCP is blocked. Default: 5985
+
+.EXAMPLE
+  .\Verify-CrossSubnetFirewall.ps1
+  Defaults: JVGR22 <-> W25s22Grr1.
+
+.EXAMPLE
+  .\Verify-CrossSubnetFirewall.ps1 -ControllerIp 10.48.190.248 -AgentIp 10.48.220.140
 
 .NOTES
-  Run Section A on the AGENT (W25s22Grr1).
-  Run Section B on the CONTROLLER (JVGR22).
+  Run on the AGENT for Section A and on the CONTROLLER for Section B.
 #>
 
 param(
@@ -25,15 +47,15 @@ Write-Host "================================================================" -F
 Write-Host " Cross-Subnet Firewall - Pre-Submission Evidence" -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 
-$thisIp = (Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notmatch '^127\.|^169\.254\.' } |
-    Select-Object -First 1).IPAddress
+$localIps = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPAddress -notmatch '^127\.|^169\.254\.' } | ForEach-Object { $_.IPAddress })
+$thisIp = if ($localIps -contains $AgentIp) { $AgentIp } elseif ($localIps -contains $ControllerIp) { $ControllerIp } else { $localIps | Select-Object -First 1 }
 Write-Host "Running on host with IP: $thisIp`n"
 
 # ============================================================
-# SECTION A - run on the AGENT (W25s22Grr1)
+# SECTION A - run on the AGENT (-AgentIp)
 # ============================================================
-if ($thisIp -like "10.48.220.*") {
+if ($thisIp -eq $AgentIp) {
     Write-Host "=== SECTION A: AGENT-SIDE EVIDENCE ===" -ForegroundColor Yellow
 
     Write-Host "`n[A1] Forward path: agent -> controller port $ControllerPort"
@@ -76,9 +98,9 @@ if ($thisIp -like "10.48.220.*") {
 }
 
 # ============================================================
-# SECTION B - run on the CONTROLLER (JVGR22)
+# SECTION B - run on the CONTROLLER (-ControllerIp)
 # ============================================================
-elseif ($thisIp -like "10.48.190.*") {
+elseif ($thisIp -eq $ControllerIp) {
     Write-Host "=== SECTION B: CONTROLLER-SIDE EVIDENCE ===" -ForegroundColor Yellow
 
     Write-Host "`n[B1] Confirm controller is listening on $ControllerPort"
@@ -113,7 +135,7 @@ elseif ($thisIp -like "10.48.190.*") {
         Select-Object -ExpandProperty TraceRoute
 }
 else {
-    Write-Host "This host ($thisIp) is on neither subnet. Run on JVGR22 or W25s22Grr1." -ForegroundColor Red
+    Write-Host "This host ($($localIps -join ', ')) owns neither -AgentIp $AgentIp nor -ControllerIp $ControllerIp." -ForegroundColor Red
 }
 
 Write-Host "`n================================================================" -ForegroundColor Cyan

@@ -22,6 +22,19 @@
 .PARAMETER ComputerName
     Remote nodes to configure. Omit to act on the local machine. Requires WinRM for remote use.
 
+.PARAMETER TaskName
+    Scheduled task to configure. Default: TestAgentGrpc Interactive
+
+.PARAMETER RestartCount
+    Restarts after a failure, 1-999. Default: 999
+
+.PARAMETER RestartIntervalMinutes
+    Minutes between restarts, 1-1440. Default: 1
+
+.PARAMETER NoExecutionTimeLimit
+    On by default: sets ExecutionTimeLimit to unlimited. Pass -NoExecutionTimeLimit:$false
+    to keep the task's current limit.
+
 .PARAMETER Apply
     Perform changes. Without it the script only reports the planned change.
 

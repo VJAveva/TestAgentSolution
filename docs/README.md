@@ -44,7 +44,8 @@ Notes:
 
 ## Operations
 
-- [Patch-AgentFleet — Setup Guide](operations/AGENT_FLEET_PATCH_SETUP.md) - Draft
+- [Utilites scripts - index with run commands](../Utilites/README.md) - Current
+- [Patch-AgentFleet — Setup Guide](operations/AGENT_FLEET_PATCH_SETUP.md) - Archived (superseded by `deploy/Invoke-FleetDeployment.ps1`)
 - [CI / Local Test Commands](operations/CI-COMMANDS.md) - Draft
 - [Operations Runbook](operations/RUNBOOK.md) - Draft
 
