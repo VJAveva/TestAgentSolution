@@ -1,7 +1,7 @@
 ---
 feature: PreFlightCheck
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Preflight, TestController.Api/Controllers/PreflightController.cs, TestController.WebApi/Endpoints/PreflightEndpoints.cs, TestControllerGrpc/Views/Dialogs/PreflightDialog.xaml, TestControllerGrpc/ViewModels/MainViewModel.Preflight.cs]
 tests: [TestControllerGrpc.Tests/Preflight, TestControllerGrpc.Tests/ViewModels/PreflightDialogViewModelTests.cs, TestControllerGrpc.Tests/Features/FeatureUsagePreflightTests.cs]
 last-verified: 2026-11-08

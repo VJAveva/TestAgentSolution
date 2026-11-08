@@ -1,7 +1,7 @@
 ---
 feature: AzureIntegration
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Ado/AdoClient.cs, TestControllerGrpc.Core/Ado/AdoOptions.cs, TestControllerGrpc.Core/Ado/AdoServiceCollectionExtensions.cs, TestControllerGrpc.Core/Ado/PatTokenProvider.cs, TestControllerGrpc.Core/Ado/InteractiveTokenProvider.cs, TestControllerGrpc.Core/Ado/ServicePrincipalTokenProvider.cs]
 tests: [TestController.WebApi.Tests/Regression/AdoUserTokenTests.cs, TestController.WebApi.Tests/Regression/AdoErrorBodySummaryTests.cs, TestController.WebApi.Tests/Impact/AdoImpactWorkItemClientTests.cs]
 last-verified: 2026-11-08

@@ -1,6 +1,6 @@
 {
   "mapVersion": "1.0-draft",
-  "status": "DRAFT — seeded from docs/AzureIntegration/ProjectlevelComponents.md. NOT ratified.",
+  "status": "DRAFT — seeded from docs/features/AzureIntegration/ProjectlevelComponents.md. NOT ratified.",
   "note": "This is the v1 seed referenced in FEATURE-ARCHITECTURE.md open question #1 (canonical component spelling). It is a starting point for review, not the authoritative v2 schema the architecture doc targets. Node definitions only — no observed history here (see ADR-07: observed Change/WorkItem/ChangedFile history belongs in SQLite, not this file).",
   "components": [
     { "id": "AABootstrap", "aliases": ["aabootstrap"], "areas": ["ProcessSupervisor", "RedundancyArbiter", "BootstrapProxy"] },

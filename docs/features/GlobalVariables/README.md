@@ -1,7 +1,7 @@
 ---
 feature: GlobalVariables
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Models/GlobalVariablesConfig.cs, TestControllerGrpc.Core/Services/ParameterResolver.cs, TestControllerGrpc.Core/Services/ParameterRank.cs, TestControllerGrpc/Views/Dialogs/GlobalVariablesEditorWindow.xaml, TestControllerGrpc/ViewModels/MainViewModel.GlobalVariables.cs]
 tests: [TestControllerGrpc.Tests/Services/GlobalVariablesLayerTests.cs]
 last-verified: 2026-11-08

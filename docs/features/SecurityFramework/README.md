@@ -1,7 +1,7 @@
 ---
 feature: SecurityFramework
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestController.Api/Security/SecurityServiceExtensions.cs, TestController.Api/Security/SecurityOptions.cs, TestController.Api/Controllers/SecurityController.cs]
 tests: [TestController.WebApi.Tests/Security, TestControllerGrpc.Tests/Security]
 last-verified: 2026-11-08

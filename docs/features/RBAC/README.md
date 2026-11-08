@@ -1,7 +1,7 @@
 ---
 feature: RBAC
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Authorization/Permission.cs, TestController.Persistence/Authorization/AuthorizationService.cs, TestController.Api/Interceptors/SessionAuthInterceptor.cs, TestControllerGrpc.Core/Locking/LockRegistry.cs, TestController.WebClient/src/lib/capabilities.ts]
 tests: [TestControllerGrpc.Tests/Rbac, TestController.WebApi.Tests/Rbac]
 last-verified: 2026-11-08

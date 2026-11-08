@@ -1,7 +1,7 @@
 ---
 feature: ClientNodeExecution
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestController.WebClient/src/components/watchlist/NodeRunDialog.tsx, TestController.Api/Controllers/ExecutionController.cs]
 tests: [TestController.WebClient/src/components/watchlist/NodeRunDialog.test.tsx, TestController.WebApi.Tests/Execution/NodeRunEndpointTests.cs, TestController.WebApi.Tests/Execution/NodeRunAuthzTests.cs]
 last-verified: 2026-11-08

@@ -1,7 +1,7 @@
 ---
 feature: FIR
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Fir, rules, TestController.Api/Controllers/ResultsController.cs, TestControllerGrpc/ViewModels/BuildResultsViewModel.Fir.cs]
 tests: [TestControllerGrpc.Tests/Fir]
 last-verified: 2026-11-08

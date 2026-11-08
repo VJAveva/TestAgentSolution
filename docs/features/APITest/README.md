@@ -1,7 +1,7 @@
 ---
 feature: APITest
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestController.ApiTests/Infrastructure, TestController.ApiTests/Data]
 tests: [TestController.ApiTests/Workflows, TestController.ApiTests/Contracts]
 last-verified: 2026-11-08
@@ -16,6 +16,8 @@ last-verified: 2026-11-08
 ## How to use
 ```powershell
 dotnet test TestController.ApiTests
+# Against a running WebApi:
+$env:API_TEST_MODE = 'Live'; $env:API_TEST_BASEURL = 'https://localhost:7240'; dotnet test TestController.ApiTests
 ```
 
 ## Config / files
@@ -25,7 +27,8 @@ dotnet test TestController.ApiTests
 - This project is itself the test suite.
 
 ## Known gaps
-- TODO verify: the spec's "live" mode against a running host, and whether it is wired.
+- Live mode is wired (`TestConfig`, `ApiTestFixture`), but it differs from the spec: the URL variable is `API_TEST_BASEURL` (spec says `API_TEST_URL`), and fake-dependent tests `return` early in Live mode, so they report as passed rather than skipped.
+- No CI pipeline runs Live mode.
 
 ## Links
 - [ApiTestFramework_Implementation_Spec.md](ApiTestFramework_Implementation_Spec.md)

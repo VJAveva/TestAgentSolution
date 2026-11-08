@@ -1,7 +1,7 @@
 ---
 feature: XmlEditor
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc/Views/RawXmlEditorWindow.xaml, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.cs, TestControllerGrpc.Core/Services/WatchListXmlEditorAnalyzer.cs, TestControllerGrpc/Services/XmlEditorTyping.cs, TestControllerGrpc/Services/XmlEditorQuickFixApplier.cs]
 tests: [TestControllerGrpc.Tests/ViewModels/WatchItemXmlEditorViewModelTests.cs, TestControllerGrpc.Tests/Services/WatchListXmlEditorAnalyzerTests.cs, TestControllerGrpc.Tests/Services/XmlEditorTypingTests.cs, TestControllerGrpc.Tests/Ui/XmlHighlightingTests.cs]
 last-verified: 2026-11-08
@@ -26,7 +26,8 @@ dotnet test TestControllerGrpc.Tests --filter "FullyQualifiedName~XmlEditor|Full
 ```
 
 ## Known gaps
-- The "edit by instruction" and token-aware intelligence in [prompts/Prompt_XmlEditor_Intelligence.md](prompts/Prompt_XmlEditor_Intelligence.md): TODO verify which parts are built.
+- [prompts/Prompt_XmlEditor_Intelligence.md](prompts/Prompt_XmlEditor_Intelligence.md) Part 1 (live intelligence) is built: completion (`CompletionWindow` in `RawXmlEditorWindow` and `TemplateXmlEditorWindow`), diagnostics and quick fixes (`WatchListXmlEditorAnalyzer`, `XmlEditorQuickFixApplier`) and token tooltips (`TokenDisplay`).
+- Part 2 ("edit by instruction": `IWatchListAssistant`, ChangeSet, "Ask to change" box) is **not built**; no such types exist in the code.
 
 ## Links
 - [prompts/Prompt_XmlEditor_Intelligence.md](prompts/Prompt_XmlEditor_Intelligence.md)

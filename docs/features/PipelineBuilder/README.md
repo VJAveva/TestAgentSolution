@@ -1,7 +1,7 @@
 ---
 feature: PipelineBuilder
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/PipelineBuilder, TestControllerGrpc/ViewModels/PipelineBuilder/PipelineBuilderViewModel.cs, TestControllerGrpc/Views/Dialogs/PipelineBuilderWindow.xaml, pipelines/recipes, pipelines/templates]
 tests: [TestControllerGrpc.Tests/PipelineBuilder]
 last-verified: 2026-11-08
@@ -27,7 +27,7 @@ dotnet test TestControllerGrpc.Tests --filter "FullyQualifiedName~PipelineBuilde
 ```
 
 ## Known gaps
-- TODO verify: whether a web client (React) entry point is planned. Only the WPF window exists today.
+- Web client entry point is planned but **not built**: [PipelineBuilder_Requirement.md](PipelineBuilder_Requirement.md) §10 step 6 says "WPF panel, then React over the same engine". Today the web client only knows the `PipelineBuilder` feature key (`featureStore.ts`); there is no REST endpoint or page.
 
 ## Links
 - [PipelineBuilder_Requirement.md](PipelineBuilder_Requirement.md), [WatchItemBuilder_Implementation_Spec.md](WatchItemBuilder_Implementation_Spec.md), [INSTALL-PLAN-FEASIBILITY.md](INSTALL-PLAN-FEASIBILITY.md)

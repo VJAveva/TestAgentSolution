@@ -1,7 +1,7 @@
 ---
 feature: FeatureToggles
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Features, TestController.Api/Controllers/FeaturesController.cs, TestController.Api/Security/RequireFeatureAttribute.cs, TestControllerGrpc/Views/FeatureSettingsWindow.xaml, TestController.WebClient/src/components/admin/FeatureSettingsPanel.tsx, TestController.WebClient/src/stores/featureStore.ts]
 tests: [TestControllerGrpc.Tests/Features, TestController.WebApi.Tests/Features, TestController.WebClient/src/components/admin/FeatureSettingsPanel.test.tsx]
 last-verified: 2026-11-08

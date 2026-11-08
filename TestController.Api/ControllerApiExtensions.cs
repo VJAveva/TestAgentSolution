@@ -49,7 +49,7 @@ public static class ControllerApiExtensions
         services.AddSingleton<SignalRNotifier>();
         services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
 
-        // Regression tab / CIRP (docs/AzureIntegration): real Azure DevOps ingest when
+        // Regression tab / CIRP (docs/features/AzureIntegration): real Azure DevOps ingest when
         // Ado:Enabled=true, otherwise falls back to the mock provider. TryAdd so a host can
         // override without touching this registration.
         services.AddAdoRegressionIngest();

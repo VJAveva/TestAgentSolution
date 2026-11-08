@@ -77,7 +77,7 @@
     <ItemGroup>
       <StrayImpactDb Include="$(ImpactRepoRoot)\**\impact-index.db;$(ImpactRepoRoot)\**\impact-outcomes.db" Exclude="$(ImpactRepoRoot)\**\bin\**;$(ImpactRepoRoot)\**\obj\**;$(ImpactRepoRoot)\publish\**" />
     </ItemGroup>
-    <Warning Code="IMPACT001" Condition="'@(StrayImpactDb)' != ''" Text="Impact database found inside the source tree: %(StrayImpactDb.FullPath). It must live under the IImpactIndexPathProvider root (default %25ProgramData%25\TestAgentSolution\ImpactIndex). Delete or move it; see .gitignore and docs/AzureIntegration/FEATURE-ARCHITECTURE.md 'Impact Index Storage'." />
+    <Warning Code="IMPACT001" Condition="'@(StrayImpactDb)' != ''" Text="Impact database found inside the source tree: %(StrayImpactDb.FullPath). It must live under the IImpactIndexPathProvider root (default %25ProgramData%25\TestAgentSolution\ImpactIndex). Delete or move it; see .gitignore and docs/features/AzureIntegration/FEATURE-ARCHITECTURE.md 'Impact Index Storage'." />
   </Target>
   
    <!-- Auto-build React on publish -->

@@ -1,7 +1,7 @@
 ---
 feature: BuildReportCard
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestController.Api/Controllers/BuildReportCardController.cs, TestControllerGrpc.Core/Services/BuildReportAggregator.cs, TestController.WebClient/src/components/reportcard/ReportCardView.tsx, TestControllerGrpc/ViewModels/MainViewModel.ReportCard.cs]
 tests: [TestControllerGrpc.Tests/Services/BuildReportAggregatorTests.cs, TestControllerGrpc.Tests/Services/BuildReportEmailHtmlTests.cs]
 last-verified: 2026-11-08
@@ -26,7 +26,7 @@ dotnet test TestControllerGrpc.Tests --filter "FullyQualifiedName~BuildReport"
 ```
 
 ## Known gaps
-- TODO verify: the PSR results input described in [BuildReportCard_Requirements.md](BuildReportCard_Requirements.md) (machine-readable PSR output) and whether it exists yet.
+- PSR input is **not built**. `BuildReportAggregator.BuildPsrCards()` returns five hardcoded `Pending` placeholder cards; nothing reads PSR result files, because the PSR result schema in [BuildReportCard_Requirements.md](BuildReportCard_Requirements.md) (open question 2) is still undefined.
 
 ## Links
 - [BuildReportCard_Requirements.md](BuildReportCard_Requirements.md), mockup [mockups/BuildReportCard_Mockup.html](mockups/BuildReportCard_Mockup.html)

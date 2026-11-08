@@ -1,7 +1,7 @@
 ---
 feature: FleetMaintenance
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Maintenance, TestController.Api/Controllers/MaintenanceController.cs, TestControllerGrpc/Views/AgentWorkspace/MaintenanceView.xaml, TestControllerGrpc/ViewModels/AgentWorkspace/FleetVM.cs, deploy/Invoke-FleetDeployment.ps1]
 tests: [TestControllerGrpc.Tests/Maintenance, TestController.WebApi.Tests/Maintenance, deploy/Invoke-NodeCleanup.Tests.ps1]
 last-verified: 2026-11-08
@@ -10,7 +10,7 @@ last-verified: 2026-11-08
 # Fleet maintenance: revert, reboot, updates, golden image
 
 ## What it does
-- Runs maintenance on agent machines from the controller: VM revert, reboot, Windows Update scan and install, golden-image refresh.
+- Runs maintenance on agent machines from the controller: VM revert, reboot, Windows Update scan and install.
 - Each operation is persisted so a controller restart can recover it; agents under maintenance are held out of runs and alerts.
 - Also covers the on-demand agent update button.
 
@@ -30,7 +30,8 @@ dotnet test TestControllerGrpc.Tests --filter "FullyQualifiedName~Maintenance"
 ```
 
 ## Known gaps
-- TODO verify: the hold on the update-install UI noted in [NodeUpdateInstaller_Build_Spec.md](NodeUpdateInstaller_Build_Spec.md), and the "Partial" verification step in [FLEET-UPDATE-SNAPSHOT.md](FLEET-UPDATE-SNAPSHOT.md).
+- The UI update install is a full persisted operation now (`MachineUpdateOperation`: precheck, out of rotation, search, install, reboot if needed, verify, quarantine on failure), gated by `Fleet_InstallUpdates`. The "Partial" rows for that path in [FLEET-UPDATE-SNAPSHOT.md](FLEET-UPDATE-SNAPSHOT.md) are out of date.
+- Golden-image refresh is **not reachable**: `GoldenImageRefreshOperation` exists but `IGoldenImageRefreshOperation` is deliberately not registered (`FleetMaintenanceExtensions`), and the trigger from [NodeUpdateInstaller_Build_Spec.md](NodeUpdateInstaller_Build_Spec.md) Part 4 (`StartRefreshAsync`, `POST /refresh`, `AllowBaselineReplace` flag) is not built.
 
 ## Links
 - [FleetUpdateOrchestration-Design.md](FleetUpdateOrchestration-Design.md), [NodeUpdateInstaller_Build_Spec.md](NodeUpdateInstaller_Build_Spec.md), [AgentUpdateButton_Requirements.md](AgentUpdateButton_Requirements.md), [FLEET-UPDATE-SNAPSHOT.md](FLEET-UPDATE-SNAPSHOT.md)

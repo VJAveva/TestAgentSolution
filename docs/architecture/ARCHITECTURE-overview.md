@@ -199,7 +199,7 @@ TestAgentSolution/
 
 ## 4. Component Catalog
 
-### 4.1 TestControllerGrpc � The Controller
+### 4.1 TestControllerGrpc — The Controller
 
 The controller is a **WPF desktop application** that embeds an ASP.NET Core Kestrel gRPC server. It is the central orchestration point.
 
@@ -232,14 +232,14 @@ The controller is a **WPF desktop application** that embeds an ASP.NET Core Kest
 
 | Component | Role |
 |-----------|------|
-| `MainViewModel` | Manages WatchList tree, agent registry, execution log, pipeline execution, periodic health checks, theme selection. 1800+ lines � the application's nerve center. |
+| `MainViewModel` | Manages WatchList tree, agent registry, execution log, pipeline execution, periodic health checks, theme selection. 1800+ lines — the application's nerve center. |
 | `TreeNodeViewModel` | Recursive tree node representing WatchList/WatchItem/Event/ActionGroup/Action/Initialize/Ref/Template hierarchy. |
 | `AgentInfoViewModel` | Per-agent display model: name, address, state, connection status, CPU/memory/disk metrics. |
 | `LogEntryViewModel` | Timestamped log entry with severity (Info/Success/Warning/Error). |
 
 ---
 
-### 4.2 TestAgentGrpc � The Agent
+### 4.2 TestAgentGrpc — The Agent
 
 The agent is a **WinForms system tray application** with an embedded ASP.NET Core Kestrel gRPC server. It runs on each remote machine.
 
@@ -283,7 +283,7 @@ Program.cs
 
 ---
 
-### 4.3 TestAgentDisplay � The Monitoring Dashboard
+### 4.3 TestAgentDisplay — The Monitoring Dashboard
 
 A **read-only WPF dashboard** for observing multiple agents in real time. Does not issue commands.
 
@@ -557,7 +557,7 @@ WatchListConfig
 ?   ???????????????????????        ???????????????????????            ?
 ?   ? TestControllerGrpc  ?        ? TestAgentGrpc       ?            ?
 ?   ? - WPF Desktop App   ?????????? - Tray App          ?            ?
-?   ? - Kestrel :5100     ?  gRPC  ? - Kestrel :5200     ?  � N       ?
+?   ? - Kestrel :5100     ?  gRPC  ? - Kestrel :5200     ?  × N       ?
 ?   ? - WatchList XML     ? HTTP/2 ? - Process execution  ?            ?
 ?   ? - File watchers     ?        ? - System metrics     ?            ?
 ?   ???????????????????????        ???????????????????????            ?
@@ -570,9 +570,9 @@ WatchListConfig
 ????????????????????????????????????????????????????????????????????????
 
 Network Requirements:
-  � Controller ? Agent: TCP port 5200 (gRPC/HTTP2) � command dispatch
-  � Agent ? Controller: TCP port 5100 (gRPC/HTTP2) � registration, heartbeat
-  � Dashboard ? Agent:  TCP port 5200 (gRPC/HTTP2) � monitoring subscription
+  • Controller ? Agent: TCP port 5200 (gRPC/HTTP2) — command dispatch
+  • Agent ? Controller: TCP port 5100 (gRPC/HTTP2) — registration, heartbeat
+  • Dashboard ? Agent:  TCP port 5200 (gRPC/HTTP2) — monitoring subscription
 ```
 
 ### Web Tier & Topology Modes
@@ -613,8 +613,8 @@ The canonical agent roster is **5 nodes**: `JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`,
 |-----|------|---------|-------------|
 | `VocabularyFile` | string | `""` | Path to the WatchList XML file loaded on startup |
 | `ControllerGrpcPort` | int | `5100` | Kestrel listen port for inbound agent gRPC |
-| `Agents[].Name` | string | � | Pre-registered agent friendly name |
-| `Agents[].Address` | string | � | Pre-registered agent gRPC address (e.g. `http://host:5200`) |
+| `Agents[].Name` | string | — | Pre-registered agent friendly name |
+| `Agents[].Address` | string | — | Pre-registered agent gRPC address (e.g. `http://host:5200`) |
 
 ### Agent (`TestAgentGrpc/appsettings.json`)
 
@@ -663,7 +663,7 @@ The canonical agent roster is **5 nodes**: `JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`,
 
 ## 11. Key Design Decisions
 
-### 1. Dual gRPC Servers � Bidirectional Communication
+### 1. Dual gRPC Servers — Bidirectional Communication
 Both the controller and agent host gRPC servers. The controller calls the agent to dispatch commands; the agent calls the controller to register, heartbeat, and push events. This avoids NAT/firewall issues with server-initiated connections and enables either side to restart independently.
 
 ### 2. Channel\<T\>-Based Event Broadcasting
@@ -673,7 +673,7 @@ The `EventBroadcaster` uses `System.Threading.Channels` with `BoundedChannelOpti
 `CommandExecutor` uses `SemaphoreSlim(1,1)` to ensure only one command runs at a time per agent. The cancellation token propagates from the gRPC call context through `WaitForExitAsync(ct)`, ensuring the process is killed and the semaphore released when the controller disconnects or times out.
 
 ### 4. WatchList XML as the Configuration Contract
-The WatchList XML format is the domain language � it defines file triggers, action trees with sequential/parallel groups, template reuse via `<Ref>`, parameter files via `<Initialize>`, and `[Token]` substitution. The controller's entire UI is a visual editor for this XML.
+The WatchList XML format is the domain language — it defines file triggers, action trees with sequential/parallel groups, template reuse via `<Ref>`, parameter files via `<Initialize>`, and `[Token]` substitution. The controller's entire UI is a visual editor for this XML.
 
 ### 5. Automatic Agent Recovery
 Agents track consecutive heartbeat failures and automatically re-register when the controller restarts. The heartbeat loop doubles as a connectivity watchdog. Agents also stay functional in standalone mode (accepting commands from any controller that connects) even if initial registration fails.
@@ -685,10 +685,10 @@ The controller runs a Kestrel gRPC server on a background thread alongside the W
 The agent uses the same pattern: `app.RunAsync()` on a background thread, `Application.Run(trayContext)` on the STA main thread. A `Mutex` prevents multiple agent instances.
 
 ### 8. Hot-Reload Vocabulary
-`VocabularyMonitor` watches the XML file with debounced reload (500ms). On change, it re-parses the config, tears down all `FileSystemWatcher` instances, and recreates them � enabling live configuration updates without restarting the controller.
+`VocabularyMonitor` watches the XML file with debounced reload (500ms). On change, it re-parses the config, tears down all `FileSystemWatcher` instances, and recreates them — enabling live configuration updates without restarting the controller.
 
 ### 9. Active Execution Guard & Stuck-State Recovery
-During active `RunCommandStreamed` calls, the dispatcher tracks the agent in `_activeExecutions` and returns synthetic snapshots for health polls � preventing concurrent HTTP/2 calls from triggering GOAWAY/RST_STREAM. On the agent side, `StuckExecutionWatchdog` forcibly resets state if the normal timeout/cancellation flow fails. The controller escalates to `ForceReady` RPC after configurable busy-recovery polling, and auto-resets gRPC channels after consecutive failure thresholds.
+During active `RunCommandStreamed` calls, the dispatcher tracks the agent in `_activeExecutions` and returns synthetic snapshots for health polls — preventing concurrent HTTP/2 calls from triggering GOAWAY/RST_STREAM. On the agent side, `StuckExecutionWatchdog` forcibly resets state if the normal timeout/cancellation flow fails. The controller escalates to `ForceReady` RPC after configurable busy-recovery polling, and auto-resets gRPC channels after consecutive failure thresholds.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 feature: Hardening
 status: In progress
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestController.Api/Security, TestController.WebApi/Program.cs, TestControllerGrpc.Core/Services/SecurityRedactor.cs, .github/skills/code-audit/SKILL.md]
 tests: [TestControllerGrpc.Tests/Security, TestController.WebApi.Tests/Security]
 last-verified: 2026-11-08

@@ -1,4 +1,4 @@
-# TestAgentSolution � Architecture Design Document
+# TestAgentSolution — Architecture Design Document
 
 **Version:** 2.3 — Production-Readiness (RBAC, Observability, Deploy Automation)  
 **Branch:** `ExeDashboadImpl`  
@@ -28,7 +28,7 @@
 TestAgentSolution is a **distributed test execution orchestrator** consisting of:
 
 - A **WPF Controller** desktop application that monitors filesystem triggers, executes test pipelines across remote agents via gRPC, and hosts an embedded web server for browser-based monitoring.
-- A **Standalone WebApi** that provides the same monitoring/management API without requiring the WPF desktop � suitable for headless/server deployments.
+- A **Standalone WebApi** that provides the same monitoring/management API without requiring the WPF desktop — suitable for headless/server deployments.
 - **Remote Agents** (WinForms) that receive gRPC commands and execute test actions on target machines.
 - A **React WebClient** (SPA) that connects to either host for real-time pipeline monitoring.
 
@@ -167,7 +167,7 @@ app.UseControllerApi();                // maps controllers + hub + starts bridge
 | **ResultsController route mismatch** | `[HttpGet("{buildNumber}")]` mapped to `/api/results/{buildNumber}` but tests/clients expected `/api/results/builds/{buildNumber}`. Fixed: route changed to `[HttpGet("builds/{buildNumber}")]` |
 | **ResultsController incomplete response** | `GetBuilds()` returned only `{buildNumber, modified}` but clients expected `{totalTests, passedTests, failedTests, passRate, health}`. Fixed: now parses each build folder with `TrxResultsParser` + `BuildResultsAggregator` |
 
-### 3.7 Controller�Agent Communication Hardening (ExeDashboadImpl branch)
+### 3.7 Controller–Agent Communication Hardening (ExeDashboadImpl branch)
 
 **What changed:** The gRPC communication between Controller and Agent was hardened to prevent and recover from the "Agent Busy" stuck state, where agents become permanently unresponsive due to failed cancellation flows or corrupted HTTP/2 channels.
 
@@ -292,17 +292,17 @@ canonical agent roster is 5 nodes (`JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST
 ?  ?  ?  (Kestrel on port 5200)        ?      ?       ?
 ?  ?  ?  ????????????????????????????  ?      ?       ?
 ?  ?  ?  ? TestController.Api       ?  ?      ?       ?
-?  ?  ?  ? � MVC Controllers        ?  ?      ?       ?
-?  ?  ?  ? � ControllerHub          ?  ?      ?       ?
-?  ?  ?  ? � SignalRBridge          ?  ?      ?       ?
+?  ?  ?  ? • MVC Controllers        ?  ?      ?       ?
+?  ?  ?  ? • ControllerHub          ?  ?      ?       ?
+?  ?  ?  ? • SignalRBridge          ?  ?      ?       ?
 ?  ?  ?  ????????????????????????????  ?      ?       ?
 ?  ?  ??????????????????????????????????      ?       ?
 ?  ?  ??????????????????????????????????      ?       ?
 ?  ?  ? Real implementations:          ?      ?       ?
-?  ?  ? � ActionPipelineExecutor       ?      ?       ?
-?  ?  ? � AgentGrpcDispatcher          ?      ?       ?
-?  ?  ? � VocabularyMonitor            ?      ?       ?
-?  ?  ? � FileWatcherManager           ?      ?       ?
+?  ?  ? • ActionPipelineExecutor       ?      ?       ?
+?  ?  ? • AgentGrpcDispatcher          ?      ?       ?
+?  ?  ? • VocabularyMonitor            ?      ?       ?
+?  ?  ? • FileWatcherManager           ?      ?       ?
 ?  ?  ??????????????????????????????????      ?       ?
 ?  ????????????????????????????????????????????       ?
 ?         ? gRPC                                       ?
@@ -322,16 +322,16 @@ canonical agent roster is 5 nodes (`JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST
 ?  ?  (Kestrel, default port 5000)             ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ? TestController.Api           ?         ?       ?
-?  ?  ? � MVC Controllers            ?         ?       ?
-?  ?  ? � ControllerHub (/hubs/ctrl) ?         ?       ?
-?  ?  ? � SignalRBridge              ?         ?       ?
+?  ?  ? • MVC Controllers            ?         ?       ?
+?  ?  ? • ControllerHub (/hubs/ctrl) ?         ?       ?
+?  ?  ? • SignalRBridge              ?         ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ? Minimal API Endpoints        ?         ?       ?
-?  ?  ? � WatchListEndpoints         ?         ?       ?
-?  ?  ? � AgentEndpoints             ?         ?       ?
-?  ?  ? � ExecutionEndpoints         ?         ?       ?
-?  ?  ? � ResultsEndpoints           ?         ?       ?
+?  ?  ? • WatchListEndpoints         ?         ?       ?
+?  ?  ? • AgentEndpoints             ?         ?       ?
+?  ?  ? • ExecutionEndpoints         ?         ?       ?
+?  ?  ? • ResultsEndpoints           ?         ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ? LiveHub (/hub/live)          ?         ?       ?
@@ -339,9 +339,9 @@ canonical agent roster is 5 nodes (`JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ?  ? Stub/Adapter implementations ?         ?       ?
-?  ?  ? � StandalonePipelineExecutor ?         ?       ?
-?  ?  ? � StandaloneAgentDispatcher  ?         ?       ?
-?  ?  ? � StandaloneVocabularyMonitor?         ?       ?
+?  ?  ? • StandalonePipelineExecutor ?         ?       ?
+?  ?  ? • StandaloneAgentDispatcher  ?         ?       ?
+?  ?  ? • StandaloneVocabularyMonitor?         ?       ?
 ?  ?  ????????????????????????????????         ?       ?
 ?  ????????????????????????????????????????????       ?
 ?         ? gRPC (query-only)                          ?
@@ -434,23 +434,23 @@ The MVC controllers and Minimal API endpoints share the same route prefixes (`/a
                     ?SignalRBridge?    ?SignalRBroadcastService?
                     ?             ?    ?(BackgroundService)    ?
                     ? Subscribes: ?    ?                       ?
-                    ? �LogEntry   ?    ? Subscribes:           ?
-                    ? �NodeProgress?   ? � Agent gRPC streams  ?
-                    ? �OutputRcvd ?    ?   (SubscribeAgentEvents)?
-                    ? �StatusChgd ?    ?                       ?
-                    ? �EventAgg   ?    ? Broadcasts:           ?
-                    ?  events     ?    ? �ExecutionLog         ?
-                    ?             ?    ? �ExecutionEvent       ?
-                    ? Broadcasts: ?    ? �AgentStatus          ?
-                    ? �LogEntry   ?    ?????????????????????????
-                    ? �ActionProgress?
-                    ? �GroupProgress ?
-                    ? �AgentOutput   ?
-                    ? �AgentStatusChanged?
-                    ? �AgentHeartbeats?
-                    ? �WatchListReloaded?
-                    ? �ExecutionStarted?
-                    ? �ExecutionCompleted?
+                    ? •LogEntry   ?    ? Subscribes:           ?
+                    ? •NodeProgress?   ? • Agent gRPC streams  ?
+                    ? •OutputRcvd ?    ?   (SubscribeAgentEvents)?
+                    ? •StatusChgd ?    ?                       ?
+                    ? •EventAgg   ?    ? Broadcasts:           ?
+                    ?  events     ?    ? •ExecutionLog         ?
+                    ?             ?    ? •ExecutionEvent       ?
+                    ? Broadcasts: ?    ? •AgentStatus          ?
+                    ? •LogEntry   ?    ?????????????????????????
+                    ? •ActionProgress?
+                    ? •GroupProgress ?
+                    ? •AgentOutput   ?
+                    ? •AgentStatusChanged?
+                    ? •AgentHeartbeats?
+                    ? •WatchListReloaded?
+                    ? •ExecutionStarted?
+                    ? •ExecutionCompleted?
                     ???????????????????
 ```
 
@@ -531,14 +531,14 @@ The MVC controllers and Minimal API endpoints share the same route prefixes (`/a
 
 ### 8.1 Performance Hits from Recent Changes
 
-#### ? `ResultsController.GetBuilds()` � N�TRX Parsing per Request
+#### ? `ResultsController.GetBuilds()` — N×TRX Parsing per Request
 
 **Change:** `GetBuilds()` was updated to parse every build folder with `TrxResultsParser` + `BuildResultsAggregator.EvaluateBuildHealth()` on every call.
 
 **Impact:**
 ```
-BEFORE:  O(1) per build � just read directory metadata
-AFTER:   O(N � M) per build � parse N .trx XML files, aggregate M test results
+BEFORE:  O(1) per build — just read directory metadata
+AFTER:   O(N × M) per build — parse N .trx XML files, aggregate M test results
 ```
 
 | Builds | TRX Files/Build | Approx Latency (before) | Approx Latency (after) |
@@ -547,7 +547,7 @@ AFTER:   O(N � M) per build � parse N .trx XML files, aggregate M test resul
 | 50 | 10 | ~5ms | ~2-5s |
 | 100 | 20 | ~8ms | ~10-20s |
 
-**Severity:** ?? **HIGH** � This endpoint is called on page load by the React dashboard.
+**Severity:** ?? **HIGH** — This endpoint is called on page load by the React dashboard.
 
 **Mitigation:** Add a caching layer:
 ```csharp
@@ -561,7 +561,7 @@ ConcurrentDictionary<string, (DateTime Modified, BuildSummary Summary)> _cache;
 
 **Measured overhead:** ~0.1-0.3ms per request (negligible for typical loads).
 
-**Severity:** ?? **LOW** � Only significant at very high request rates (>10K req/s).
+**Severity:** ?? **LOW** — Only significant at very high request rates (>10K req/s).
 
 #### ? `SignalRBridge` + `SignalRBroadcastService` Running Simultaneously
 
@@ -569,38 +569,38 @@ ConcurrentDictionary<string, (DateTime Modified, BuildSummary Summary)> _cache;
 - `SignalRBridge` subscribes to `IActionPipelineExecutor` events ? broadcasts to `ControllerHub`
 - `SignalRBroadcastService` subscribes to gRPC agent streams ? broadcasts to `LiveHub`
 
-Since `StandalonePipelineExecutor` is a stub (events never fire), `SignalRBridge` subscribes to events that never trigger � **wasted subscriptions but zero runtime cost**.
+Since `StandalonePipelineExecutor` is a stub (events never fire), `SignalRBridge` subscribes to events that never trigger — **wasted subscriptions but zero runtime cost**.
 
 However, the `SignalRBridge` heartbeat throttle `Timer` runs every 1 second even when idle.
 
-**Severity:** ?? **NEGLIGIBLE** � One timer tick per second with empty dictionary check.
+**Severity:** ?? **NEGLIGIBLE** — One timer tick per second with empty dictionary check.
 
-#### ? `EventAggregator.Publish()` � ThreadPool Dispatch per Handler
+#### ? `EventAggregator.Publish()` — ThreadPool Dispatch per Handler
 
-**Impact:** Every `Publish<T>()` call queues a `ThreadPool.QueueUserWorkItem` per subscriber. Under 100 agents sending heartbeats (100 � N subscribers):
+**Impact:** Every `Publish<T>()` call queues a `ThreadPool.QueueUserWorkItem` per subscriber. Under 100 agents sending heartbeats (100 × N subscribers):
 
 ```
-Heartbeats/sec: 100 agents � 1 heartbeat/sec = 100 publishes/sec
+Heartbeats/sec: 100 agents × 1 heartbeat/sec = 100 publishes/sec
 Subscribers: ~5 (bridge, UI, logging, etc.)
 ThreadPool items/sec: 500 work items/sec
 ```
 
-**Severity:** ?? **MEDIUM** at scale � ThreadPool work item overhead is ~1-2?s each, but 500/sec adds up. The `SignalRBridge` heartbeat throttling (1-second batching) mitigates this for the SignalR broadcast, but **other subscribers still receive 100 individual callbacks/sec**.
+**Severity:** ?? **MEDIUM** at scale — ThreadPool work item overhead is ~1-2?s each, but 500/sec adds up. The `SignalRBridge` heartbeat throttling (1-second batching) mitigates this for the SignalR broadcast, but **other subscribers still receive 100 individual callbacks/sec**.
 
 #### ? `WebApplication.CreateBuilder()` inside `ControllerWebApiHost.RunServerAsync()`
 
 **Impact:** The WPF host creates a **second full ASP.NET host** with its own DI container, configuration, logging pipeline. This doubles memory for hosting services (~20-50MB additional).
 
-**Severity:** ?? **MEDIUM** � Unavoidable in the current architecture since WPF's `IHost` and the embedded web server's `WebApplication` have separate DI containers. Singletons are manually bridged.
+**Severity:** ?? **MEDIUM** — Unavoidable in the current architecture since WPF's `IHost` and the embedded web server's `WebApplication` have separate DI containers. Singletons are manually bridged.
 
 ### 8.2 Performance Hot Paths
 
 | Hot Path | Frequency | Current Perf | Risk |
 |---|---|---|---|
-| `GET /api/results/builds` | On every dashboard load | ?? O(N�M) TRX parse | Cache needed |
+| `GET /api/results/builds` | On every dashboard load | ?? O(N×M) TRX parse | Cache needed |
 | `GET /api/execution/sessions` | Polling every 2-5s | ?? O(1) ConcurrentDictionary read | OK |
 | `GET /api/watchlist` | On every page load | ?? Cached in `IVocabularyMonitor` | OK |
-| SignalR `AgentHeartbeats` | 100 agents � 1/sec | ?? Throttled to 1 batch/sec | OK |
+| SignalR `AgentHeartbeats` | 100 agents × 1/sec | ?? Throttled to 1 batch/sec | OK |
 | SignalR `LogEntry` | ~10-100/sec during execution | ?? Unbatched, per-entry broadcast | May flood at scale |
 | `ExecuteEventTrackedAsync` | Per trigger | ?? Async pipeline | OK |
 | gRPC `ExecuteCommand` | Per remote action | ?? Streaming with timeout | OK |
@@ -611,7 +611,7 @@ ThreadPool items/sec: 500 work items/sec
 
 ### Block 1: ?? Standalone WebApi Cannot Execute Pipelines
 
-**Where:** `StandalonePipelineExecutor` is a stub � all `Execute*` methods return `Task.CompletedTask` or `false`.
+**Where:** `StandalonePipelineExecutor` is a stub — all `Execute*` methods return `Task.CompletedTask` or `false`.
 
 **Impact:** `POST /api/execution/trigger/{tag}` creates a session but **no actions actually run**. The session completes immediately with 0 results.
 
@@ -630,7 +630,7 @@ Browser ? POST trigger ? ExecutionController ? BeginSession ?
 
 **Where:** `StandaloneAgentDispatcher.ExecuteRemoteCommandAsync()` returns failure.
 
-**Impact:** Even if pipeline execution were implemented, `RunRemoteCommand` actions would fail because the dispatcher doesn't manage gRPC execution channels � only query channels (via `AgentGrpcClientManager`).
+**Impact:** Even if pipeline execution were implemented, `RunRemoteCommand` actions would fail because the dispatcher doesn't manage gRPC execution channels — only query channels (via `AgentGrpcClientManager`).
 
 **E2E Flow Blocked:**
 ```

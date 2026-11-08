@@ -307,7 +307,7 @@ builder.Services.AddOpenApi(options =>
             Version = "v1",
             Description = "REST + SignalR surface for the TestAgentSolution test-orchestration "
                 + "platform. Use the bearer token issued by /api/auth/login (Secured mode) "
-                + "to authorize requests. See docs/ONBOARDING.md for a first-run walkthrough.",
+                + "to authorize requests. See docs/getting-started/ONBOARDING.md for a first-run walkthrough.",
         };
         return Task.CompletedTask;
     });

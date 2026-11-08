@@ -1,4 +1,4 @@
-# TestAgentSolution � System Design & Architecture Diagrams
+# TestAgentSolution — System Design & Architecture Diagrams
 
 > **Status:** Current state on `master` (post .NET 10 upgrade)
 > **Target framework:** `net10.0` / `net10.0-windows`
@@ -15,9 +15,9 @@ The system is a **distributed test-orchestration platform** with two operator-fa
 | `TestControllerGrpc.Core` | `net10.0` | Library | Shared kernel: proto contract, domain models, `PipelineExecutorBase`, `RemoteCommandStreamRunner`, event aggregator, build-results pipeline, interfaces (`IAgentGrpcDispatcher`, `IActionPipelineExecutor`, `IVocabularyMonitor`, `IRealtimeNotifier`, `IFileWatcherManager`, `IAppLogger`). |
 | `TestController.Api` | `net10.0` | Library | Shared ASP.NET Core surface: MVC controllers (`Execution`, `WatchList`, `Agents`, `Results`, `Health`, `User`, `SystemMode`, `Audit`), `ControllerHub` (SignalR), `SignalRNotifier`, `LockRecoveryService`, `RequestLoggingMiddleware`, security (`AddMultiIdentitySecurity`, `AddRbacFeature`, `SessionAuthInterceptor`), `AddControllerApi()` extension. |
 | `TestController.Persistence` | `net10.0` | Library | EF Core + SQLite RBAC store: `OrchestratorDbContext` (Scoped), entities (`User`, `Session`, `PipelineAssignment`, `AuditEntry`, `NotificationMute`, `NotificationCooldown`), migrations, `AuthorizationService`, `SessionStore`, `QueuedAuditWriter` + `AuditDrainWorker`, `PasswordHasher`. |
-| `TestControllerGrpc` | `net10.0-windows` (WPF) | WinExe | Desktop controller � WPF UI + in-process Kestrel hosting the shared API + gRPC server. Owns `MainViewModel` (12 partials), `ActionPipelineExecutor`, `AgentGrpcDispatcher`, `VocabularyMonitor`, dashboards. |
-| `TestController.WebApi` | `net10.0` | Exe | Web controller � Kestrel hosting shared API + SignalR + React SPA from `wwwroot`. Standalone implementations: `StandaloneAgentDispatcher`, `StandalonePipelineExecutor`, `StandaloneVocabularyMonitor`, `AgentRegistry`, `AgentEventRelayService`. |
-| `TestController.WebClient` | � | Vite/React SPA | Browser UI; built via MSBuild targets and copied into the WebApi `wwwroot`. |
+| `TestControllerGrpc` | `net10.0-windows` (WPF) | WinExe | Desktop controller — WPF UI + in-process Kestrel hosting the shared API + gRPC server. Owns `MainViewModel` (12 partials), `ActionPipelineExecutor`, `AgentGrpcDispatcher`, `VocabularyMonitor`, dashboards. |
+| `TestController.WebApi` | `net10.0` | Exe | Web controller — Kestrel hosting shared API + SignalR + React SPA from `wwwroot`. Standalone implementations: `StandaloneAgentDispatcher`, `StandalonePipelineExecutor`, `StandaloneVocabularyMonitor`, `AgentRegistry`, `AgentEventRelayService`. |
+| `TestController.WebClient` | — | Vite/React SPA | Browser UI; built via MSBuild targets and copied into the WebApi `wwwroot`. |
 | `TestAgentGrpc` | `net10.0-windows` | WinExe (tray) | Agent: gRPC server (`TestAgentService`), `CommandExecutor`, `EventBroadcaster`, `AuditLogger`, `SystemMetricsCollector`, `ConnectionHealthMonitor`, WinForms tray UI; gRPC client back to controller (`TestControllerClient`). |
 | `TestAgentDisplay` | `net10.0-windows` (WPF) | WinExe | Lightweight viewer subscribing directly to agents via `SubscribeAgentEvents`. |
 | `TestControllerGrpc.Tests` / `TestController.WebApi.Tests` | `net10.0` | Test | Unit/integration tests. |
@@ -25,9 +25,9 @@ The system is a **distributed test-orchestration platform** with two operator-fa
 ### Key design pillars
 
 1. **Single proto contract** (`TestControllerGrpc.Core/Protos/test_agent.proto`) with two services: `TestControllerService` (hosted by controllers) and `TestAgentService` (hosted by agents).
-2. **Two pipeline executors, one base** � `ActionPipelineExecutor` (WPF) and `StandalonePipelineExecutor` (WebApi) both inherit `PipelineExecutorBase` so orchestration logic (sequential/parallel, ref/template expansion, group / tracked group, snapshot-isolated retry, deep-clone) is shared.
-3. **Two dispatchers, one interface** � `IAgentGrpcDispatcher` is implemented by both hosts; both delegate streaming through `RemoteCommandStreamRunner`.
-4. **Pluggable real-time notification** � `IRealtimeNotifier` is implemented as in-process VM push for WPF and `SignalRNotifier` over `ControllerHub` for the web.
+2. **Two pipeline executors, one base** — `ActionPipelineExecutor` (WPF) and `StandalonePipelineExecutor` (WebApi) both inherit `PipelineExecutorBase` so orchestration logic (sequential/parallel, ref/template expansion, group / tracked group, snapshot-isolated retry, deep-clone) is shared.
+3. **Two dispatchers, one interface** — `IAgentGrpcDispatcher` is implemented by both hosts; both delegate streaming through `RemoteCommandStreamRunner`.
+4. **Pluggable real-time notification** — `IRealtimeNotifier` is implemented as in-process VM push for WPF and `SignalRNotifier` over `ControllerHub` for the web.
 
 ---
 
@@ -93,7 +93,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph TCS["TestControllerService � hosted by Controller"]
+    subgraph TCS["TestControllerService — hosted by Controller"]
         direction TB
         R1["Register(TestAgentRef)"]
         R2["UnRegister(TestAgentRef)"]
@@ -102,7 +102,7 @@ flowchart TB
         R5["Heartbeat(HeartbeatRequest)"]
     end
 
-    subgraph TAS["TestAgentService � hosted by Agent"]
+    subgraph TAS["TestAgentService — hosted by Agent"]
         direction TB
         A1["GetState"]
         A2["RunCommand"]
@@ -125,7 +125,7 @@ flowchart TB
 
 ---
 
-## 4. WPF host � TestControllerGrpc internals
+## 4. WPF host — TestControllerGrpc internals
 
 ```mermaid
 flowchart TB
@@ -195,14 +195,14 @@ flowchart TB
 
 ---
 
-## 5. Web host � TestController.WebApi internals
+## 5. Web host — TestController.WebApi internals
 
 ```mermaid
 flowchart TB
     subgraph WebApi["TestController.WebApi (net10.0)"]
         direction TB
 
-        Pgm["Program.cs<br/>� Kestrel: 4h keepalive,<br/>  no min data rates<br/>� camelCase JSON +<br/>  string enums<br/>� AddControllerApi()<br/>� AddSignalR()<br/>� React build target"]
+        Pgm["Program.cs<br/>• Kestrel: 4h keepalive,<br/>  no min data rates<br/>• camelCase JSON +<br/>  string enums<br/>• AddControllerApi()<br/>• AddSignalR()<br/>• React build target"]
 
         subgraph Endp["Minimal-API Endpoints"]
             EE["ExecutionEndpoints"]
@@ -247,7 +247,7 @@ flowchart TB
 
 ---
 
-## 6. Agent � TestAgentGrpc internals
+## 6. Agent — TestAgentGrpc internals
 
 ```mermaid
 flowchart TB
@@ -302,7 +302,7 @@ flowchart TB
     Ctrl -- "RunCommand[Streamed] /<br/>Subscribe / Snapshot /<br/>AuditLog / Health" --> TAS
 ```
 
-The agent is **both** a gRPC server and a gRPC client � server for command dispatch and queries; client for registration, heartbeat, and event push.
+The agent is **both** a gRPC server and a gRPC client — server for command dispatch and queries; client for registration, heartbeat, and event push.
 
 ---
 
@@ -470,7 +470,7 @@ Either controller can run alone; both use the same `TestController.Api` library,
 | Concern | Implementation |
 |---|---|
 | **Logging** | `IAppLogger` / `AppLogger` (file-based per host) + `RequestLoggingMiddleware`; agent-side `AuditLogger`. |
-| **Real-time push** | `IRealtimeNotifier` � WPF in-process VM push vs `SignalRNotifier` over `ControllerHub`. |
+| **Real-time push** | `IRealtimeNotifier` — WPF in-process VM push vs `SignalRNotifier` over `ControllerHub`. |
 | **Locking** | `AgentLockManager` + `AgentLockEvents` (Core) + `LockRecoveryService` (Api) prevent two pipelines acquiring the same agent. Pipeline locks via `ILockRegistry`. |
 | **AuthZ / RBAC** | Two layers: `AddMultiIdentitySecurity()` (REST: NTLM/bearer/API-key) + `AddRbacFeature()` / `SessionAuthInterceptor` (gRPC). Default vs Secured mode via `RbacOptions.Enabled`; `Permission` enum; fail-open in Default mode. |
 | **Persistence** | `TestController.Persistence` (EF Core + SQLite, WAL); `OrchestratorDbContext` Scoped via `IDbContextFactory`; audit fire-and-forget. |

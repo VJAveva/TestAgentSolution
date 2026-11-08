@@ -28,9 +28,9 @@ Notes:
 
 ## Architecture
 
-- [TestAgentSolution - Architecture & System Design](architecture/ARCHITECTURE.md) - Draft
-- [TestAgentSolution - Architecture Design Document](architecture/ARCHITECTURE_DESIGN_DOCUMENT.md) - Draft
-- [TestAgentSolution - System Design & Architecture Diagrams](architecture/ARCHITECTURE-DIAGRAMS.md) - Draft
+- [TestAgentSolution — Architecture & System Design](architecture/ARCHITECTURE.md) - Draft
+- [TestAgentSolution — Architecture Design Document](architecture/ARCHITECTURE_DESIGN_DOCUMENT.md) - Draft
+- [TestAgentSolution — System Design & Architecture Diagrams](architecture/ARCHITECTURE-DIAGRAMS.md) - Draft
 - [TestAgentSolution — Architecture & System Design Document](architecture/ARCHITECTURE-overview.md) - Draft
 - [TestAgentSolution — Complete Design](architecture/COMPLETE_DESIGN.md) - Draft
 - [Conventions — TestAgentSolution](architecture/CONVENTIONS.md) - Draft

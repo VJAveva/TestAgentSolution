@@ -1,7 +1,7 @@
 ---
 feature: CodeChurn
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Ado, TestController.Api/Controllers/ImpactController.cs, TestControllerGrpc/ViewModels/Regression/RegressionViewModel.cs, TestControllerGrpc/Views/Regression/RegressionWindow.xaml, TestController.WebClient/src/components/regression/RegressionView.tsx]
 tests: [TestController.WebApi.Tests/Regression, TestControllerGrpc.Tests/Features/CodeChurnRepositoryTests.cs]
 last-verified: 2026-11-08

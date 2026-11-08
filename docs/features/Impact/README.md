@@ -1,7 +1,7 @@
 ---
 feature: Impact
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestController.Impact, TestControllerGrpc.Core/Impact, TestController.WebApi/Endpoints/ImpactMappingEndpoints.cs, docs/impact/component-usecase-map.v1.json, docs/impact/component-categories.xml]
 tests: [TestController.WebApi.Tests/Impact]
 last-verified: 2026-11-08

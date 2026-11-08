@@ -1,7 +1,7 @@
 ---
 feature: Reliability
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc/Diagnostics/UiPerfDiagnostics.cs, TestController.WebClient/src/lib/uiPerf.ts, TestController.WebClient/src/hooks/useRenderCount.ts, TestControllerGrpc.Core/Services/SecurityRedactor.cs]
 tests: [TestControllerGrpc.Tests/Services/CommandExecutionE2ETests.cs, TestController.WebClient/src/hooks/useExecutionDashboard.test.ts]
 last-verified: 2026-11-08

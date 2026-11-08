@@ -284,7 +284,7 @@ public partial class App : Application
                 // current vocabulary config fresh from the monitor.
                 services.AddTransient<TestControllerGrpc.ViewModels.WatchBuilder.WatchBuilderViewModel>();
 
-                // Regression tab / CIRP (docs/AzureIntegration): real Azure DevOps ingest when
+                // Regression tab / CIRP (docs/features/AzureIntegration): real Azure DevOps ingest when
                 // Ado:Enabled=true, otherwise falls back to the mock provider. This is a separate
                 // instance from TestController.Api's own registration — the WPF and Web hosts each
                 // have their own DI container per the "two front doors, one engine" keystone; no

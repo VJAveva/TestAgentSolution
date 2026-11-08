@@ -1,7 +1,7 @@
 ---
 feature: RunEmail
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc/Services/ConsolidatedRunMailer.cs, TestControllerGrpc.Core/Services/ConsolidatedRunEmailBuilder.cs, TestControllerGrpc.Core/Services/ConsolidatedRunReportBuilder.cs, TestControllerGrpc.Core/Models/BuildResultsConfig.cs]
 tests: [TestControllerGrpc.Tests/Services/ConsolidatedRunEmailBuilderTests.cs, TestControllerGrpc.Tests/Services/ConsolidatedRunReportBuilderTests.cs, TestControllerGrpc.Tests/Services/ConsolidatedRunDataTests.cs]
 last-verified: 2026-11-08

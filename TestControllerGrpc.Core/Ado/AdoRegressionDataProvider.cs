@@ -8,7 +8,7 @@ namespace TestControllerGrpc.Ado;
 /// <summary>
 /// Real IRegressionDataProvider backed by live Azure DevOps queries (Phase E, replaces
 /// MockRegressionDataProvider when Ado:Enabled=true). On-demand queries only — no SQLite
-/// caching / background sync yet (deferred, see docs/rbac note in memory: this pass scopes to
+/// caching / background sync yet (deferred, see docs/features/RBAC note in memory: this pass scopes to
 /// real-time queries feeding the UI directly).
 /// </summary>
 public sealed class AdoRegressionDataProvider : IRegressionDataProvider

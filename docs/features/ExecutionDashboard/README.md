@@ -1,7 +1,7 @@
 ---
 feature: ExecutionDashboard
 status: Implemented
-owner: TODO
+owner: Vinodkumar Javvadi
 code: [TestControllerGrpc/Views/ExecutionDashboardWindow.xaml, TestControllerGrpc/ViewModels/Execution/ExecutionDashboardVM.cs, TestController.WebClient/src/hooks/useExecutionDashboard.tsx, TestController.WebClient/src/components/execution, TestController.Dashboard]
 tests: [TestControllerGrpc.Tests/ViewModels/ExecutionDashboardFilterTests.cs, TestControllerGrpc.Tests/ViewModels/ExecutionDashboardLifecycleTests.cs, TestControllerGrpc.Tests/ViewModels/ExecutionDashboardToolbarTests.cs, TestController.WebApi.Tests/ExecutionDashboardEndpointsTests.cs, TestController.WebClient/src/hooks/useExecutionDashboard.test.ts]
 last-verified: 2026-11-08
