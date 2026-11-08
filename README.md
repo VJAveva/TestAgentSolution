@@ -125,13 +125,17 @@ See [`deploy/README.md`](deploy/README.md) for production deployment scripts and
 
 ## Documentation
 
+Start at **[`docs/README.md`](docs/README.md)**: the index of every document, grouped by folder, with a status for each.
+Every feature has a README under [`docs/features/`](docs/features/) listing its code, tests, configuration and known gaps.
+Check links after editing docs with `.\tools\Check-DocLinks.ps1`.
+
 | Document | Path |
 |----------|------|
 | Architecture & Design | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) |
 | Architecture Diagrams | [`docs/architecture/ARCHITECTURE-DIAGRAMS.md`](docs/architecture/ARCHITECTURE-DIAGRAMS.md) |
 | Ops Runbook | [`docs/operations/RUNBOOK.md`](docs/operations/RUNBOOK.md) |
 | CI Commands | [`docs/operations/CI-COMMANDS.md`](docs/operations/CI-COMMANDS.md) |
-| Security Framework | [`docs/MultiIdentity_Security_Framework_Requirements.md`](docs/features/SecurityFramework/MultiIdentity_Security_Framework_Requirements.md) |
+| Security Framework | [`docs/features/SecurityFramework/`](docs/features/SecurityFramework/README.md) |
 | Hardening Plans | [`docs/features/Hardening/`](docs/features/Hardening/) |
 | Deployment Guide | [`deploy/README.md`](deploy/README.md) |
 

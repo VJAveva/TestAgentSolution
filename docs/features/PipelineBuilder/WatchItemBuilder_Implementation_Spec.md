@@ -111,6 +111,8 @@ except the final serialize/parse boundary.
 
 ### File: `TestControllerGrpc.Core/WatchModel/WatchListModel.cs`
 
+> TODO verify: no `WatchListModel` class exists in the code as of 2026-11-08.
+
 ```csharp
 // ===== PLUG IN: your namespace =====
 namespace TestControllerGrpc.Core.WatchModel;
@@ -224,6 +226,8 @@ model. This guarantees the form and XML view never disagree and the output is
 always well-formed.
 
 ### File: `TestControllerGrpc.Core/WatchModel/WatchListSerializer.cs`
+
+> TODO verify: no `WatchListSerializer` class exists in the code as of 2026-11-08.
 
 ```csharp
 using System.Xml;
@@ -412,7 +416,7 @@ Rule-based validation that runs in real time as the user edits. Each rule
 produces errors (block save) or warnings (allow but flag). This is what
 guarantees the user can't produce broken XML.
 
-### File: `TestControllerGrpc.Core/WatchModel/WatchListValidator.cs`
+### File: `TestControllerGrpc.Core/Services/WatchListValidator.cs`
 
 ```csharp
 namespace TestControllerGrpc.Core.WatchModel;
@@ -586,7 +590,7 @@ Supplies the dropdown/auto-complete suggestions for each field so users pick
 valid values instead of typing free-form. THIS is the "auto selections
 recommendation" and "no room for compilation issues" requirement.
 
-### File: `TestControllerGrpc.Core/WatchModel/WatchFieldSuggestions.cs`
+### File: `TestControllerGrpc.Core/Services/WatchFieldSuggestions.cs`
 
 ```csharp
 namespace TestControllerGrpc.Core.WatchModel;
@@ -672,7 +676,7 @@ When an old-format WatchList.xml loads, silently upgrade it to the current
 standard. The user opens the file and it just works — modern, consistent,
 valid — with no prompt.
 
-### File: `TestControllerGrpc.Core/WatchModel/WatchListMigrator.cs`
+### File: `TestControllerGrpc.Core/Services/WatchListMigrator.cs`
 
 ```csharp
 namespace TestControllerGrpc.Core.WatchModel;

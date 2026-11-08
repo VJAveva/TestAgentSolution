@@ -167,7 +167,7 @@ sequenceDiagram
   `RbacOptions.Enabled == false` (zero behaviour change while off), enforce `CanAsync` only in Secured
   mode. Follow `ExecutionController.IsRbacAuthorizedAsync` / `PipelineAuthorizationGuard`.
 - Permissions enum: `TestControllerGrpc.Core/Authorization/Permission.cs`. Role→permission catalog:
-  `TestController.Api/PermissionCatalog.cs`.
+  `TestControllerGrpc.Core/Authorization/PermissionCatalog.cs`.
 - **Audit is fire-and-forget:** enqueue via `IAuditWriter`; never `await` it in the request path.
 - Two `IAuthorizationService` types exist (`Microsoft.AspNetCore.Authorization` vs
   `TestControllerGrpc.Authorization`) — fully-qualify when both usings are present.

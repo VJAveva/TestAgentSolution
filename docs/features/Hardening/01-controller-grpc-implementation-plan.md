@@ -133,7 +133,7 @@ In `MonitorView.xaml`, add a subtle notice bar (e.g., amber info panel) bound to
 
 **Risk:** CTRL-005 / Consistency — `MonitorVM` caches metrics locally, but `WebApi` and other consumers can't share that cache.
 
-**File (new):** `TestControllerGrpc/Services/AgentTelemetryCacheService.cs`
+**File (new):** `TestControllerGrpc.Core/Services/AgentTelemetryCacheService.cs`
 
 ### Design
 
@@ -267,7 +267,7 @@ AutoReset_TriggersAfterConsecutiveFailures
 
 **Risk:** CTRL-006 — 15+ timeout constants scattered across dispatcher and MonitorVM make tuning and deployment-specific configuration impossible.
 
-**File (new):** `TestControllerGrpc/Services/ControllerTimeoutOptions.cs`
+**File (new):** `TestControllerGrpc.Core/Services/ControllerTimeoutOptions.cs`
 
 ### Design
 

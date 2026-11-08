@@ -343,8 +343,8 @@ These land in a NEW `TestController.Persistence` project (the only structural ad
 | 15 | Generate `SessionAuthInterceptor` (with Default mode short-circuit). Integrates with existing `AddMultiIdentitySecurity()` infrastructure — does not replace it. | `TestController.Api/Interceptors/SessionAuthInterceptor.cs` | 5K |
 | 16 | Generate `AuditLoggingInterceptor` | `TestController.Api/Interceptors/AuditLoggingInterceptor.cs` | 2K |
 | 17 | Generate `auth.proto` and the generated stubs | `TestControllerGrpc.Core/Protos/auth.proto` | 2K |
-| 18 | Generate `AuthGrpcService` (LoginAsync, LogoutAsync, ChangePasswordAsync) | `TestController.Api/Services/AuthGrpcService.cs` | 4K |
-| 19 | Generate `SystemModeGrpcService` (Get/SwitchToSecured/SwitchToDefault) | `TestController.Api/Services/SystemModeGrpcService.cs` | 3K |
+| 18 | Generate `AuthGrpcService` (LoginAsync, LogoutAsync, ChangePasswordAsync) | `TestController.Api/Services/AuthGrpcService.cs` (TODO verify: not in the code as of 2026-11-08) | 4K |
+| 19 | Generate `SystemModeGrpcService` (Get/SwitchToSecured/SwitchToDefault) | `TestController.Api/Services/SystemModeGrpcService.cs` (TODO verify: not in the code as of 2026-11-08) | 3K |
 | 20 | Generate DI registrations as a new extension method `AddRbacFeature()` and call it from both `TestControllerGrpc/App.xaml.cs` and `TestController.WebApi/Program.cs` | `TestController.Api/RbacFeatureExtensions.cs` + surgical diffs | 4K |
 
 **Block D: Tests (depends on Blocks A-C)**
