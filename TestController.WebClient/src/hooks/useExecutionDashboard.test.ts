@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { reducer } from './useExecutionDashboard';
 
 /**
- * Guards the batching fix from docs/reliability/UIPerformance-CopilotPrompts.md.
+ * Guards the batching fix from docs/features/Reliability/UIPerformance-CopilotPrompts.md.
  * The server batches agent output every ~500ms; the client must consume that batch
  * in ONE reducer pass. Fanning it back out to one dispatch per line produced one
  * React render per output line and undid the server-side batching.

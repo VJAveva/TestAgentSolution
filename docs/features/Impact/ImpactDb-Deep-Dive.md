@@ -28,7 +28,7 @@ outcomes feed back in as anchors, so it improves with use.
 
 Default location: `%ProgramData%\TestAgentSolution\ImpactIndex` and the sibling `...\Learning`.
 Resolution order is `IMPACT_INDEX_ROOT` env var → `ImpactMapping:IndexRoot` → the ProgramData default
-([`ImpactIndexPathProvider`](../../TestControllerGrpc.Core/Impact/ImpactIndexPathProvider.cs)).
+([`ImpactIndexPathProvider`](../../../TestControllerGrpc.Core/Impact/ImpactIndexPathProvider.cs)).
 
 The split is deliberate: a forced index rebuild must never wipe the learning history that trains the ranker.
 That is also why `-Force` deletes only the index.
@@ -64,7 +64,7 @@ The critical property: **T0 anchors need no index.** That path works even when t
 `RetrievalIndexBuilder.BuildAsync(fullRebuild, ...)`.
 
 **Corpus is only two work-item types:** `"Feature"` and `"Test Case"`
-([`AdoImpactWorkItemClient`](../../TestControllerGrpc.Core/Impact/Ado/AdoImpactWorkItemClient.cs) field arrays).
+([`AdoImpactWorkItemClient`](../../../TestControllerGrpc.Core/Impact/Ado/AdoImpactWorkItemClient.cs) field arrays).
 Bugs, IMS and User Stories are **never indexed** — they enter as anchors instead (§6).
 
 | Document | Id | Text indexed |
@@ -73,7 +73,7 @@ Bugs, IMS and User Stories are **never indexed** — they enter as anchors inste
 | Feature | `F:<id>` | Title + Description |
 
 Composition is defined once, in
-[`IndexTextComposer`](../../TestControllerGrpc.Core/Impact/IndexTextComposer.cs), and used by both the builder
+[`IndexTextComposer`](../../../TestControllerGrpc.Core/Impact/IndexTextComposer.cs), and used by both the builder
 and the test fixtures — when those drift, a fixture measures a corpus that does not exist. **Description is
 included because test case titles are frequently a bare requirement id ("FR 12345")** carrying no matchable
 vocabulary; see `Algorithm-Schema.md` §2.

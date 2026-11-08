@@ -36,7 +36,7 @@ Copy the contents of `publish\agent` to the agent machine, e.g. `C:\TestAgentSol
 ## 3. Configure `appsettings.json`
 
 Edit `appsettings.json` next to `TestAgentGrpc.exe` and set the four values that
-matter per node (see [AgentSettings.cs](AgentSettings.cs)):
+matter per node (see [AgentSettings.cs](../TestAgentGrpc/AgentSettings.cs)):
 
 ```jsonc
 {

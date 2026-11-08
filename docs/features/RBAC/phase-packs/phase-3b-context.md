@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 3b. Detach when Phase 3b ships and switch to `phase-3c-context.md`.
 
-> Companion reading: `docs/rbac/04_UI_Mockup_Catalog.md` Mockups 3, 4, 6, 9; `docs/rbac/05_Default_Mode_Design.md` §5 (Lock Model in Default Mode), §7 (UI Differences); `docs/rbac/03_Integration_With_Lock_Spec.md` §3, §6; `docs/architecture/CURRENT_STATE.md` "Executor Adapter" section; `docs/architecture/CONVENTIONS.md` WPF MVVM section.
+> Companion reading: `docs/features/RBAC/04_UI_Mockup_Catalog.md` Mockups 3, 4, 6, 9; `docs/features/RBAC/05_Default_Mode_Design.md` §5 (Lock Model in Default Mode), §7 (UI Differences); `docs/features/RBAC/03_Integration_With_Lock_Spec.md` §3, §6; `docs/architecture/CURRENT_STATE.md` "Executor Adapter" section; `docs/architecture/CONVENTIONS.md` WPF MVVM section.
 
 ---
 
@@ -140,9 +140,9 @@ public sealed record OwnerIdentity(string UserId, string DisplayName, ClientKind
 
 ```
 [SPEC]
-- docs/rbac/04_UI_Mockup_Catalog.md Mockups 3, 4, 6, 9
-- docs/rbac/05_Default_Mode_Design.md §5, §7
-- docs/rbac/03_Integration_With_Lock_Spec.md §3, §6
+- docs/features/RBAC/04_UI_Mockup_Catalog.md Mockups 3, 4, 6, 9
+- docs/features/RBAC/05_Default_Mode_Design.md §5, §7
+- docs/features/RBAC/03_Integration_With_Lock_Spec.md §3, §6
 - docs/architecture/CONVENTIONS.md — WPF MVVM, DI
 - docs/architecture/CURRENT_STATE.md — Executor Adapter, RBAC Phase status
 

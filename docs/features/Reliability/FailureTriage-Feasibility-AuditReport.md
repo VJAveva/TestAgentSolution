@@ -99,7 +99,7 @@ No artifact/binary-version table exists. Which binaries actually landed on an ag
 
 The PowerShell tools named in the prompt are **NOT FOUND — searched for:** glob `**/GetBuildChanges*.ps1`,
 `GetBuildChanges_OMI`, `function GetBuildChanges`. They appear only in markdown and in
-`docs/AzureIntegration/Program.cs:403`, which is a legacy reference copy not built by any project.
+`docs/archive/Program.cs:403`, which is a legacy reference copy not built by any project.
 
 #### B2. Output shape — `EXISTS`, full
 

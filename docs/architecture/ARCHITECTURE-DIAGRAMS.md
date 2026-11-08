@@ -2,7 +2,7 @@
 
 > **Status:** Current state on `master` (post .NET 10 upgrade)
 > **Target framework:** `net10.0` / `net10.0-windows`
-> **Companion doc:** see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full narrative; this file focuses on **renderable diagrams** (Mermaid) and a concise system-design summary.
+> **Companion doc:** see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full narrative; this file focuses on **renderable diagrams** (Mermaid) and a concise system-design summary.
 
 ---
 
@@ -553,7 +553,7 @@ flowchart LR
 
 ### 11.3 Enhancements & changelog
 
-Production-readiness phases (see `docs/Requirements/TestAgentSolution-Implementation-Plan.md`):
+Production-readiness phases (see `docs/archive/TestAgentSolution-Implementation-Plan.md`):
 
 | Phase | What landed |
 |-------|-------------|
@@ -562,6 +562,6 @@ Production-readiness phases (see `docs/Requirements/TestAgentSolution-Implementa
 | **P3** | `Deployment:Topology` + `ConfigValidator`; Vite dev proxy via `VITE_DEV_PROXY_TARGET`. |
 | **P4** | `System_ChangeMode`; mode-gated permission checks (fail-open in Default mode). |
 | **P5-3** | `deploy/Invoke-Deploy.ps1` + `.github/workflows/deploy.yml`. |
-| **P5-4** | Scalar UI `/scalar` + `docs/ONBOARDING.md`. |
+| **P5-4** | Scalar UI `/scalar` + `docs/getting-started/ONBOARDING.md`. |
 
 **Known gap (P5-1):** no run queue — `ExecutionController` dispatches fire-and-forget and returns **409** when agents are busy.

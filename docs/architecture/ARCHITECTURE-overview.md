@@ -600,7 +600,7 @@ Browser ──HTTP/SignalR──> IIS ──> TestController.WebApi
 ```
 
 The canonical agent roster is **5 nodes**: `JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`,
-`JVHIST` (static config; no dynamic discovery). See `docs/RUNBOOK.md` →
+`JVHIST` (static config; no dynamic discovery). See `docs/operations/RUNBOOK.md` →
 "Agent Roster (Canonical Source of Truth)".
 
 ---
@@ -743,7 +743,7 @@ Scalar UI at `/scalar`, and the custom category-based `IAppLogger` (`Info`/`Warn
 ## 13. Enhancements & Changelog
 
 Production-readiness work delivered in phases (P0–P5). See
-`docs/Requirements/TestAgentSolution-Implementation-Plan.md` for the full plan.
+`docs/archive/TestAgentSolution-Implementation-Plan.md` for the full plan.
 
 | Phase | Area | What landed |
 |-------|------|-------------|
@@ -752,7 +752,7 @@ Production-readiness work delivered in phases (P0–P5). See
 | **P3** | Decoupling | `Deployment:Topology` (`Auto`/`CoLocated`/`Standalone`) + `ConfigValidator.ValidateDeploymentTopology()`; Vite dev proxy via `VITE_DEV_PROXY_TARGET`; `.env.example` / `.env.development`. |
 | **P4** | RBAC enforcement | Added `System_ChangeMode`; mode-gated permission checks in `ExecutionController` (`Pipeline_Trigger`/`CancelAll`/`ForceRelease`), `UserController` (`User_*`), and `SystemModeController` — all fail-open in Default mode. |
 | **P5-3** | Deploy/rollback | `deploy/Invoke-Deploy.ps1` (backup → deploy → smoke test → auto-rollback) and `.github/workflows/deploy.yml` (`workflow_dispatch` deploy/rollback). |
-| **P5-4** | API discovery + onboarding | Scalar UI at `/scalar` over the existing OpenAPI document; `docs/ONBOARDING.md` first-run guide. |
+| **P5-4** | API discovery + onboarding | Scalar UI at `/scalar` over the existing OpenAPI document; `docs/getting-started/ONBOARDING.md` first-run guide. |
 
 **Known gap (P5-1, not yet implemented):** there is no run queue. `ExecutionController`
 dispatches with fire-and-forget `Task.Run(...)` and returns **409 Conflict** when agents are

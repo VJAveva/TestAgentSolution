@@ -4,7 +4,7 @@ using TestControllerGrpc.Services;
 namespace TestControllerGrpc.Tests.Services;
 
 /// <summary>
-/// The shared <c>GlobalVariables.json</c> layer (docs/GlobalVariables/GlobalVariables_Requirement.md).
+/// The shared <c>GlobalVariables.json</c> layer (docs/features/GlobalVariables/GlobalVariables_Requirement.md).
 ///
 /// Two things make this layer dangerous enough to pin hard. First, it was wired into the execution
 /// paths for the FIRST time - before this it reached a context only in the validator and the WPF

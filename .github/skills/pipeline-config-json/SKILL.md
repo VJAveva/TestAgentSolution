@@ -7,10 +7,10 @@ argument-hint: 'Release (e.g. SP2026R2) and use case (e.g. WARM, Sanity)'
 # Pipeline Config JSON
 
 ## Locations
-- Template: `docs/Requirements/pipeline-config.sample.json`
-- Schema: `docs/Requirements/pipeline-config.schema.json`
+- Template: `docs/features/PreFlightCheck/pipeline-config.sample.json`
+- Schema: `docs/features/PreFlightCheck/pipeline-config.schema.json`
 - Live: `C:\TestControllerService\Parameters\<Release>\<Release>-<UseCase>-pipeline-config.json` (e.g. `SP2026R2\SP2026R2-WARM-pipeline-config.json`)
-- Constants: `C:\TestControllerService\Parameters\GlobalVariables.json` (sample: `docs/GlobalVariables/GlobalVariables.json`)
+- Constants: `C:\TestControllerService\Parameters\GlobalVariables.json` (sample: `docs/features/GlobalVariables/GlobalVariables.json`)
 - Loader: `ParameterResolver.LoadJsonConfig`. Precedence is by **rank**, not file order: Global 10 < Profile 20 < PipelinePin 30 < GlobalVars 35 < TriggerFile 40 < RunOverride 50.
 
 ## Shape
@@ -32,8 +32,8 @@ argument-hint: 'Release (e.g. SP2026R2) and use case (e.g. WARM, Sanity)'
    - Agent hostnames go in `profiles`.
 3. **Secrets**: use placeholders (`__SET_..._PASSWORD__`) in anything committed. Real values live only in the deployed file. Never print them when reading the live file.
 4. **Validate**
-   - **Schema**: `docs/Requirements/pipeline-config.schema.json`. Root has only `version` (const 1), `global` (required), `profiles` and `pipelines`. Every layer key matches `^_[A-Za-z0-9_]+$`, and every value is a string. `pipelines` keys are 1 to 36 characters.
-     PS 5.1 has no `Test-Json`, so check those rules with `ConvertFrom-Json` plus `PSObject.Properties` loops. If Node is available, `npx --yes ajv-cli validate --spec=draft2020 -s docs/Requirements/pipeline-config.schema.json -d <file>` also works.
+   - **Schema**: `docs/features/PreFlightCheck/pipeline-config.schema.json`. Root has only `version` (const 1), `global` (required), `profiles` and `pipelines`. Every layer key matches `^_[A-Za-z0-9_]+$`, and every value is a string. `pipelines` keys are 1 to 36 characters.
+     PS 5.1 has no `Test-Json`, so check those rules with `ConvertFrom-Json` plus `PSObject.Properties` loops. If Node is available, `npx --yes ajv-cli validate --spec=draft2020 -s docs/features/PreFlightCheck/pipeline-config.schema.json -d <file>` also works.
      Report each violation with its JSON path.
    - Every `pipelines` key exactly equals an existing WatchItem `Tag`. It's case-sensitive, so a mismatch is silently dead config.
    - Every `Profile=` used by an Initialize pointing here exists in `profiles`.

@@ -1,6 +1,6 @@
 # FIR — Implementation Plan
 
-> Path in repo: `docs/FIRFailedTest/FIR_Implementation_Plan.md`
+> Path in repo: `docs/features/FIR/FIR_Implementation_Plan.md`
 > Inputs: `FIR_Requirement.md`, `FIR_Results_Mockup.html`, review of the codebase (2026-10-10).
 > Status: plan approved; Phase 1 ready to start.
 > **Two ground rules:** (1) **generic** — the engine knows nothing about any one product or test
@@ -271,7 +271,7 @@ FirReport {
 ## Phase 1 prompt (paste to start)
 
 ```
-Implement Phase 1 of docs/FIRFailedTest/FIR_Implementation_Plan.md: TRX input + generic layer only.
+Implement Phase 1 of docs/features/FIR/FIR_Implementation_Plan.md: TRX input + generic layer only.
 No rule packs, no Excel, no UI. The engine must contain NO WASSmokeTest/AppServer knowledge.
 Create in TestControllerGrpc.Core/Fir/: FirTrxInput (adapts TrxModels.TestResult + optional .log text),
 FirGenericAnalyzer (failure type assertion/exception/timeout/summary-check; failing frame = test code /

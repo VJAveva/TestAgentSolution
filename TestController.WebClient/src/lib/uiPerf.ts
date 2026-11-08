@@ -1,5 +1,5 @@
 /**
- * TEMPORARY UI performance instrumentation — see docs/reliability/UIPerformance-CopilotPrompts.md (P03).
+ * TEMPORARY UI performance instrumentation — see docs/features/Reliability/UIPerformance-CopilotPrompts.md (P03).
  *
  * Enable at runtime with NO rebuild:
  *     localStorage.setItem('uiPerf', '1'); location.reload();

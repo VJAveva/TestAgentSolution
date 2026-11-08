@@ -6,8 +6,8 @@
 > Verified against code on 2026-09-24. Every claim cites the implementing file. Where a statement is an
 > inference rather than something the code states, it says so.
 >
-> Companions, for depth this document deliberately summarises: [`../impact/Algorithm-As-Built.md`](../impact/Algorithm-As-Built.md)
-> (impact algorithm), [`../rbac/01_System_Design.md`](../rbac/01_System_Design.md) (RBAC spec),
+> Companions, for depth this document deliberately summarises: [`../impact/Algorithm-As-Built.md`](../features/Impact/Algorithm-As-Built.md)
+> (impact algorithm), [`../rbac/01_System_Design.md`](../features/RBAC/01_System_Design.md) (RBAC spec),
 > [`CURRENT_STATE.md`](CURRENT_STATE.md) (type inventory), [`CONVENTIONS.md`](CONVENTIONS.md) (coding rules),
 > [`README.md`](README.md) (the short map).
 
@@ -281,7 +281,7 @@ the token in a **header**, never the body.
 
 ## 14. Impact analysis
 
-Summarised here; full detail in [`../impact/Algorithm-As-Built.md`](../impact/Algorithm-As-Built.md).
+Summarised here; full detail in [`../impact/Algorithm-As-Built.md`](../features/Impact/Algorithm-As-Built.md).
 
 A six-stage cascade: risk score → anchors (can exit early) → query build → hybrid BM25 + dense retrieval
 fused by RRF → LLM rerank → MMR + knapsack selection under a time budget → record.

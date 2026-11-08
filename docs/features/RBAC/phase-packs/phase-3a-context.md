@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 3a. Detach when Phase 3a ships and switch to `phase-3b-context.md`.
 
-> Companion reading: `docs/rbac/03_Integration_With_Lock_Spec.md` §1.1 (two lock layers), §2–4 (reconciliation), §6 (scope); `docs/rbac/01_System_Design.md` §5 (pipeline state machine); `docs/rbac/05_Default_Mode_Design.md` §5 (locks in Default mode); `Pipeline_Lock_Coordination_Spec.md` §4.3–4.4 (model + lifecycle), §10 (failure scenarios); `docs/architecture/CURRENT_STATE.md` "Executor Adapter" section.
+> Companion reading: `docs/features/RBAC/03_Integration_With_Lock_Spec.md` §1.1 (two lock layers), §2–4 (reconciliation), §6 (scope); `docs/features/RBAC/01_System_Design.md` §5 (pipeline state machine); `docs/features/RBAC/05_Default_Mode_Design.md` §5 (locks in Default mode); `Pipeline_Lock_Coordination_Spec.md` §4.3–4.4 (model + lifecycle), §10 (failure scenarios); `docs/architecture/CURRENT_STATE.md` "Executor Adapter" section.
 
 ---
 
@@ -135,9 +135,9 @@ No UI work in this phase (Phase 3b = WPF lock UI, Phase 3c = Web lock UI).
 
 ```
 [SPEC]
-- docs/rbac/03_Integration_With_Lock_Spec.md §1.1, §3, §4
-- docs/rbac/01_System_Design.md §5 — Pipeline State Machine
-- docs/rbac/05_Default_Mode_Design.md §5 — Lock Model in Default Mode
+- docs/features/RBAC/03_Integration_With_Lock_Spec.md §1.1, §3, §4
+- docs/features/RBAC/01_System_Design.md §5 — Pipeline State Machine
+- docs/features/RBAC/05_Default_Mode_Design.md §5 — Lock Model in Default Mode
 - Pipeline_Lock_Coordination_Spec.md §4.3–4.4 (model types + lifecycle)
 - docs/architecture/CURRENT_STATE.md — Executor Adapter, RBAC Phase status
 

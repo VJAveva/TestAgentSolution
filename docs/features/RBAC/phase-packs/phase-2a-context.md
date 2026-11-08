@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 2a. Detach when Phase 2a ships and switch to `phase-2b-context.md`.
 
-> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/rbac/01_System_Design.md` §3 (authorization) + §5.1–5.2 (trigger/cancel), `docs/rbac/02_Implementation_Roadmap.md` §Phase 2, `docs/architecture/CURRENT_STATE.md` "Executor Adapter" section, `docs/architecture/CONVENTIONS.md`.
+> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/features/RBAC/01_System_Design.md` §3 (authorization) + §5.1–5.2 (trigger/cancel), `docs/features/RBAC/02_Implementation_Roadmap.md` §Phase 2, `docs/architecture/CURRENT_STATE.md` "Executor Adapter" section, `docs/architecture/CONVENTIONS.md`.
 
 ---
 
@@ -118,9 +118,9 @@ Copy this skeleton when opening a Copilot session for any task in Block A–C:
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §3 — Authorization Design
-- docs/rbac/01_System_Design.md §5.1 — Atomic trigger
-- docs/rbac/02_Implementation_Roadmap.md §Phase 2 — Pipeline Trigger + Cancel
+- docs/features/RBAC/01_System_Design.md §3 — Authorization Design
+- docs/features/RBAC/01_System_Design.md §5.1 — Atomic trigger
+- docs/features/RBAC/02_Implementation_Roadmap.md §Phase 2 — Pipeline Trigger + Cancel
 - docs/architecture/CURRENT_STATE.md — Executor Adapter
 
 [CURRENT STATE]

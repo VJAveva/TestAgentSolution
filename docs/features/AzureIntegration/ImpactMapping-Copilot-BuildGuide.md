@@ -5,9 +5,9 @@
 > the engine *as first specified* and have since diverged from the code.
 >
 > For current behaviour use:
-> - [`docs/impact/Algorithm-Schema.md`](../impact/Algorithm-Schema.md) — pipeline, formulas, every tunable
-> - [`docs/impact/ImpactDb-Deep-Dive.md`](../impact/ImpactDb-Deep-Dive.md) — index and operations
-> - [`docs/impact/Regression-Selection-Algorithm.md`](../impact/Regression-Selection-Algorithm.md) — R1–R3
+> - [`docs/features/Impact/Algorithm-Schema.md`](../Impact/Algorithm-Schema.md) — pipeline, formulas, every tunable
+> - [`docs/features/Impact/ImpactDb-Deep-Dive.md`](../Impact/ImpactDb-Deep-Dive.md) — index and operations
+> - [`docs/features/Impact/Regression-Selection-Algorithm.md`](../Impact/Regression-Selection-Algorithm.md) — R1–R3
 >
 > Known divergences: `MaxFeaturesPerGroupQuery`, `MaxTestCasesPerGroupQuery`, `TopFeaturesPerBranch` and
 > `UseWiqlPreFilter` were deleted; a `Risk` section and the `Selection` scoring weights were added; test case

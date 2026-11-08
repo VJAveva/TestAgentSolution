@@ -19,15 +19,15 @@ The RBAC feature adds a NEW project `TestController.Persistence/` for EF Core + 
 
 ## Active Design Specifications (read before generating code)
 
-- `docs/rbac/00_Master_Plan.md` — decisions and phase summary
-- `docs/rbac/01_System_Design.md` — architecture and SQLite schema
-- `docs/rbac/02_Implementation_Roadmap.md` — phase definitions, exit criteria
-- `docs/rbac/03_Integration_With_Lock_Spec.md` — pipeline lock model (separate from existing `AgentLockManager`, which locks agents not pipelines)
-- `docs/rbac/04_UI_Mockup_Catalog.md` — visual design rationale
-- `docs/rbac/05_Default_Mode_Design.md` — Default vs Secured mode
-- `docs/rbac/06_Copilot_Implementation_Plan.md` — token-efficient workflow
-- `docs/rbac/07_Implementation_Toolkit.md` — the practical handoff guide (start here)
-- `docs/rbac/phase-packs/phase-N-context.md` — attach the current-phase pack to each session
+- `docs/features/RBAC/00_Master_Plan.md` — decisions and phase summary
+- `docs/features/RBAC/01_System_Design.md` — architecture and SQLite schema
+- `docs/features/RBAC/02_Implementation_Roadmap.md` — phase definitions, exit criteria
+- `docs/features/RBAC/03_Integration_With_Lock_Spec.md` — pipeline lock model (separate from existing `AgentLockManager`, which locks agents not pipelines)
+- `docs/features/RBAC/04_UI_Mockup_Catalog.md` — visual design rationale
+- `docs/features/RBAC/05_Default_Mode_Design.md` — Default vs Secured mode
+- `docs/features/RBAC/06_Copilot_Implementation_Plan.md` — token-efficient workflow
+- `docs/features/RBAC/07_Implementation_Toolkit.md` — the practical handoff guide (start here)
+- `docs/features/RBAC/phase-packs/phase-N-context.md` — attach the current-phase pack to each session
 
 ## Current Codebase Facts
 

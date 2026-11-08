@@ -1,11 +1,11 @@
 # TestAgentSolution — System Design
 
-**Status:** current as of 2026-09-10. Supersedes the diagrams in `docs/ARCHITECTURE-DIAGRAMS.md`,
-`docs/ARCHITECTURE.md` and `docs/ARCHITECTURE_DESIGN_DOCUMENT.md`, all of which were last revised 2026-06-27 and
+**Status:** current as of 2026-09-10. Supersedes the diagrams in `docs/architecture/ARCHITECTURE-DIAGRAMS.md`,
+`docs/architecture/ARCHITECTURE.md` and `docs/architecture/ARCHITECTURE_DESIGN_DOCUMENT.md`, all of which were last revised 2026-06-27 and
 predate the RBAC phases 3–10, the impact-analysis engine and the Azure DevOps credential work.
 
 Companion documents: `docs/architecture/CURRENT_STATE.md` (types, DI registrations, load-bearing weirdness),
-`docs/architecture/CONVENTIONS.md` (coding patterns), `docs/impact/Algorithm-Schema.md` (retrieval maths).
+`docs/architecture/CONVENTIONS.md` (coding patterns), `docs/features/Impact/Algorithm-Schema.md` (retrieval maths).
 
 ---
 

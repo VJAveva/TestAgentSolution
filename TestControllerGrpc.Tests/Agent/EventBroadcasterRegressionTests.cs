@@ -7,7 +7,7 @@ namespace TestControllerGrpc.Tests.Agent;
 
 /// <summary>
 /// Regression guard for the gRPC "Unexpected compressed flag value in message
-/// header" framing corruption (docs/Issues/Debug_Grpc_CompressedFlag_Error.md).
+/// header" framing corruption (docs/issues/closed/Debug_Grpc_CompressedFlag_Error.md).
 ///
 /// Root cause: multiple independent gRPC stream writers (the controller push
 /// stream, the SubscribeAgentEvents firehose, the tray UI) each serialize the

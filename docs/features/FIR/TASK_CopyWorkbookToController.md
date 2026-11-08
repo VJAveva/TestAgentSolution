@@ -24,7 +24,7 @@ report then reads `test data (… , copy from run)` instead of `controller copy,
 
 ## Change
 
-In [Run-WASTests.bat](../../Utilites/TestSetup/Common/SmokeTest/Run-WASTests.bat):
+In [Run-WASTests.bat](../../../Utilites/TestSetup/Common/SmokeTest/Run-WASTests.bat):
 
 1. One call at the end of `:CopySuiteToCtrl`:
 
@@ -65,7 +65,7 @@ In [Run-WASTests.bat](../../Utilites/TestSetup/Common/SmokeTest/Run-WASTests.bat
 
 ## Rollout
 
-`*.bat` is in `preserveFiles` in [fleet-inventory.json](../../deploy/fleet-inventory.json), so a fleet
+`*.bat` is in `preserveFiles` in [fleet-inventory.json](../../../deploy/fleet-inventory.json), so a fleet
 deploy will **not** update `C:\TestAgentService\Run-WASTests.bat`. It must be copied by hand.
 
 1. **Canary one agent first.** Copy to a single agent, run one suite, and verify:

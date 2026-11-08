@@ -3,12 +3,12 @@ using System.Text.Json.Serialization;
 namespace TestControllerGrpc.Models;
 
 // =============================================================================
-// Regression tab / CIRP domain model (docs/AzureIntegration/FEATURE-ARCHITECTURE.md §6,
-// docs/AzureIntegration/RegressionTab-UI-Spec.md).
+// Regression tab / CIRP domain model (docs/features/AzureIntegration/FEATURE-ARCHITECTURE.md §6,
+// docs/features/CodeChurn/RegressionTab-UI-Spec.md).
 //
 // STATUS: Phase 6 UI-first slice. Real Azure DevOps ingest (Phases 0-5 of the
 // architecture doc) is a separate, gated track that needs Entra/PAT credentials
-// and captured fixtures — see docs/AzureIntegration/Azure-DevOps-Integration-Guide.md.
+// and captured fixtures — see docs/features/CodeChurn/Azure-DevOps-Integration-Guide.md.
 // Until that lands, IRegressionDataProvider is backed by MockRegressionDataProvider
 // so the grid (R9) and plan panel (R11-13) can be built and reviewed now, per the
 // spec's own build order: "R9 first with static data".

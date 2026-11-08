@@ -91,7 +91,7 @@ maintenance surface you may have forgotten you own.
 | Project | Scale | Evidence | Assessment |
 |---|---|---|---|
 | `TestController.Dashboard/` | 261 LOC, 2 files | 10 references, **all in `.md` docs**. Not in `Publish-All.ps1`. References `TestControllerGrpc`, so it is a consumer nothing consumes. | **Likely abandoned** — confirm in Stage 4 |
-| `TestAgent.Diagnostics/` | 1,470 LOC, 20 files, **zero project references** | 6 references, **all in `.md` docs** (incl. `docs/Requirements/TestAgent_Diagnostics_BuildSpec.md`). Not shipped. | **Likely abandoned or never finished** |
+| `TestAgent.Diagnostics/` | 1,470 LOC, 20 files, **zero project references** | 6 references, **all in `.md` docs** (incl. `docs/features/AgentDiagnostics/TestAgent_Diagnostics_BuildSpec.md`). Not shipped. | **Likely abandoned or never finished** |
 | `TestController.LoadTests/` | 566 LOC, Exe | 7 references, all docs. Contains `SimulatedAgentService` — a fake agent for scale testing. | **Dev tool — probably intentional** |
 | `TestController.ImpactEval/` | 200 LOC, 1 file, Exe | 4 references (docs + `.sln`). | **Dev tool — probably intentional** |
 
@@ -103,7 +103,7 @@ the repo, excluding each project's own folder.)*
 **Plain language:** there is a 56 KB C# file living in your docs folder that nothing compiles. It looks like
 real implementation work that was either prototyped there or moved and never cleaned up.
 
-- `docs/AzureIntegration/Program.cs` — **56,222 bytes, 1,079 lines, not compiled by any project.**
+- `docs/archive/Program.cs` — **56,222 bytes, 1,079 lines, not compiled by any project.**
   The only `.csproj` mention of `AzureIntegration` is inside an MSBuild *error-message string* in
   `TestController.WebApi/TestController.WebApi.csproj` line 70 — not a compile item. **Verified.**
 
@@ -147,7 +147,7 @@ but if you forgot they existed, this is the reminder.
 
 | Feature | State | Evidence |
 |---|---|---|
-| **Golden-image refresh** (revert → patch → verify → replace baseline) | Fully implemented with a 12-phase state machine and tests, but has **no DI registration, no façade method, and no UI entry point**. Reachable only from tests. | `TestControllerGrpc.Core/Maintenance/GoldenImageRefreshOperation.cs`; documented as deliberate in `docs/Requirements/FleetUpdateOrchestration-Design.md` §9.3 |
+| **Golden-image refresh** (revert → patch → verify → replace baseline) | Fully implemented with a 12-phase state machine and tests, but has **no DI registration, no façade method, and no UI entry point**. Reachable only from tests. | `TestControllerGrpc.Core/Maintenance/GoldenImageRefreshOperation.cs`; documented as deliberate in `docs/features/FleetMaintenance/FleetUpdateOrchestration-Design.md` §9.3 |
 | **Consolidated pipeline email** | Deployed and registered, but gated off: `SendConsolidatedEmail` defaults to `false` and the three companion settings default to empty. | `TestControllerGrpc.Core/Models/BuildResultsConfig.cs`; `TestControllerGrpc/Services/ConsolidatedRunMailer.cs` |
 | **VM provider batching** | `ScriptBackedVirtualizationProvider` supports multi-VM batched calls, but the per-agent design decision means it is always called with single-element lists. | `TestControllerGrpc.Core/Maintenance/ScriptBackedVirtualizationProvider.cs`; design doc §9.6 |
 
@@ -306,7 +306,7 @@ I will not invent answers to these. Flagged for you to confirm or for later stag
 | **Q1** | Is `TestAgentDisplay` still used? It *is* published by `Publish-All.ps1`, but it has **zero project references** and duplicates the proto. | If unused, it is shipped dead weight that must be kept proto-compatible forever. |
 | **Q2** | Are `TestController.Dashboard` and `TestAgent.Diagnostics` abandoned, or paused work you intend to resume? | Determines whether Stage 4 recommends deletion. |
 | **Q3** | The report-card and audit features have substantial backends but very thin React surfaces (report card = 1 component file). Intentional, or unfinished? | Classic "half-built feature" signature; needs your intent to classify. |
-| **Q4** | Is `docs/AzureIntegration/Program.cs` (1,079 uncompiled lines) a reference sample, or orphaned implementation? | Determines delete vs relocate. |
+| **Q4** | Is `docs/archive/Program.cs` (1,079 uncompiled lines) a reference sample, or orphaned implementation? | Determines delete vs relocate. |
 | **Q5** | Is the standalone web host actually deployed anywhere, or is the WPF host's embedded API the only one in use? | Changes how much the WPF/standalone behaviour divergence actually matters. |
 
 ---

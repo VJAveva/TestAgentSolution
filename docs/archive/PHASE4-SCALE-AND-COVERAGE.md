@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Phase 4 — Scale Validation & Test Coverage (Implementation Plan)
 
 > **Created:** 2026-06-19
@@ -10,7 +12,7 @@
 
 ## Important context — scaling is largely already built
 
-The repo already contains **`docs/Issues/SCALING-IMPLEMENTATION-PLAN.md`** (8 phases, 200-agent target) and most of it is **implemented**: SignalR heartbeat + output batching (`AgentHeartbeats`/`AgentOutputBatch` in `useSignalR.ts`), fleet snapshot cache (`TestController.WebApi.Tests/FleetSnapshotCacheTests.cs`), bounded pipeline parallelism (`TestControllerGrpc.Tests/Scaling/PipelineParallelismTests.cs`), ThreadPool pre-warm + rate-limit config (`RateLimitConfigTests.cs`), and event-aggregator stress tests (`EventAggregatorStressTests.cs`).
+The repo already contains **`docs/archive/SCALING-IMPLEMENTATION-PLAN.md`** (8 phases, 200-agent target) and most of it is **implemented**: SignalR heartbeat + output batching (`AgentHeartbeats`/`AgentOutputBatch` in `useSignalR.ts`), fleet snapshot cache (`TestController.WebApi.Tests/FleetSnapshotCacheTests.cs`), bounded pipeline parallelism (`TestControllerGrpc.Tests/Scaling/PipelineParallelismTests.cs`), ThreadPool pre-warm + rate-limit config (`RateLimitConfigTests.cs`), and event-aggregator stress tests (`EventAggregatorStressTests.cs`).
 
 **So D3 is reframed:** not "design scaling" (done) but **"validate it end-to-end."** The existing tests cover each *mechanism in isolation*; what's missing is a single test that drives a live N-agent fleet and measures the documented success criteria. Don't re-implement the scaling fixes.
 

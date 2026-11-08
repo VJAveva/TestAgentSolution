@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 0. Detach when Phase 0 ships and switch to `phase-0.5-context.md`.
 
-> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/rbac/01_System_Design.md`, `docs/rbac/05_Default_Mode_Design.md`, `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
+> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/features/RBAC/01_System_Design.md`, `docs/features/RBAC/05_Default_Mode_Design.md`, `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
 
 ---
 
@@ -126,8 +126,8 @@ Copy this skeleton when opening a Copilot session for any task in Block A-D:
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §<X> — <one line>
-- docs/rbac/05_Default_Mode_Design.md §<Y> — <one line if relevant>
+- docs/features/RBAC/01_System_Design.md §<X> — <one line>
+- docs/features/RBAC/05_Default_Mode_Design.md §<Y> — <one line if relevant>
 
 [CURRENT STATE]
 - Tasks 1..N already done (paths)

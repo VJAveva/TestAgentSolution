@@ -5,7 +5,7 @@
     <!--
         Lock badge for WatchItem tree rows.
         Amber variant: other-owner lock. Blue variant: own-run elapsed timer.
-        Per docs/rbac/04_UI_Mockup_Catalog.md Mockups 3, 4.
+        Per docs/features/RBAC/04_UI_Mockup_Catalog.md Mockups 3, 4.
     -->
     <UserControl.Style>
         <Style TargetType="UserControl">

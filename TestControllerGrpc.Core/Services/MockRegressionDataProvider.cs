@@ -5,9 +5,9 @@ namespace TestControllerGrpc.Services;
 
 /// <summary>
 /// Deterministic, in-memory stand-in for the real Azure DevOps ingest pipeline
-/// (docs/AzureIntegration/FEATURE-ARCHITECTURE.md Phases 0-5). Those phases need
+/// (docs/features/AzureIntegration/FEATURE-ARCHITECTURE.md Phases 0-5). Those phases need
 /// Entra/PAT credentials and captured fixtures that don't exist in this repo yet
-/// (see docs/AzureIntegration/Azure-DevOps-Integration-Guide.md Stage 0-1).
+/// (see docs/features/CodeChurn/Azure-DevOps-Integration-Guide.md Stage 0-1).
 ///
 /// This provider exists so the Regression tab (R9 grid, R11-13 plan panel) can be
 /// built and reviewed now, per RegressionTab-UI-Spec.md's own build order: "R9

@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Error Handling & Resilience Fix Plan
 
 > **Created:** 2025-05-23 | **Scope:** P1–P2 error handling gaps from GAP-ANALYSIS.md §1

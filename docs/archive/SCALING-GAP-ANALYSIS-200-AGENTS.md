@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Scaling Gap Analysis: 10 → 200 Agents
 
 > **Author:** Performance Architecture Review  

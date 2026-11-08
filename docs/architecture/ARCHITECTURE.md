@@ -1054,21 +1054,21 @@ never awaited); `AuditDrainWorker` batches to SQLite; a retention worker purges 
 | API reference UI | `GET /scalar` (Scalar.AspNetCore; Bearer preselected) |
 | Logging | `IAppLogger` — category-based `Info`/`Warn`/`Error` (**not** Serilog); ring buffer + rolling files + optional Seq sink; `SecurityRedactor` strips secrets |
 | Rate limiting | `telemetry` (reads) + `mutation` (writes) fixed-window policies; 429 + RFC 7807 |
-| Onboarding | `docs/ONBOARDING.md` (first-run via `/scalar`) |
+| Onboarding | `docs/getting-started/ONBOARDING.md` (first-run via `/scalar`) |
 
 ### Deploy & rollback
 
 Per-component deploy scripts in `deploy/` are wrapped by `deploy/Invoke-Deploy.ps1`
 (pre-deploy check → timestamped backup → deploy → smoke test → **auto-rollback** on failure)
 and surfaced via the `workflow_dispatch` workflow `.github/workflows/deploy.yml`. See
-`docs/RUNBOOK.md` → "Deploy & Rollback".
+`docs/operations/RUNBOOK.md` → "Deploy & Rollback".
 
 ---
 
 ## 18. Enhancements & Changelog
 
 Production-readiness work delivered in phases (P0–P5); see
-`docs/Requirements/TestAgentSolution-Implementation-Plan.md`.
+`docs/archive/TestAgentSolution-Implementation-Plan.md`.
 
 | Phase | Area | What landed |
 |-------|------|-------------|
@@ -1077,7 +1077,7 @@ Production-readiness work delivered in phases (P0–P5); see
 | **P3** | Decoupling | `Deployment:Topology` (`Auto`/`CoLocated`/`Standalone`) + `ConfigValidator.ValidateDeploymentTopology()`; Vite dev proxy via `VITE_DEV_PROXY_TARGET`. |
 | **P4** | RBAC enforcement | Added `System_ChangeMode`; mode-gated permission checks in `ExecutionController`, `UserController`, `SystemModeController` (fail-open in Default mode). |
 | **P5-3** | Deploy/rollback | `deploy/Invoke-Deploy.ps1` + `.github/workflows/deploy.yml`. |
-| **P5-4** | API discovery + onboarding | Scalar UI at `/scalar`; `docs/ONBOARDING.md`. |
+| **P5-4** | API discovery + onboarding | Scalar UI at `/scalar`; `docs/getting-started/ONBOARDING.md`. |
 
 **Known gap (P5-1):** no run queue. `ExecutionController` dispatches fire-and-forget and
 returns **409 Conflict** when agents are busy — multi-team use is "collide and 409", not queued.

@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 3c. Detach when Phase 3c ships and switch to `phase-4-context.md`.
 
-> Companion reading: `docs/rbac/04_UI_Mockup_Catalog.md` Mockups 3, 4, 6, 9; `docs/rbac/05_Default_Mode_Design.md` §5 (Lock Model in Default Mode), §7 (UI Differences); `docs/architecture/CURRENT_STATE.md` "Pipeline Lock Coordination" section; `docs/architecture/CONVENTIONS.md` React section.
+> Companion reading: `docs/features/RBAC/04_UI_Mockup_Catalog.md` Mockups 3, 4, 6, 9; `docs/features/RBAC/05_Default_Mode_Design.md` §5 (Lock Model in Default Mode), §7 (UI Differences); `docs/architecture/CURRENT_STATE.md` "Pipeline Lock Coordination" section; `docs/architecture/CONVENTIONS.md` React section.
 
 ---
 
@@ -150,8 +150,8 @@ interface PipelineLockDto {
 
 ```
 [SPEC]
-- docs/rbac/04_UI_Mockup_Catalog.md Mockups 3, 4, 6, 9
-- docs/rbac/05_Default_Mode_Design.md §5, §7
+- docs/features/RBAC/04_UI_Mockup_Catalog.md Mockups 3, 4, 6, 9
+- docs/features/RBAC/05_Default_Mode_Design.md §5, §7
 - docs/architecture/CURRENT_STATE.md — Pipeline Lock Coordination section
 - docs/architecture/CONVENTIONS.md — React section
 

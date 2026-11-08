@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Tier 3 — Feature Completeness: Gap Implementation Plan
 
 | Field | Value |
@@ -129,7 +131,7 @@ action groups in parallel with a `SemaphoreSlim` throttle ([PipelineExecutorBase
 
 ### 4.1 Tasks
 1. **Confirm the serialization point.** Trace `TriggerWatchItem` in [ExecutionController.cs](../../TestController.Api/Controllers/ExecutionController.cs) and `MainViewModel.Execution.cs` `TriggerEvent`; identify any implicit single-run gate (a shared `_isRunning`, a single executor await, or a UI `CanExecute`). Remove/relax only the *cross-item* gate — keep the **per-tag lock** (concurrent runs of the *same* WatchItem must still block).
-2. **UI-thread marshaling (WPF).** Convert the flagged synchronous `Dispatcher.Invoke` sites to `InvokeAsync` and ensure every `ObservableCollection` mutation from a background progress/result stream is marshaled. Known sites (per `docs/Requirements/GAP-ANALYSIS.md`): `MainViewModel.Execution.cs:60,137,331` and `MonitorVM.cs:443,465`. Consider `BindingOperations.EnableCollectionSynchronization` for hot collections.
+2. **UI-thread marshaling (WPF).** Convert the flagged synchronous `Dispatcher.Invoke` sites to `InvokeAsync` and ensure every `ObservableCollection` mutation from a background progress/result stream is marshaled. Known sites (per `docs/archive/GAP-ANALYSIS.md`): `MainViewModel.Execution.cs:60,137,331` and `MonitorVM.cs:443,465`. Consider `BindingOperations.EnableCollectionSynchronization` for hot collections.
 3. **Load test.** Add a test that triggers ≥5 distinct WatchItems concurrently and asserts all reach a terminal state with correct per-session counts (extend [ConcurrentExecutionTests.cs](../../TestController.ApiTests/Workflows/ConcurrentExecutionTests.cs)).
 
 ### 4.2 Acceptance
@@ -143,7 +145,7 @@ action groups in parallel with a `SemaphoreSlim` throttle ([PipelineExecutorBase
 
 ## 5. WatchItem Builder — Greenfield
 
-**Status:** ❌ Not implemented (spec only: [WatchItemBuilder_Implementation_Spec.md](Requirements/WatchItemBuilder_Implementation_Spec.md)). This is the one true feature build.
+**Status:** ❌ Not implemented (spec only: [WatchItemBuilder_Implementation_Spec.md](../features/PipelineBuilder/WatchItemBuilder_Implementation_Spec.md)). This is the one true feature build.
 
 **Foundation that de-risks it:**
 - Round-trip parser/serializer exists: [WatchListXmlParser.cs](../../TestControllerGrpc.Core/Services/WatchListXmlParser.cs) (the schema authority — form fields and validation rules must mirror it).

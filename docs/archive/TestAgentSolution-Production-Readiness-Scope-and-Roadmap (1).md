@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # TestAgentSolution — Feature Scope & Production-Readiness Roadmap
 
 ### From a single-user tool to a cross-team platform

@@ -17,7 +17,7 @@
     backup without deploying anything new.
 
     This is the automation referenced by .github/workflows/deploy.yml and the
-    "Deploy & Rollback" section of docs/RUNBOOK.md. Anyone - not just the
+    "Deploy & Rollback" section of docs/operations/RUNBOOK.md. Anyone - not just the
     original author - can deploy and roll back with a single command.
 
 .PARAMETER Component

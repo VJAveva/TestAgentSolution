@@ -1,6 +1,6 @@
 # ui-perf-baseline.md
 
-Gate 1 artifact for `docs/reliability/UIPerformance-CopilotPrompts.md`.
+Gate 1 artifact for `docs/features/Reliability/UIPerformance-CopilotPrompts.md`.
 
 ## Status: WEB MEASURED · WPF NOT MEASURED
 
@@ -42,7 +42,7 @@ non-proxied host.
 route is mapped only in `TestController.WebApi/Endpoints/ExecutionEndpoints.cs`, while the
 WPF-embedded host serves the plain `/api/execution/dashboard-sessions`
 (`TestController.Api/Controllers/ExecutionController.cs` L112). Already recorded as
-"Critical" in `docs/Issues/WEBCLIENT_BLANK_PAGE_SECURED_MODE.md` L34 and still unfixed.
+"Critical" in `docs/issues/closed/WEBCLIENT_BLANK_PAGE_SECURED_MODE.md` L34 and still unfixed.
 
 Measured: **1 × 404 per 8 s (>225 per 30 min) → 3 on first load, then 0** after latching
 onto the working path.

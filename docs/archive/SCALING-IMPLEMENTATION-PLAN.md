@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Scaling Remediation — Implementation Plan
 
 > **Objective:** Fix all P0/P1 scaling gaps to support 200 agents with zero regressions  

@@ -99,7 +99,7 @@ logged or returned by the API; red-proof each.
 ## Part 5 — Package for other teams (docs only, no code)
 
 ```
-Write docs/Team-Onboarding.md:
+Write docs/getting-started/Team-Onboarding.md:
 1. Install controller + agents (Prepare-ControllerNode.ps1, Prepare-AgentNode-Full.ps1 -Controller <name>).
 2. Copy Features.json, turn off what the team does not use; Code Churn repos/branches.
 3. Parameters folder layout and <Release>-<UseCase>-pipeline-config.json naming; GlobalVariables.json.

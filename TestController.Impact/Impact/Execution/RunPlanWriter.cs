@@ -18,7 +18,7 @@ public sealed record RunPlanResult(
 
 /// <summary>
 /// Writes an impact selection as a layered-config-shaped JSON trigger file
-/// (docs/impact/Regression-Selection-Algorithm.md §4.3). The controller already watches folders, fires
+/// (docs/features/Impact/Regression-Selection-Algorithm.md §4.3). The controller already watches folders, fires
 /// WatchItem events and resolves trigger parameters at <see cref="ParameterRank.TriggerFile"/>, so a
 /// selection needs no second execution path — only a file in the right shape.
 /// <para>

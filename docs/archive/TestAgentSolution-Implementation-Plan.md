@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # TestAgentSolution — Implementation Plan (Code-Validated)
 
 | | |
@@ -47,14 +49,14 @@ These are the things that will keep hurting until you confront them. Each is rea
 ### 2.1 You're maintaining the same logic twice (the dual-host tax) — **biggest structural debt**
 You have two of everything on the hot path:
 
-- Executors: [ActionPipelineExecutor.cs](TestControllerGrpc/Services/ActionPipelineExecutor.cs) (WPF) **vs** [StandalonePipelineExecutor.cs](TestController.WebApi/Services/StandalonePipelineExecutor.cs) (WebApi)
-- Dispatchers: [AgentGrpcDispatcher.cs](TestControllerGrpc/Services/AgentGrpcDispatcher.cs) **vs** [StandaloneAgentDispatcher.cs](TestController.WebApi/Services/StandaloneAgentDispatcher.cs)
-- Locks: [AgentLockManager.cs](TestControllerGrpc.Core/Services/AgentLockManager.cs) **vs** the WebApi `LockRegistry`
+- Executors: [ActionPipelineExecutor.cs](../../TestControllerGrpc/Services/ActionPipelineExecutor.cs) (WPF) **vs** [StandalonePipelineExecutor.cs](../../TestController.WebApi/Services/StandalonePipelineExecutor.cs) (WebApi)
+- Dispatchers: [AgentGrpcDispatcher.cs](../../TestControllerGrpc/Services/AgentGrpcDispatcher.cs) **vs** [StandaloneAgentDispatcher.cs](../../TestController.WebApi/Services/StandaloneAgentDispatcher.cs)
+- Locks: [AgentLockManager.cs](../../TestControllerGrpc.Core/Services/AgentLockManager.cs) **vs** the WebApi `LockRegistry`
 
 Every fix you make now has to be made twice or it drifts. The earlier email-card I/O fix, the deadlines, the Polly tuning — each is a coin-flip on whether both hosts got it. **This is the tax you pay for shipping the standalone host *in parallel* with the WPF host instead of *extracting* it.** Until the WPF host becomes a thin client of the same core execution path, drift is structural, not accidental.
 
 ### 2.2 RBAC is built, wired, and switched OFF — comfortable, and dangerous
-[TestControllerGrpc/appsettings.json](TestControllerGrpc/appsettings.json#L100-L101) has `"RBAC": { "Enabled": false }`. The entire auth/permission/audit surface — `AuthorizationService.CanAsync`, `SessionAuthInterceptor`, 403/409 paths — **has never run in Secured mode in production.** Scaffolding that compiles gives false confidence. The day you flip it on is the day you discover which of the 15 controllers forgot a `Can` check, which client call lacks a bearer token, and which 409 should've been a 403. **The gate to "second team onboarded" is not *writing* RBAC — it's *surviving the first week with it on*.**
+[TestControllerGrpc/appsettings.json](../../TestControllerGrpc/appsettings.json#L100-L101) has `"RBAC": { "Enabled": false }`. The entire auth/permission/audit surface — `AuthorizationService.CanAsync`, `SessionAuthInterceptor`, 403/409 paths — **has never run in Secured mode in production.** Scaffolding that compiles gives false confidence. The day you flip it on is the day you discover which of the 15 controllers forgot a `Can` check, which client call lacks a bearer token, and which 409 should've been a 403. **The gate to "second team onboarded" is not *writing* RBAC — it's *surviving the first week with it on*.**
 
 ### 2.3 Config drift already shipped the exact bug the roadmap warns about
 The roadmap dedicates Epic D to "jvkbak drift." It's already in your repo, in production config:
@@ -64,25 +66,25 @@ The roadmap dedicates Epic D to "jvkbak drift." It's already in your repo, in pr
 { "Name": "jvkbak", "Address": "http://jvbak:5200" },   // Name says jvkbak, address says jvbak
 ```
 
-A name/address mismatch in [appsettings.Production.json](TestController.WebApi/appsettings.Production.json#L28). This is not hypothetical future drift — it's a live latent outage waiting for the day traffic routes by that address. **The doc treats config drift as a future risk; it's a present defect.**
+A name/address mismatch in [appsettings.Production.json](../../TestController.WebApi/appsettings.Production.json#L28). This is not hypothetical future drift — it's a live latent outage waiting for the day traffic routes by that address. **The doc treats config drift as a future risk; it's a present defect.**
 
 ### 2.4 Correlation IDs exist in the schema but aren't threaded — half-wired traceability
-`AppLogEntry` carries `CorrelationId` and `RunId` ([IAppLogger.cs](TestControllerGrpc.Core/Services/IAppLogger.cs)), and the gRPC runner can attach an `x-correlation-id` header ([RemoteCommandStreamRunner.cs](TestControllerGrpc.Core/Services/RemoteCommandStreamRunner.cs)). But the proto carries only `execution_id`, the session manager doesn't propagate the id, and **agent logs don't carry the controller's `RunId`.** So the promise — "one run reads as a single story" — is *plumbed but not connected*. This is worse than absent, because the fields *look* populated in the controller and mysteriously empty on the agent.
+`AppLogEntry` carries `CorrelationId` and `RunId` ([IAppLogger.cs](../../TestControllerGrpc.Core/Services/IAppLogger.cs)), and the gRPC runner can attach an `x-correlation-id` header ([RemoteCommandStreamRunner.cs](../../TestControllerGrpc.Core/Services/RemoteCommandStreamRunner.cs)). But the proto carries only `execution_id`, the session manager doesn't propagate the id, and **agent logs don't carry the controller's `RunId`.** So the promise — "one run reads as a single story" — is *plumbed but not connected*. This is worse than absent, because the fields *look* populated in the controller and mysteriously empty on the agent.
 
 ### 2.5 The agent is still a tray app — the OS can't supervise it
-[TestAgentGrpc/Program.cs](TestAgentGrpc/Program.cs) runs Kestrel on a background thread + a WinForms tray context on an STA thread. There is **no `UseWindowsService()`.** Your `GrpcListenerWatchdog` does the right thing — it exits with a restart code on zombie detection — but *something has to restart it*, and that something is a Windows Service Recovery policy that only exists if provisioning set it. **Your self-healing depends on a config step that VM reverts erase.** The zombie problem you keep fighting is downstream of this one decision.
+[TestAgentGrpc/Program.cs](../../TestAgentGrpc/Program.cs) runs Kestrel on a background thread + a WinForms tray context on an STA thread. There is **no `UseWindowsService()`.** Your `GrpcListenerWatchdog` does the right thing — it exits with a restart code on zombie detection — but *something has to restart it*, and that something is a Windows Service Recovery policy that only exists if provisioning set it. **Your self-healing depends on a config step that VM reverts erase.** The zombie problem you keep fighting is downstream of this one decision.
 
 ### 2.6 Orphan detection without reassignment turns "hung run" into "lost run"
-[LockRecoveryService.cs](TestController.Api/Services/LockRecoveryService.cs) detects orphaned locks and releases them via `AgentLockManager.FindOrphanedLocks`. Good — no more indefinite hang. But the abandoned *work* is never requeued. You traded one failure mode (hang) for a quieter one (silent loss). For a single user who notices, fine. For another team, a run that vanishes with no result and no error is a trust-killer.
+[LockRecoveryService.cs](../../TestController.Api/Services/LockRecoveryService.cs) detects orphaned locks and releases them via `AgentLockManager.FindOrphanedLocks`. Good — no more indefinite hang. But the abandoned *work* is never requeued. You traded one failure mode (hang) for a quieter one (silent loss). For a single user who notices, fine. For another team, a run that vanishes with no result and no error is a trust-killer.
 
 ### 2.7 Co-located mode has two event authorities
-When `ControllerProxyUrl` is set, [TestController.WebApi/Program.cs](TestController.WebApi/Program.cs) runs `ControllerEventRelayService`/`ControllerProxyService` to bridge to the WPF host's authoritative data — *and* the WPF host runs its own `ControllerWebApiHost` on the same port 5200. **Which process is the source of truth depends on a config string.** That's a debugging trap: the same `/api/...` call can hit either backend, and event ordering across the relay is not guaranteed.
+When `ControllerProxyUrl` is set, [TestController.WebApi/Program.cs](../../TestController.WebApi/Program.cs) runs `ControllerEventRelayService`/`ControllerProxyService` to bridge to the WPF host's authoritative data — *and* the WPF host runs its own `ControllerWebApiHost` on the same port 5200. **Which process is the source of truth depends on a config string.** That's a debugging trap: the same `/api/...` call can hit either backend, and event ordering across the relay is not guaranteed.
 
 ### 2.8 No run queue — multi-team is currently "collide and 409"
-[ExecutionController.cs](TestController.Api/Controllers/ExecutionController.cs) dispatches with `_ = Task.Run(...)` (fire-and-forget) and returns `409 Conflict` when agents are busy. That's fine for one operator who retries. Two teams = a busy-wait race over four shared VMs. **The system doesn't queue work; it rejects it.**
+[ExecutionController.cs](../../TestController.Api/Controllers/ExecutionController.cs) dispatches with `_ = Task.Run(...)` (fire-and-forget) and returns `409 Conflict` when agents are busy. That's fine for one operator who retries. Two teams = a busy-wait race over four shared VMs. **The system doesn't queue work; it rejects it.**
 
 ### 2.9 Secrets are in plaintext
-`ServicePassword` flows as a plaintext script parameter into `ConvertTo-SecureString -AsPlainText` ([Setup-AgentNode.ps1](Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1)), and SMTP/domain identifiers sit in `appsettings.json`. No DPAPI, no Credential Manager, no vault. One repo leak = domain-account exposure.
+`ServicePassword` flows as a plaintext script parameter into `ConvertTo-SecureString -AsPlainText` ([Setup-AgentNode.ps1](../../Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1)), and SMTP/domain identifiers sit in `appsettings.json`. No DPAPI, no Credential Manager, no vault. One repo leak = domain-account exposure.
 
 ---
 
@@ -95,48 +97,48 @@ These are live defects and false-confidence traps. Do them before any new featur
 
 | # | Action | Files | Exit criteria |
 |---|---|---|---|
-| P0-1 | Fix the `jvkbak`/`jvbak` address typo | [appsettings.Production.json](TestController.WebApi/appsettings.Production.json#L28) | Name and address agree for all 4 agents; diff'd against WPF [appsettings.json](TestControllerGrpc/appsettings.json) |
+| P0-1 | Fix the `jvkbak`/`jvbak` address typo | [appsettings.Production.json](../../TestController.WebApi/appsettings.Production.json#L28) | Name and address agree for all 4 agents; diff'd against WPF [appsettings.json](../../TestControllerGrpc/appsettings.json) |
 | P0-2 | Reconcile agent lists across the 3 appsettings (UPPERCASE vs lowercase, jvgr2 only in prod) | all `appsettings*.json` | One canonical agent roster; documented source of truth |
-| P0-3 | Move `ServicePassword` + SMTP creds out of plaintext | [Setup-AgentNode.ps1](Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1), `appsettings.json` × N | No secret literal in any tracked file; runtime reads DPAPI/Credential Manager |
+| P0-3 | Move `ServicePassword` + SMTP creds out of plaintext | [Setup-AgentNode.ps1](../../Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1), `appsettings.json` × N | No secret literal in any tracked file; runtime reads DPAPI/Credential Manager |
 
 ### P1 — Make self-healing actually self-heal (Epic B finish)
 | # | Action | Files | Exit criteria |
 |---|---|---|---|
-| P1-1 | Run the agent as a Windows Service (`UseWindowsService()`), keep tray as optional attach | [TestAgentGrpc/Program.cs](TestAgentGrpc/Program.cs) | `sc query` shows the service; kill the process → SCM restarts it with **zero** human action |
-| P1-2 | Bake SCM recovery policy + service registration into provisioning so it survives reverts | [Setup-AgentNode.ps1](Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1), [Patch-AgentFleet.ps1](Utilites/Patch-AgentFleet.ps1) | Fresh/reverted VM auto-configures recovery; verified by revert test |
-| P1-3 | Decide orphaned-work policy: **clean-fail with a visible result** (minimum) or reassign (stretch) | [LockRecoveryService.cs](TestController.Api/Services/LockRecoveryService.cs), `ExecutionSessionManager` | A mid-run agent death produces a terminal `Failed` session + SignalR event within a bounded time — never a silent disappearance |
-| P1-4 | Audit every Controller→agent gRPC call for an explicit deadline | [AgentGrpcDispatcher.cs](TestControllerGrpc/Services/AgentGrpcDispatcher.cs), [StandaloneAgentDispatcher.cs](TestController.WebApi/Services/StandaloneAgentDispatcher.cs) | No unbounded call remains; deadlines sourced from `ControllerTimeoutOptions` |
+| P1-1 | Run the agent as a Windows Service (`UseWindowsService()`), keep tray as optional attach | [TestAgentGrpc/Program.cs](../../TestAgentGrpc/Program.cs) | `sc query` shows the service; kill the process → SCM restarts it with **zero** human action |
+| P1-2 | Bake SCM recovery policy + service registration into provisioning so it survives reverts | [Setup-AgentNode.ps1](../../Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1), [Patch-AgentFleet.ps1](../../Utilites/Patch-AgentFleet.ps1) | Fresh/reverted VM auto-configures recovery; verified by revert test |
+| P1-3 | Decide orphaned-work policy: **clean-fail with a visible result** (minimum) or reassign (stretch) | [LockRecoveryService.cs](../../TestController.Api/Services/LockRecoveryService.cs), `ExecutionSessionManager` | A mid-run agent death produces a terminal `Failed` session + SignalR event within a bounded time — never a silent disappearance |
+| P1-4 | Audit every Controller→agent gRPC call for an explicit deadline | [AgentGrpcDispatcher.cs](../../TestControllerGrpc/Services/AgentGrpcDispatcher.cs), [StandaloneAgentDispatcher.cs](../../TestController.WebApi/Services/StandaloneAgentDispatcher.cs) | No unbounded call remains; deadlines sourced from `ControllerTimeoutOptions` |
 
 ### P2 — Join up observability (Epic A finish)
 | # | Action | Files | Exit criteria |
 |---|---|---|---|
-| P2-1 | Thread `RunId`/`CorrelationId` end-to-end: controller → gRPC metadata → agent log scope | [RemoteCommandStreamRunner.cs](TestControllerGrpc.Core/Services/RemoteCommandStreamRunner.cs), `ExecutionSessionManager`, agent log writes | Given a `RunId`, you can pull controller **and** agent log lines for that one run |
-| P2-2 | Ship metrics from the agent + WPF host, not just WebApi | [AppMetrics.cs](TestController.WebApi/Services/AppMetrics.cs) pattern → agent | `/metrics` (or push) covers all hosts |
-| P2-3 | Build the fleet-health screen in the WebClient off existing heartbeat + `/api/health` | [HealthController.cs](TestController.Api/Controllers/HealthController.cs), `ConnectionHealthMonitor`, WebClient | Killing an agent shows red on screen within seconds, before a run hangs on it |
+| P2-1 | Thread `RunId`/`CorrelationId` end-to-end: controller → gRPC metadata → agent log scope | [RemoteCommandStreamRunner.cs](../../TestControllerGrpc.Core/Services/RemoteCommandStreamRunner.cs), `ExecutionSessionManager`, agent log writes | Given a `RunId`, you can pull controller **and** agent log lines for that one run |
+| P2-2 | Ship metrics from the agent + WPF host, not just WebApi | [AppMetrics.cs](../../TestController.WebApi/Services/AppMetrics.cs) pattern → agent | `/metrics` (or push) covers all hosts |
+| P2-3 | Build the fleet-health screen in the WebClient off existing heartbeat + `/api/health` | [HealthController.cs](../../TestController.Api/Controllers/HealthController.cs), `ConnectionHealthMonitor`, WebClient | Killing an agent shows red on screen within seconds, before a run hangs on it |
 | P2-4 | Add agent-down + run-overrun alerting (reuse existing SMTP path) | `NotificationDispatcher`, `ConnectionHealthMonitor` events | Email/Teams fires on `ConnectionLost` and on run > expected duration |
 | P2-5 | (Optional but high-value) central log sink so logs aren't trapped per-VM | `AppLogger` sink abstraction | One query surface across the fleet (Seq/ELK) — without ripping out `AppLogger` |
 
 ### P3 — Finish decoupling (Epic C last mile)
 | # | Action | Files | Exit criteria |
 |---|---|---|---|
-| P3-1 | Make the WebClient backend URL deploy-time configurable (honour `VITE_API_BASE_URL`) | [vite.config.ts](TestController.WebClient/vite.config.ts), [src/lib/api.ts](TestController.WebClient/src/lib/api.ts) | One build runs against WPF-embedded *or* standalone WebApi by env, no rebuild |
-| P3-2 | Define one authoritative deployment topology; make `ControllerProxyUrl` co-located mode an explicit, documented choice — not an accident | [TestController.WebApi/Program.cs](TestController.WebApi/Program.cs), `RUNBOOK.md` | A team runs submit→watch entirely on standalone WebApi with **no WPF running anywhere** |
+| P3-1 | Make the WebClient backend URL deploy-time configurable (honour `VITE_API_BASE_URL`) | [vite.config.ts](../../TestController.WebClient/vite.config.ts), [src/lib/api.ts](../../TestController.WebClient/src/lib/api.ts) | One build runs against WPF-embedded *or* standalone WebApi by env, no rebuild |
+| P3-2 | Define one authoritative deployment topology; make `ControllerProxyUrl` co-located mode an explicit, documented choice — not an accident | [TestController.WebApi/Program.cs](../../TestController.WebApi/Program.cs), `RUNBOOK.md` | A team runs submit→watch entirely on standalone WebApi with **no WPF running anywhere** |
 | P3-3 | Attack the dual-host tax: extract shared execution path so WPF becomes a client of the core, not a parallel implementation | `ActionPipelineExecutor` / `StandalonePipelineExecutor` → shared base | New hot-path logic is written once; the two executors collapse toward one |
 
 ### P4 — Turn the lock on and survive it (Epic E activation)
 | # | Action | Files | Exit criteria |
 |---|---|---|---|
-| P4-1 | Audit all 15 controllers for a `Can`/permission check on every mutating action | [TestController.Api/Controllers/](TestController.Api/Controllers) | Coverage matrix: every endpoint maps to a permission; gaps closed |
-| P4-2 | Run the full app in **Secured mode** in a staging fleet; fix every 401/403/409 surprise | [RbacFeatureExtensions.cs](TestController.Api/RbacFeatureExtensions.cs), interceptors | A scripted run as each of the 4 roles behaves exactly per the capability matrix |
-| P4-3 | Decide identity provider: keep Negotiate/API-key, or integrate Entra/OIDC as the roadmap wants | [SecurityServiceExtensions.cs](TestController.Api/Security/SecurityServiceExtensions.cs) | Documented decision; if OIDC, login flow validated end-to-end |
+| P4-1 | Audit all 15 controllers for a `Can`/permission check on every mutating action | [TestController.Api/Controllers/](../../TestController.Api/Controllers) | Coverage matrix: every endpoint maps to a permission; gaps closed |
+| P4-2 | Run the full app in **Secured mode** in a staging fleet; fix every 401/403/409 surprise | [RbacFeatureExtensions.cs](../../TestController.Api/RbacFeatureExtensions.cs), interceptors | A scripted run as each of the 4 roles behaves exactly per the capability matrix |
+| P4-3 | Decide identity provider: keep Negotiate/API-key, or integrate Entra/OIDC as the roadmap wants | [SecurityServiceExtensions.cs](../../TestController.Api/Security/SecurityServiceExtensions.cs) | Documented decision; if OIDC, login flow validated end-to-end |
 | P4-4 | Only after P4-2 passes: flip `RBAC.Enabled = true` as the default and onboard team #2 | `appsettings.json` | First external team completes a run under Secured mode with a clean audit trail |
 
 ### P5 — Fairness & ops (Epics F, G, H)
 | # | Action | Files | Exit criteria |
 |---|---|---|---|
-| P5-1 | Add a run queue in front of the fire-and-forget dispatch | [ExecutionController.cs](TestController.Api/Controllers/ExecutionController.cs) | Two simultaneous submissions queue and both complete; no 409 race |
+| P5-1 | Add a run queue in front of the fire-and-forget dispatch | [ExecutionController.cs](../../TestController.Api/Controllers/ExecutionController.cs) | Two simultaneous submissions queue and both complete; no 409 race |
 | P5-2 | Per-team fair-share + queue-depth visibility on the dashboard | scheduler + WebClient | One team can't starve another; depth/usage visible |
-| P5-3 | Automate deploy + rollback on top of existing CI | [.github/workflows/](.github/workflows), [deploy/](deploy) | Someone other than you deploys and rolls back from `RUNBOOK.md` |
+| P5-3 | Automate deploy + rollback on top of existing CI | [.github/workflows/](../../.github/workflows), [deploy/](../../deploy) | Someone other than you deploys and rolls back from `RUNBOOK.md` |
 | P5-4 | Publish Swagger/OpenAPI + onboarding guide | WebApi host, `docs/` | A new team goes no-access → first run on docs alone |
 
 ---

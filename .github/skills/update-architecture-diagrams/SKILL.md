@@ -1,11 +1,11 @@
 ---
 name: update-architecture-diagrams
-description: 'Reconcile docs/ARCHITECTURE-DIAGRAMS.md (Mermaid C4, gRPC surface, host internals, runtime flows, deployment, RBAC) with the current code: find type, project, RPC, endpoint, port and file names that no longer exist and fix them. Use for update architecture diagrams, stale diagram, docs drift, rename in docs.'
+description: 'Reconcile docs/architecture/ARCHITECTURE-DIAGRAMS.md (Mermaid C4, gRPC surface, host internals, runtime flows, deployment, RBAC) with the current code: find type, project, RPC, endpoint, port and file names that no longer exist and fix them. Use for update architecture diagrams, stale diagram, docs drift, rename in docs.'
 ---
 
 # Update Architecture Diagrams
 
-Target: `docs/ARCHITECTURE-DIAGRAMS.md` (sections 1-11, mostly ```mermaid blocks plus the "Where to look in code" table). The scope is **names**: fix renamed or removed identifiers. Don't redesign diagrams or add components unless the user asks.
+Target: `docs/architecture/ARCHITECTURE-DIAGRAMS.md` (sections 1-11, mostly ```mermaid blocks plus the "Where to look in code" table). The scope is **names**: fix renamed or removed identifiers. Don't redesign diagrams or add components unless the user asks.
 
 ## Encoding first
 The file already contains mojibake (e.g. a damaged dash in the title). Check for a BOM and count non-ASCII bytes **before** editing:

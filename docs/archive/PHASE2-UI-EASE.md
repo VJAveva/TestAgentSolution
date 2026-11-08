@@ -1,9 +1,11 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Phase 2 — UI Ease & Consistency (Implementation Plan)
 
 > **Created:** 2026-06-19
 > **Scope:** Navigation, unified data-access, and large-tree rendering — the "UI ease" items from the 2026-06-19 walkthrough.
 > **Stack touched:** `TestController.WebClient` (React/Zustand) only.
-> **Depends on:** Phase 1 (`docs/Issues/PHASE1-QUICK-WINS.md`) — A3 below builds on A2's status-map + memoized rows.
+> **Depends on:** Phase 1 (`docs/archive/PHASE1-QUICK-WINS.md`) — A3 below builds on A2's status-map + memoized rows.
 > **Goal:** Make the app deep-linkable and refresh-safe, give every API call one consistent error/auth path, and keep large WatchLists smooth — without changing backend contracts.
 
 ---

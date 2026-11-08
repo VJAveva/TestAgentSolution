@@ -15,7 +15,7 @@ public sealed record RegressionRiskAssessment(
     double Score, RiskTier Tier, ChurnMetrics Churn, IReadOnlyList<ScoreComponent> Components);
 
 /// <summary>
-/// Default risk scorer (R1, docs/impact/Regression-Selection-Algorithm.md §2). Combines log-compressed churn,
+/// Default risk scorer (R1, docs/features/Impact/Regression-Selection-Algorithm.md §2). Combines log-compressed churn,
 /// saturating defect density, build-failure state, exponentially decaying recency and coverage uncertainty into
 /// a convex score in [0,1], then bands it into <see cref="RiskTier"/>.
 /// <para>

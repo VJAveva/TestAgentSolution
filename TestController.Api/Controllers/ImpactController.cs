@@ -17,7 +17,7 @@ using TestControllerGrpc.Services;
 namespace TestController.Api.Controllers;
 
 /// <summary>
-/// Regression tab / CIRP endpoints (docs/AzureIntegration/FEATURE-ARCHITECTURE.md §5, §7).
+/// Regression tab / CIRP endpoints (docs/features/AzureIntegration/FEATURE-ARCHITECTURE.md §5, §7).
 /// Backed by <see cref="MockRegressionDataProvider"/> until real Azure DevOps ingest
 /// (Phases 0-5) lands — see the class doc there for why. The response shapes are the
 /// real v2 contract; only the data source is temporary.

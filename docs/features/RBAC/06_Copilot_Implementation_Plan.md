@@ -62,15 +62,15 @@ TestControllerGrpc (WPF host) and TestController.WebApi (web host). This is
 the only structural addition; all other RBAC code lands in existing projects.
 
 ## Active Design Specifications (read before generating code)
-- `docs/rbac/00_Master_Plan.md` — decisions and phase summary
-- `docs/rbac/01_System_Design.md` — architecture and SQLite schema
-- `docs/rbac/02_Implementation_Roadmap.md` — phase definitions, exit criteria
-- `docs/rbac/03_Integration_With_Lock_Spec.md` — pipeline lock model (separate
+- `docs/features/RBAC/00_Master_Plan.md` — decisions and phase summary
+- `docs/features/RBAC/01_System_Design.md` — architecture and SQLite schema
+- `docs/features/RBAC/02_Implementation_Roadmap.md` — phase definitions, exit criteria
+- `docs/features/RBAC/03_Integration_With_Lock_Spec.md` — pipeline lock model (separate
   from existing AgentLockManager, which locks agents not pipelines)
-- `docs/rbac/04_UI_Mockup_Catalog.md` — visual design rationale
-- `docs/rbac/05_Default_Mode_Design.md` — Default vs Secured mode
-- `docs/rbac/07_Implementation_Toolkit.md` — the practical handoff guide
-- `docs/rbac/phase-packs/phase-N-context.md` — attach the current-phase pack
+- `docs/features/RBAC/04_UI_Mockup_Catalog.md` — visual design rationale
+- `docs/features/RBAC/05_Default_Mode_Design.md` — Default vs Secured mode
+- `docs/features/RBAC/07_Implementation_Toolkit.md` — the practical handoff guide
+- `docs/features/RBAC/phase-packs/phase-N-context.md` — attach the current-phase pack
 
 ## Current Codebase Facts
 See `docs/architecture/CURRENT_STATE.md` — captures existing types, services,
@@ -111,7 +111,7 @@ This file is read on every session. The cost: ~700 tokens per session, every ses
 
 ### Layer 2: Phase Context Packs (one per implementation phase)
 
-For each phase, create a small file under `docs/rbac/phase-packs/`:
+For each phase, create a small file under `docs/features/RBAC/phase-packs/`:
 
 - `phase-0-context.md` (~2 KB) — what Phase 0 delivers, file list, dependencies on Layer 1 facts
 - `phase-0.5-context.md`
@@ -188,7 +188,7 @@ This is the only time you spend tokens on broad discovery. After this, every pro
 
 ### Step 2: Commit the design docs to the repo
 
-Put `docs/rbac/00_Master_Plan.md` through `05_Default_Mode_Design.md` into the repo. Copilot can reference them by path. They're already token-optimized (you and Claude designed them carefully).
+Put `docs/features/RBAC/00_Master_Plan.md` through `05_Default_Mode_Design.md` into the repo. Copilot can reference them by path. They're already token-optimized (you and Claude designed them carefully).
 
 ### Step 3: Create `.github/copilot-instructions.md`
 
@@ -199,8 +199,8 @@ Use the template in Part 2 above. Customize the bracketed parts.
 For each phase you're about to start (don't do them all at once — generate when needed):
 
 ```
-@workspace Read docs/rbac/02_Implementation_Roadmap.md "Phase 0" section and
-generate docs/rbac/phase-packs/phase-0-context.md with:
+@workspace Read docs/features/RBAC/02_Implementation_Roadmap.md "Phase 0" section and
+generate docs/features/RBAC/phase-packs/phase-0-context.md with:
 - 2-sentence goal
 - Numbered file list with each file's purpose in <10 words
 - Sequence note: which files must come before which (e.g., "interfaces before implementations")
@@ -265,9 +265,9 @@ Generate <file path>
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §3.4 — Default mode short-circuit logic
-- docs/rbac/01_System_Design.md §4 — auth flow, interceptor responsibilities
-- docs/rbac/05_Default_Mode_Design.md §4 — short-circuit code shape
+- docs/features/RBAC/01_System_Design.md §3.4 — Default mode short-circuit logic
+- docs/features/RBAC/01_System_Design.md §4 — auth flow, interceptor responsibilities
+- docs/features/RBAC/05_Default_Mode_Design.md §4 — short-circuit code shape
 
 [CURRENT STATE]
 - IUserContext, Role, ClientKind, Permission, IAuthorizationService all exist (tasks 1-4)
@@ -492,7 +492,7 @@ Concrete first-day plan:
 
 1. **Hour 1**: create `.github/copilot-instructions.md` using the template in Part 2.
 2. **Hour 2**: run the codebase audit prompt from Part 3. Review the generated `CURRENT_STATE.md` and `CONVENTIONS.md`. Fix anything wrong. Commit.
-3. **Hour 3**: commit the 6 design docs (`00`–`05`) under `docs/rbac/`.
+3. **Hour 3**: commit the 6 design docs (`00`–`05`) under `docs/features/RBAC/`.
 4. **Hour 4**: generate `phase-0-context.md` using the prompt in Part 3 Step 4.
 5. **Hour 5**: run Phase 0 Task 1 using the template in Part 5. Verify the output looks right.
 6. **End of day 1**: you have your full context model set up and your first generated file in main.
@@ -554,7 +554,7 @@ NEVER:
 
 CONTEXT LAYERS:
   Layer 1: .github/copilot-instructions.md (auto-loaded)
-  Layer 2: docs/rbac/phase-packs/phase-N-context.md (attach when starting phase)
+  Layer 2: docs/features/RBAC/phase-packs/phase-N-context.md (attach when starting phase)
   Layer 3: your task prompt (small, focused)
 
 WHEN STUCK:

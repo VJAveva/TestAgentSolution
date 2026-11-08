@@ -15,7 +15,7 @@ using TestControllerGrpc.Services;
 namespace TestControllerGrpc.ViewModels.Regression;
 
 /// <summary>
-/// Root view-model for the Regression tab (docs/AzureIntegration/RegressionTab-UI-Spec.md).
+/// Root view-model for the Regression tab (docs/features/CodeChurn/RegressionTab-UI-Spec.md).
 /// Backed by <see cref="IRegressionDataProvider"/> — currently <c>MockRegressionDataProvider</c>
 /// pending real Azure DevOps ingest. Recalculation order per the spec's cross-cutting section:
 /// scope (R1/R2) hits the provider; category toggles (R3) and quick/column filters (R7/R8) are

@@ -127,12 +127,12 @@ See [`deploy/README.md`](deploy/README.md) for production deployment scripts and
 
 | Document | Path |
 |----------|------|
-| Architecture & Design | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
-| Architecture Diagrams | [`docs/ARCHITECTURE-DIAGRAMS.md`](docs/ARCHITECTURE-DIAGRAMS.md) |
-| Ops Runbook | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) |
-| CI Commands | [`docs/CI-COMMANDS.md`](docs/CI-COMMANDS.md) |
-| Security Framework | [`docs/MultiIdentity_Security_Framework_Requirements.md`](docs/MultiIdentity_Security_Framework_Requirements.md) |
-| Hardening Plans | [`docs/hardening-plan/`](docs/hardening-plan/) |
+| Architecture & Design | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) |
+| Architecture Diagrams | [`docs/architecture/ARCHITECTURE-DIAGRAMS.md`](docs/architecture/ARCHITECTURE-DIAGRAMS.md) |
+| Ops Runbook | [`docs/operations/RUNBOOK.md`](docs/operations/RUNBOOK.md) |
+| CI Commands | [`docs/operations/CI-COMMANDS.md`](docs/operations/CI-COMMANDS.md) |
+| Security Framework | [`docs/MultiIdentity_Security_Framework_Requirements.md`](docs/features/SecurityFramework/MultiIdentity_Security_Framework_Requirements.md) |
+| Hardening Plans | [`docs/features/Hardening/`](docs/features/Hardening/) |
 | Deployment Guide | [`deploy/README.md`](deploy/README.md) |
 
 ---

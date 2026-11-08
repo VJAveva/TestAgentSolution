@@ -24,7 +24,7 @@ on the Kestrel port in `appsettings.json`.
 
 ## 2. Authentication
 
-The platform runs in one of two modes (see `docs/rbac/05_Default_Mode_Design.md`):
+The platform runs in one of two modes (see `docs/features/RBAC/05_Default_Mode_Design.md`):
 
 - **Default mode** — RBAC disabled. Requests are accepted without a token; you are
   treated as the default client identity. Good for evaluation.
@@ -80,8 +80,8 @@ this table is a starting map, not the source of truth.
 | `401 Unauthorized` | Missing/expired token in Secured mode | re-run `/api/auth/login` |
 | `403 Forbidden` | Authenticated but lack the permission | ask an admin to assign your role |
 | `409 Conflict` on trigger | Agents busy (no run queue yet) | retry, or see Implementation Plan P5-1 |
-| `503` on `/healthz/ready` | An agent is unreachable | `docs/TROUBLESHOOTING.md` |
+| `503` on `/healthz/ready` | An agent is unreachable | `docs/features/SecurityFramework/TROUBLESHOOTING.md` |
 
 Operational procedures (deploy, rollback, restart, log locations) live in
-`docs/RUNBOOK.md`. Architecture and the mode model live under `docs/rbac/` and
+`docs/operations/RUNBOOK.md`. Architecture and the mode model live under `docs/features/RBAC/` and
 `docs/architecture/`.

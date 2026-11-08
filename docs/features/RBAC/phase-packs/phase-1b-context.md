@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 1b. Detach when Phase 1b ships and switch to `phase-2-context.md`.
 
-> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/rbac/01_System_Design.md` §7.1, `docs/rbac/02_Implementation_Roadmap.md` §Phase 1, `docs/rbac/04_UI_Mockup_Catalog.md` Mockup 7, `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
+> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/features/RBAC/01_System_Design.md` §7.1, `docs/features/RBAC/02_Implementation_Roadmap.md` §Phase 1, `docs/features/RBAC/04_UI_Mockup_Catalog.md` Mockup 7, `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
 
 ---
 
@@ -119,9 +119,9 @@ Copy this skeleton when opening a Copilot session for any task in Block A–C:
 
 ```
 [SPEC]
-- docs/rbac/02_Implementation_Roadmap.md §Phase 1 — User Management
-- docs/rbac/04_UI_Mockup_Catalog.md — Mockup 7 (User Management)
-- docs/rbac/01_System_Design.md §7.1 — Users, PipelineAssignments tables
+- docs/features/RBAC/02_Implementation_Roadmap.md §Phase 1 — User Management
+- docs/features/RBAC/04_UI_Mockup_Catalog.md — Mockup 7 (User Management)
+- docs/features/RBAC/01_System_Design.md §7.1 — Users, PipelineAssignments tables
 
 [CURRENT STATE]
 - Phase 0 + 0.5 + 1a complete

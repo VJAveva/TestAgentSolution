@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { countRender, uiPerfEnabled } from '../lib/uiPerf';
 
 /**
- * TEMPORARY — see docs/reliability/UIPerformance-CopilotPrompts.md (P03).
+ * TEMPORARY — see docs/features/Reliability/UIPerformance-CopilotPrompts.md (P03).
  * Counts renders of a component. No-op unless uiPerf is enabled.
  * Remove by deleting this file and its call sites.
  */

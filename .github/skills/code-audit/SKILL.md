@@ -1,12 +1,12 @@
 ---
 name: code-audit
-description: 'Five-pass code audit of ONE folder in TestAgentSolution: secrets, correctness, architecture, performance, hardening. Report only, never rewrite. Follows docs/hardening-plan/CodeAudit-Copilot-Prompts.md. Use for audit, code review, find bugs, hardening review, security review of a folder.'
+description: 'Five-pass code audit of ONE folder in TestAgentSolution: secrets, correctness, architecture, performance, hardening. Report only, never rewrite. Follows docs/features/Hardening/CodeAudit-Copilot-Prompts.md. Use for audit, code review, find bugs, hardening review, security review of a folder.'
 argument-hint: 'One folder (e.g. TestControllerGrpc.Core/Maintenance) and optionally a single pass number'
 ---
 
 # Code Audit (5 passes, one folder)
 
-Source prompts: `docs/hardening-plan/CodeAudit-Copilot-Prompts.md`. That file is the authority; this skill is the runbook.
+Source prompts: `docs/features/Hardening/CodeAudit-Copilot-Prompts.md`. That file is the authority; this skill is the runbook.
 
 ## Ground rules
 1. **Report only.** No edits, no rewritten files. A fix is a *minimal* suggested diff in the table.

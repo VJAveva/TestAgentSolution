@@ -268,9 +268,9 @@ This removes the "source of truth depends on a config string" ambiguity in co-lo
 `deploy/Invoke-Deploy.ps1` wraps the per-component deploy scripts with a safety net:
 pre-deploy session check → timestamped backup → deploy → smoke test → **auto-rollback** on
 failure (and an explicit `-Rollback`). The `workflow_dispatch` workflow
-`.github/workflows/deploy.yml` lets anyone deploy/roll back from `docs/RUNBOOK.md`. The
+`.github/workflows/deploy.yml` lets anyone deploy/roll back from `docs/operations/RUNBOOK.md`. The
 canonical agent roster is 5 nodes (`JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST`), and
-`docs/ONBOARDING.md` is the first-run guide (via `/scalar`).
+`docs/getting-started/ONBOARDING.md` is the first-run guide (via `/scalar`).
 
 > **Phase map:** P0 config hygiene · P2 observability · P3 topology decoupling ·
 > P4 RBAC enforcement · P5-3 deploy/rollback · P5-4 Scalar + onboarding.

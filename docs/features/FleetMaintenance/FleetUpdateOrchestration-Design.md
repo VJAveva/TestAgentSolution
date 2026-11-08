@@ -3,7 +3,7 @@
 **Status:** Draft for review · **Date:** 2026-09-16
 **Scope:** Controller-driven Windows Update installation, golden-image (snapshot) refresh, and multi-hypervisor support (vCloud Director, vSphere, Hyper-V), at a fleet size of 50+ VMs.
 
-**Related docs:** [FleetRevert-UI-Spec.html](FleetRevert-UI-Spec.html) (R1–R24) · [FleetRevert-Workflow-and-CopilotPrompts.md](FleetRevert-Workflow-and-CopilotPrompts.md)
+**Related docs:** [FleetRevert-UI-Spec.html](mockups/FleetRevert-UI-Spec.html) (R1–R24) · [FleetRevert-Workflow-and-CopilotPrompts.md](prompts/FleetRevert-Workflow-and-CopilotPrompts.md)
 
 ---
 
@@ -44,7 +44,7 @@ revert → install → reboot → wait ready → VERIFY → power off → replac
 
 ### 2.1 Windows Update — detection only
 
-[`WindowsUpdateDetector.cs`](../../TestAgentGrpc/Services/WindowsUpdateDetector.cs) runs on the agent as a `BackgroundService` and feeds one reporter from two paths:
+[`WindowsUpdateDetector.cs`](../../../TestAgentGrpc/Services/WindowsUpdateDetector.cs) runs on the agent as a `BackgroundService` and feeds one reporter from two paths:
 
 | Path | Mechanism | Interval |
 |---|---|---|
@@ -59,13 +59,13 @@ Posture travels to the controller as `ExecutionEventType.EVENT_WINDOWS_UPDATE = 
 Two facts that make adding it cheap:
 
 - The detector's WUApi search runs with **`searcher.Online = false`** — local cache only. An install flow needs an *online* search first, so this is a new call path, not a reuse.
-- The agent installs as **LocalSystem** by default ([`Setup-AgentNode.ps1`](../../Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1)), so it is already elevated enough to drive WUApi installs.
+- The agent installs as **LocalSystem** by default ([`Setup-AgentNode.ps1`](../../../Utilites/TestAgent_SetupScripts/Setup-AgentNode.ps1)), so it is already elevated enough to drive WUApi installs.
 
 ⚠️ **Not uniform:** `Setup-InteractiveAgent.ps1` provisions agents under an auto-logon *user* account for desktop-session work. Those nodes may not be able to install. Capability must be **probed per node**, never assumed fleet-wide.
 
 ### 2.2 Snapshot / revert — vCloud only, via PowerShell
 
-[`MachineRevertOperation.cs`](../../TestControllerGrpc.Core/Maintenance/MachineRevertOperation.cs) is an 8-phase state machine (`Precheck → Quarantine → SnapshotRevert → PowerOn → PingWait → AgentWait → PostPrep → Verify`) that shells out through `IPowerShellScriptRunner`:
+[`MachineRevertOperation.cs`](../../../TestControllerGrpc.Core/Maintenance/MachineRevertOperation.cs) is an 8-phase state machine (`Precheck → Quarantine → SnapshotRevert → PowerOn → PingWait → AgentWait → PostPrep → Verify`) that shells out through `IPowerShellScriptRunner`:
 
 ```csharp
 var revert = await _scriptRunner.RunAsync(
@@ -75,7 +75,7 @@ var revert = await _scriptRunner.RunAsync(
 
 The script contract is **positional `(vmName, snapshotName)`, success signalled by exit code 0**.
 
-[`Revert-AgentVM.ps1`](../../Utilites/RevertAgents/Revert-AgentVM.ps1) adapts that onto [`Revert-RcloudMachines.ps1`](../../Utilites/RevertAgents/Revert-RcloudMachines.ps1), which uses VMware PowerCLI against vCloud Director:
+[`Revert-AgentVM.ps1`](../../../Utilites/RevertAgents/Revert-AgentVM.ps1) adapts that onto [`Revert-RcloudMachines.ps1`](../../../Utilites/RevertAgents/Revert-RcloudMachines.ps1), which uses VMware PowerCLI against vCloud Director:
 
 ```powershell
 $snapSection = $vm.ExtensionData.GetSnapshotSection()
@@ -92,7 +92,7 @@ Two consequences, both load-bearing for this design:
 
 ### 2.3 Fleet maintenance engine
 
-[`FleetMaintenanceService.cs`](../../TestControllerGrpc.Core/Maintenance/FleetMaintenanceService.cs) owns in-flight operations in a `ConcurrentDictionary<string, RunningOperation>` keyed by node, with a `ConcurrentQueue<string>` for reboots beyond the concurrency cap. `MaintenanceKind` is `{ Revert, Reboot, Prep, InstallBuild }`; `MaintenanceState` is `{ None, Draining, Reverting, Rebooting, Updating, Quarantined }`.
+[`FleetMaintenanceService.cs`](../../../TestControllerGrpc.Core/Maintenance/FleetMaintenanceService.cs) owns in-flight operations in a `ConcurrentDictionary<string, RunningOperation>` keyed by node, with a `ConcurrentQueue<string>` for reboots beyond the concurrency cap. `MaintenanceKind` is `{ Revert, Reboot, Prep, InstallBuild }`; `MaintenanceState` is `{ None, Draining, Reverting, Rebooting, Updating, Quarantined }`.
 
 Crash recovery exists: `MaintenanceRecoveryService` closes orphaned operations on startup and **quarantines** the node rather than returning it to rotation, because it cannot know whether the operation finished.
 
@@ -241,7 +241,7 @@ The current design does not fit. Four measured bottlenecks, in priority order.
 
 ### 5.1 Reboots are serial
 
-`MaxConcurrentReboots` defaults to **1** ([`WindowsUpdateModels.cs`](../../TestControllerGrpc.Core/Maintenance/WindowsUpdateModels.cs)). Each reboot is quarantine + reboot + ping-wait + agent-wait. At ~7 min/node, 50 nodes ≈ **6 hours**.
+`MaxConcurrentReboots` defaults to **1** ([`WindowsUpdateModels.cs`](../../../TestControllerGrpc.Core/Maintenance/WindowsUpdateModels.cs)). Each reboot is quarantine + reboot + ping-wait + agent-wait. At ~7 min/node, 50 nodes ≈ **6 hours**.
 
 A golden-image refresh is far longer than a reboot (revert + patch + verify + snapshot), so at concurrency 1 a full-fleet refresh is measured in **days**. Concurrency must be configurable and enforced per *platform*, since the real constraint is how much of the fleet may be offline simultaneously.
 
@@ -253,7 +253,7 @@ At 50 nodes the current path pays 50 × (PowerCLI module load + `Connect-CIServe
 
 ### 5.3 `FleetUpdatesVM` rebuilds everything, per event, with no debounce
 
-`OnStatusChanged → Refresh()` → `Rows.Clear()` + full rebuild + banners + notifications ([`FleetUpdatesVM.cs`](../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs)).
+`OnStatusChanged → Refresh()` → `Rows.Clear()` + full rebuild + banners + notifications ([`FleetUpdatesVM.cs`](../../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs)).
 
 `FleetVM` received a 250 ms debounce whose comment reads *"At 200 agents with heartbeats every 5s, up to 40 events/second can arrive"* — **that fix was never applied to `FleetUpdatesVM`.** Two O(N²) loops compound it: the orphan scan (`Rows.All(...)` inside a `Where`) and `SyncCardBadges` (`Cards × Rows.FirstOrDefault`).
 
@@ -261,7 +261,7 @@ At 50 agents × 12 registry polls/hour = 600 full rebuilds/hour, each O(N²).
 
 ### 5.4 A 5-second probe of every agent, forever
 
-[`FleetVM.cs`](../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetVM.cs) probes every registered agent every 5 s — ~10 gRPC calls/sec at 50 agents, sustained. `AgentWorkspaceVM` constructs `FleetVM` eagerly, so this runs whether or not the tab is visible. Offline VMs make it worse, as each probe waits out a timeout.
+[`FleetVM.cs`](../../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetVM.cs) probes every registered agent every 5 s — ~10 gRPC calls/sec at 50 agents, sustained. `AgentWorkspaceVM` constructs `FleetVM` eagerly, so this runs whether or not the tab is visible. Offline VMs make it worse, as each probe waits out a timeout.
 
 ### 5.5 UI at 50 rows
 

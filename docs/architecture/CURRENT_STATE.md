@@ -578,7 +578,7 @@ RBAC gating added to the **existing** report engine. No new report functionality
 | Metrics | `GET /metrics` | OpenTelemetry → Prometheus exporter; custom `AppMetrics` |
 | API spec | `GET /openapi/v1.json` | `AddOpenApi()` document transformer (title/version/description) |
 | API reference UI | `GET /scalar` | `MapScalarApiReference()` (BluePlanet theme, Bearer scheme) |
-| Onboarding | `docs/ONBOARDING.md` | Zero-to-first-call guide (endpoints, auth, 401/403/409) |
+| Onboarding | `docs/getting-started/ONBOARDING.md` | Zero-to-first-call guide (endpoints, auth, 401/403/409) |
 | Logging | `IAppLogger` (not Serilog) | Category-based; ring buffer + rolling files + optional Seq sink + `SecurityRedactor` |
 | Rate limiting | `telemetry` / `mutation` policies | `AddRateLimiter()` |
 
@@ -586,7 +586,7 @@ RBAC gating added to the **existing** report engine. No new report functionality
 
 - `Deployment:Topology` config (`Auto` | `CoLocated` | `Standalone`) bound via `DeploymentOptions`, validated at startup by `ConfigValidator.ValidateDeploymentTopology()` (CoLocated requires `ControllerProxyUrl`; Standalone forbids it).
 - Canonical 5-agent roster: `JVGR1`, `JVGR2`, `JVKPRI`, `JVKBAK`, `JVHIST` (gRPC :5200, fallback :5201–5203).
-- Deploy/rollback automation: `deploy/Invoke-Deploy.ps1` (pre-deploy check → timestamped backup → deploy → smoke test → auto-rollback on failure; explicit `-Rollback`) and `.github/workflows/deploy.yml` (`workflow_dispatch`, self-hosted Windows deploy runner). See `docs/RUNBOOK.md` → "Deploy & Rollback".
+- Deploy/rollback automation: `deploy/Invoke-Deploy.ps1` (pre-deploy check → timestamped backup → deploy → smoke test → auto-rollback on failure; explicit `-Rollback`) and `.github/workflows/deploy.yml` (`workflow_dispatch`, self-hosted Windows deploy runner). See `docs/operations/RUNBOOK.md` → "Deploy & Rollback".
 
 ## Enhancements & Changelog (production-readiness)
 
@@ -597,6 +597,6 @@ RBAC gating added to the **existing** report engine. No new report functionality
 | **P3** | Explicit `Deployment:Topology` + `ConfigValidator`; Vite dev proxy `VITE_DEV_PROXY_TARGET`. |
 | **P4-1** | `System_ChangeMode`; mode-gated permission checks (fail-open in Default mode). |
 | **P5-3** | `deploy/Invoke-Deploy.ps1` + `.github/workflows/deploy.yml` (deploy/rollback). |
-| **P5-4** | Scalar API reference UI (`/scalar`) + `docs/ONBOARDING.md`. |
+| **P5-4** | Scalar API reference UI (`/scalar`) + `docs/getting-started/ONBOARDING.md`. |
 
 **Known gap (P5-1):** no run queue — `ExecutionController` dispatches fire-and-forget (`Task.Run`) and returns **409 Conflict** when target agents are busy; there is no server-side queue/backpressure.

@@ -95,7 +95,7 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!-- Redesign styles (docs/Requirements/RibbonRedesign-CodeChurn-Mockup.html): axis label, count chip,
+        <!-- Redesign styles (docs/features/CodeChurn/mockups/RibbonRedesign-CodeChurn-Mockup.html): axis label, count chip,
              segmented range presets, filled Dispatch, context-bar cells. -->
         <Style x:Key="RibbonAxisLbl" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextS}" />

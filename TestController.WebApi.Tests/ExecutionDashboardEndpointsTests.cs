@@ -36,7 +36,7 @@ public class ExecutionDashboardEndpointsTests : IClassFixture<TestWebAppFactory>
     }
 
     // ── Regression guard: WebClient blank page in Secured mode ─────────
-    // docs/Issues/WEBCLIENT_BLANK_PAGE_SECURED_MODE.md — the React dashboard
+    // docs/issues/closed/WEBCLIENT_BLANK_PAGE_SECURED_MODE.md — the React dashboard
     // polls /api/execution/proxy/dashboard-sessions. When that route was not
     // mapped, the SPA fallback returned index.html on an /api/ path; apiFetch
     // detected HTML and synthesized a 404, leaving the dashboard blank. Guard

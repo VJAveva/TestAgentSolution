@@ -300,7 +300,7 @@ public partial class App : Application
                 services.AddTransient<TestControllerGrpc.ViewModels.Regression.AdoSignInViewModel>();
                 services.AddSingleton<TestControllerGrpc.ViewModels.Regression.RegressionViewModel>();
 
-                // Impact test mapping engine (docs/AzureIntegration/ImpactMapping-Copilot-BuildGuide.md).
+                // Impact test mapping engine (docs/features/AzureIntegration/ImpactMapping-Copilot-BuildGuide.md).
                 // Reader: the desktop host consumes the index but never writes it — the WebApi host owns
                 // maintenance, so at most one writer touches the SQLite file.
                 TestControllerGrpc.Core.Impact.ImpactServiceCollectionExtensions.AddImpactMapping(
@@ -314,7 +314,7 @@ public partial class App : Application
 
         Services = _host.Services;
 
-        // TEMPORARY (docs/reliability/UIPerformance-CopilotPrompts.md P02). No-op unless
+        // TEMPORARY (docs/features/Reliability/UIPerformance-CopilotPrompts.md P02). No-op unless
         // UiPerf:Enabled=true or UIPERF=1.
         Diagnostics.UiPerfDiagnostics.Install(
             Services.GetRequiredService<IConfiguration>(), Dispatcher);

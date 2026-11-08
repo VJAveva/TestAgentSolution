@@ -196,7 +196,7 @@ builder.Services.AddSignalR(options =>
 });
 builder.Services.AddScoped<Microsoft.AspNetCore.SignalR.IHubFilter, TestController.Api.Hubs.HubExceptionFilter>();
 
-// Impact test mapping engine (docs/AzureIntegration/ImpactMapping-Copilot-BuildGuide.md).
+// Impact test mapping engine (docs/features/AzureIntegration/ImpactMapping-Copilot-BuildGuide.md).
 // ReaderWriter: this standalone host owns index maintenance (at most one writer per SQLite file).
 TestControllerGrpc.Core.Impact.ImpactServiceCollectionExtensions.AddImpactMapping(
     builder.Services, builder.Configuration, TestControllerGrpc.Core.Impact.ImpactHostRole.ReaderWriter);

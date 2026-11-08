@@ -26,7 +26,7 @@ argument-hint: 'Permission name and which roles get it'
 For each role, write down the expected (role, permission, resourceId) results:
 - `CapabilityChecker.Can(...)` (UX) must equal `AuthorizationService.CanAsync(...)` (authority) for both a **null** and a **real** resourceId.
 - Known trap: a pipeline-scoped permission with null resourceId is allowed by `CapabilityChecker` for Engineers but denied by `CanAsync`.
-- Known pre-existing drift: the TS Administrator list lacks some C# members (see `docs/hardening-plan/SECURITY-GAPS.md`). Don't "fix" the counts to hide it; add your +1 on top and mention the drift.
+- Known pre-existing drift: the TS Administrator list lacks some C# members (see `docs/features/Hardening/SECURITY-GAPS.md`). Don't "fix" the counts to hide it; add your +1 on top and mention the drift.
 
 ## Wire it (if asked)
 - REST: `[RequirePermission(Permission.X)]` (skill `add-rest-endpoint`).

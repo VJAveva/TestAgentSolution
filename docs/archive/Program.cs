@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Archived on 2026-11-08: sample code kept for reference; not part of any project.
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;

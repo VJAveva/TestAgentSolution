@@ -516,7 +516,7 @@ export interface BuildReportCard {
 
 // ── Regression tab / CIRP (matches ImpactController projections) ──────────────
 // Backed by a mock provider until real Azure DevOps ingest lands — see
-// docs/AzureIntegration/FEATURE-ARCHITECTURE.md. Shapes are the real v2 contract.
+// docs/features/AzureIntegration/FEATURE-ARCHITECTURE.md. Shapes are the real v2 contract.
 
 export type RegressionCategoryKind = 'Runtime' | 'Config' | 'Both' | 'Unclassified';
 export type RegressionEvidenceKind = 'Assumed' | 'Declared' | 'Observed';

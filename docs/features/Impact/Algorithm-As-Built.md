@@ -31,9 +31,9 @@ T5  Record            → persist to the learning database
 ```
 
 Orchestrated by `ImpactTestMappingService.MapCoreAsync()` in
-[`ImpactTestMappingService.cs`](../../TestController.Impact/Impact/ImpactTestMappingService.cs).
+[`ImpactTestMappingService.cs`](../../../TestController.Impact/Impact/ImpactTestMappingService.cs).
 Entry points are `IImpactTestMappingService.MapAsync()` and
-[`RegressionImpactMatcher`](../../TestController.Impact/Impact/RegressionImpactMatcher.cs), which adapts
+[`RegressionImpactMatcher`](../../../TestController.Impact/Impact/RegressionImpactMatcher.cs), which adapts
 build-churn rows (`SubsystemRow`) into the engine's input.
 
 ---
@@ -42,7 +42,7 @@ build-churn rows (`SubsystemRow`) into the engine's input.
 
 ### R1 — Risk scoring
 
-[`RegressionRiskScorer.Score()`](../../TestController.Impact/Impact/Risk/RegressionRiskScorer.cs)
+[`RegressionRiskScorer.Score()`](../../../TestController.Impact/Impact/Risk/RegressionRiskScorer.cs)
 
 A weighted blend of five normalised signals produces a score in $[0,1]$ and a tier:
 
@@ -61,7 +61,7 @@ emits `Unmapped` — Medium is the floor.
 
 ### T0 — Anchors
 
-[`AnchorEdgeProvider.GetAnchorsAsync()`](../../TestController.Impact/Impact/Anchors/AnchorEdgeProvider.cs)
+[`AnchorEdgeProvider.GetAnchorsAsync()`](../../../TestController.Impact/Impact/Anchors/AnchorEdgeProvider.cs)
 
 An **anchor** is a high-precision `(testCaseId, source, weight, rationale)` edge that links a changed
 component directly to a test **without consulting the index at all**. This is what makes the pipeline
@@ -82,7 +82,7 @@ unless `Anchors.AllowEarlyExitForCriticalTier` is set (default `false`).
 ### T1 — Query construction
 
 `ChangeDocumentBuilder` extracts symbols, string literals and public-API changes from the change set.
-[`KeywordExtractor`](../../TestController.Impact/Impact/Query/KeywordExtractor.cs) groups them into
+[`KeywordExtractor`](../../../TestController.Impact/Impact/Query/KeywordExtractor.cs) groups them into
 weighted facets:
 
 | Facet | Weight | Content |
@@ -94,13 +94,13 @@ weighted facets:
 | expanded | 0.60 | HyDE synthetic prose |
 | paths | 0.30–1.00 | folder names |
 
-[`HydeQueryGenerator`](../../TestController.Impact/Impact/Query/HydeQueryGenerator.cs) optionally
+[`HydeQueryGenerator`](../../../TestController.Impact/Impact/Query/HydeQueryGenerator.cs) optionally
 generates synthetic "what a test for this would read like" prose to bridge vocabulary gaps. It requires an
 LLM and is skipped silently when none is configured.
 
 ### T2 — Hybrid retrieval
 
-[`HybridRetriever`](../../TestController.Impact/Impact/Retrieval/HybridRetriever.cs)
+[`HybridRetriever`](../../../TestController.Impact/Impact/Retrieval/HybridRetriever.cs)
 
 Retrieval is **lexical + dense fused by Reciprocal Rank Fusion**. It is *not* call-graph based, *not*
 file-path scoped and *not* co-change based.
@@ -113,7 +113,7 @@ $$\text{RRF}(d) = \left(\frac{w_{\text{lex}}}{60 + r_{\text{lex}}(d)} + \frac{w_
 - $K = 60$ is the RRF discount constant.
 
 **Document composition** is centralised in
-[`IndexTextComposer`](../../TestController.Impact/Impact/IndexTextComposer.cs). Test cases index
+[`IndexTextComposer`](../../../TestControllerGrpc.Core/Impact/IndexTextComposer.cs). Test cases index
 Title + **Description** + flattened Steps + Tags. Descriptions matter because titles are frequently bare
 requirement IDs such as `"FR 12345"`, which carry no retrievable signal.
 
@@ -133,7 +133,7 @@ Truncated to `Retrieval.MaxCandidateTestCases` (400), ranked by score then work-
 
 ### T3 — Rerank
 
-[`RelevanceReranker.cs`](../../TestController.Impact/Impact/Rerank/RelevanceReranker.cs)
+[`RelevanceReranker.cs`](../../../TestController.Impact/Impact/Rerank/RelevanceReranker.cs)
 
 - **`LlmRelevanceReranker`** grades each candidate **0–3** and must cite the code signals it relied on.
   Results cache for 7 days keyed on `SHA256(fingerprint + id + revision)`. It **fails open** — a parse
@@ -146,7 +146,7 @@ Ranking (T2) uses corpus statistics; rerank (T3) uses semantic judgement against
 
 ### T4 — Selection
 
-[`BudgetedDiversitySelector.Select()`](../../TestController.Impact/Impact/Selection/BudgetedDiversitySelector.cs)
+[`BudgetedDiversitySelector.Select()`](../../../TestController.Impact/Impact/Selection/BudgetedDiversitySelector.cs)
 
 Final per-candidate score:
 
@@ -188,7 +188,7 @@ Two SQLite databases, split deliberately:
 | `impact-outcomes.db` | **durable** | run history, selections, learning signals |
 
 Built by
-[`RetrievalIndexBuilder.BuildAsync()`](../../TestController.Impact/Impact/Index/RetrievalIndexBuilder.cs):
+[`RetrievalIndexBuilder.BuildAsync()`](../../../TestController.Impact/Impact/Index/RetrievalIndexBuilder.cs):
 
 - Corpus is **only** `Feature` and `Test Case` work items. Bugs / IMS / Stories enter the pipeline as
   anchors, not index documents.
@@ -211,7 +211,7 @@ scripts: `deploy/Rebuild-ImpactIndex.ps1`, `deploy/Prepare-ImpactIndexStorage.ps
 
 ## 4. Learning
 
-[`OutcomeStore`](../../TestController.Impact/Impact/Learning/OutcomeStore.cs) persists:
+[`OutcomeStore`](../../../TestController.Impact/Impact/Learning/OutcomeStore.cs) persists:
 
 | Record | Written by | Status |
 |---|---|---|
@@ -230,14 +230,14 @@ Platt scaling below that.
 
 ## 5. Evaluation
 
-[`TestController.ImpactEval`](../../TestController.ImpactEval/Program.cs) is a standalone CLI:
+[`TestController.ImpactEval`](../../../TestController.ImpactEval/Program.cs) is a standalone CLI:
 
 ```
 TestController.ImpactEval replay  <corpus>          # score historical selections against outcomes
 TestController.ImpactEval compare <before> <after>  # paired delta analysis
 ```
 
-Metrics in [`EvalMetrics.cs`](../../TestController.Impact/Impact/Eval/EvalMetrics.cs): `RecallAtK`,
+Metrics in [`EvalMetrics.cs`](../../../TestController.Impact/Impact/Eval/EvalMetrics.cs): `RecallAtK`,
 `PrecisionAtK`, `Apfd`, `IsSafeRecall`.
 
 Documented exit criteria: **safe recall ≥ 0.98** (hard gate), selection cost ≤ 0.35 at Targeted tier,

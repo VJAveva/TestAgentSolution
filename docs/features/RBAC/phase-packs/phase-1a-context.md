@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 1a. Detach when Phase 1a ships and switch to `phase-1b-context.md`.
 
-> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/rbac/01_System_Design.md`, `docs/rbac/02_Implementation_Roadmap.md`, `docs/rbac/04_UI_Mockup_Catalog.md` (Mockups 1 & 2), `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
+> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/features/RBAC/01_System_Design.md`, `docs/features/RBAC/02_Implementation_Roadmap.md`, `docs/features/RBAC/04_UI_Mockup_Catalog.md` (Mockups 1 & 2), `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
 
 ---
 
@@ -110,9 +110,9 @@ Copy this skeleton when opening a Copilot session for any task in Block A–C:
 
 ```
 [SPEC]
-- docs/rbac/02_Implementation_Roadmap.md §Phase 1 — <one line>
-- docs/rbac/04_UI_Mockup_Catalog.md — Mockup 1 (Login) / Mockup 2 (Post-login identity)
-- docs/rbac/01_System_Design.md §4 — auth flow
+- docs/features/RBAC/02_Implementation_Roadmap.md §Phase 1 — <one line>
+- docs/features/RBAC/04_UI_Mockup_Catalog.md — Mockup 1 (Login) / Mockup 2 (Post-login identity)
+- docs/features/RBAC/01_System_Design.md §4 — auth flow
 
 [CURRENT STATE]
 - Phase 0 + Phase 0.5 complete

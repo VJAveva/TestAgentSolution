@@ -1,3 +1,4 @@
+// Archived on 2026-11-08: draft test kept for reference; not part of any project.
 using System.Collections.Concurrent;
 using TestControllerGrpc.Services;
 

@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # TestAgentSolution — Production Gap Analysis
 
 > **Audit date:** 2026-05-22 | **Branch:** `ExeDashboadImpl`
@@ -241,9 +243,9 @@ Various improvements to timer disposal, pagination, gRPC TLS, metrics, tests, an
 
 - `README.md` — top-level entry point with architecture overview, prereqs, build/run/test steps
 - `deploy/README.md` — comprehensive deployment guide with script reference
-- `docs/ARCHITECTURE.md`, `ARCHITECTURE_DESIGN_DOCUMENT.md`, `ARCHITECTURE-DIAGRAMS.md`
-- `docs/RUNBOOK.md` — unified ops runbook with troubleshooting, escalation, common failures
-- `docs/hardening-plan/` — 10 hardening documents (per-component)
+- `docs/architecture/ARCHITECTURE.md`, `ARCHITECTURE_DESIGN_DOCUMENT.md`, `ARCHITECTURE-DIAGRAMS.md`
+- `docs/operations/RUNBOOK.md` — unified ops runbook with troubleshooting, escalation, common failures
+- `docs/features/Hardening/` — 10 hardening documents (per-component)
 - OpenAPI available in all environments
 - Inline XML docs on all public services
 
@@ -252,7 +254,7 @@ Various improvements to timer disposal, pagination, gRPC TLS, metrics, tests, an
 | Gap | Impact | Fix Location | Priority | Status |
 |-----|--------|-------------|----------|--------|
 | ~~**No top-level README.md**~~ | New team members have no entry point | `README.md` created at solution root | **P1** | ✅ Done |
-| ~~**No unified ops runbook**~~ | Incident response is ad-hoc | `docs/RUNBOOK.md` — troubleshooting, escalation, recovery | **P1** | ✅ Done |
+| ~~**No unified ops runbook**~~ | Incident response is ad-hoc | `docs/operations/RUNBOOK.md` — troubleshooting, escalation, recovery | **P1** | ✅ Done |
 | ~~**OpenAPI disabled in Production**~~ | API consumers can't discover endpoints | `Program.cs` — `MapOpenApi()` now unconditional | **P2** | ✅ Done |
 | **No formal ADRs** | Architectural decisions undocumented, rationale lost when engineers leave | `docs/adrs/` — document: no-auth decision, plaintext gRPC, custom logger vs Serilog | **P2** | Deferred |
 

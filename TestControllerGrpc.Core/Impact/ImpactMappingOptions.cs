@@ -232,7 +232,7 @@ public sealed class ImpactMappingOptions
 
     /// <summary>
     /// Regression risk scoring (R1) and the risk-aware selection tuning it drives (R2).
-    /// See docs/impact/Regression-Selection-Algorithm.md §2-3.
+    /// See docs/features/Impact/Regression-Selection-Algorithm.md §2-3.
     /// </summary>
     public sealed class RiskOptions
     {

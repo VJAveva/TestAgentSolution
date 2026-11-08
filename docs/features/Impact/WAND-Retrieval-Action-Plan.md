@@ -43,17 +43,17 @@ Files read in full or in the relevant region:
 
 | Concern | File | Verified fact |
 |---|---|---|
-| BM25 scorer | [Bm25Scorer.cs](../../TestController.Impact/Impact/Index/Bm25Scorer.cs) | `lengthNorm = k1 * (1 - b + b*(len/avgdl))`; `score += idf * (tf*(k1+1)) / (tf + lengthNorm)` |
-| RRF fusion | [HybridRetriever.cs](../../TestController.Impact/Impact/Retrieval/HybridRetriever.cs) | Fuses lexical + dense **by rank**, not score |
-| Fan-out damping | [FanOutNormalizer.cs](../../TestController.Impact/Impact/Ranking/FanOutNormalizer.cs) | `Normalize(IReadOnlyList<Scored<FeatureCandidate>>, IndexSnapshot, IList<string>)` |
-| Search entry point | [IndexSnapshot.cs](../../TestController.Impact/Impact/Index/IndexSnapshot.cs) | `SearchBm25(IReadOnlyCollection<string> terms, int limit)` over in-memory `_documents` |
-| Load path | [RetrievalIndexStore.cs](../../TestController.Impact/Impact/Index/RetrievalIndexStore.cs) | `GetSnapshotAsync(IndexKind, IReadOnlyCollection<string>?, CancellationToken)` |
-| T2 caller | [ImpactTestMappingService.cs](../../TestController.Impact/Impact/ImpactTestMappingService.cs) | Loads both snapshots, then runs branches |
-| Schema | [IndexEntities.cs](../../TestController.Impact/Impact/Index/IndexEntities.cs), [ImpactIndexDbContext.cs](../../TestController.Impact/Impact/Index/ImpactIndexDbContext.cs) | `DocumentTerm` PK = `(DocumentId, Term)`, index on `Term` |
-| Provisioning | [ImpactIndexInitializer.cs](../../TestController.Impact/Impact/Index/ImpactIndexInitializer.cs) | `EnsureCreatedAsync` + WAL only |
-| Build | [RetrievalIndexBuilder.cs](../../TestController.Impact/Impact/Index/RetrievalIndexBuilder.cs) | `BulkInsertTermsAsync` 300-row chunks; `RecomputeCorpusStatisticsAsync` full-corpus |
-| Query construction | [ImpactContracts.cs](../../TestControllerGrpc.Core/Impact/ImpactContracts.cs) | `KeywordGroup(string GroupId, string Label, IReadOnlyList<string> Terms, double Weight)` |
-| Options | [ImpactMappingOptions.cs](../../TestControllerGrpc.Core/Impact/ImpactMappingOptions.cs) | `Bm25K1=1.2`, `Bm25B=0.75`, `FanOutPenaltyFloor=0.35`, `FanOutPenaltyCeiling=1.30` |
+| BM25 scorer | [Bm25Scorer.cs](../../../TestController.Impact/Impact/Index/Bm25Scorer.cs) | `lengthNorm = k1 * (1 - b + b*(len/avgdl))`; `score += idf * (tf*(k1+1)) / (tf + lengthNorm)` |
+| RRF fusion | [HybridRetriever.cs](../../../TestController.Impact/Impact/Retrieval/HybridRetriever.cs) | Fuses lexical + dense **by rank**, not score |
+| Fan-out damping | [FanOutNormalizer.cs](../../../TestController.Impact/Impact/Ranking/FanOutNormalizer.cs) | `Normalize(IReadOnlyList<Scored<FeatureCandidate>>, IndexSnapshot, IList<string>)` |
+| Search entry point | [IndexSnapshot.cs](../../../TestController.Impact/Impact/Index/IndexSnapshot.cs) | `SearchBm25(IReadOnlyCollection<string> terms, int limit)` over in-memory `_documents` |
+| Load path | [RetrievalIndexStore.cs](../../../TestController.Impact/Impact/Index/RetrievalIndexStore.cs) | `GetSnapshotAsync(IndexKind, IReadOnlyCollection<string>?, CancellationToken)` |
+| T2 caller | [ImpactTestMappingService.cs](../../../TestController.Impact/Impact/ImpactTestMappingService.cs) | Loads both snapshots, then runs branches |
+| Schema | [IndexEntities.cs](../../../TestController.Impact/Impact/Index/IndexEntities.cs), [ImpactIndexDbContext.cs](../../../TestController.Impact/Impact/Index/ImpactIndexDbContext.cs) | `DocumentTerm` PK = `(DocumentId, Term)`, index on `Term` |
+| Provisioning | [ImpactIndexInitializer.cs](../../../TestController.Impact/Impact/Index/ImpactIndexInitializer.cs) | `EnsureCreatedAsync` + WAL only |
+| Build | [RetrievalIndexBuilder.cs](../../../TestController.Impact/Impact/Index/RetrievalIndexBuilder.cs) | `BulkInsertTermsAsync` 300-row chunks; `RecomputeCorpusStatisticsAsync` full-corpus |
+| Query construction | [ImpactContracts.cs](../../../TestControllerGrpc.Core/Impact/ImpactContracts.cs) | `KeywordGroup(string GroupId, string Label, IReadOnlyList<string> Terms, double Weight)` |
+| Options | [ImpactMappingOptions.cs](../../../TestControllerGrpc.Core/Impact/ImpactMappingOptions.cs) | `Bm25K1=1.2`, `Bm25B=0.75`, `FanOutPenaltyFloor=0.35`, `FanOutPenaltyCeiling=1.30` |
 
 Types required by the brief that **exist**: all of the above.
 Types required that **do not exist**: a schema-version record, an integer document id, a postings cursor.

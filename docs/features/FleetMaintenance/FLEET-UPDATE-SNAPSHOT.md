@@ -12,13 +12,13 @@ The common assumption — "the code exists but nothing is wired" — is **half r
 Two separate things are going on:
 
 **The update installer is fully wired and reachable today.** `NodeUpdateInstaller` is registered in DI
-([FleetMaintenanceExtensions.cs](TestController.Api/FleetMaintenanceExtensions.cs#L32)) and the Fleet UI has a live
-button bound to it ([MaintenanceView.xaml](TestControllerGrpc/Views/AgentWorkspace/MaintenanceView.xaml#L219)).
+([FleetMaintenanceExtensions.cs](../../../TestController.Api/FleetMaintenanceExtensions.cs#L32)) and the Fleet UI has a live
+button bound to it ([MaintenanceView.xaml](../../../TestControllerGrpc/Views/AgentWorkspace/MaintenanceView.xaml#L219)).
 Anyone looking at the Agent Fleet screen right now can check for updates and install them on a production node.
 
 **The snapshot half is deliberately switched off.** `GoldenImageRefreshOperation` exists and is tested, but it is
 not registered, there is no `StartRefreshAsync` on the service interface, and no UI can reach it. The comment at
-[FleetMaintenanceExtensions.cs](TestController.Api/FleetMaintenanceExtensions.cs#L31) says so explicitly:
+[FleetMaintenanceExtensions.cs](../../../TestController.Api/FleetMaintenanceExtensions.cs#L31) says so explicitly:
 *"Inert until something resolves it: IGoldenImageRefreshOperation is deliberately NOT registered."*
 
 So the risk is not that nothing works. It is that **the destructive half works and the safety half does not.**
@@ -40,19 +40,19 @@ unreachable. **Most of the work below is wiring and gating, not new capability.*
 
 | Component | Exists? | Wired (DI / service / API / UI) | Tested? | What it does |
 |---|---|---|---|---|
-| `INodeUpdateInstaller` | Yes — [GoldenImageContracts.cs:21](TestControllerGrpc.Core/Maintenance/GoldenImageContracts.cs#L21) | — | — | Probe / Search / Install contract |
-| `NodeUpdateInstaller` | Yes — [NodeUpdateInstaller.cs:23](TestControllerGrpc.Core/Maintenance/NodeUpdateInstaller.cs#L23) | **DI yes** ([:32](TestController.Api/FleetMaintenanceExtensions.cs#L32)). No API endpoint. **UI yes** | `NodeUpdateInstallerTests.cs` | Sends WUApi PowerShell inline as `-EncodedCommand` over the existing `RunRemoteCommand` path; parses a `##TCWU##`-delimited JSON line off `OutputReceived`, filtered by agent name |
-| "Check for updates" UI path | Yes — `UpdateActionCommand` [FleetUpdatesVM.cs:317](TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs#L317) | **Bound** at [MaintenanceView.xaml:219](TestControllerGrpc/Views/AgentWorkspace/MaintenanceView.xaml#L219) | `NodeUpdateActionTests.cs` | One button: Check → Install. Probes `IsInstallSupportedAsync` first |
-| `MachineRebootOperation` | Yes | **DI yes** ([:27](TestController.Api/FleetMaintenanceExtensions.cs#L27)); API `POST /reboot`; UI FleetVM + Fleet grid | `FleetMaintenanceServiceTests`, concurrency tests | Remote `shutdown` dispatched to the agent, then waits for re-registration |
-| `MachineRevertOperation` | Yes | **DI yes** ([:26](TestController.Api/FleetMaintenanceExtensions.cs#L26)); API `POST /revert`; UI `RevertMachineViewModel` | Yes | Reverts to baseline snapshot via `Revert-AgentVM.ps1` |
-| `GoldenImageRefreshOperation` | Yes — [:16](TestControllerGrpc.Core/Maintenance/GoldenImageRefreshOperation.cs#L16) | **NOT registered**; no `StartRefreshAsync` on [IFleetMaintenanceService](TestControllerGrpc.Core/Maintenance/MaintenanceContracts.cs#L37); **no UI** | `GoldenImageRefreshOperationTests.cs` | The full 12-phase state machine. Unreachable at runtime |
-| `BaselineReplacer` | Yes — [:53](TestControllerGrpc.Core/Maintenance/BaselineReplacer.cs#L53) | **NOT registered** anywhere | `BaselineReplacerTests.cs` | Chooses a safe snapshot-replacement ordering per platform |
-| `IVirtualizationProvider` / `ScriptBackedVirtualizationProvider` | Yes | **DI yes**, via factory ([:29](TestController.Api/FleetMaintenanceExtensions.cs#L29), [:41](TestController.Api/FleetMaintenanceExtensions.cs#L41)) — but its only consumers are unregistered, so it is **inert** | `VirtualizationProviderRegistrationTests.cs` | Snapshot/power verbs via `Vm-Ops.<platform>.ps1` |
+| `INodeUpdateInstaller` | Yes — [GoldenImageContracts.cs:21](../../../TestControllerGrpc.Core/Maintenance/GoldenImageContracts.cs#L21) | — | — | Probe / Search / Install contract |
+| `NodeUpdateInstaller` | Yes — [NodeUpdateInstaller.cs:23](../../../TestControllerGrpc.Core/Maintenance/NodeUpdateInstaller.cs#L23) | **DI yes** ([:32](../../../TestController.Api/FleetMaintenanceExtensions.cs#L32)). No API endpoint. **UI yes** | `NodeUpdateInstallerTests.cs` | Sends WUApi PowerShell inline as `-EncodedCommand` over the existing `RunRemoteCommand` path; parses a `##TCWU##`-delimited JSON line off `OutputReceived`, filtered by agent name |
+| "Check for updates" UI path | Yes — `UpdateActionCommand` [FleetUpdatesVM.cs:317](../../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs#L317) | **Bound** at [MaintenanceView.xaml:219](../../../TestControllerGrpc/Views/AgentWorkspace/MaintenanceView.xaml#L219) | `NodeUpdateActionTests.cs` | One button: Check → Install. Probes `IsInstallSupportedAsync` first |
+| `MachineRebootOperation` | Yes | **DI yes** ([:27](../../../TestController.Api/FleetMaintenanceExtensions.cs#L27)); API `POST /reboot`; UI FleetVM + Fleet grid | `FleetMaintenanceServiceTests`, concurrency tests | Remote `shutdown` dispatched to the agent, then waits for re-registration |
+| `MachineRevertOperation` | Yes | **DI yes** ([:26](../../../TestController.Api/FleetMaintenanceExtensions.cs#L26)); API `POST /revert`; UI `RevertMachineViewModel` | Yes | Reverts to baseline snapshot via `Revert-AgentVM.ps1` |
+| `GoldenImageRefreshOperation` | Yes — [:16](../../../TestControllerGrpc.Core/Maintenance/GoldenImageRefreshOperation.cs#L16) | **NOT registered**; no `StartRefreshAsync` on [IFleetMaintenanceService](../../../TestControllerGrpc.Core/Maintenance/MaintenanceContracts.cs#L37); **no UI** | `GoldenImageRefreshOperationTests.cs` | The full 12-phase state machine. Unreachable at runtime |
+| `BaselineReplacer` | Yes — [:53](../../../TestControllerGrpc.Core/Maintenance/BaselineReplacer.cs#L53) | **NOT registered** anywhere | `BaselineReplacerTests.cs` | Chooses a safe snapshot-replacement ordering per platform |
+| `IVirtualizationProvider` / `ScriptBackedVirtualizationProvider` | Yes | **DI yes**, via factory ([:29](../../../TestController.Api/FleetMaintenanceExtensions.cs#L29), [:41](../../../TestController.Api/FleetMaintenanceExtensions.cs#L41)) — but its only consumers are unregistered, so it is **inert** | `VirtualizationProviderRegistrationTests.cs` | Snapshot/power verbs via `Vm-Ops.<platform>.ps1` |
 | `Vm-Ops.vcloud.ps1` | Yes — `Utilites/RevertAgents/` | **Deployed on JVGR22** — verified 14,891 bytes, 2026-09-17 | — | Verb-dispatched create/delete/revert/power/list |
-| `MaintenanceRecoveryService` | Yes — [:50](TestControllerGrpc/Services/MaintenanceRecoveryService.cs#L50) | **DI yes**, hosted service | `MaintenanceRecoveryServiceTests.cs` | On restart, closes unfinished operations as Failed and quarantines their nodes |
+| `MaintenanceRecoveryService` | Yes — [:50](../../../TestControllerGrpc/Services/MaintenanceRecoveryService.cs#L50) | **DI yes**, hosted service | `MaintenanceRecoveryServiceTests.cs` | On restart, closes unfinished operations as Failed and quarantines their nodes |
 | Quarantine | Yes — `MaintenanceState.Quarantined` | API `POST /nodes/{id}/clear-quarantine`; UI "Return to rotation" | Yes | Sticky hold-out until an operator clears it |
-| `DispatchGate` | Yes — [:26](TestControllerGrpc.Core/Maintenance/DispatchGate.cs#L26) | Used at `ExecutionController` :402/:858 and `MainViewModel.Execution` :82 | `DispatchGateTests.cs` | Blocks dispatch for Reverting / Rebooting / **Updating** / Quarantined |
-| `UpdatePostureCoordinator` | Yes | **DI yes** ([App.xaml.cs:153](TestControllerGrpc/App.xaml.cs#L153)) | `UpdatePostureCoordinatorTests.cs` | Drains on posture, moves idle+RebootRequired nodes to `Updating`, optional auto-reboot inside a policy window |
+| `DispatchGate` | Yes — [:26](../../../TestControllerGrpc.Core/Maintenance/DispatchGate.cs#L26) | Used at `ExecutionController` :402/:858 and `MainViewModel.Execution` :82 | `DispatchGateTests.cs` | Blocks dispatch for Reverting / Rebooting / **Updating** / Quarantined |
+| `UpdatePostureCoordinator` | Yes | **DI yes** ([App.xaml.cs:153](../../../TestControllerGrpc/App.xaml.cs#L153)) | `UpdatePostureCoordinatorTests.cs` | Drains on posture, moves idle+RebootRequired nodes to `Updating`, optional auto-reboot inside a policy window |
 | `MaintenanceController` | Yes | revert / reboot / precheck / cancel / clear-quarantine / active / history / updates / policy | Yes | **No install endpoint and no refresh endpoint** |
 | Agent-side update execution | Yes | `WindowsUpdateDetector` is **detect-only** (`Online = false`); installation happens through the inline script | `WindowsUpdateSettingsDefaultsTests.cs` | Detect posture; install arrives as a remote command |
 
@@ -78,8 +78,8 @@ unreachable. **Most of the work below is wiring and gating, not new capability.*
 
 ### 4.1 A node receives test work while updating — **NO GUARD on the live path**
 
-`DispatchGate` does block `Updating` ([DispatchGate.cs:36](TestControllerGrpc.Core/Maintenance/DispatchGate.cs#L36)).
-But [`InstallUpdatesAsync`](TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs#L372) never sets that
+`DispatchGate` does block `Updating` ([DispatchGate.cs:36](../../../TestControllerGrpc.Core/Maintenance/DispatchGate.cs#L36)).
+But [`InstallUpdatesAsync`](../../../TestControllerGrpc/ViewModels/AgentWorkspace/FleetUpdatesVM.cs#L372) never sets that
 state and never takes a lock — it calls `_installer.InstallAsync` directly. A node is only protected if it happened
 to be `Draining`/`Updating` already from posture. **Click "Install updates" on an idle, healthy node and it stays
 fully dispatchable for the entire install.**
@@ -87,7 +87,7 @@ fully dispatchable for the entire install.**
 ### 4.2 Reboot or crash mid-install; controller crash mid-operation — **guarded only for operations**
 
 `MaintenanceRecoveryService` closes unfinished operations and quarantines their nodes on restart
-([:50–75](TestControllerGrpc/Services/MaintenanceRecoveryService.cs#L50)). That is solid — but it reads
+([:50–75](../../../TestControllerGrpc/Services/MaintenanceRecoveryService.cs#L50)). That is solid — but it reads
 `GetUnfinishedAsync`, and the UI install path **creates no operation row**. A controller crash during a UI-initiated
 install leaves no record, no quarantine, and a half-patched node back in rotation.
 
@@ -95,21 +95,21 @@ install leaves no record, no quarantine, and a half-patched node back in rotatio
 
 `GoldenImageRefreshOperation` puts Verify at phase 9, before PowerOff (10) and ReplaceBaseline (11), and on
 verification failure reverts to the intact baseline rather than promoting
-([:170–182](TestControllerGrpc.Core/Maintenance/GoldenImageRefreshOperation.cs#L170)). It also reboots and re-waits
+([:170–182](../../../TestControllerGrpc.Core/Maintenance/GoldenImageRefreshOperation.cs#L170)). It also reboots and re-waits
 whenever `install.RebootRequired`. The ordering is right; nothing can currently run it.
 
 ### 4.4 vCloud single snapshot — delete-then-create window — **guarded by default**
 
 `BaselineReplacer.ReplaceAsync` uses atomic replace on vCloud and create-then-prune on tree platforms.
 Delete-then-create is reachable **only** when `ReclaimSpaceBeforeReplace` is set, and it defaults to `false`
-([BaselineRetentionOptions](TestControllerGrpc.Core/Maintenance/BaselineReplacer.cs#L33)). The distinct
+([BaselineRetentionOptions](../../../TestControllerGrpc.Core/Maintenance/BaselineReplacer.cs#L33)). The distinct
 `FailedBaselineMissing` status exists so a lost baseline is reported as such. This is the best-guarded area in the
 whole feature.
 
 ### 4.5 Two operations on one node; a whole pool at once — **guarded for operations only**
 
-One-per-node is enforced by `_active.TryAdd` ([FleetMaintenanceService.cs:98](TestControllerGrpc.Core/Maintenance/FleetMaintenanceService.cs#L98)).
-Concurrency is kind-aware ([CapFor :144](TestControllerGrpc.Core/Maintenance/FleetMaintenanceService.cs#L144)):
+One-per-node is enforced by `_active.TryAdd` ([FleetMaintenanceService.cs:98](../../../TestControllerGrpc.Core/Maintenance/FleetMaintenanceService.cs#L98)).
+Concurrency is kind-aware ([CapFor :144](../../../TestControllerGrpc.Core/Maintenance/FleetMaintenanceService.cs#L144)):
 Reboot and GoldenImageRefresh are capped, everything else is `int.MaxValue`. Two gaps: `InstallUpdates` is **not**
 capped, and the UI install path bypasses both guards entirely — nothing stops an operator from starting installs on
 every node in the pool at once.
@@ -138,8 +138,8 @@ those present identically as "agent did not reconnect". Diagnosis is left to a h
 |---|---|
 | Reboot works in production | **Confirmed in code** — registered, API + UI reachable, concurrency-tested. Not re-run live during this audit |
 | Revert needs `RCLOUD_USER` / `RCLOUD_PASSWORD` | **Confirmed, and they are missing on JVGR22** |
-| Reboot-required should use `Auto Update\RebootRequired` only | **Code does not match the brief** — it ORs `Auto Update\RebootRequired` **and** `Component Based Servicing\RebootPending` into one boolean used for both drain and reporting. `PendingFileRenameOperations` is counted and debug-logged but gated behind `TreatPendingFileRenamesAsRebootRequired`, default `false` ([WindowsUpdateDetector.cs:152](TestAgentGrpc/Services/WindowsUpdateDetector.cs#L152)). Resolved by D7 — see §7.2 |
-| Posture reports Ok/Failed/Stale/Unknown | **Confirmed** — `UpdateScanStatus` ([WindowsUpdateEnums.cs:24](TestControllerGrpc.Core/Maintenance/WindowsUpdateEnums.cs#L24)) |
+| Reboot-required should use `Auto Update\RebootRequired` only | **Code does not match the brief** — it ORs `Auto Update\RebootRequired` **and** `Component Based Servicing\RebootPending` into one boolean used for both drain and reporting. `PendingFileRenameOperations` is counted and debug-logged but gated behind `TreatPendingFileRenamesAsRebootRequired`, default `false` ([WindowsUpdateDetector.cs:152](../../../TestAgentGrpc/Services/WindowsUpdateDetector.cs#L152)). Resolved by D7 — see §7.2 |
+| Posture reports Ok/Failed/Stale/Unknown | **Confirmed** — `UpdateScanStatus` ([WindowsUpdateEnums.cs:24](../../../TestControllerGrpc.Core/Maintenance/WindowsUpdateEnums.cs#L24)) |
 
 One correction to earlier notes: `Vm-Ops.vcloud.ps1` **is** deployed on JVGR22. A previous note claiming it was
 missing was wrong; measured this session.
@@ -253,20 +253,20 @@ Option 3 is compatible with the first slice below, which writes no snapshot at a
 The decision is clear, but today **one boolean serves both purposes**, so this is a code change, not a config one.
 
 `WindowsUpdateDetector.IsRebootRequired()`
-([:152](TestAgentGrpc/Services/WindowsUpdateDetector.cs#L152)) ORs `Auto Update\RebootRequired` **and**
+([:152](../../../TestAgentGrpc/Services/WindowsUpdateDetector.cs#L152)) ORs `Auto Update\RebootRequired` **and**
 `Component Based Servicing\RebootPending` into a single `RebootRequired` field. That one field then drives the
 **dispatch/drain** decision all the way through:
 
 > `WindowsUpdateStatusDto.RebootRequired` → `NodeUpdateStatusStore.DeriveState`
-> ([:75](TestControllerGrpc.Core/Maintenance/NodeUpdateStatusStore.cs#L75)) → `WindowsUpdateState.RebootRequired`
-> → `UpdatePolicyEvaluator` ([:13](TestControllerGrpc.Core/Maintenance/UpdatePolicyEvaluator.cs#L13)) →
+> ([:75](../../../TestControllerGrpc.Core/Maintenance/NodeUpdateStatusStore.cs#L75)) → `WindowsUpdateState.RebootRequired`
+> → `UpdatePolicyEvaluator` ([:13](../../../TestControllerGrpc.Core/Maintenance/UpdatePolicyEvaluator.cs#L13)) →
 > `policy.RebootRequiredEffect` (default `Draining`) → `DispatchGate` blocks.
 
 So **drain currently fires on CBS too**, which the decision says it should not.
 
 Meanwhile the update flow's reboot decision uses neither registry key: `UpdateInstallResult.RebootRequired` comes
 from the WUApi installer's own answer, `$result.RebootRequired`
-([NodeUpdateInstaller.cs:201](TestControllerGrpc.Core/Maintenance/NodeUpdateInstaller.cs#L201)).
+([NodeUpdateInstaller.cs:201](../../../TestControllerGrpc.Core/Maintenance/NodeUpdateInstaller.cs#L201)).
 
 Implementing D7 therefore means:
 
@@ -305,7 +305,7 @@ D7's signal split needs an agent-side change, a new field on the posture wire co
 rollout across nine nodes. That is too much for a first slice, and it is not needed to make install safe.
 
 This slice therefore reboots on **`UpdateInstallResult.RebootRequired`** — the WUApi installer's own answer,
-already returned today ([NodeUpdateInstaller.cs:201](TestControllerGrpc.Core/Maintenance/NodeUpdateInstaller.cs#L201)),
+already returned today ([NodeUpdateInstaller.cs:201](../../../TestControllerGrpc.Core/Maintenance/NodeUpdateInstaller.cs#L201)),
 requiring no agent change. The D7 registry split becomes **slice 2**.
 
 **Accepted consequence:** until slice 2 ships, drain/dispatch still fires on `CBS\RebootPending` as well as

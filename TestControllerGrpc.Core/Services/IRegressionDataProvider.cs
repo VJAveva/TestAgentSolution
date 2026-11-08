@@ -3,7 +3,7 @@ using TestControllerGrpc.Models;
 namespace TestControllerGrpc.Services;
 
 /// <summary>
-/// Serves the Regression tab (CIRP — see docs/AzureIntegration/FEATURE-ARCHITECTURE.md).
+/// Serves the Regression tab (CIRP — see docs/features/AzureIntegration/FEATURE-ARCHITECTURE.md).
 /// Both hosts (WPF Controller, WebApi) consume this directly or via TestController.Api's
 /// /api/impact endpoints — same shape either way, per the platform's "one engine" keystone.
 /// </summary>

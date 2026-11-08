@@ -160,7 +160,7 @@ audited folder. Still-open ones are listed explicitly.
 - **Still open per source:** WEBAPI-002 (= REG-015), API-005 (shared API vs minimal-API endpoint parity - same shape as
   REG-005), TEST-001 (in progress), TEST-002, TEST-003, TEST-006, TEST-007, SYS-005..SYS-009.
 - **AUDIT.md open questions Q1-Q5** (TestAgentDisplay use, Dashboard/Diagnostics abandoned, thin React audit/report card,
-  `docs/AzureIntegration/Program.cs`, standalone web host deployed?) - **Q5 answered**: yes, IIS `TestControllerWeb` on :81.
+  `docs/archive/Program.cs`, standalone web host deployed?) - **Q5 answered**: yes, IIS `TestControllerWeb` on :81.
 
 ## Summary counts (Phase 0)
 

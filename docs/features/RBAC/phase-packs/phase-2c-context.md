@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 2c. Detach when Phase 2c ships and switch to `phase-3-context.md`.
 
-> Companion reading: `docs/rbac/01_System_Design.md` §3 (authorization), `docs/rbac/02_Implementation_Roadmap.md` §Phase 2, `docs/rbac/04_UI_Mockup_Catalog.md` Mockup 4 (Engineer "My pipelines" web view) + Mockup 11 (Default mode tooltip), `docs/architecture/CURRENT_STATE.md` "React Structure".
+> Companion reading: `docs/features/RBAC/01_System_Design.md` §3 (authorization), `docs/features/RBAC/02_Implementation_Roadmap.md` §Phase 2, `docs/features/RBAC/04_UI_Mockup_Catalog.md` Mockup 4 (Engineer "My pipelines" web view) + Mockup 11 (Default mode tooltip), `docs/architecture/CURRENT_STATE.md` "React Structure".
 
 ---
 
@@ -103,9 +103,9 @@ No new packages. All work lands in existing WebClient project.
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §3 — Authorization Design
-- docs/rbac/04_UI_Mockup_Catalog.md Mockup 4 + Mockup 11 — Engineer filtered view, tooltip copy
-- docs/rbac/02_Implementation_Roadmap.md §Phase 2 — Pipeline Trigger + Cancel
+- docs/features/RBAC/01_System_Design.md §3 — Authorization Design
+- docs/features/RBAC/04_UI_Mockup_Catalog.md Mockup 4 + Mockup 11 — Engineer filtered view, tooltip copy
+- docs/features/RBAC/02_Implementation_Roadmap.md §Phase 2 — Pipeline Trigger + Cancel
 - docs/architecture/CURRENT_STATE.md — React Structure, apiFetch, Zustand stores
 
 [CURRENT STATE]

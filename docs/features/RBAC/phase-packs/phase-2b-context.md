@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 2b. Detach when Phase 2b ships and switch to `phase-2c-context.md`.
 
-> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/rbac/01_System_Design.md` §3 (authorization), `docs/rbac/02_Implementation_Roadmap.md` §Phase 2, `docs/rbac/04_UI_Mockup_Catalog.md` Mockup 2 + Mockup 4 (Engineer "My pipelines" header), `docs/architecture/CURRENT_STATE.md` "WPF View Structure" + "MainViewModel partials".
+> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/features/RBAC/01_System_Design.md` §3 (authorization), `docs/features/RBAC/02_Implementation_Roadmap.md` §Phase 2, `docs/features/RBAC/04_UI_Mockup_Catalog.md` Mockup 2 + Mockup 4 (Engineer "My pipelines" header), `docs/architecture/CURRENT_STATE.md` "WPF View Structure" + "MainViewModel partials".
 
 ---
 
@@ -135,9 +135,9 @@ Copy this skeleton when opening a Copilot session for any task in Block A–C:
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §3 — Authorization Design
-- docs/rbac/04_UI_Mockup_Catalog.md Mockup 2 + Mockup 4 — Engineer filtered view
-- docs/rbac/02_Implementation_Roadmap.md §Phase 2 — Pipeline Trigger + Cancel
+- docs/features/RBAC/01_System_Design.md §3 — Authorization Design
+- docs/features/RBAC/04_UI_Mockup_Catalog.md Mockup 2 + Mockup 4 — Engineer filtered view
+- docs/features/RBAC/02_Implementation_Roadmap.md §Phase 2 — Pipeline Trigger + Cancel
 - docs/architecture/CURRENT_STATE.md — MainViewModel partials, WPF MVVM
 
 [CURRENT STATE]

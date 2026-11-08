@@ -7,7 +7,7 @@
 > - [CURRENT_STATE.md](CURRENT_STATE.md) — exhaustive current types, DI, executor flow, WatchList schema, load-bearing weirdness.
 > - [CONVENTIONS.md](CONVENTIONS.md) — coding patterns (MVVM, Zustand, `AppLogger`, DI lifetimes, test naming).
 > - [WebApi-DB-Decoupling.md](WebApi-DB-Decoupling.md) — how the standalone WebApi stays DB-free and proxies the controller.
-> - Root [ARCHITECTURE.md](../../ARCHITECTURE.md) and [docs/ARCHITECTURE.md](../ARCHITECTURE.md) — narrative overview.
+> - Root [ARCHITECTURE.md](ARCHITECTURE-overview.md) and [docs/architecture/ARCHITECTURE.md](ARCHITECTURE.md) — narrative overview.
 
 ---
 

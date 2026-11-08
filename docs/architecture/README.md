@@ -10,13 +10,13 @@
 |---|---|
 | **The complete story — HLD + LLD, everything** | [**`COMPLETE_DESIGN.md`**](COMPLETE_DESIGN.md) |
 | The map — hosts, ports, who calls whom | this file |
-| C4-style container and component diagrams | [`../ARCHITECTURE-DIAGRAMS.md`](../ARCHITECTURE-DIAGRAMS.md) |
+| C4-style container and component diagrams | [`../ARCHITECTURE-DIAGRAMS.md`](ARCHITECTURE-DIAGRAMS.md) |
 | Narrative design and rationale | [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) |
 | Types, DI registrations, current code facts | [`CURRENT_STATE.md`](CURRENT_STATE.md) |
 | Coding patterns and conventions | [`CONVENTIONS.md`](CONVENTIONS.md) |
-| Full component catalogue and gRPC contracts | [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) |
-| Impact-analysis algorithm as built | [`../impact/Algorithm-As-Built.md`](../impact/Algorithm-As-Built.md) |
-| RBAC design and phases | [`../rbac/01_System_Design.md`](../rbac/01_System_Design.md) |
+| Full component catalogue and gRPC contracts | [`../../ARCHITECTURE.md`](ARCHITECTURE-overview.md) |
+| Impact-analysis algorithm as built | [`../impact/Algorithm-As-Built.md`](../features/Impact/Algorithm-As-Built.md) |
+| RBAC design and phases | [`../rbac/01_System_Design.md`](../features/RBAC/01_System_Design.md) |
 
 ---
 
@@ -201,7 +201,7 @@ Found while verifying this map. Recorded rather than silently fixed, since the d
 
 | Document | Issue |
 |---|---|
-| `docs/ARCHITECTURE.md` lines 129, 271, 403 | **FIXED 2026-09-24.** Stated the controller gRPC port as 15100; corrected to 5100, verified against `ControllerGrpcServerHost.cs` (`GetValue("ControllerGrpcPort", 5100)`), both `appsettings.json` files and `fleet-inventory.json`. |
+| `docs/architecture/ARCHITECTURE.md` lines 129, 271, 403 | **FIXED 2026-09-24.** Stated the controller gRPC port as 15100; corrected to 5100, verified against `ControllerGrpcServerHost.cs` (`GetValue("ControllerGrpcPort", 5100)`), both `appsettings.json` files and `fleet-inventory.json`. |
 | `ARCHITECTURE.md` §2 | Describes only WPF vs WebApi. There are **three** topologies; the CoLocated/Standalone split driven by `ControllerProxyUrl` is undocumented. Covered in [`COMPLETE_DESIGN.md`](COMPLETE_DESIGN.md) §4. |
 | `ARCHITECTURE.md` | No mention of `isPrimaryHost`, or that the WebApi runs with a null session store. Covered in [`COMPLETE_DESIGN.md`](COMPLETE_DESIGN.md) §11. |
 | `ARCHITECTURE.md` | Does not cover `LockRegistry` (pipeline locking), fleet maintenance, or `TestController.Persistence`. Covered in [`COMPLETE_DESIGN.md`](COMPLETE_DESIGN.md) §§11–15. |

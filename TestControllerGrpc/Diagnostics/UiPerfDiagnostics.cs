@@ -10,7 +10,7 @@ using TestControllerGrpc.Services;
 namespace TestControllerGrpc.Diagnostics;
 
 /// <summary>
-/// TEMPORARY UI performance instrumentation — see docs/reliability/UIPerformance-CopilotPrompts.md (P02).
+/// TEMPORARY UI performance instrumentation — see docs/features/Reliability/UIPerformance-CopilotPrompts.md (P02).
 /// <para>Enable with <c>UiPerf:Enabled=true</c> in appsettings.json or environment variable
 /// <c>UIPERF=1</c>. Output goes to <c>&lt;log dir&gt;\ui-perf-YYYYMMDD.log</c> and
 /// <c>&lt;log dir&gt;\ui-binding-errors-YYYYMMDD.log</c>.</para>

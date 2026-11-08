@@ -1,3 +1,5 @@
+> Archived on 2026-11-08. Superseded by [docs/features/Hardening/REGISTER.md](../features/Hardening/REGISTER.md), which tracks open work now.
+
 # Phase 3 — Maintainability (Implementation Plan)
 
 > **Created:** 2026-06-19

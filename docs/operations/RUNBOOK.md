@@ -379,6 +379,6 @@ Schedule via Windows Task Scheduler for automated cleanup.
 
 ## Related Docs
 
-- [Security Troubleshooting](TROUBLESHOOTING.md) — Auth/token/TLS issues
-- [Deployment Guide](../deploy/README.md) — Deploy scripts and procedures
-- [Architecture](ARCHITECTURE.md) — System design overview
+- [Security Troubleshooting](../features/SecurityFramework/TROUBLESHOOTING.md) — Auth/token/TLS issues
+- [Deployment Guide](../../deploy/README.md) — Deploy scripts and procedures
+- [Architecture](../architecture/ARCHITECTURE.md) — System design overview

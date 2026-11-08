@@ -2,7 +2,7 @@
 
 > Attach this file to every Copilot session while working on Phase 0.5. Detach when Phase 0.5 ships and switch to `phase-1-context.md`.
 
-> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/rbac/01_System_Design.md`, `docs/rbac/05_Default_Mode_Design.md`, `docs/rbac/04_UI_Mockup_Catalog.md`, `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
+> Companion reading (already in Copilot context via `.github/copilot-instructions.md`): `docs/features/RBAC/01_System_Design.md`, `docs/features/RBAC/05_Default_Mode_Design.md`, `docs/features/RBAC/04_UI_Mockup_Catalog.md`, `docs/architecture/CURRENT_STATE.md`, `docs/architecture/CONVENTIONS.md`.
 
 ---
 
@@ -102,9 +102,9 @@ Copy this skeleton when opening a Copilot session for any task in Block A–C:
 
 ```
 [SPEC]
-- docs/rbac/02_Implementation_Roadmap.md §Phase 0.5 — <one line>
-- docs/rbac/05_Default_Mode_Design.md §<Y> — <one line if relevant>
-- docs/rbac/04_UI_Mockup_Catalog.md — Mockup <N>
+- docs/features/RBAC/02_Implementation_Roadmap.md §Phase 0.5 — <one line>
+- docs/features/RBAC/05_Default_Mode_Design.md §<Y> — <one line if relevant>
+- docs/features/RBAC/04_UI_Mockup_Catalog.md — Mockup <N>
 
 [CURRENT STATE]
 - Phase 0 complete (all 24 files shipped)

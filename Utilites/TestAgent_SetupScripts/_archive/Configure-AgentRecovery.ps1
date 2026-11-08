@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Part 3 of the self-healing gRPC agent system (see
-  docs/Issues/SelfHealing_Grpc_Agent_Spec.md).
+  docs/issues/closed/SelfHealing_Grpc_Agent_Spec.md).
 
   - Sets escalating restart delays (5s, 10s, 30s) to avoid tight crash loops.
   - Sets failureflag=1 so NON-ZERO exit codes (the watchdog's Environment.ExitCode=3)

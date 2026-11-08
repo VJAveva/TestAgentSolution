@@ -83,7 +83,7 @@ Every Copilot session loads context in this order:
 |---|---|---|---|
 | 1 | `.github/copilot-instructions.md` | GitHub Copilot, automatic | ~700 tokens (every session) |
 | 2 | `docs/architecture/CURRENT_STATE.md` + `CONVENTIONS.md` | Pin via `@workspace` or explicit reference in prompt | ~2K tokens when referenced |
-| 3 | `docs/rbac/phase-packs/phase-N-context.md` for the current phase | Attach at start of session | ~2K tokens |
+| 3 | `docs/features/RBAC/phase-packs/phase-N-context.md` for the current phase | Attach at start of session | ~2K tokens |
 | 4 | Your task prompt referencing specific doc sections | You type it | ~500 tokens |
 
 **Layer 1 is the most important — it makes everything else cheap.** Copy `copilot-instructions.md` from the deliverables to `.github/copilot-instructions.md` in your repo root. Commit it. After that, every Copilot session automatically has the project context.
@@ -100,12 +100,12 @@ Do this once, today or tomorrow. After this, every implementation task is fast.
 
 ```powershell
 cd $YOUR_REPO_ROOT
-mkdir -Force docs/architecture, docs/rbac, docs/rbac/phase-packs
+mkdir -Force docs/architecture, docs/rbac, docs/features/RBAC/phase-packs
 
 # Copy all the .md files from the deliverables zip into the matching locations
 # CURRENT_STATE.md and CONVENTIONS.md from your audit run go in docs/architecture/
-# 00 through 07 .md files go in docs/rbac/
-# phase-0-context.md goes in docs/rbac/phase-packs/
+# 00 through 07 .md files go in docs/features/RBAC/
+# phase-0-context.md goes in docs/features/RBAC/phase-packs/
 # audit-prompt.md goes in docs/architecture/
 
 git add docs/
@@ -177,8 +177,8 @@ Here's hour by hour what your first implementation day looks like.
 You've decided to start with the foundation: `IUserContext` and `ClientKind`.
 
 Open the relevant docs:
-- `docs/rbac/phase-packs/phase-0-context.md` — see Block A, task #1
-- `docs/rbac/01_System_Design.md` — read §3 (Authorization Design) and §4 (Authentication Flow)
+- `docs/features/RBAC/phase-packs/phase-0-context.md` — see Block A, task #1
+- `docs/features/RBAC/01_System_Design.md` — read §3 (Authorization Design) and §4 (Authentication Flow)
 
 You spend 10 minutes reading. You now know what `IUserContext` should expose.
 
@@ -186,14 +186,14 @@ You spend 10 minutes reading. You now know what `IUserContext` should expose.
 
 Important: **fresh** session, not "continuing yesterday's conversation."
 
-Attach (pin) `docs/rbac/phase-packs/phase-0-context.md` to the session.
+Attach (pin) `docs/features/RBAC/phase-packs/phase-0-context.md` to the session.
 
 ### 09:20 — Paste your first task prompt
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §3 — IUserContext is the identity contract flowing through every gRPC request
-- docs/rbac/01_System_Design.md §4 — SessionAuthInterceptor populates IUserContext from session token
+- docs/features/RBAC/01_System_Design.md §3 — IUserContext is the identity contract flowing through every gRPC request
+- docs/features/RBAC/01_System_Design.md §4 — SessionAuthInterceptor populates IUserContext from session token
 
 [CURRENT STATE]
 - No types in TestControllerGrpc.Core/Identity/ folder yet (folder doesn't exist)
@@ -257,7 +257,7 @@ New session. Attach phase pack. Paste new prompt:
 
 ```
 [SPEC]
-- docs/rbac/01_System_Design.md §3.1 — full Permission catalog (19 entries)
+- docs/features/RBAC/01_System_Design.md §3.1 — full Permission catalog (19 entries)
 
 [CURRENT STATE]
 - IUserContext and ClientKind from Task 1 are committed
@@ -337,7 +337,7 @@ Before starting any task:
 
 - [ ] Fresh Copilot Chat session (not continuing yesterday's chat)
 - [ ] `.github/copilot-instructions.md` is present in the repo (Layer 1 auto-loads)
-- [ ] `docs/rbac/phase-packs/phase-N-context.md` for the current phase is attached/pinned
+- [ ] `docs/features/RBAC/phase-packs/phase-N-context.md` for the current phase is attached/pinned
 - [ ] You know which doc section the task spec lives in (so you can cite it)
 - [ ] You know what files this task creates/modifies (from the phase pack)
 - [ ] You have the task prompt template ready (Part 5 of doc `06`)
@@ -424,4 +424,4 @@ Be honest about scope:
 
 ## 14. The one-line summary
 
-**Drop `copilot-instructions.md` into `.github/`, commit the 8 design docs to `docs/rbac/`, attach `phase-0-context.md` to your first Copilot session, and start with Phase 0 Task 1 using the prompt template in `06_Copilot_Implementation_Plan.md` Part 5. Close the session after each task. That's it.**
+**Drop `copilot-instructions.md` into `.github/`, commit the 8 design docs to `docs/features/RBAC/`, attach `phase-0-context.md` to your first Copilot session, and start with Phase 0 Task 1 using the prompt template in `06_Copilot_Implementation_Plan.md` Part 5. Close the session after each task. That's it.**
