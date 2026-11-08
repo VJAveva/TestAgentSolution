@@ -10,7 +10,8 @@ last-verified: 2026-11-08
 # Fleet maintenance: revert, reboot, updates, golden image
 
 ## What it does
-- Runs maintenance on agent machines from the controller: VM revert, reboot, Windows Update scan and install.
+- Runs maintenance on agent machines from the controller: VM revert, reboot, Windows Update scan (report only).
+- **Installing Windows updates is disabled by policy** (IT owns patching): `Maintenance:AllowUpdateInstall` defaults to `false`, `FleetMaintenanceService.StartInstallUpdatesAsync` refuses with "Disabled by policy", and the Fleet button only shows "N pending — recheck". The install code is kept; removing it is a separate decision.
 - Each operation is persisted so a controller restart can recover it; agents under maintenance are held out of runs and alerts.
 - Also covers the on-demand agent update button.
 

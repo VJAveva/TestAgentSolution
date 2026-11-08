@@ -70,11 +70,14 @@ public class PipelineBuilderCreateTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private readonly BuilderAuth.RecordingAudit _audit = new();
+
     private PipelineBuilderService Service() => new(
         new DerivedTargetCatalog(_parameters),
         new FolderRecipeSource(_recipes),
         new FolderStageTemplateSource(_templates),
         BuilderAuth.AllowAll,
+        _audit,
         Path.Combine(_root, "Triggers"));
 
     private Task<CreateOutcome> CreateAsAdmin(BuilderResult preview, BuilderValidation validation) =>
@@ -423,6 +426,7 @@ public class PipelineBuilderCreateTests : IDisposable
             new FolderRecipeSource(_recipes),
             new FolderStageTemplateSource(_templates),
             BuilderAuth.AdminOnly,
+            _audit,
             Path.Combine(_root, "Triggers"));
 
         var preview = Preview();
@@ -431,6 +435,7 @@ public class PipelineBuilderCreateTests : IDisposable
         var outcome = await service.CreateAsync(preview, validation, _fragments, BuilderAuth.Engineer);
 
         Assert.False(outcome.Written);
+        Assert.Empty(_audit.Entries);
         Assert.Contains(outcome.Issues, i => i.Message.Contains("permission", StringComparison.OrdinalIgnoreCase));
         Assert.False(File.Exists(preview.ConfigPath));
         Assert.False(Directory.Exists(_fragments));
@@ -444,6 +449,7 @@ public class PipelineBuilderCreateTests : IDisposable
             new FolderRecipeSource(_recipes),
             new FolderStageTemplateSource(_templates),
             BuilderAuth.AdminOnly,
+            _audit,
             Path.Combine(_root, "Triggers"));
 
         var preview = Preview();
@@ -454,6 +460,31 @@ public class PipelineBuilderCreateTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_Should_WriteOneAuditEntry_When_FilesAreWritten()
+    {
+        var preview = Preview();
+
+        var outcome = await CreateAsAdmin(preview, Service().Validate(preview, Live()));
+
+        Assert.True(outcome.Written);
+        var entry = Assert.Single(_audit.Entries);
+        Assert.Equal("Pipeline_Author", entry.ActionName);
+        Assert.Equal(preview.Tag, entry.ResourceId);
+        Assert.Equal(BuilderAuth.Admin.UserId, entry.UserId);
+        Assert.True(entry.Allowed);
+        Assert.Equal("pipeline-fragment-created", entry.ReasonCode);
+    }
+
+    [Fact]
+    public async Task Create_Should_NotAudit_When_ValidationBlocksTheWrite()
+    {
+        var outcome = await CreateAsAdmin(Preview(), new BuilderValidation([new BuilderIssue(BuilderSeverity.Error, "no")], []));
+
+        Assert.False(outcome.Written);
+        Assert.Empty(_audit.Entries);
+    }
+
+    [Fact]
     public async Task Create_Should_CheckPermissionBeforeValidation_So_ADeniedCallerLearnsNothingElse()
     {
         var service = new PipelineBuilderService(
@@ -461,6 +492,7 @@ public class PipelineBuilderCreateTests : IDisposable
             new FolderRecipeSource(_recipes),
             new FolderStageTemplateSource(_templates),
             BuilderAuth.AdminOnly,
+            _audit,
             Path.Combine(_root, "Triggers"));
 
         var preview = Preview();

@@ -91,7 +91,7 @@ public class NodeUpdateActionTests
     [Fact]
     public async Task Check_Should_BecomeAnInstallAction_When_UpdatesAreFound()
     {
-        var vm = Build(Installer(search: new UpdateSearchResult(true, 3, ["A", "B", "C"])));
+        var vm = Build(Installer(search: new UpdateSearchResult(true, 3, ["A", "B", "C"])), null, allowInstall: true);
 
         await vm.UpdateActionCommand.ExecuteAsync(Node);
 
@@ -103,7 +103,7 @@ public class NodeUpdateActionTests
     [Fact]
     public async Task Check_Should_Singularise_When_ExactlyOneUpdateIsFound()
     {
-        var vm = Build(Installer(search: new UpdateSearchResult(true, 1, ["A"])));
+        var vm = Build(Installer(search: new UpdateSearchResult(true, 1, ["A"])), null, allowInstall: true);
 
         await vm.UpdateActionCommand.ExecuteAsync(Node);
 
@@ -194,7 +194,7 @@ public class NodeUpdateActionTests
     {
         // RebuildRows throws every row away. If the button state lived on the row, an unrelated status
         // report mid-install would silently reset it to "Check for updates".
-        var vm = Build(Installer(search: new UpdateSearchResult(true, 4, ["A"])));
+        var vm = Build(Installer(search: new UpdateSearchResult(true, 4, ["A"])), null, allowInstall: true);
         await vm.UpdateActionCommand.ExecuteAsync(Node);
 
         var before = vm.ActionFor(Node);
@@ -208,7 +208,7 @@ public class NodeUpdateActionTests
     [Fact]
     public async Task Action_Should_BeSharedWithTheGridRow_When_RowsAreRebuilt()
     {
-        var vm = Build(Installer(search: new UpdateSearchResult(true, 2, ["A"])), Node);
+        var vm = Build(Installer(search: new UpdateSearchResult(true, 2, ["A"])), null, allowInstall: true, Node);
         await vm.UpdateActionCommand.ExecuteAsync(Node);
 
         vm.RefreshCommand.Execute(null);

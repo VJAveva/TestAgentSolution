@@ -50,6 +50,27 @@ public class UpdateInstallParkedTests
     }
 
     [Fact]
+    public async Task Label_Should_NeverOfferInstall_When_InstallIsDisabled()
+    {
+        var vm = Build(Installer(3), new Mock<IFleetMaintenanceService>(), allowInstall: false);
+
+        await vm.UpdateActionCommand.ExecuteAsync(Node);
+
+        var action = vm.ActionFor(Node);
+        Assert.Equal(NodeUpdateActionState.Available, action.State);
+        Assert.DoesNotContain("Install", action.Label);
+        Assert.Contains("disabled by policy", action.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Label_Should_OfferInstall_When_InstallIsAllowed()
+    {
+        var action = new NodeUpdateActionVM { InstallAllowed = true, AvailableCount = 2, State = NodeUpdateActionState.Available };
+
+        Assert.Equal("Install 2 updates", action.Label);
+    }
+
+    [Fact]
     public async Task Check_Should_StillReportAvailableUpdates_When_InstallIsParked()
     {
         var vm = Build(Installer(3), new Mock<IFleetMaintenanceService>(), allowInstall: false);

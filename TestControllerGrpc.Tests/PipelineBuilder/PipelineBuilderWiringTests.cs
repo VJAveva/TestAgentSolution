@@ -48,6 +48,7 @@ public class PipelineBuilderWiringTests
             .Build());
         services.AddSingleton<IAppLogger, SilentLogger>();
         services.AddSingleton(new Mock<IAuthorizationService>().Object);
+        services.AddSingleton(new Mock<IAuditWriter>().Object);
         services.AddSingleton(dispatcher.Object);
         services.AddSingleton(new Mock<IVocabularyMonitor>().Object);
         services.AddSingleton<CurrentUserHolder>();
@@ -78,6 +79,19 @@ public class PipelineBuilderWiringTests
 
         Assert.NotNull(provider.GetService<PipelineBuilderService>());
         Assert.NotNull(provider.GetService<IBuilderAgentSource>());
+    }
+
+    /// <summary>The embedded REST API reaches the builder only through this bundle; without it /api/pipeline-builder is 404.</summary>
+    [Fact]
+    public void AddPipelineBuilderFeature_Should_ResolveOneHostSharedWithThePanel_When_TheContainerIsBuilt()
+    {
+        using var provider = BuildContainer();
+
+        var host = provider.GetService<PipelineBuilderHost>();
+
+        Assert.NotNull(host);
+        Assert.Same(provider.GetRequiredService<PipelineBuilderService>(), host.Builder);
+        Assert.EndsWith("PipelineFragments", host.FragmentDir);
     }
 
     /// <summary>A shipped recipe the loader rejects is a recipe nobody can pick.</summary>

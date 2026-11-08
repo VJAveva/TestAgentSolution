@@ -43,6 +43,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
     private readonly IRegressionImpactMatcher _impactMatcher;
     private readonly TestControllerGrpc.Core.Preflight.PreflightService? _preflight;
     private readonly TestControllerGrpc.Features.IFeatureGate? _featureGate;
+    private readonly TestControllerGrpc.Core.PipelineBuilder.PipelineBuilderHost? _pipelineBuilder;
     private readonly ILogger<ControllerWebApiHost> _logger;
     private readonly IConfiguration _config;
     private readonly int _port;
@@ -71,9 +72,11 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
         IFleetNotificationService? fleetNotifications = null,
         IUpdatePolicyStore? updatePolicy = null,
         TestControllerGrpc.Core.Preflight.PreflightService? preflight = null,
-        TestControllerGrpc.Features.IFeatureGate? featureGate = null)
+        TestControllerGrpc.Features.IFeatureGate? featureGate = null,
+        TestControllerGrpc.Core.PipelineBuilder.PipelineBuilderHost? pipelineBuilder = null)
     {
         _featureGate = featureGate;
+        _pipelineBuilder = pipelineBuilder;
         _sessionManager = sessionManager;
         _executor = executor;
         _dispatcher = dispatcher;
@@ -192,6 +195,8 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
             // Same instance as the WPF container, so a toggle reloads once and both sides agree.
             if (_featureGate is not null)
                 builder.Services.AddSingleton(_featureGate);
+            if (_pipelineBuilder is not null)
+                builder.Services.AddSingleton(_pipelineBuilder);
             TestControllerGrpc.Features.FeatureGateServiceCollectionExtensions.AddFeatureGate(builder.Services);
 
             // RBAC feature (identity, authorization, audit, persistence, mode transition)

@@ -312,7 +312,7 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
     internal NodeUpdateActionVM ActionFor(string agentName)
     {
         if (_updateActions.TryGetValue(agentName, out var existing)) return existing;
-        var created = new NodeUpdateActionVM();
+        var created = new NodeUpdateActionVM { InstallAllowed = _maintenanceOptions.AllowUpdateInstall };
         _updateActions[agentName] = created;
         return created;
     }
@@ -339,9 +339,10 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
         // Installing patches a live machine, so it is Administrator-only. Checking updates stays open.
         if (action.State == NodeUpdateActionState.Available)
         {
+            // With install disabled the button only re-checks; the install verb is never offered.
             if (!_maintenanceOptions.AllowUpdateInstall)
             {
-                action.Detail = FleetMaintenanceService.UpdateInstallDisabledMessage;
+                await CheckUpdatesAsync(nodeId, action).ConfigureAwait(true);
                 return;
             }
 
@@ -381,9 +382,10 @@ public partial class FleetUpdatesVM : ObservableObject, IDisposable
             }
 
             action.AvailableCount = result.AvailableCount;
-            action.Detail = result.AvailableCount == 0
-                ? "No updates available."
-                : string.Join(Environment.NewLine, result.Titles.Take(10));
+            var titles = string.Join(Environment.NewLine, result.Titles.Take(10));
+            action.Detail = result.AvailableCount == 0 ? "No updates available."
+                : action.InstallAllowed ? titles
+                : FleetMaintenanceService.UpdateInstallDisabledMessage + Environment.NewLine + titles;
             action.State = result.AvailableCount > 0 ? NodeUpdateActionState.Available : NodeUpdateActionState.Done;
         }
         catch (Exception ex)
@@ -571,9 +573,13 @@ public sealed partial class NodeUpdateActionVM : ObservableObject
     [ObservableProperty] private bool _rebootRequired;
     [ObservableProperty] private string _detail = "";
 
+    /// <summary>False by default: without an explicit allow the button reports updates and never offers to install them.</summary>
+    public bool InstallAllowed { get; init; }
+
     public string Label => State switch
     {
         NodeUpdateActionState.Checking => "Checking\u2026",
+        NodeUpdateActionState.Available when !InstallAllowed => $"{AvailableCount} pending \u2014 recheck",
         NodeUpdateActionState.Available => AvailableCount == 1 ? "Install 1 update" : $"Install {AvailableCount} updates",
         NodeUpdateActionState.Installing => "Installing\u2026",
         NodeUpdateActionState.Done => "Up to date",

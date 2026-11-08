@@ -12,6 +12,13 @@ internal static class BuilderAuth
 
     public static IAuthorizationService AllowAll { get; } = new Decider(_ => true);
 
+    /// <summary>Keeps what the service audits so a test can assert on it.</summary>
+    public sealed class RecordingAudit : IAuditWriter
+    {
+        public List<AuditEntry> Entries { get; } = [];
+        public void Enqueue(AuditEntry entry) => Entries.Add(entry);
+    }
+
     /// <summary>Mirrors the real rule for this permission: Administrator only.</summary>
     public static IAuthorizationService AdminOnly { get; } =
         new Decider(user => string.Equals(

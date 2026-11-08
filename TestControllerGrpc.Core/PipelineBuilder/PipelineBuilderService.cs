@@ -101,6 +101,7 @@ public sealed partial class PipelineBuilderService(
     IRecipeSource recipes,
     IStageTemplateSource stageTemplates,
     IAuthorizationService authorization,
+    IAuditWriter audit,
     string triggerRoot)
 {
     private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };

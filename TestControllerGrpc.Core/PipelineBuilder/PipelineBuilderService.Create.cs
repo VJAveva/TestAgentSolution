@@ -225,6 +225,17 @@ public sealed partial class PipelineBuilderService
             File.Move(fragmentTemp, fragmentPath, overwrite: false);
             fragmentPublished = true;
             written = true;
+            audit.Enqueue(new AuditEntry
+            {
+                UserId = caller.UserId,
+                GuestId = caller.GuestId,
+                RoleAtTime = Enum.TryParse<Role>(caller.Roles.FirstOrDefault(), ignoreCase: true, out var role) ? role : null,
+                ActionName = nameof(Permission.Pipeline_Author),
+                ResourceId = preview.Tag,
+                Allowed = true,
+                ReasonCode = "pipeline-fragment-created",
+                ClientKind = caller.ClientKind,
+            });
             issues.Add(new(BuilderSeverity.Info,
                 $"Import '{fragmentPath}' into the WatchList to activate '{preview.Tag}'. No pipeline was activated or run."));
         }

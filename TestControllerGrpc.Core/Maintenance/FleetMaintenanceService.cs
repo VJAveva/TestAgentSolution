@@ -14,7 +14,7 @@ public sealed class FleetMaintenanceService : IFleetMaintenanceService
 
     /// <summary>Shown wherever install is offered, so the UI and the engine cannot word it differently.</summary>
     public const string UpdateInstallDisabledMessage =
-        "Windows updates are installed by IT. This controller reports status only.";
+        "Disabled by policy: Windows updates are installed by IT. This controller reports status only.";
 
     private readonly IMachineRevertOperation _revertOperation;
     private readonly IMachineRebootOperation _rebootOperation;

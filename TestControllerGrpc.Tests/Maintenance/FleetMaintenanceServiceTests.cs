@@ -65,6 +65,7 @@ public class FleetMaintenanceServiceTests
             var ex = await Assert.ThrowsAsync<NotSupportedException>(
                 () => sut.StartInstallUpdatesAsync(request, CancellationToken.None));
             Assert.Contains("installed by IT", ex.Message);
+            Assert.StartsWith("Disabled by policy", ex.Message);
         }
     }
 

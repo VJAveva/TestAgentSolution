@@ -80,6 +80,7 @@ public class PipelineBuilderPreviewTests : IDisposable
         new FolderRecipeSource(_recipes),
         new FolderStageTemplateSource(_templates),
         BuilderAuth.AllowAll,
+        new BuilderAuth.RecordingAudit(),
         Path.Combine(_root, "Triggers"));
 
     private static BuilderRequest Request(int agentCount) => new(

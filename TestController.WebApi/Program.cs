@@ -412,6 +412,7 @@ app.Use(async (context, next) =>
 if (app.Services.GetRequiredService<ControllerProxyService>().IsConfigured)
 {
     app.UseMiddleware<ControllerExecutionForwardingMiddleware>();
+    app.UseMiddleware<PipelineBuilderForwardingMiddleware>();
 }
 
 // Code Churn reads run on the controller when this host has no usable ADO credential (Ado:ForwardImpactToController).

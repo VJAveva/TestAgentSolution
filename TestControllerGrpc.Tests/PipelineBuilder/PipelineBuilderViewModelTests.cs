@@ -73,6 +73,7 @@ public class PipelineBuilderViewModelTests : IDisposable
             new FolderRecipeSource(Path.Combine(_root, "recipes")),
             new FolderStageTemplateSource(Path.Combine(_root, "templates")),
             BuilderAuth.AdminOnly,
+            new BuilderAuth.RecordingAudit(),
             Path.Combine(_root, "Triggers"));
 
         return new PipelineBuilderViewModel(

@@ -12,8 +12,9 @@ namespace TestControllerGrpc.Services;
 /// Registers the Pipeline Builder for the desktop container, following AddFirFeature().
 /// </summary>
 /// <remarks>
-/// Desktop-only for now: the panel is the only consumer. When the web path gains endpoints this
-/// moves to TestController.Api so both API hosts share one registration.
+/// Lives in the desktop container because the data (Parameters folder, WatchList, fragments) is on this
+/// machine. <see cref="ControllerWebApiHost"/> bridges <see cref="PipelineBuilderHost"/> into the
+/// embedded API; the standalone WebApi forwards /api/pipeline-builder/* here.
 /// </remarks>
 public static class PipelineBuilderFeatureExtensions
 {
@@ -54,20 +55,33 @@ public static class PipelineBuilderFeatureExtensions
                 recipes,
                 templates,
                 sp.GetRequiredService<IAuthorizationService>(),
+                sp.GetRequiredService<IAuditWriter>(),
                 triggerRoot);
         });
 
+        // One bundle for the panel and the embedded REST API, so both write to the same fragment folder.
+        services.TryAddSingleton(sp =>
+        {
+            var config = sp.GetRequiredService<IConfiguration>();
+            return new PipelineBuilderHost(
+                sp.GetRequiredService<PipelineBuilderService>(),
+                sp.GetRequiredService<IBuilderAgentSource>(),
+                () => sp.GetRequiredService<IVocabularyMonitor>().CurrentConfig ?? new WatchListConfig(),
+                Resolve(config, FragmentDirKey, Path.Combine(ControllerRoot(config), "PipelineFragments")));
+        });
+
         // Transient: each open re-reads the catalogs, so a config dropped in since the last open shows up.
-        services.TryAddTransient(sp => new ViewModels.PipelineBuilder.PipelineBuilderViewModel(
-            sp.GetRequiredService<PipelineBuilderService>(),
-            sp.GetRequiredService<IBuilderAgentSource>(),
-            sp.GetRequiredService<CapabilityChecker>(),
-            sp.GetRequiredService<CurrentUserHolder>(),
-            () => sp.GetRequiredService<IVocabularyMonitor>().CurrentConfig ?? new WatchListConfig(),
-            Resolve(
-                sp.GetRequiredService<IConfiguration>(),
-                FragmentDirKey,
-                Path.Combine(ControllerRoot(sp.GetRequiredService<IConfiguration>()), "PipelineFragments"))));
+        services.TryAddTransient(sp =>
+        {
+            var host = sp.GetRequiredService<PipelineBuilderHost>();
+            return new ViewModels.PipelineBuilder.PipelineBuilderViewModel(
+                host.Builder,
+                host.Agents,
+                sp.GetRequiredService<CapabilityChecker>(),
+                sp.GetRequiredService<CurrentUserHolder>(),
+                host.LiveConfig,
+                host.FragmentDir);
+        });
 
         return services;
     }
