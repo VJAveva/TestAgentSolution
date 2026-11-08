@@ -37,6 +37,17 @@ See `docs/architecture/CURRENT_STATE.md` — captures existing types, services, 
 
 See `docs/architecture/CONVENTIONS.md` — CommunityToolkit.Mvvm patterns, Zustand stores, custom `AppLogger` (NOT Serilog), Singleton DI defaults, `Method_Should_Expected_When_State` test naming, etc.
 
+## Documentation
+
+Index: `docs/README.md`. Procedure: the `update-docs` skill.
+
+- A change that adds or changes a feature, config key, endpoint, CLI arg or file path must update `docs/features/<feature>/README.md` in the same change and bump its `last-verified` date.
+- New feature = new `docs/features/<feature>/` folder copied from `docs/features/_template/`, plus one line in `docs/README.md`.
+- Prompts and mockups live with their feature (`docs/features/<feature>/prompts/`, `mockups/`), never in the docs root.
+- Never put real passwords, tokens or unsanitized logs/TRX in docs (use the `sanitize-logs` skill).
+- Never delete a doc; move it to `docs/archive/` with "Superseded by <path> on <date>" at the top.
+- Run `tools/Check-Docs.ps1` before committing doc changes.
+
 ## Operating Principles (apply to every response)
 
 1. **Output code, not explanations.** Unless explicitly asked, do not narrate your reasoning. Generate the requested artifact and stop.

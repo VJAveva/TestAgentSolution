@@ -55,3 +55,20 @@ jobs:
           name: test-results
           path: ${{ runner.temp }}/test-results/**/*.trx
           retention-days: 14
+
+  docs:
+    name: Docs check
+    runs-on: windows-latest
+    # Non-blocking for now: findings show as warnings/errors in the run summary but never fail the workflow.
+    # To make it blocking, delete the continue-on-error line (and add -Strict to also fail on warnings).
+    continue-on-error: true
+
+    steps:
+      - name: Checkout (full history for the last-verified check)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check docs
+        shell: powershell
+        run: .\tools\Check-Docs.ps1
