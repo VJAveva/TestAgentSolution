@@ -440,6 +440,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     protected async Task<bool> ExecuteNodeAsync(
         IActionNode node, PipelineExecutionContext ctx, CancellationToken ct)
     {
+        if (ctx.RunSkips.Contains(node))
+        {
+            Log("Skip", "Before the start point of this partial run");
+            MarkSubtreeSkipped(node, null);
+            return true;
+        }
+
         // The untracked path must gate too, or whether a node is skipped would depend on which entry
         // point the caller happened to use.
         if (node is ISkippableNode skippable &&
@@ -545,6 +552,13 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
         IActionNode node, PipelineExecutionContext ctx,
         ExecutionSession session, CancellationToken ct, string groupPath = "")
     {
+        if (ctx.RunSkips.Contains(node))
+        {
+            Log("Skip", "Before the start point of this partial run");
+            MarkSubtreeSkipped(node, session);
+            return true;
+        }
+
         // A skipped subtree is never entered, so by construction nothing here can inherit a skip; the gate
         // still owns the rule so the executor and the pre-run manifest can never disagree.
         if (node is ISkippableNode skippable &&

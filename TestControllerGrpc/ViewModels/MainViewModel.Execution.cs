@@ -149,6 +149,7 @@ public sealed partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanTriggerEvent), AllowConcurrentExecutions = true)] 
     private async Task TriggerEvent()
     {
+        var partial = TakePendingPartialRun();
         if (SelectedNode?.ModelObject is not EventConfig ev) return;
 
         var wiNode = SelectedNode.Parent;
@@ -193,10 +194,12 @@ public sealed partial class MainViewModel
         var ctx = new PipelineExecutionContext
         {
             WatchItemPath = wiConfig?.Path ?? "",
-            TriggerFileName = $"[ManualTrigger:{ev.Type}]",
+            TriggerFileName = partial is { } p ? $"[ManualTrigger:{ev.Type}] partial run: {p.Path}" : $"[ManualTrigger:{ev.Type}]",
             Parameters = CollectInitializeParameters(SelectedNode),
             SessionId = session.SessionId,
+            RunSkips = partial?.Skips ?? new HashSet<IActionNode>(),
         };
+        if (partial is { } run) AddLog($"[{session.SessionId}] partial run: {run.Path} ({run.Skips.Count} earlier step(s) skipped)");
         StampOwner(ctx);
 
         // Acquire agent locks

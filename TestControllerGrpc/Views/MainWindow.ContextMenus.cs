@@ -76,6 +76,8 @@ public partial class MainWindow : Window
             StructuralEditBlockedReason = node.NodeKind == NodeKinds.WatchItem ? _vm.EditBlockedReasonFor(node, structural: true) : null,
             TemplateEditBlockedReason = _vm.EditBlockedReasonFor(_vm.TemplateRoots.FirstOrDefault()),
             HasClipboard = _vm.HasNodeClipboard,
+            IsPipelineRunning = tree == NodeMenuTree.WatchList && _vm.IsPipelineRunning(_vm.PipelineTagOf(node)),
+            CanStop = _vm.CanStopPipeline(_vm.PipelineTagOf(node)),
             CanEnablePipelines = _capabilityChecker.Can(Permission.Pipeline_Enable),
             CanDisablePipelines = _capabilityChecker.Can(Permission.Pipeline_Disable),
             CanToggleThisPipeline = node.NodeKind == NodeKinds.WatchItem && _capabilityChecker.Can(
@@ -201,6 +203,11 @@ public partial class MainWindow : Window
         NodeMenuIds.Ungroup => (null, _ => _vm.UngroupNode(node)),
         NodeMenuIds.SaveAsTemplate => (null, _ => _vm.SaveGroupAsTemplate(node)),
 
+        NodeMenuIds.RunFromHere => (null, _ => _vm.RunFromHere(node)),
+        NodeMenuIds.ShowResolvedCommand => (null, _ => _vm.ShowResolvedCommand(node)),
+        NodeMenuIds.OpenLastOutput => (null, _ => _vm.OpenLastOutput(node)),
+        NodeMenuIds.Stop => (null, _ => FireAndForget(_vm.StopPipelineAsync(node))),
+
         _ => throw new InvalidOperationException($"Menu item '{id}' has no handler."),
     };
 
@@ -259,6 +266,10 @@ public partial class MainWindow : Window
             [NodeMenuIds.WrapInGroup] = ("\uE8F1", "TextS"),
             [NodeMenuIds.Ungroup] = ("\uE8F1", "TextS"),
             [NodeMenuIds.SaveAsTemplate] = ("\uE74E", "AccMauve"),
+            [NodeMenuIds.RunFromHere] = ("\uE893", "AccGreen"),
+            [NodeMenuIds.ShowResolvedCommand] = ("\uE756", "AccBlue"),
+            [NodeMenuIds.OpenLastOutput] = ("\uE8A5", "AccBlue"),
+            [NodeMenuIds.Stop] = ("\uE71A", "AccRed"),
         };
 
     /// <summary>Puts the cursor in the visible Tag field of Node Properties (Rename / F2).</summary>
@@ -283,6 +294,10 @@ public partial class MainWindow : Window
             foreach (var deeper in Descendants<T>(child)) yield return deeper;
         }
     }
+
+    private static void FireAndForget(Task task) =>
+        task.ContinueWith(t => App.Services.GetRequiredService<IAppLogger>().Error("UI", "Menu action failed", t.Exception!),
+            TaskContinuationOptions.OnlyOnFaulted);
 
     private void AskSkipReason(TreeNodeViewModel node)
     {

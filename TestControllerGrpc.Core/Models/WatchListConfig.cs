@@ -376,6 +376,12 @@ public sealed class PipelineExecutionContext
     public string SessionId { get; set; } = "";
 
     /// <summary>
+    /// Steps this run must not execute ("Run from here to end"). Per run, never written to the model, so the
+    /// WatchList and every other run are unaffected. Matched by reference.
+    /// </summary>
+    public IReadOnlySet<IActionNode> RunSkips { get; set; } = new HashSet<IActionNode>();
+
+    /// <summary>
     /// Per-acquisition pipeline-lock token set by the trigger path that acquired the
     /// single-run lock. The executor releases that exact lock when the run fully stops.
     /// Empty when the run was started without acquiring a pipeline lock.

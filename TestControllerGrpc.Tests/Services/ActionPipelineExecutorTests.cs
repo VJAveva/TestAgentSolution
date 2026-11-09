@@ -548,4 +548,73 @@ public class ActionPipelineExecutorTests
         Assert.NotEmpty(scopes);
         Assert.All(scopes, s => Assert.Equal("SP2026R2 - Sanity 5 Nodes Smoke E2E", s));
     }
+
+    // ── P7: Run from here to end ──────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteEventAsync_Should_SkipOnlyTheStepsBeforeTheStart_When_APartialRunIsRequested()
+    {
+        var executed = new List<string>();
+        _dispatcher
+            .Setup(d => d.ExecuteLocalCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
+            .Returns<ActionConfig, PipelineExecutionContext, CancellationToken>((a, _, _) =>
+            {
+                executed.Add(a.Command);
+                return Task.FromResult(new ActionResult(true, 0, ""));
+            });
+
+        var start = new ActionConfig { Type = ActionType.RunCommand, Command = "g2" };
+        var evt = new EventConfig
+        {
+            Type = "Renamed",
+            Children =
+            [
+                new ActionConfig { Type = ActionType.RunCommand, Command = "first" },
+                new ActionGroupConfig
+                {
+                    Tag = "G",
+                    Children = [new ActionConfig { Type = ActionType.RunCommand, Command = "g1" }, start],
+                },
+                new ActionConfig { Type = ActionType.RunCommand, Command = "last" },
+            ],
+        };
+
+        var ctx = CreateContext();
+        ctx.RunSkips = PartialRun.StepsBefore(evt, start)!;
+        await _executor.ExecuteEventAsync(evt, ctx, CancellationToken.None);
+
+        Assert.Equal(["g2", "last"], executed);
+        Assert.Empty(evt.Children.OfType<ActionConfig>().Where(a => a.Skip)); // the model is untouched
+    }
+
+    [Fact]
+    public void StepsBefore_Should_ReturnNull_When_TheStartIsNotInTheEvent()
+    {
+        var evt = new EventConfig { Children = [new ActionConfig { Command = "a" }] };
+
+        Assert.Null(PartialRun.StepsBefore(evt, new ActionConfig { Command = "elsewhere" }));
+    }
+
+    [Fact]
+    public void StepsBefore_Should_KeepInitialize_When_ItComesBeforeTheStart()
+    {
+        var init = new InitializeConfig { Tag = "Params" };
+        var start = new ActionConfig { Command = "b" };
+        var evt = new EventConfig { Children = [init, new ActionConfig { Command = "a" }, start] };
+
+        var skips = PartialRun.StepsBefore(evt, start)!;
+
+        Assert.DoesNotContain(init, skips);
+        Assert.Single(skips);
+    }
+
+    [Fact]
+    public void ResolvedCommand_Should_MaskSecrets_When_ThePasswordIsTypedLiterally()
+    {
+        var text = RunInfoText.ResolvedCommand("jvgr1", "install.bat", "-password=Hunter2Secret -build 42");
+
+        Assert.DoesNotContain("Hunter2Secret", text);
+        Assert.Contains("install.bat", text);
+        Assert.Contains("jvgr1", text);
+    }
 }

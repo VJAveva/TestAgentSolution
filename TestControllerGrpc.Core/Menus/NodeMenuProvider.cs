@@ -74,6 +74,12 @@ public static class NodeMenuIds
     public const string Ungroup = "Ungroup";
     public const string SaveAsTemplate = "SaveAsTemplate";
 
+    // Run additions (P7)
+    public const string RunFromHere = "RunFromHere";
+    public const string ShowResolvedCommand = "ShowResolvedCommand";
+    public const string OpenLastOutput = "OpenLastOutput";
+    public const string Stop = "Stop";
+
     public static IReadOnlyList<string> All { get; } = typeof(NodeMenuIds)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(f => f.IsLiteral)
@@ -96,6 +102,7 @@ public static class NodeMenuProvider
         if (c.Tree == NodeMenuTree.Library) Library(c, m);
         else if (c.InTemplateCall) TemplateCall(c, m);
         else Pipeline(c, m);
+        if (c.Tree == NodeMenuTree.WatchList && c.IsPipelineRunning) m = RunItemsBecomeStop(c, m);
         if (c.NodeKind == NodeKinds.WatchItem && c.StructuralEditBlockedReason is { } structural)
             m = m.Select(i => i.Id is NodeMenuIds.Delete or NodeMenuIds.MoveUp or NodeMenuIds.MoveDown
                 ? i with { IsEnabled = false, ToolTip = structural } : i).ToList();
@@ -158,6 +165,7 @@ public static class NodeMenuProvider
 
             case NodeKinds.ActionGroup:
                 m.Add(Runnable(NodeMenuIds.ExecuteGroup, "Execute Group", c));
+                m.Add(Runnable(NodeMenuIds.RunFromHere, "Run from here to end\u2026", c));
                 AddChildren(m);
                 GroupSiblings(m);
                 m.Add(ExecutionTypeMenu(c));
@@ -175,6 +183,9 @@ public static class NodeMenuProvider
 
             case NodeKinds.Action:
                 m.Add(Runnable(NodeMenuIds.ExecuteAction, "Execute Action", c));
+                m.Add(Runnable(NodeMenuIds.RunFromHere, "Run from here to end\u2026", c));
+                m.Add(Item(NodeMenuIds.ShowResolvedCommand, "Show resolved command", NodeMenuGroup.Run));
+                m.Add(Item(NodeMenuIds.OpenLastOutput, "Open last output", NodeMenuGroup.Run));
                 ActionSiblings(m);
                 m.Add(Item(NodeMenuIds.Rename, "Rename\u2026", NodeMenuGroup.Edit));
                 m.Add(Item(NodeMenuIds.Duplicate, "Duplicate", NodeMenuGroup.Copy));
@@ -292,6 +303,26 @@ public static class NodeMenuProvider
                 m.Add(Item(NodeMenuIds.DeleteFromLibrary, "Delete", NodeMenuGroup.Delete));
                 return;
         }
+    }
+
+    private static readonly HashSet<string> StartRunIds =
+    [
+        NodeMenuIds.TriggerAllEvents, NodeMenuIds.TriggerEvent, NodeMenuIds.ExecuteGroup,
+        NodeMenuIds.ExecuteAction, NodeMenuIds.RunFromHere, NodeMenuIds.RetryFailed,
+    ];
+
+    /// <summary>Rule 5: while the pipeline runs, its run items are replaced by one Stop item.</summary>
+    private static List<NodeMenuItem> RunItemsBecomeStop(NodeMenuContext c, List<NodeMenuItem> m)
+    {
+        var first = m.FindIndex(i => StartRunIds.Contains(i.Id));
+        if (first < 0) return m;
+        var result = m.Where(i => !StartRunIds.Contains(i.Id)).ToList();
+        result.Insert(Math.Min(first, result.Count), Item(NodeMenuIds.Stop, "Stop", NodeMenuGroup.Run) with
+        {
+            IsEnabled = c.CanStop,
+            ToolTip = c.CanStop ? "Stop the running pipeline" : "You do not have permission to stop this pipeline.",
+        });
+        return result;
     }
 
     private static void GroupSiblings(List<NodeMenuItem> m)

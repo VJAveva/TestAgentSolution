@@ -68,6 +68,11 @@ public sealed record NodeMenuContext
     /// <summary>A node has been copied and can be pasted.</summary>
     public bool HasClipboard { get; init; }
 
+    /// <summary>The node's pipeline is running now (rule 5: run items become Stop).</summary>
+    public bool IsPipelineRunning { get; init; }
+
+    public bool CanStop { get; init; }
+
     /// <summary>Failed actions in the last session of this pipeline; 0 hides Retry.</summary>
     public int RetryFailedCount { get; init; }
     public bool CanRetry { get; init; }

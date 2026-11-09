@@ -24,3 +24,7 @@ Format: phase | file:line | one-line description.
 | P6 | TestControllerGrpc/Views/MainWindow.xaml (WatchListTreeView) | Double-click on a template call does not open Edit template (2.8 asks for double-click and Enter; only Enter is wired - double-click already toggles expand). |
 | P6 | TestControllerGrpc/ViewModels/MainViewModel.TemplateNavigation.cs:52 | Back to pipeline is lost after Undo/Redo or a reload (the tree is rebuilt, so the remembered node no longer exists); it logs a warning instead. |
 | P6 | TestControllerGrpc/ViewModels/MainViewModel.TemplateNavigation.cs:40 | The banner stays visible when the user leaves the template by other means (selecting another template); it only closes via its buttons. |
+| P7 | TestControllerGrpc.Core/Models/WatchListConfig.cs:600 | Open last output shows the result summary (outcome, exit code, error) only: an action's output lines are not stored on ActionExecutionResult, just streamed to the Execution Log. |
+| P7 | TestControllerGrpc/ViewModels/MainViewModel.RunAdditions.cs:27 | Run from here uses the whole-pipeline pre-flight; section 3 asks for pre-flight limited to the selected nodes plus Initialize. |
+| P7 | TestControllerGrpc/ViewModels/MainViewModel.RunAdditions.cs:27 | Run from here is offered on pipeline groups/actions only - not inside a template call or in the Library. |
+| P7 | TestControllerGrpc/ViewModels/MainViewModel.Execution.cs (TriggerEvent) | The partial-run marker is in the trigger name and the log line; the session/history views do not show a separate "partial" badge. |
