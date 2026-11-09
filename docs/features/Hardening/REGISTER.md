@@ -29,7 +29,7 @@ Source keys: `SG` = SECURITY-GAPS.md section, `P0x` = per-area plan, `AUD` = AUD
 | REG-003 | H | No HTTPS anywhere; HSTS only when already HTTPS; no `UseHttpsRedirection`/`UseHsts` | SG 1.3 | grep: zero `UseHttpsRedirection`/`UseHsts` in hosts | **Open** (blocked on cert, REG-060) | `TransportTests.Startup_Should_Fail_When_NoHttpsBinding_And_EnvironmentIsProduction` |
 | REG-004 | H | CORS reflects any origin **with credentials** when `Cors:AllowedOrigins` is absent (it is absent) | SG 1.4; **contradicts P03 WEBAPI-006 "Done"** | `TestController.WebApi/Program.cs:215` `SetIsOriginAllowed(_ => true)`; no `Cors` key in either WebApi appsettings | **Open** | `CorsTests.Default_Should_Not_ReflectArbitraryOrigin_When_AllowedOriginsMissing` |
 | REG-005 | C | `trigger-all`, `trigger-event`, `retry-tag`, `preflight` served locally with no permission check - sibling of the gated `trigger/{tag}` | SG 1.5 | `TestController.WebApi/Endpoints/ExecutionEndpoints.cs:14-18`, zero `Permission.` in file; group only `RequireAuthorization(User)` (`Program.cs:510`) | **Open** | `ExecutionEndpointsRbacTests.TriggerEvent_Should_Return403_When_CallerLacksPipelineTrigger` (+ trigger-all, retry-tag) |
-| REG-006 | C | WatchList mutation (`PUT /`, `/import`, `/refresh`) gated at "any authenticated user"; no permission exists for it | SG 1.6 | `WatchListEndpoints.cs:15-18`; `Program.cs:508` | **Open** (needs decision D-5 + appended permission) | `WatchListEndpointsRbacTests.SaveWatchList_Should_Return403_When_CallerIsEngineer` |
+| REG-006 | C | WatchList mutation (`PUT /`, `/import`, `/refresh`) gated at "any authenticated user"; no permission exists for it | SG 1.6 | `WatchListEndpoints.cs:18-19` (`RequirePermission(Pipeline_Author, denyInDefaultMode: true)`); `/refresh` line 21 still ungated | **Partial** (PUT and `/import` fixed 2026-11-09 in `f843403`; `/refresh` only re-reads the file and is still open) | `WatchListEndpointsTests.SaveWatchList_Should_Return403_When_SecuredCallerLacksPipelineAuthor`, `ImportWatchItems_Should_Return403AndImportNothing_When_DefaultMode` |
 | REG-007 | H | Maintenance POSTs (`revert`, `reboot`, `precheck`, `cancel`, `clear-quarantine`, update snooze/ack/reboot-ready) need only `User`; only `PUT policy` is Admin | SG 1.7 (was UNVERIFIED, now confirmed) | `TestController.Api/Controllers/MaintenanceController.cs:16,63,92,118,126,133,174,183,199`; zero `RequirePermission` | **Open** | `MaintenanceControllerRbacTests.Revert_Should_Return403_When_CallerLacksFleetMaintain` |
 | REG-008 | H | `GetMySessions` (and two sibling actions) take identity from client header `X-User-Id` | SG 1.8 | `ExecutionController.cs:1172`, `:1226`, `:1249` | **Open** | `ExecutionControllerTests.GetMySessions_Should_IgnoreHeader_When_PrincipalIsAuthenticated` |
 | REG-009 | M | `/api/clientlogs` anonymous, unbounded, unescaped body written to server log | SG 1.10 | `TestController.WebApi/Program.cs:526-532` | **Open** | `ClientLogTests.Post_Should_Return401_When_Anonymous`; `..._Should_TruncateAndEscape_When_BodyContainsNewlines` |
@@ -166,8 +166,8 @@ audited folder. Still-open ones are listed explicitly.
 
 | Status | Count |
 |---|---|
-| Open | 38 |
-| Partial | 7 |
+| Open | 37 |
+| Partial | 8 |
 | Fixed | 8 |
 | Verified OK | 3 |
 | Ext | 11 |
