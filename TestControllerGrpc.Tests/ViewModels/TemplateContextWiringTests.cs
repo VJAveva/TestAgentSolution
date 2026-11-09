@@ -95,8 +95,9 @@ public class TemplateContextWiringTests
     public void TemplateMenus_Should_OfferTheContextItems()
     {
         var menus = Source("TestControllerGrpc", "Views", "MainWindow.ContextMenus.cs");
+        var provider = Source("TestControllerGrpc.Core", "Menus", "NodeMenuProvider.cs");
 
-        Assert.Contains("AddTemplateContextItems(menu, node)", menus);
+        Assert.Contains("ContextItems(c, m)", provider);
         Assert.Contains("ChangeTemplateContext(node)", menus);
         Assert.Contains("ClearTemplateContext(node)", menus);
     }

@@ -181,6 +181,9 @@ P1 Quick fix - right-click selects the node under the mouse (walk the visual tre
                2.8.1 is P6), Execute Group/Action, Delete template call... (removes only this pipeline's Ref) and
                Move on the Ref itself. No undo until P3. Run on the Ref node itself waits for P7.
 P2 NodeMenuProvider in Core (rule 12) - pure function, table-driven tests per node type.
+               DONE 2026-11-09: TestControllerGrpc.Core/Menus (NodeMenuProvider, NodeMenuIds, NodeMenuContext).
+               MainWindow.ContextMenus.cs only describes the node and renders; NodeKinds moved to Core. Same items as
+               before, now ordered by rule 2 (root keeps today's order, rule 11); run items disabled with the reason.
 P3 Undo + ApplyEdit - one edit path with snapshot undo/redo (stack of 50, cleared on reload); move existing commands onto it.
 P4 Permissions - Pipeline_Edit (scoped by assignments) and Template_Edit (admin) via the add-rbac-permission skill.
 P5 Missing edit commands (2.5-2.7) through ApplyEdit, then shortcuts (rule 10).
