@@ -691,6 +691,33 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The Ref this node belongs to as written in its parent (itself for a Ref, the nearest
+    /// non-mirrored Ref above a template-expansion node), or null when the node is not part of a call.
+    /// </summary>
+    public TreeNodeViewModel? OwningTemplateCall
+    {
+        get
+        {
+            if (NodeKind != NodeKinds.Ref && !IsRefExpansion) return null;
+            for (var n = this; n is not null; n = n.Parent)
+                if (n.NodeKind == NodeKinds.Ref && !n.IsRefExpansion) return n;
+            return null;
+        }
+    }
+
+    /// <summary>Template that "Edit template" opens: the nearest Ref at or above this call node.</summary>
+    public string? CalledTemplateId
+    {
+        get
+        {
+            if (OwningTemplateCall is null) return null;
+            for (var n = this; n is not null; n = n.Parent)
+                if (n.NodeKind == NodeKinds.Ref) return string.IsNullOrWhiteSpace(n.TemplateID) ? null : n.TemplateID;
+            return null;
+        }
+    }
+
     /// <summary>Chip shown on a Template header row once a pipeline context is chosen.</summary>
     public string TemplateContextLabel
     {

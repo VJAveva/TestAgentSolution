@@ -144,18 +144,8 @@ public sealed partial class MainViewModel
         var parent = target.Parent;
         if (parent is null) return;
 
-        if (parent.Children.Remove(target))
+        if (TryDetach(target))
         {
-            switch (parent.ModelObject)
-            {
-                case WatchListConfig cfg when target.ModelObject is WatchItemConfig wi: cfg.WatchItems.Remove(wi); break;
-                case WatchItemConfig wi when target.ModelObject is EventConfig ev: wi.Events.Remove(ev); break;
-                case EventConfig ev when target.ModelObject is IActionNode a: ev.Children.Remove(a); break;
-                case ActionGroupConfig ag when target.ModelObject is IActionNode a2: ag.Children.Remove(a2); break;
-                case TemplateConfig tc when target.ModelObject is IActionNode a3: tc.Children.Remove(a3); break;
-                case List<TemplateConfig> tl when target.ModelObject is TemplateConfig tc2: tl.Remove(tc2); break;
-            }
-            parent.RefreshDisplayText();
             IsDirty = true;
             AddLog($"Deleted: {target.DisplayText}");
             SelectedNode = null;
@@ -164,6 +154,57 @@ public sealed partial class MainViewModel
         if (WatchListRoot is not null && RemoveDeep(WatchListRoot, target))
         { SelectedNode = null; }
     }
+
+    /// <summary>Removes a node from its parent in both the tree and the model.</summary>
+    internal static bool TryDetach(TreeNodeViewModel target)
+    {
+        var parent = target.Parent;
+        if (parent is null || !parent.Children.Remove(target)) return false;
+
+        switch (parent.ModelObject)
+        {
+            case WatchListConfig cfg when target.ModelObject is WatchItemConfig wi: cfg.WatchItems.Remove(wi); break;
+            case WatchItemConfig wi when target.ModelObject is EventConfig ev: wi.Events.Remove(ev); break;
+            case EventConfig ev when target.ModelObject is IActionNode a: ev.Children.Remove(a); break;
+            case ActionGroupConfig ag when target.ModelObject is IActionNode a2: ag.Children.Remove(a2); break;
+            case TemplateConfig tc when target.ModelObject is IActionNode a3: tc.Children.Remove(a3); break;
+            case List<TemplateConfig> tl when target.ModelObject is TemplateConfig tc2: tl.Remove(tc2); break;
+        }
+        parent.RefreshDisplayText();
+        return true;
+    }
+
+    /// <summary>Confirmation text for removing a template call from its pipeline.</summary>
+    internal static string TemplateCallRemovalPrompt(TreeNodeViewModel call)
+        => $"Remove '{call.TemplateID}' from '{FindWatchItemTag(call) ?? "this pipeline"}'?"
+           + Environment.NewLine + Environment.NewLine
+           + "The template is not deleted and other pipelines are not affected.";
+
+    /// <summary>
+    /// Removes the pipeline's Ref that the selected node belongs to. A node inside a template
+    /// expansion is a read-only mirror, so the call is the only thing that can be removed here.
+    /// </summary>
+    [RelayCommand]
+    private void ConfirmDeleteTemplateCall()
+    {
+        if (SelectedNode?.OwningTemplateCall is not { } call || call.Parent is null) return;
+        if (ThemedMessageBox.Show(TemplateCallRemovalPrompt(call), "Delete template call",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+        if (!TryDetach(call)) return;
+        IsDirty = true;
+        AddLog($"Removed template call: {call.TemplateID}");
+        SelectedNode = null;
+        QueueValidation();
+    }
+
+    /// <summary>The Library tree's Template node with this ID, or null when it does not exist.</summary>
+    public TreeNodeViewModel? FindTemplateNode(string? templateId)
+        => string.IsNullOrWhiteSpace(templateId) || TemplateListRoot is null
+            ? null
+            : TemplateListRoot.Children.FirstOrDefault(t =>
+                t.NodeKind == NodeKinds.Template && string.Equals(t.Tag, templateId, StringComparison.OrdinalIgnoreCase));
+
 
     [RelayCommand]
     private void ConfirmDeleteSelectedNode()

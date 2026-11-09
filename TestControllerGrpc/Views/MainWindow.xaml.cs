@@ -397,17 +397,24 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Selects the TreeViewItem under the cursor before its context menu opens.
+    /// Selects the TreeViewItem under the cursor before its context menu opens; empty space selects
+    /// the root so the root menu shows instead of the previous selection's menu.
     /// </summary>
     private void OnTreePreviewRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (sender is not ItemsControl tree || e.OriginalSource is not DependencyObject src) return;
+        if (sender is not TreeView tree || e.OriginalSource is not DependencyObject src) return;
+        if (TreeHitTest.IsInScrollBar(src)) return;
 
-        var item = ItemsControl.ContainerFromElement(tree, src) as TreeViewItem;
-        if (item is null) return;
+        var item = TreeHitTest.ContainerAt(src);
+        if (item is not null)
+        {
+            item.IsSelected = true;
+            item.Focus();
+            return;
+        }
 
-        item.IsSelected = true;
-        item.Focus();
+        if (tree.Items.Count > 0 && tree.Items[0] is TreeNodeViewModel root)
+            root.IsSelected = true;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

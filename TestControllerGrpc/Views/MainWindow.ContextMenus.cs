@@ -49,6 +49,13 @@ public partial class MainWindow : Window
 
         if (node is null) return menu;
 
+        // A Ref and everything under it mirrors a shared template, so editing items do not apply here.
+        if (node.OwningTemplateCall is not null)
+        {
+            AddTemplateCallItems(menu, node);
+            return menu;
+        }
+
         // ?? Execution commands ??????????????????????????????????????
         if (node.NodeKind is "WatchItem")
         {
@@ -370,6 +377,69 @@ public partial class MainWindow : Window
                 _vm.SetNodeSkip(node, true, dialog.Reason);
         };
         menu.Items.Add(skip);
+    }
+
+    /// <summary>Items for a Ref in a pipeline and for the read-only template nodes shown under it.</summary>
+    private void AddTemplateCallItems(ContextMenu menu, TreeNodeViewModel node)
+    {
+        var templateId = node.CalledTemplateId;
+        var templateNode = _vm.FindTemplateNode(templateId);
+        var edit = Named(CreateMenuItemWithIcon("Edit template", null, "\uE70F", "AccMauve"), "Edit template");
+        if (templateNode is null)
+        {
+            edit.IsEnabled = false;
+            edit.ToolTip = string.IsNullOrEmpty(templateId)
+                ? "This Ref does not name a template."
+                : $"Template '{templateId}' is not in the Library.";
+            ToolTipService.SetShowOnDisabled(edit, true);
+        }
+        else
+        {
+            edit.Click += (_, _) => OpenTemplateInLibrary(templateNode);
+        }
+        menu.Items.Add(edit);
+
+        if (node.NodeKind is "ActionGroup")
+            menu.Items.Add(Named(WithRunBlockedTooltip(
+                CreateMenuItemWithIcon("Execute Group", _vm.ExecuteGroupCommand, "\uE768", "AccGreen"), node), "Execute Group"));
+        else if (node.NodeKind is "Action")
+            menu.Items.Add(Named(WithRunBlockedTooltip(
+                CreateMenuItemWithIcon("Execute Action", _vm.ExecuteSingleActionCommand, "\uE768", "AccGreen"), node), "Execute Action"));
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Named(CreateMenuItemWithIcon("Delete template call\u2026", _vm.ConfirmDeleteTemplateCallCommand, "\uE74D", "AccRed"),
+            "Delete template call"));
+
+        if (node.IsRefExpansion || !CanShowMoveItems(node)) return;
+        menu.Items.Add(new Separator());
+        if (MainViewModel.CanMoveNode(node, -1))
+        {
+            var moveUp = Named(CreateMenuItemWithIcon("Move Up", null, "\uE74A", "TextS"), "Move Up");
+            moveUp.Click += (_, _) => _vm.MoveNodeUp(node);
+            menu.Items.Add(moveUp);
+        }
+        if (MainViewModel.CanMoveNode(node, +1))
+        {
+            var moveDown = Named(CreateMenuItemWithIcon("Move Down", null, "\uE74B", "TextS"), "Move Down");
+            moveDown.Click += (_, _) => _vm.MoveNodeDown(node);
+            menu.Items.Add(moveDown);
+        }
+    }
+
+    private static MenuItem Named(MenuItem item, string name)
+    {
+        System.Windows.Automation.AutomationProperties.SetName(item, name);
+        return item;
+    }
+
+    /// <summary>Shows the template in the Library tab, selected and expanded.</summary>
+    private void OpenTemplateInLibrary(TreeNodeViewModel templateNode)
+    {
+        LibraryTab.IsSelected = true;
+        if (templateNode.Parent is { } root) root.IsExpanded = true;
+        templateNode.IsExpanded = true;
+        templateNode.IsSelected = true;
+        _vm.ActivateTemplateNode(templateNode);
     }
 
     private static bool CanShowMoveItems(TreeNodeViewModel node)

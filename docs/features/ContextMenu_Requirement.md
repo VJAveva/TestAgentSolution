@@ -176,6 +176,10 @@ P0 Security  - PUT /api/watchlist and POST /api/watchlist/import behind a permis
                DONE 2026-11-09: Pipeline_Author, refused for everyone in Default mode; web Import button disabled.
 P1 Quick fix - right-click selects the node under the mouse (walk the visual tree to the nearest TreeViewItem);
                root menu only on root/empty space; Ref children show Edit template / Delete template call / Run. Ship alone.
+               DONE 2026-11-09: TreeHitTest walks to the nearest row (empty space selects the root). A Ref and its
+               mirrored children get Edit template (minimal: opens the Library tab, selects the template; full
+               2.8.1 is P6), Execute Group/Action, Delete template call... (removes only this pipeline's Ref) and
+               Move on the Ref itself. No undo until P3. Run on the Ref node itself waits for P7.
 P2 NodeMenuProvider in Core (rule 12) - pure function, table-driven tests per node type.
 P3 Undo + ApplyEdit - one edit path with snapshot undo/redo (stack of 50, cleared on reload); move existing commands onto it.
 P4 Permissions - Pipeline_Edit (scoped by assignments) and Template_Edit (admin) via the add-rbac-permission skill.
