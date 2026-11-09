@@ -188,6 +188,9 @@ P2 NodeMenuProvider in Core (rule 12) - pure function, table-driven tests per no
                MainWindow.ContextMenus.cs only describes the node and renders; NodeKinds moved to Core. Same items as
                before, now ordered by rule 2 (root keeps today's order, rule 11); run items disabled with the reason.
 P3 Undo + ApplyEdit - one edit path with snapshot undo/redo (stack of 50, cleared on reload); move existing commands onto it.
+               DONE 2026-11-09: TestControllerGrpc.Core/Editing/EditHistory (WatchList XML snapshots, cap 50);
+               MainViewModel.Undo.cs ApplyEdit/BeginEdit scope (nested edits = one step), Undo/Redo commands,
+               Ctrl+Z / Ctrl+Y on both trees; every existing edit command runs in a scope; cleared on every reload.
 P4 Permissions - Pipeline_Edit (scoped by assignments) and Template_Edit (admin) via the add-rbac-permission skill.
 P5 Missing edit commands (2.5-2.7) through ApplyEdit, then shortcuts (rule 10).
 P6 Edit template navigation (2.8.1).

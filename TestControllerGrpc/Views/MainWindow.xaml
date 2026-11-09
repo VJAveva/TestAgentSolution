@@ -2184,7 +2184,12 @@
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
                                       VirtualizingPanel.ScrollUnit="Pixel"
-                                      AllowDrop="True" />
+                                      AllowDrop="True">
+                                <TreeView.InputBindings>
+                                    <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
+                                    <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
+                                </TreeView.InputBindings>
+                            </TreeView>
                         </DockPanel>
                     </TabItem>
 
@@ -2229,7 +2234,12 @@
                                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
-                                      VirtualizingPanel.ScrollUnit="Pixel" />
+                                      VirtualizingPanel.ScrollUnit="Pixel">
+                                <TreeView.InputBindings>
+                                    <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
+                                    <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
+                                </TreeView.InputBindings>
+                            </TreeView>
                         </DockPanel>
                     </TabItem>
 

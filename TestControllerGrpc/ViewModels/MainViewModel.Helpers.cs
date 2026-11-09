@@ -193,6 +193,7 @@ public sealed partial class MainViewModel
         {
             try
             {
+                ClearEditHistory();
                 RebuildAllTrees();
                 // Templates arrive with the config, which loads after the view model is built.
                 RefreshTemplateIds();
@@ -538,10 +539,18 @@ public sealed partial class MainViewModel
     public void SetNodeSkip(TreeNodeViewModel node, bool skip, string? reason = null)
     {
         if (node.ModelObject is not ISkippableNode) return;
+        using var edit = BeginEdit(skip ? "Skip" : "Include");
 
         // Set the reason first: OnSkipChanged triggers the cascade that paints the row.
         node.SkipReason = skip ? reason ?? "" : "";
         node.Skip = skip;
+    }
+
+    /// <summary>Enables or disables a pipeline (or, on the root, every pipeline) as one undoable step.</summary>
+    public void SetPipelineEnabled(TreeNodeViewModel node, bool enabled)
+    {
+        using var edit = BeginEdit(enabled ? "Enable" : "Disable");
+        node.IsEnabled = enabled;
     }
 
     private void OnConfigReloaded(WatchListConfig config)
@@ -557,6 +566,7 @@ public sealed partial class MainViewModel
             {
                 try
                 {
+                    ClearEditHistory();
                     RebuildAllTrees();
                     StatusMessage = $"{config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")} (diff reload)";
                 }

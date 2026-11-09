@@ -134,8 +134,8 @@ public partial class MainWindow : Window
     /// <summary>Maps every <see cref="NodeMenuIds"/> value to the command or handler that performs it.</summary>
     private (ICommand? Command, Action<MenuItem>? Click) Bind(string id, TreeNodeViewModel node) => id switch
     {
-        NodeMenuIds.EnableAllWatchItems => (null, _ => node.IsEnabled = true),
-        NodeMenuIds.DisableAllWatchItems => (null, _ => node.IsEnabled = false),
+        NodeMenuIds.EnableAllWatchItems => (null, _ => _vm.SetPipelineEnabled(node, true)),
+        NodeMenuIds.DisableAllWatchItems => (null, _ => _vm.SetPipelineEnabled(node, false)),
         NodeMenuIds.AddWatchItem => (_vm.AddWatchItemCommand, null),
         NodeMenuIds.NewPipeline => (null, _ => new Dialogs.PipelineBuilderWindow { Owner = this }.ShowDialog()),
         NodeMenuIds.ImportWatchItems => (_vm.ImportWatchItemsCommand, null),
@@ -155,7 +155,7 @@ public partial class MainWindow : Window
         NodeMenuIds.AddRef => (_vm.AddRefToGroupCommand, null),
         NodeMenuIds.AddInitialize => (_vm.AddInitializeToGroupCommand, null),
         NodeMenuIds.ExportWatchItem => (_vm.ExportWatchItemsCommand, null),
-        NodeMenuIds.IncludeInTriggerAll => (null, mi => node.IsEnabled = mi.IsChecked),
+        NodeMenuIds.IncludeInTriggerAll => (null, mi => _vm.SetPipelineEnabled(node, mi.IsChecked)),
         NodeMenuIds.Delete => (_vm.ConfirmDeleteSelectedNodeCommand, null),
 
         NodeMenuIds.ExecutionType => (null, null),

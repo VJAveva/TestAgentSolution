@@ -31,6 +31,7 @@ public sealed partial class MainViewModel
         };
         if (dlg.ShowDialog() != true) return;
 
+        using var edit = BeginEdit("Import WatchItems");
         try
         {
             var importedConfig = WatchListXmlParser.Load(dlg.FileName);

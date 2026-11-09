@@ -39,6 +39,7 @@ public sealed partial class MainViewModel
             initialBrowsePath,
             onFilePathChanged: newPath =>
             {
+                using var edit = BeginEdit("Global variables file");
                 _config.GlobalVariablesFile = newPath;
                 GlobalVariablesFilePath = newPath;
                 IsDirty = true;

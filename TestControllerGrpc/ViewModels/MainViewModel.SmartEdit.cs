@@ -324,6 +324,7 @@ public sealed partial class MainViewModel
 
         var group = BuildAgentFanOutGroup(action, chosen);
 
+        using var edit = BeginEdit("Apply to agents");
         if (!ReplaceActionWithGroup(parentNode, node, action, group))
         {
             AddLog("Apply to agents: could not locate the action's parent.", LogSeverity.Error);

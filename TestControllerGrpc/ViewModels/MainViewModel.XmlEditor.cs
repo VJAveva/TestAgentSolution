@@ -66,6 +66,7 @@ public sealed partial class MainViewModel
         var result = editorWindow.ShowDialog();
         if (result == true && editorVm.DialogAccepted)
         {
+            using var edit = BeginEdit($"Edit XML ({oldWi.Tag})");
             try
             {
                 var parsed = WatchListXmlParser.DeserializeWatchItem(editorVm.ResultXml);
@@ -135,6 +136,7 @@ public sealed partial class MainViewModel
         var result = editorWindow.ShowDialog();
         if (result == true && editorVm.DialogAccepted)
         {
+            using var edit = BeginEdit("Edit WatchList XML");
             try
             {
                 var newConfig = WatchListXmlParser.DeserializeWatchList(editorVm.ResultXml);
