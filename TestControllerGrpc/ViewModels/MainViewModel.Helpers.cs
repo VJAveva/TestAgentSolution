@@ -539,6 +539,7 @@ public sealed partial class MainViewModel
     public void SetNodeSkip(TreeNodeViewModel node, bool skip, string? reason = null)
     {
         if (node.ModelObject is not ISkippableNode) return;
+        if (!EnsureCanEdit(node)) return;
         using var edit = BeginEdit(skip ? "Skip" : "Include");
 
         // Set the reason first: OnSkipChanged triggers the cascade that paints the row.

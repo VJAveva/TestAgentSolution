@@ -192,6 +192,10 @@ P3 Undo + ApplyEdit - one edit path with snapshot undo/redo (stack of 50, cleare
                MainViewModel.Undo.cs ApplyEdit/BeginEdit scope (nested edits = one step), Undo/Redo commands,
                Ctrl+Z / Ctrl+Y on both trees; every existing edit command runs in a scope; cleared on every reload.
 P4 Permissions - Pipeline_Edit (scoped by assignments) and Template_Edit (admin) via the add-rbac-permission skill.
+               DONE 2026-11-09: both appended to Permission (C#, AuthorizationService buckets, PermissionCatalog, TS);
+               Core Editing/EditAuthorization decides (running pipeline / Pipeline_Edit / Template_Edit / Pipeline_Author
+               for whole-WatchList and pipeline delete/move); every WPF edit command checks it; menu edit items disabled
+               with the reason.
 P5 Missing edit commands (2.5-2.7) through ApplyEdit, then shortcuts (rule 10).
 P6 Edit template navigation (2.8.1).
 P7 Run additions - Run from here to end (engine), Show resolved command, Open last output, Stop.

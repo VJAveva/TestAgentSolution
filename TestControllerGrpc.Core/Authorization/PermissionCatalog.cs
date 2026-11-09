@@ -26,6 +26,7 @@ public static class PermissionCatalog
         Permission.CodeChurn_View,
         Permission.CodeChurn_Export,
         Permission.ReportCard_View,
+        Permission.Pipeline_Edit,
     ];
 
     private static readonly Permission[] EngineerPermissions =
@@ -36,6 +37,7 @@ public static class PermissionCatalog
         Permission.Pipeline_Retry,
         Permission.Report_View,
         Permission.Notification_Mute,
+        Permission.Pipeline_Edit,
     ];
 
     private static readonly Permission[] GuestPermissions =

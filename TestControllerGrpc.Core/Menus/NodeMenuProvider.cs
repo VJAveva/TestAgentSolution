@@ -82,8 +82,28 @@ public static class NodeMenuProvider
         if (c.Tree == NodeMenuTree.Library) Library(c, m);
         else if (c.InTemplateCall) TemplateCall(c, m);
         else Pipeline(c, m);
-        return m;
+        if (c.NodeKind == NodeKinds.WatchItem && c.StructuralEditBlockedReason is { } structural)
+            m = m.Select(i => i.Id is NodeMenuIds.Delete or NodeMenuIds.MoveUp or NodeMenuIds.MoveDown
+                ? i with { IsEnabled = false, ToolTip = structural } : i).ToList();
+        return c.EditBlockedReason is { } reason ? m.Select(i => BlockEdit(i, reason)).ToList() : m;
     }
+
+    /// <summary>Items that change the WatchList; shown disabled with the reason when editing is not allowed.</summary>
+    public static readonly IReadOnlySet<string> EditIds = new HashSet<string>
+    {
+        NodeMenuIds.AddWatchItem, NodeMenuIds.ImportWatchItems, NodeMenuIds.EditWatchListXml,
+        NodeMenuIds.AddEvent, NodeMenuIds.AddActionGroup, NodeMenuIds.AddAction, NodeMenuIds.AddRef,
+        NodeMenuIds.AddInitialize, NodeMenuIds.Delete, NodeMenuIds.ExecutionType, NodeMenuIds.ExecutionSequential,
+        NodeMenuIds.ExecutionParallel, NodeMenuIds.Skip, NodeMenuIds.Include, NodeMenuIds.MoveUp, NodeMenuIds.MoveDown,
+        NodeMenuIds.DeleteTemplateCall, NodeMenuIds.AddTemplate, NodeMenuIds.EditTemplatesXml,
+        NodeMenuIds.ImportTemplates, NodeMenuIds.EditTemplateXml, NodeMenuIds.AddGroupToTemplate,
+        NodeMenuIds.AddActionToTemplate, NodeMenuIds.AddRefToTemplate, NodeMenuIds.AddInitializeToTemplate,
+        NodeMenuIds.DeleteFromLibrary,
+    };
+
+    private static NodeMenuItem BlockEdit(NodeMenuItem item, string reason) => EditIds.Contains(item.Id)
+        ? item with { IsEnabled = false, ToolTip = reason, Children = item.Children.Select(ch => BlockEdit(ch, reason)).ToList() }
+        : item;
 
     private static void Pipeline(NodeMenuContext c, List<NodeMenuItem> m)
     {

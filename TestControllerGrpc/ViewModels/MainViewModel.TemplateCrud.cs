@@ -11,6 +11,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void EditTemplateXml()
     {
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         OpenTemplateXmlEditorWindow();
     }
 
@@ -69,6 +70,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void AddTemplate()
     {
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         using var edit = BeginEdit("Add Template");
         var t = new TemplateConfig { ID = $"NewTemplate{_config.Templates.Count + 1}" };
         _config.Templates.Add(t);
@@ -88,6 +90,7 @@ public sealed partial class MainViewModel
     {
         if (SelectedTemplateNode is null || SelectedTemplateNode.NodeKind != NodeKinds.Template) return;
         if (SelectedTemplateNode.ModelObject is not TemplateConfig selectedTemplate) return;
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
 
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeTemplateList(new List<TemplateConfig> { selectedTemplate });
@@ -191,6 +194,7 @@ public sealed partial class MainViewModel
     private void DeleteTemplate()
     {
         if (SelectedTemplateNode is null || SelectedTemplateNode.NodeKind == NodeKinds.TemplateList) return;
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         using var edit = BeginEdit("Delete from Library");
 
         // CRITICAL: Capture before Remove triggers SelectedItemChanged
@@ -221,6 +225,7 @@ public sealed partial class MainViewModel
         var t = SelectedTemplateNode;
         if (t?.NodeKind is not (NodeKinds.Template or NodeKinds.TemplateList or NodeKinds.ActionGroup or NodeKinds.Event)) return;
         if (t.NodeKind == NodeKinds.TemplateList) { AddTemplate(); return; }
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         using var edit = BeginEdit("Add ActionGroup");
         AddChildT(t, new ActionGroupConfig { Tag = "NewGroup", ExecutionType = ExecutionMode.Sequential });
     }
@@ -229,6 +234,7 @@ public sealed partial class MainViewModel
     private void AddActionToTemplate()
     {
         if (SelectedTemplateNode?.NodeKind is not ("Template" or "ActionGroup")) return;
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         using var edit = BeginEdit("Add Action");
         AddChildT(SelectedTemplateNode, new ActionConfig { Type = ActionType.RunCommand, Command = "cmd", Parameters = "/c echo hello" });
     }
@@ -237,6 +243,7 @@ public sealed partial class MainViewModel
     private void AddRefToTemplate()
     {
         if (SelectedTemplateNode?.NodeKind is not ("Template" or "ActionGroup")) return;
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         using var edit = BeginEdit("Add Ref");
         AddChildT(SelectedTemplateNode, new RefConfig { TemplateID = AvailableTemplateIds.Count > 0 ? AvailableTemplateIds[0] : "" });
     }
@@ -245,6 +252,7 @@ public sealed partial class MainViewModel
     private void AddInitializeToTemplate()
     {
         if (SelectedTemplateNode?.NodeKind is not ("Template" or "ActionGroup")) return;
+        if (!EnsureCanEdit(Editing.EditTarget.Template)) return;
         using var edit = BeginEdit("Add Initialize");
         AddChildT(SelectedTemplateNode, new InitializeConfig { Tag = "Params" });
     }

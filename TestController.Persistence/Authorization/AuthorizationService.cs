@@ -157,7 +157,8 @@ public sealed class AuthorizationService : IAuthorizationService
         Permission.System_ChangeMode or
         Permission.Fleet_InstallUpdates or
         Permission.Pipeline_Author or
-        Permission.System_ConfigureFeatures;
+        Permission.System_ConfigureFeatures or
+        Permission.Template_Edit;
 
     // Not IsReadPermission: that bucket also grants Guests, and Code Churn / Report Card are
     // Administrator + Senior Manager only.
@@ -173,7 +174,8 @@ public sealed class AuthorizationService : IAuthorizationService
     private static bool IsPipelineScopedPermission(Permission p) => p is
         Permission.Pipeline_Trigger or
         Permission.Pipeline_Cancel or
-        Permission.Pipeline_Retry;
+        Permission.Pipeline_Retry or
+        Permission.Pipeline_Edit;
 
     private void EnqueueAudit(IUserContext user, Permission permission, string? resourceId, AuthDecision decision)
     {

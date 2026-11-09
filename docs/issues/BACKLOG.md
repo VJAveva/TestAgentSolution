@@ -12,3 +12,7 @@ Format: phase | file:line | one-line description.
 | P3 | TestController.WebApi/Endpoints/WatchListEndpoints.cs:21 | POST /api/watchlist/refresh is still open to any signed-in user (REG-006 Partial). |
 | P3 | docs/issues/ISSUE_Flaky_Lock_And_Debounce_Tests.md (branch fix/flaky-lock-debounce) | The flaky lock/debounce test fix is on an unmerged branch; FleetMaintenanceServiceTests timeout is in the same family and not fixed. |
 | P3 | (new task, after P3) | Window smoke test: open every separate window (Pipeline Builder, Change Password, Login, Pre-flight, ...) on a test host with fake services. Deferred by request. |
+| P4 | TestControllerGrpc/ViewModels/MainViewModel.EditRights.cs:24 | WPF edits are local file writes, so they are gated by CapabilityChecker (cached role + assignments), not a server round trip; a stale assignment list allows or denies until the next /api/auth/me refresh. |
+| P4 | TestControllerGrpc/ViewModels/MainViewModel.cs:768 | Editing a Library template is not blocked while a pipeline that Refs it is running (only the pipeline's own edits are). |
+| P4 | TestControllerGrpc/Views/MainWindow.DragDrop.cs:84 | Drag-and-drop shows a valid drop target even when the edit is blocked; the drop is refused only after release (logged). |
+| P4 | TestControllerGrpc.Tests/Rbac/*Tests.cs | TestOptionsMonitor / TestDbContextFactory are copied privately into 10+ test classes; one shared helper would do. |

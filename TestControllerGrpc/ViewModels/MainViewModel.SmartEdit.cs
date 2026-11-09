@@ -310,6 +310,7 @@ public sealed partial class MainViewModel
         if (SelectedNode is not { NodeKind: NodeKinds.Action } node) return;
         if (node.ModelObject is not ActionConfig action) return;
         if (node.Parent is not { } parentNode) return;
+        if (!EnsureCanEdit(node)) return;
 
         WriteBackAll();
 

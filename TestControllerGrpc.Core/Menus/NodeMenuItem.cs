@@ -56,6 +56,12 @@ public sealed record NodeMenuContext
     public bool PipelineBuilderEnabled { get; init; }
     public bool GlobalVariablesEnabled { get; init; }
 
+    /// <summary>Why the user cannot edit this node now (rule 4/5); null when edits are allowed.</summary>
+    public string? EditBlockedReason { get; init; }
+
+    /// <summary>WatchItem only: why the pipeline itself cannot be deleted or moved (needs Pipeline_Author).</summary>
+    public string? StructuralEditBlockedReason { get; init; }
+
     /// <summary>Failed actions in the last session of this pipeline; 0 hides Retry.</summary>
     public int RetryFailedCount { get; init; }
     public bool CanRetry { get; init; }

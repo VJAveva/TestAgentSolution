@@ -16,16 +16,18 @@ export const PERMISSION_CATALOG: Readonly<Record<string, readonly string[]>> = O
     'Audit_View', 'Audit_Export', 'Notification_Mute',
     'CodeChurn_View', 'CodeChurn_Export', 'ReportCard_View',
     'Pipeline_Author', 'System_ConfigureFeatures',
+    'Pipeline_Edit', 'Template_Edit',
   ]),
   SeniorManager: Object.freeze([
     'Pipeline_View', 'Pipeline_Trigger', 'Pipeline_Cancel', 'Pipeline_Retry',
     'Pipeline_TriggerAll', 'Pipeline_CancelAll', 'Pipeline_ForceRelease',
     'Report_View', 'Report_Generate', 'Notification_Mute',
     'CodeChurn_View', 'CodeChurn_Export', 'ReportCard_View',
+    'Pipeline_Edit',
   ]),
   Engineer: Object.freeze([
     'Pipeline_View', 'Pipeline_Trigger', 'Pipeline_Cancel', 'Pipeline_Retry',
-    'Report_View', 'Notification_Mute',
+    'Report_View', 'Notification_Mute', 'Pipeline_Edit',
   ]),
   Guest: Object.freeze([
     'Pipeline_View', 'Report_View',

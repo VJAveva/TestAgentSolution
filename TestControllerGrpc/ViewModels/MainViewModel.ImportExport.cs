@@ -24,6 +24,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void ImportWatchItems()
     {
+        if (!EnsureCanEdit(Editing.EditTarget.WholeWatchList)) return;
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
             Filter = "WatchList XML (*.xml)|*.xml|All Files|*.*",

@@ -45,6 +45,7 @@ public sealed partial class MainViewModel
     {
         if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         if (SelectedNode.ModelObject is not WatchItemConfig oldWi) return;
+        if (!EnsureCanEdit(SelectedNode)) return;
 
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeWatchItem(oldWi);
@@ -121,6 +122,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void OpenWatchListEditor()
     {
+        if (!EnsureCanEdit(Editing.EditTarget.WholeWatchList)) return;
         WriteBackAll();
         var xml = WatchListXmlParser.SerializeWatchList(_config);
 

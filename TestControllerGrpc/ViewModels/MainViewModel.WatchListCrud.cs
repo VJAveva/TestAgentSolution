@@ -12,6 +12,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void AddWatchItem()
     {
+        if (!EnsureCanEdit(Editing.EditTarget.WholeWatchList)) return;
         using var edit = BeginEdit("Add WatchItem");
         var idx = _config.WatchItems.Count + 1;
         var tag = $"WatchItem{idx}";
@@ -35,6 +36,7 @@ public sealed partial class MainViewModel
     private void AddChildNode()
     {
         if (SelectedNode is null) return;
+        if (!EnsureCanEdit(SelectedNode)) return;
         using var edit = BeginEdit("Add child");
         if (SelectedNode.NodeKind == NodeKinds.WatchList) { AddWatchItem(); return; }
         if (SelectedNode.NodeKind == NodeKinds.WatchItem)
@@ -56,6 +58,7 @@ public sealed partial class MainViewModel
     private void AddActionToGroup()
     {
         if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
+        if (!EnsureCanEdit(SelectedNode)) return;
         using var edit = BeginEdit("Add Action");
         var action = _suggestions.NewActionDefaults(ActionType.RunCommand);
         action.Parameters = "/c echo hello";
@@ -68,6 +71,7 @@ public sealed partial class MainViewModel
     private void AddRefToGroup()
     {
         if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
+        if (!EnsureCanEdit(SelectedNode)) return;
         using var edit = BeginEdit("Add Ref");
         AddChild(SelectedNode, new RefConfig { TemplateID = AvailableTemplateIds.Count > 0 ? AvailableTemplateIds[0] : "" });
     }
@@ -77,6 +81,7 @@ public sealed partial class MainViewModel
     private void AddInitializeToGroup()
     {
         if (SelectedNode?.NodeKind is not (NodeKinds.ActionGroup or NodeKinds.Event)) return;
+        if (!EnsureCanEdit(SelectedNode)) return;
         using var edit = BeginEdit("Add Initialize");
         AddChild(SelectedNode, new InitializeConfig { Tag = "Params", ParameterFile = "" });
         AddLog("Added Initialize node");
@@ -87,6 +92,7 @@ public sealed partial class MainViewModel
     private void AddActionGroup()
     {
         if (SelectedNode is null) return;
+        if (!EnsureCanEdit(SelectedNode)) return;
         using var edit = BeginEdit("Add ActionGroup");
         if (SelectedNode.NodeKind is NodeKinds.WatchItem)
         {
@@ -143,6 +149,7 @@ public sealed partial class MainViewModel
     {
         if (SelectedNode is null) return;
         if (SelectedNode.NodeKind is NodeKinds.WatchList or NodeKinds.TemplateList) return;
+        if (!EnsureCanEdit(SelectedNode, structural: true)) return;
         using var edit = BeginEdit($"Delete {SelectedNode.NodeKind}");
 
         // CRITICAL: Capture references BEFORE Remove(), because Remove() triggers
@@ -195,6 +202,7 @@ public sealed partial class MainViewModel
     private void ConfirmDeleteTemplateCall()
     {
         if (SelectedNode?.OwningTemplateCall is not { } call || call.Parent is null) return;
+        if (!EnsureCanEdit(call)) return;
         if (ThemedMessageBox.Show(TemplateCallRemovalPrompt(call), "Delete template call",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
@@ -234,6 +242,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void ApplyChanges()
     {
+        if (ActiveEditNode is not null && !EnsureCanEdit(ActiveEditNode)) return;
         using var edit = BeginEdit("Edit properties");
         ActiveEditNode?.ApplyToModel();
         string? parameterSaveStatus = null;
@@ -305,6 +314,7 @@ public sealed partial class MainViewModel
         var oldSiblings = oldParent.Children;
         var oldIdx = oldSiblings.IndexOf(node);
         if (oldIdx < 0) return;
+        if (!EnsureCanEdit(node, structural: true) || !EnsureCanEdit(newParent)) return;
         using var edit = BeginEdit("Move");
 
         // Remove from old parent model
@@ -348,6 +358,7 @@ public sealed partial class MainViewModel
         if (idx < 0) return;
         var nIdx = idx + dir;
         if (nIdx < 0 || nIdx >= siblings.Count) return;
+        if (!EnsureCanEdit(node, structural: true)) return;
         using var edit = BeginEdit(dir < 0 ? "Move up" : "Move down");
         siblings.Move(idx, nIdx);
         switch (node.Parent.ModelObject)

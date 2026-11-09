@@ -72,6 +72,8 @@ public partial class MainWindow : Window
             CanMoveUp = MainViewModel.CanMoveNode(node, -1),
             CanMoveDown = MainViewModel.CanMoveNode(node, +1),
             RunBlockedReason = _vm.RunBlockedReasonFor(node),
+            EditBlockedReason = _vm.EditBlockedReasonFor(node),
+            StructuralEditBlockedReason = node.NodeKind == NodeKinds.WatchItem ? _vm.EditBlockedReasonFor(node, structural: true) : null,
             CanEnablePipelines = _capabilityChecker.Can(Permission.Pipeline_Enable),
             CanDisablePipelines = _capabilityChecker.Can(Permission.Pipeline_Disable),
             CanToggleThisPipeline = node.NodeKind == NodeKinds.WatchItem && _capabilityChecker.Can(

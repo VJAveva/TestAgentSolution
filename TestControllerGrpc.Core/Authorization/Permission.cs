@@ -43,5 +43,11 @@ public enum Permission
     Pipeline_Author,
 
     /// <summary>Turn per-team features on or off (Features.json). Administrator only.</summary>
-    System_ConfigureFeatures
+    System_ConfigureFeatures,
+
+    /// <summary>Add, change, move or delete nodes inside one pipeline. Scoped by pipeline assignment.</summary>
+    Pipeline_Edit,
+
+    /// <summary>Change a Library template. Administrator only: a template change affects every pipeline that uses it.</summary>
+    Template_Edit
 }

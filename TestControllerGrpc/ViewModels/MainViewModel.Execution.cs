@@ -1385,6 +1385,7 @@ public sealed partial class MainViewModel
     /// <summary>Changes the ExecutionType of the selected Event or ActionGroup node.</summary>
     public void ChangeExecutionType(TreeNodeViewModel node, ExecutionMode newMode)
     {
+        if (!EnsureCanEdit(node)) return;
         using var edit = BeginEdit($"Execution type {newMode}");
         node.ExecutionTypeText = newMode.ToString();
         node.ApplyToModel();

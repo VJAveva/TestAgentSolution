@@ -21,7 +21,9 @@ public class PipelineAuthorPermissionTests
         Assert.Equal(24, (int)Permission.Pipeline_Author);
         // Later members are appended after it, never inserted before it.
         Assert.Equal(25, (int)Permission.System_ConfigureFeatures);
-        Assert.Equal(Permission.System_ConfigureFeatures, all[^1]);
+        Assert.Equal(26, (int)Permission.Pipeline_Edit);
+        Assert.Equal(27, (int)Permission.Template_Edit);
+        Assert.Equal(Permission.Template_Edit, all[^1]);
     }
 
     [Fact]
