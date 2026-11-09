@@ -74,6 +74,8 @@ public partial class MainWindow : Window
             RunBlockedReason = _vm.RunBlockedReasonFor(node),
             EditBlockedReason = _vm.EditBlockedReasonFor(node),
             StructuralEditBlockedReason = node.NodeKind == NodeKinds.WatchItem ? _vm.EditBlockedReasonFor(node, structural: true) : null,
+            TemplateEditBlockedReason = _vm.EditBlockedReasonFor(_vm.TemplateRoots.FirstOrDefault()),
+            HasClipboard = _vm.HasNodeClipboard,
             CanEnablePipelines = _capabilityChecker.Can(Permission.Pipeline_Enable),
             CanDisablePipelines = _capabilityChecker.Can(Permission.Pipeline_Disable),
             CanToggleThisPipeline = node.NodeKind == NodeKinds.WatchItem && _capabilityChecker.Can(
@@ -186,6 +188,19 @@ public partial class MainWindow : Window
         NodeMenuIds.ExportTemplate => (_vm.ExportTemplatesCommand, null),
         NodeMenuIds.DeleteFromLibrary => (_vm.DeleteTemplateCommand, null),
 
+        NodeMenuIds.AddGroupAbove => (null, _ => _vm.AddSibling(node, group: true, above: true)),
+        NodeMenuIds.AddGroupBelow => (null, _ => _vm.AddSibling(node, group: true, above: false)),
+        NodeMenuIds.AddActionAbove => (null, _ => _vm.AddSibling(node, group: false, above: true)),
+        NodeMenuIds.AddActionBelow => (null, _ => _vm.AddSibling(node, group: false, above: false)),
+        NodeMenuIds.Rename => (null, _ => _vm.RequestRename(node)),
+        NodeMenuIds.Duplicate => (null, _ => _vm.DuplicateNode(node)),
+        NodeMenuIds.DuplicateForAgents => (_vm.ApplyActionToAgentsCommand, null),
+        NodeMenuIds.Copy => (null, _ => _vm.CopyNode(node)),
+        NodeMenuIds.Paste => (null, _ => _vm.PasteNode(node)),
+        NodeMenuIds.WrapInGroup => (null, _ => _vm.WrapInGroup(node)),
+        NodeMenuIds.Ungroup => (null, _ => _vm.UngroupNode(node)),
+        NodeMenuIds.SaveAsTemplate => (null, _ => _vm.SaveGroupAsTemplate(node)),
+
         _ => throw new InvalidOperationException($"Menu item '{id}' has no handler."),
     };
 
@@ -232,7 +247,42 @@ public partial class MainWindow : Window
             [NodeMenuIds.AddInitializeToTemplate] = ("\uE713", "AccYellow"),
             [NodeMenuIds.ExportTemplate] = ("\uE898", "AccMauve"),
             [NodeMenuIds.DeleteFromLibrary] = ("\uE74D", "AccRed"),
+            [NodeMenuIds.AddGroupAbove] = ("\uE8F1", "Accent"),
+            [NodeMenuIds.AddGroupBelow] = ("\uE8F1", "Accent"),
+            [NodeMenuIds.AddActionAbove] = ("\uE7C8", "AccPeach"),
+            [NodeMenuIds.AddActionBelow] = ("\uE7C8", "AccPeach"),
+            [NodeMenuIds.Rename] = ("\uE8AC", "TextS"),
+            [NodeMenuIds.Duplicate] = ("\uE8C8", "TextS"),
+            [NodeMenuIds.DuplicateForAgents] = ("\uE8C8", "AccBlue"),
+            [NodeMenuIds.Copy] = ("\uE8C8", "TextS"),
+            [NodeMenuIds.Paste] = ("\uE77F", "TextS"),
+            [NodeMenuIds.WrapInGroup] = ("\uE8F1", "TextS"),
+            [NodeMenuIds.Ungroup] = ("\uE8F1", "TextS"),
+            [NodeMenuIds.SaveAsTemplate] = ("\uE74E", "AccMauve"),
         };
+
+    /// <summary>Puts the cursor in the visible Tag field of Node Properties (Rename / F2).</summary>
+    private void FocusTagField()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            var tag = Descendants<TextBox>(this).FirstOrDefault(t =>
+                t.IsVisible && !t.IsReadOnly && AutomationProperties.GetName(t) == "TAG");
+            if (tag is null) return;
+            tag.Focus();
+            tag.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) yield return match;
+            foreach (var deeper in Descendants<T>(child)) yield return deeper;
+        }
+    }
 
     private void AskSkipReason(TreeNodeViewModel node)
     {

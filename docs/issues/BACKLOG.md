@@ -16,3 +16,8 @@ Format: phase | file:line | one-line description.
 | P4 | TestControllerGrpc/ViewModels/MainViewModel.cs:768 | Editing a Library template is not blocked while a pipeline that Refs it is running (only the pipeline's own edits are). |
 | P4 | TestControllerGrpc/Views/MainWindow.DragDrop.cs:84 | Drag-and-drop shows a valid drop target even when the edit is blocked; the drop is refused only after release (logged). |
 | P4 | TestControllerGrpc.Tests/Rbac/*Tests.cs | TestOptionsMonitor / TestDbContextFactory are copied privately into 10+ test classes; one shared helper would do. |
+| P5 | docs/features/ContextMenu_Requirement.md 2.6 | Not built: Add Restart step after, Add Settle wait after, Change agent... (the exact restart/settle commands are not defined anywhere; agent is editable in Node Properties). |
+| P5 | docs/features/ContextMenu_Requirement.md 2.2 | Not built for WatchItem: Duplicate pipeline..., the blocked-Rename message with a Duplicate button, Edit XML of this group. |
+| P5 | TestControllerGrpc/Views/MainWindow.xaml:36 | Delete is still a window-wide key (rule 10 says tree focus only); a TextBox handles its own Delete, other controls may not. |
+| P5 | TestControllerGrpc/Views/MainWindow.xaml (Execution ribbon) | The ribbon's Trigger All button still runs without a confirm; only the keyboard path (Ctrl+Shift+F5) asks. |
+| P5 | TestControllerGrpc/ViewModels/MainViewModel.NodeEdits.cs:46 | Structural edits rebuild the parent's rows, so the rows below lose their expanded/collapsed state and any run status shown on them. |

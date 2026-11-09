@@ -60,6 +60,20 @@ public static class NodeMenuIds
     public const string ExportTemplate = "ExportTemplate";
     public const string DeleteFromLibrary = "DeleteFromLibrary";
 
+    // Structural edits (P5)
+    public const string AddGroupAbove = "AddGroupAbove";
+    public const string AddGroupBelow = "AddGroupBelow";
+    public const string AddActionAbove = "AddActionAbove";
+    public const string AddActionBelow = "AddActionBelow";
+    public const string Rename = "Rename";
+    public const string Duplicate = "Duplicate";
+    public const string DuplicateForAgents = "DuplicateForAgents";
+    public const string Copy = "Copy";
+    public const string Paste = "Paste";
+    public const string WrapInGroup = "WrapInGroup";
+    public const string Ungroup = "Ungroup";
+    public const string SaveAsTemplate = "SaveAsTemplate";
+
     public static IReadOnlyList<string> All { get; } = typeof(NodeMenuIds)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(f => f.IsLiteral)
@@ -99,6 +113,9 @@ public static class NodeMenuProvider
         NodeMenuIds.ImportTemplates, NodeMenuIds.EditTemplateXml, NodeMenuIds.AddGroupToTemplate,
         NodeMenuIds.AddActionToTemplate, NodeMenuIds.AddRefToTemplate, NodeMenuIds.AddInitializeToTemplate,
         NodeMenuIds.DeleteFromLibrary,
+        NodeMenuIds.AddGroupAbove, NodeMenuIds.AddGroupBelow, NodeMenuIds.AddActionAbove, NodeMenuIds.AddActionBelow,
+        NodeMenuIds.Rename, NodeMenuIds.Duplicate, NodeMenuIds.DuplicateForAgents, NodeMenuIds.Paste,
+        NodeMenuIds.WrapInGroup, NodeMenuIds.Ungroup,
     };
 
     private static NodeMenuItem BlockEdit(NodeMenuItem item, string reason) => EditIds.Contains(item.Id)
@@ -142,7 +159,15 @@ public static class NodeMenuProvider
             case NodeKinds.ActionGroup:
                 m.Add(Runnable(NodeMenuIds.ExecuteGroup, "Execute Group", c));
                 AddChildren(m);
+                GroupSiblings(m);
                 m.Add(ExecutionTypeMenu(c));
+                m.Add(Item(NodeMenuIds.Rename, "Rename\u2026", NodeMenuGroup.Edit));
+                CopyItems(c, m, isGroup: true);
+                m.Add(Item(NodeMenuIds.SaveAsTemplate, "Save group as template\u2026", NodeMenuGroup.Copy) with
+                {
+                    IsEnabled = c.TemplateEditBlockedReason is null,
+                    ToolTip = c.TemplateEditBlockedReason,
+                });
                 Move(c, m);
                 SkipItem(c, m);
                 m.Add(Item(NodeMenuIds.Delete, "Delete", NodeMenuGroup.Delete));
@@ -150,6 +175,11 @@ public static class NodeMenuProvider
 
             case NodeKinds.Action:
                 m.Add(Runnable(NodeMenuIds.ExecuteAction, "Execute Action", c));
+                ActionSiblings(m);
+                m.Add(Item(NodeMenuIds.Rename, "Rename\u2026", NodeMenuGroup.Edit));
+                m.Add(Item(NodeMenuIds.Duplicate, "Duplicate", NodeMenuGroup.Copy));
+                m.Add(Item(NodeMenuIds.DuplicateForAgents, "Duplicate for agents\u2026", NodeMenuGroup.Copy));
+                CopyItems(c, m, isGroup: false, includeDuplicate: false);
                 Move(c, m);
                 SkipItem(c, m);
                 m.Add(Item(NodeMenuIds.Delete, "Delete", NodeMenuGroup.Delete));
@@ -236,7 +266,10 @@ public static class NodeMenuProvider
                 m.Add(Item(NodeMenuIds.AddActionToTemplate, "Add Action", NodeMenuGroup.Add));
                 m.Add(Item(NodeMenuIds.AddGroupToTemplate, "Add ActionGroup", NodeMenuGroup.Add));
                 m.Add(Item(NodeMenuIds.AddRefToTemplate, "Add Ref", NodeMenuGroup.Add));
+                GroupSiblings(m);
                 m.Add(ExecutionTypeMenu(c));
+                m.Add(Item(NodeMenuIds.Rename, "Rename\u2026", NodeMenuGroup.Edit));
+                CopyItems(c, m, isGroup: true);
                 Move(c, m);
                 SkipItem(c, m);
                 m.Add(Item(NodeMenuIds.DeleteFromLibrary, "Delete", NodeMenuGroup.Delete));
@@ -245,6 +278,9 @@ public static class NodeMenuProvider
             case NodeKinds.Action:
                 m.Add(Runnable(NodeMenuIds.ExecuteAction, "Execute Action", c));
                 ContextItems(c, m);
+                ActionSiblings(m);
+                m.Add(Item(NodeMenuIds.Rename, "Rename\u2026", NodeMenuGroup.Edit));
+                CopyItems(c, m, isGroup: false);
                 Move(c, m);
                 SkipItem(c, m);
                 m.Add(Item(NodeMenuIds.DeleteFromLibrary, "Delete", NodeMenuGroup.Delete));
@@ -255,6 +291,28 @@ public static class NodeMenuProvider
                 m.Add(Item(NodeMenuIds.DeleteFromLibrary, "Delete", NodeMenuGroup.Delete));
                 return;
         }
+    }
+
+    private static void GroupSiblings(List<NodeMenuItem> m)
+    {
+        m.Add(Item(NodeMenuIds.AddGroupAbove, "Add ActionGroup above", NodeMenuGroup.Add));
+        m.Add(Item(NodeMenuIds.AddGroupBelow, "Add ActionGroup below", NodeMenuGroup.Add));
+    }
+
+    private static void ActionSiblings(List<NodeMenuItem> m)
+    {
+        m.Add(Item(NodeMenuIds.AddActionAbove, "Add Action above", NodeMenuGroup.Add));
+        m.Add(Item(NodeMenuIds.AddActionBelow, "Add Action below", NodeMenuGroup.Add));
+    }
+
+    private static void CopyItems(NodeMenuContext c, List<NodeMenuItem> m, bool isGroup, bool includeDuplicate = true)
+    {
+        if (includeDuplicate) m.Add(Item(NodeMenuIds.Duplicate, "Duplicate", NodeMenuGroup.Copy));
+        m.Add(Item(NodeMenuIds.Copy, "Copy", NodeMenuGroup.Copy));
+        if (c.HasClipboard)
+            m.Add(Item(NodeMenuIds.Paste, isGroup ? "Paste inside" : "Paste below", NodeMenuGroup.Copy));
+        m.Add(Item(NodeMenuIds.WrapInGroup, "Wrap in new group", NodeMenuGroup.Copy));
+        if (isGroup) m.Add(Item(NodeMenuIds.Ungroup, "Ungroup", NodeMenuGroup.Copy));
     }
 
     private static void AddChildren(List<NodeMenuItem> m)

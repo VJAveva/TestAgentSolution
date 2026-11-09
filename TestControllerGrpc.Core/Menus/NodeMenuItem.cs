@@ -62,6 +62,12 @@ public sealed record NodeMenuContext
     /// <summary>WatchItem only: why the pipeline itself cannot be deleted or moved (needs Pipeline_Author).</summary>
     public string? StructuralEditBlockedReason { get; init; }
 
+    /// <summary>Why the user cannot change Library templates (Save group as template); null when allowed.</summary>
+    public string? TemplateEditBlockedReason { get; init; }
+
+    /// <summary>A node has been copied and can be pasted.</summary>
+    public bool HasClipboard { get; init; }
+
     /// <summary>Failed actions in the last session of this pipeline; 0 hides Retry.</summary>
     public int RetryFailedCount { get; init; }
     public bool CanRetry { get; init; }

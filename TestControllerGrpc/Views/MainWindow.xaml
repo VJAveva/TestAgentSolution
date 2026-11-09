@@ -21,7 +21,7 @@
         <KeyBinding Key="R" Modifiers="Ctrl" Command="{Binding RefreshWatchListCommand}" />
 
         <!-- Execution -->
-        <KeyBinding Key="F5" Command="{Binding TriggerAllWatchItemsCommand}" />
+        <KeyBinding Key="F5" Modifiers="Ctrl+Shift" Command="{Binding TriggerAllWithConfirmCommand}" />
         <KeyBinding Key="F5" Modifiers="Shift" Command="{Binding CancelExecutionCommand}" />
         <KeyBinding Key="R" Modifiers="Ctrl+Shift" Command="{Binding RetryFailedCommand}" />
 
@@ -2188,6 +2188,13 @@
                                 <TreeView.InputBindings>
                                     <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
                                     <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
+                                    <KeyBinding Key="F2" Command="{Binding RenameActiveCommand}" />
+                                    <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding DuplicateActiveCommand}" />
+                                    <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding CopyActiveCommand}" />
+                                    <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding PasteActiveCommand}" />
+                                    <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding MoveActiveUpCommand}" />
+                                    <KeyBinding Key="Down" Modifiers="Alt" Command="{Binding MoveActiveDownCommand}" />
+                                    <KeyBinding Key="F5" Command="{Binding RunActiveWithConfirmCommand}" />
                                 </TreeView.InputBindings>
                             </TreeView>
                         </DockPanel>
@@ -2238,6 +2245,13 @@
                                 <TreeView.InputBindings>
                                     <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoCommand}" />
                                     <KeyBinding Key="Y" Modifiers="Ctrl" Command="{Binding RedoCommand}" />
+                                    <KeyBinding Key="F2" Command="{Binding RenameActiveCommand}" />
+                                    <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding DuplicateActiveCommand}" />
+                                    <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding CopyActiveCommand}" />
+                                    <KeyBinding Key="V" Modifiers="Ctrl" Command="{Binding PasteActiveCommand}" />
+                                    <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding MoveActiveUpCommand}" />
+                                    <KeyBinding Key="Down" Modifiers="Alt" Command="{Binding MoveActiveDownCommand}" />
+                                    <KeyBinding Key="F5" Command="{Binding RunActiveWithConfirmCommand}" />
                                 </TreeView.InputBindings>
                             </TreeView>
                         </DockPanel>

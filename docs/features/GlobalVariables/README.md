@@ -4,7 +4,7 @@ status: Implemented
 owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Models/GlobalVariablesConfig.cs, TestControllerGrpc.Core/Services/ParameterResolver.cs, TestControllerGrpc.Core/Services/ParameterRank.cs, TestControllerGrpc/Views/Dialogs/GlobalVariablesEditorWindow.xaml, TestControllerGrpc/ViewModels/MainViewModel.GlobalVariables.cs]
 tests: [TestControllerGrpc.Tests/Services/GlobalVariablesLayerTests.cs]
-last-verified: 2026-11-08
+last-verified: 2026-11-09
 ---
 
 # Global Variables
@@ -27,7 +27,7 @@ dotnet test TestControllerGrpc.Tests --filter "FullyQualifiedName~GlobalVariable
 ```
 
 ## Known gaps
-- None recorded.
+- Choosing a different GlobalVariables file is undoable (Ctrl+Z on the tree); "Use this build" writes to every parameter file on disk and is not undoable.
 
 ## Links
 - [GlobalVariables_Requirement.md](GlobalVariables_Requirement.md), mockup [mockups/GlobalVariables_Dialog_Mockup.html](mockups/GlobalVariables_Dialog_Mockup.html), prompt [prompts/GlobalVariables_Copilot_Prompt.md](prompts/GlobalVariables_Copilot_Prompt.md)

@@ -225,7 +225,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             skippable.SkipReason = string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
-    private static TreeNodeViewModel RootOf(TreeNodeViewModel node)
+    internal static TreeNodeViewModel RootOf(TreeNodeViewModel node)
     {
         while (node.Parent is { } p) node = p;
         return node;
@@ -906,7 +906,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     }
 
     /// <summary>Templates by ID, for expanding Ref nodes inline.</summary>
-    private static Dictionary<string, TemplateConfig> TemplateIndex(List<TemplateConfig>? templates)
+    internal static Dictionary<string, TemplateConfig> TemplateIndex(List<TemplateConfig>? templates)
     {
         var index = new Dictionary<string, TemplateConfig>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in templates ?? [])

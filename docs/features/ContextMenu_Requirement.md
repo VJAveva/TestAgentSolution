@@ -197,6 +197,10 @@ P4 Permissions - Pipeline_Edit (scoped by assignments) and Template_Edit (admin)
                for whole-WatchList and pipeline delete/move); every WPF edit command checks it; menu edit items disabled
                with the reason.
 P5 Missing edit commands (2.5-2.7) through ApplyEdit, then shortcuts (rule 10).
+               DONE 2026-11-09: Core Editing/NodeEdits (clone via the Save serializer, duplicate, insert above/below, wrap,
+               ungroup, group as template); menu adds Add above/below, Rename (focuses Tag), Duplicate, Duplicate for agents,
+               Copy/Paste (in-app clipboard only), Wrap, Ungroup, Save group as template (admin). Tree keys: F2, Ctrl+D,
+               Ctrl+C/V, Alt+Up/Down, F5 (run selected, confirm); Trigger All moved to Ctrl+Shift+F5 with confirm.
 P6 Edit template navigation (2.8.1).
 P7 Run additions - Run from here to end (engine), Show resolved command, Open last output, Stop.
 P8 Web v1 - menu from the provider via API: Run, pre-flight, view, resolved command. No web editing yet.

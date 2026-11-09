@@ -46,9 +46,11 @@ public class NodeMenuProviderTests
         { "Event", Ctx(NodeKinds.Event),
             [TriggerEvent, AddActionGroup, AddAction, AddRef, AddInitialize, ExecutionType, MoveUp, MoveDown, Delete] },
         { "ActionGroup", Ctx(NodeKinds.ActionGroup) with { IsSkippable = true },
-            [ExecuteGroup, AddActionGroup, AddAction, AddRef, AddInitialize, ExecutionType, MoveUp, MoveDown, Skip, Delete] },
+            [ExecuteGroup, AddActionGroup, AddAction, AddRef, AddInitialize, AddGroupAbove, AddGroupBelow, ExecutionType, Rename,
+             Duplicate, Copy, WrapInGroup, Ungroup, SaveAsTemplate, MoveUp, MoveDown, Skip, Delete] },
         { "Action, skipped", Ctx(NodeKinds.Action) with { IsSkippable = true, IsSkipped = true },
-            [ExecuteAction, MoveUp, MoveDown, Include, Delete] },
+            [ExecuteAction, AddActionAbove, AddActionBelow, Rename, Duplicate, DuplicateForAgents, Copy, WrapInGroup,
+             MoveUp, MoveDown, Include, Delete] },
         { "Initialize", Ctx(NodeKinds.Initialize), [Delete] },
         { "Template call (Ref)", Call(NodeKinds.Ref, isRoot: true), [EditTemplate, MoveUp, MoveDown, DeleteTemplateCall] },
         { "Group inside a template call", Call(NodeKinds.ActionGroup, isRoot: false) with { IsSkippable = true },
@@ -61,10 +63,11 @@ public class NodeMenuProviderTests
             [ExecuteTemplate, CheckOnly, SetTemplateContext, ClearTemplateContext, AddGroupToTemplate, AddActionToTemplate,
              AddRefToTemplate, AddInitializeToTemplate, EditTemplateXml, ExportTemplate, MoveUp, MoveDown, DeleteFromLibrary] },
         { "Library ActionGroup", Lib(NodeKinds.ActionGroup) with { IsSkippable = true },
-            [ExecuteGroup, SetTemplateContext, AddActionToTemplate, AddGroupToTemplate, AddRefToTemplate, ExecutionType,
-             MoveUp, MoveDown, Skip, DeleteFromLibrary] },
+            [ExecuteGroup, SetTemplateContext, AddActionToTemplate, AddGroupToTemplate, AddRefToTemplate, AddGroupAbove,
+             AddGroupBelow, ExecutionType, Rename, Duplicate, Copy, WrapInGroup, Ungroup, MoveUp, MoveDown, Skip, DeleteFromLibrary] },
         { "Library Action", Lib(NodeKinds.Action) with { IsSkippable = true },
-            [ExecuteAction, SetTemplateContext, MoveUp, MoveDown, Skip, DeleteFromLibrary] },
+            [ExecuteAction, SetTemplateContext, AddActionAbove, AddActionBelow, Rename, Duplicate, Copy, WrapInGroup,
+             MoveUp, MoveDown, Skip, DeleteFromLibrary] },
     };
 
     private static IEnumerable<NodeMenuContext> AllContexts() => Rows.Select(r => (NodeMenuContext)r[1]);
