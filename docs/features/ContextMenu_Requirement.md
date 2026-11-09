@@ -202,6 +202,9 @@ P5 Missing edit commands (2.5-2.7) through ApplyEdit, then shortcuts (rule 10).
                Copy/Paste (in-app clipboard only), Wrap, Ungroup, Save group as template (admin). Tree keys: F2, Ctrl+D,
                Ctrl+C/V, Alt+Up/Down, F5 (run selected, confirm); Trigger All moved to Ctrl+Shift+F5 with confirm.
 P6 Edit template navigation (2.8.1).
+               DONE 2026-11-09: MainViewModel.TemplateNavigation (EditTemplate, banner "used by N pipelines", Back to pipeline,
+               missing template -> create (admin) / delete call / cancel); TreeNodeViewModel.MatchInTemplate selects the same
+               step inside the template; view-only note without Template_Edit; Enter on a template call = Edit template.
 P7 Run additions - Run from here to end (engine), Show resolved command, Open last output, Stop.
 P8 Web v1 - menu from the provider via API: Run, pre-flight, view, resolved command. No web editing yet.
 

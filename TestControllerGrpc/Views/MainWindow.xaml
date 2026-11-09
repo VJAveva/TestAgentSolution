@@ -2143,7 +2143,7 @@
                     </TabControl.Resources>
 
                     <!-- Test Plan Tab -->
-                    <TabItem>
+                    <TabItem x:Name="WatchListTab">
                         <TabItem.Header>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="{StaticResource FontSize11}" VerticalAlignment="Center" Margin="0,0,4,0" />
@@ -2195,6 +2195,7 @@
                                     <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding MoveActiveUpCommand}" />
                                     <KeyBinding Key="Down" Modifiers="Alt" Command="{Binding MoveActiveDownCommand}" />
                                     <KeyBinding Key="F5" Command="{Binding RunActiveWithConfirmCommand}" />
+                                    <KeyBinding Key="Enter" Command="{Binding EditTemplateActiveCommand}" />
                                 </TreeView.InputBindings>
                             </TreeView>
                         </DockPanel>
@@ -2209,6 +2210,24 @@
                             </StackPanel>
                         </TabItem.Header>
                         <DockPanel>
+                            <!-- 2.8.1 banner: which pipelines a template edit affects, and the way back. -->
+                            <Border DockPanel.Dock="Top" Margin="6,5,6,0" Padding="8,6" CornerRadius="4" BorderThickness="1"
+                                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource AccMauve}"
+                                    Visibility="{Binding IsTemplateBannerVisible, Converter={StaticResource BoolVis}}">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="Segoe MDL2 Assets" Padding="4,2"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand" VerticalAlignment="Top"
+                                            Foreground="{DynamicResource TextS}" Command="{Binding CloseTemplateBannerCommand}"
+                                            AutomationProperties.Name="Close template banner" ToolTip="Close" />
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding TemplateBannerText}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextP}" FontSize="{StaticResource FontSize10}" />
+                                        <Button Content="Back to pipeline" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                                Style="{StaticResource SmBtn}" Command="{Binding BackToPipelineCommand}"
+                                                AutomationProperties.Name="Back to pipeline" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
                             <StackPanel DockPanel.Dock="Top" Margin="6,5,6,2">
                                 <!-- Search / filter box -->
                                 <Grid>

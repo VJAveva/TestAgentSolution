@@ -718,6 +718,28 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The node inside <paramref name="templateNode"/> at the same position as <paramref name="clicked"/> sits under
+    /// its nearest Ref (2.8.1 step 3). Falls back to the template itself when the shapes no longer match.
+    /// </summary>
+    public static TreeNodeViewModel MatchInTemplate(TreeNodeViewModel clicked, TreeNodeViewModel templateNode)
+    {
+        var path = new Stack<int>();
+        for (var n = clicked; n.NodeKind != NodeKinds.Ref; n = n.Parent)
+        {
+            if (n.Parent is null) return templateNode;
+            path.Push(n.Parent.Children.IndexOf(n));
+        }
+
+        var target = templateNode;
+        while (path.TryPop(out var i))
+        {
+            if (i < 0 || i >= target.Children.Count) return templateNode;
+            target = target.Children[i];
+        }
+        return target;
+    }
+
     /// <summary>Chip shown on a Template header row once a pipeline context is chosen.</summary>
     public string TemplateContextLabel
     {

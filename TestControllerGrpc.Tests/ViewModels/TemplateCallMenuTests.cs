@@ -166,6 +166,29 @@ public class TemplateCallMenuTests : IDisposable
         Assert.Contains("template is not deleted", prompt);
     }
 
+    [Fact]
+    public void MatchInTemplate_Should_FindTheSameStepInsideTheTemplate_When_AMirroredStepIsClicked()
+    {
+        var config = NestedCalls();
+        var install = CallIn(TreeNodeViewModel.FromWatchList(config), "P1").Children[0].Children[0].Children[0];
+        var inner = TreeNodeViewModel.FromTemplateList(config.Templates).Children.Single(t => t.Tag == "Inner");
+
+        var match = TreeNodeViewModel.MatchInTemplate(install, inner);
+
+        Assert.Same(inner.Children[0], match);
+        Assert.Equal("Install", match.Tag);
+    }
+
+    [Fact]
+    public void MatchInTemplate_Should_FallBackToTheTemplate_When_TheShapesNoLongerMatch()
+    {
+        var config = NestedCalls();
+        var group = CallIn(TreeNodeViewModel.FromWatchList(config), "P1").Children[0];
+        var emptyOuter = TreeNodeViewModel.FromTemplate(new TemplateConfig { ID = "Outer" });
+
+        Assert.Same(emptyOuter, TreeNodeViewModel.MatchInTemplate(group, emptyOuter));
+    }
+
     // ── Right-click hit test ────────────────────────────────────────────────
 
     [Fact]

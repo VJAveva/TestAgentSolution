@@ -21,3 +21,6 @@ Format: phase | file:line | one-line description.
 | P5 | TestControllerGrpc/Views/MainWindow.xaml:36 | Delete is still a window-wide key (rule 10 says tree focus only); a TextBox handles its own Delete, other controls may not. |
 | P5 | TestControllerGrpc/Views/MainWindow.xaml (Execution ribbon) | The ribbon's Trigger All button still runs without a confirm; only the keyboard path (Ctrl+Shift+F5) asks. |
 | P5 | TestControllerGrpc/ViewModels/MainViewModel.NodeEdits.cs:46 | Structural edits rebuild the parent's rows, so the rows below lose their expanded/collapsed state and any run status shown on them. |
+| P6 | TestControllerGrpc/Views/MainWindow.xaml (WatchListTreeView) | Double-click on a template call does not open Edit template (2.8 asks for double-click and Enter; only Enter is wired - double-click already toggles expand). |
+| P6 | TestControllerGrpc/ViewModels/MainViewModel.TemplateNavigation.cs:52 | Back to pipeline is lost after Undo/Redo or a reload (the tree is rebuilt, so the remembered node no longer exists); it logs a warning instead. |
+| P6 | TestControllerGrpc/ViewModels/MainViewModel.TemplateNavigation.cs:40 | The banner stays visible when the user leaves the template by other means (selecting another template); it only closes via its buttons. |

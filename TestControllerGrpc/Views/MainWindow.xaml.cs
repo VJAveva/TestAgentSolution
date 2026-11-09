@@ -107,6 +107,8 @@ public partial class MainWindow : Window
         // ?? Keyboard shortcut support ????????????????????????
         _vm.FocusLogSearchRequested += OnFocusLogSearchRequested;
         _vm.RenameRequested += FocusTagField;
+        _vm.ShowInLibraryRequested += OpenTemplateInLibrary;
+        _vm.ShowInWatchListRequested += ShowInWatchList;
 
         // ?? Window icon (matches the system tray "TC" badge) ?????????
         Icon = CreateControllerWindowImage();

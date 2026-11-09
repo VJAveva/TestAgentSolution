@@ -224,10 +224,11 @@ public static class NodeMenuProvider
     {
         m.Add(Item(NodeMenuIds.EditTemplate, "Edit template", NodeMenuGroup.Edit) with
         {
-            IsEnabled = c.CalledTemplateExists,
-            ToolTip = c.CalledTemplateExists ? null
-                : string.IsNullOrEmpty(c.CalledTemplateId) ? "This Ref does not name a template."
-                : $"Template '{c.CalledTemplateId}' is not in the Library.",
+            ToolTip = !c.CalledTemplateExists
+                ? string.IsNullOrEmpty(c.CalledTemplateId) ? "This Ref does not name a template."
+                    : $"Template '{c.CalledTemplateId}' is not in the Library - choose to create it or delete the call."
+                : c.TemplateEditBlockedReason is null ? null : "You can view but not edit templates",
+            IsEnabled = !string.IsNullOrEmpty(c.CalledTemplateId),
         });
         if (c.NodeKind == NodeKinds.ActionGroup) m.Add(Runnable(NodeMenuIds.ExecuteGroup, "Execute Group", c));
         else if (c.NodeKind == NodeKinds.Action) m.Add(Runnable(NodeMenuIds.ExecuteAction, "Execute Action", c));

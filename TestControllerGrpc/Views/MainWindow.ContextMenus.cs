@@ -170,7 +170,7 @@ public partial class MainWindow : Window
         NodeMenuIds.MoveUp => (null, _ => _vm.MoveNodeUp(node)),
         NodeMenuIds.MoveDown => (null, _ => _vm.MoveNodeDown(node)),
 
-        NodeMenuIds.EditTemplate => (null, _ => OpenTemplateInLibrary(_vm.FindTemplateNode(node.CalledTemplateId))),
+        NodeMenuIds.EditTemplate => (null, _ => _vm.EditTemplate(node)),
         NodeMenuIds.DeleteTemplateCall => (_vm.ConfirmDeleteTemplateCallCommand, null),
 
         NodeMenuIds.AddTemplate => (_vm.AddTemplateCommand, null),
@@ -292,14 +292,21 @@ public partial class MainWindow : Window
             _vm.SetNodeSkip(node, true, dialog.Reason);
     }
 
-    /// <summary>Shows the template in the Library tab, selected and expanded.</summary>
+    /// <summary>Shows a node in the Library tab, selected and expanded.</summary>
     private void OpenTemplateInLibrary(TreeNodeViewModel? templateNode)
     {
         if (templateNode is null) return;
         LibraryTab.IsSelected = true;
-        if (templateNode.Parent is { } root) root.IsExpanded = true;
+        if (TreeNodeViewModel.RootOf(templateNode) is { } root) root.IsExpanded = true;
         templateNode.IsExpanded = true;
         templateNode.IsSelected = true;
         _vm.ActivateTemplateNode(templateNode);
+    }
+
+    private void ShowInWatchList(TreeNodeViewModel node)
+    {
+        WatchListTab.IsSelected = true;
+        node.IsSelected = true;
+        _vm.ActivateWatchListNode(node);
     }
 }

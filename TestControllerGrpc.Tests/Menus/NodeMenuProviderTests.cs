@@ -136,13 +136,13 @@ public class NodeMenuProviderTests
     }
 
     [Fact]
-    public void Build_Should_DisableEditTemplateWithAReason_When_TheTemplateIsMissing()
+    public void Build_Should_KeepEditTemplateEnabledWithAReason_When_TheTemplateIsMissing()
     {
         var item = NodeMenuProvider.Build(Call(NodeKinds.Ref, true) with { CalledTemplateExists = false, CalledTemplateId = "Gone" })
             .Single(i => i.Id == EditTemplate);
 
-        Assert.False(item.IsEnabled);
-        Assert.Equal("Template 'Gone' is not in the Library.", item.ToolTip);
+        Assert.True(item.IsEnabled); // 2.8.1-5: opens the "not found" choice instead of navigating
+        Assert.Equal("Template 'Gone' is not in the Library - choose to create it or delete the call.", item.ToolTip);
     }
 
     [Theory]
