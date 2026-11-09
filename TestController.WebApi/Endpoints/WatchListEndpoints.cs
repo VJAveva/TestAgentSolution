@@ -1,5 +1,7 @@
 using System.Text;
+using TestController.Api.Security;
 using TestController.WebApi.Services;
+using TestControllerGrpc.Authorization;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -12,8 +14,9 @@ public static class WatchListEndpoints
         // These endpoints extend the shared WatchListController with standalone-specific features.
         // Common endpoints (GET /, GET {tag}/status, GET {tag}/parameters) are provided by the shared library.
         group.MapGet("/xml", GetWatchListXml);
-        group.MapPut("/", SaveWatchList);
-        group.MapPost("/import", ImportWatchItems);
+        // Both replace pipelines wholesale, so they are Administrator-only and closed in Default mode.
+        group.MapPut("/", SaveWatchList).RequirePermission(Permission.Pipeline_Author, denyInDefaultMode: true);
+        group.MapPost("/import", ImportWatchItems).RequirePermission(Permission.Pipeline_Author, denyInDefaultMode: true);
         group.MapGet("/export", ExportWatchItems);
         group.MapPost("/refresh", RefreshWatchList);
         return group;

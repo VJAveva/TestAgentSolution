@@ -33,6 +33,12 @@ export default function WatchListToolbar() {
 
   const retryDisabled = busy || !canRetry || hasActiveLock || isPipelineDisabled;
 
+  // The server refuses import without Pipeline_Author, and always in Default mode.
+  const canImport = useCan('Pipeline_Author');
+  const importTitle = canImport
+    ? undefined
+    : 'Importing pipelines needs an Administrator in Secured mode.';
+
   // Single-run gate for the Trigger button: while the selected pipeline is locked
   // (running) NOBODY may trigger a second run — the path forward is Cancel. Also
   // blocked when the pipeline is disabled. Triggering with no WatchItem selected
@@ -133,7 +139,7 @@ export default function WatchListToolbar() {
       <ToolBtn icon={<PlayCircle size={14} />} label="Trigger" onClick={wrap(handleTrigger)} disabled={triggerDisabled} accent title={triggerTitle} />
       <ToolBtn icon={<XCircle size={14} />} label="Cancel" onClick={wrap(cancelAll)} disabled={busy} danger />
       <div className="w-px bg-bdr mx-1" />
-      <ToolBtn icon={<Upload size={14} />} label="Import" onClick={handleImport} disabled={busy} />
+      <ToolBtn icon={<Upload size={14} />} label="Import" onClick={handleImport} disabled={busy || !canImport} title={importTitle} />
       <ToolBtn icon={<Download size={14} />} label="Export" onClick={wrap(handleExport)} disabled={busy} />
       <ToolBtn icon={<RefreshCw size={14} />} label="Refresh" onClick={wrap(refresh)} disabled={busy} />
 

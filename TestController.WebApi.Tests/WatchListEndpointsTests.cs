@@ -1,5 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TestController.WebApi.Tests;
 
@@ -8,11 +11,105 @@ namespace TestController.WebApi.Tests;
 /// </summary>
 public class WatchListEndpointsTests : IClassFixture<TestWebAppFactory>
 {
+    private const string ImportXml = """
+        <WatchList>
+          <WatchItem Tag="Smuggled" Path="C:\Smuggled" Filter="*.txt">
+            <Event Type="Renamed" ExecutionType="Sequential" />
+          </WatchItem>
+        </WatchList>
+        """;
+
+    private readonly TestWebAppFactory _factory;
     private readonly HttpClient _client;
+    private readonly HttpClient _admin;
 
     public WatchListEndpointsTests(TestWebAppFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
+        _admin = Secured("Pipeline_Author");
+    }
+
+    private sealed class StubCapabilityResolver(IReadOnlySet<string> capabilities) : TestController.Api.Security.IRemoteCapabilityResolver
+    {
+        public Task<IReadOnlySet<string>?> GetCapabilitiesAsync(string? authorizationHeader, CancellationToken ct)
+            => Task.FromResult<IReadOnlySet<string>?>(capabilities);
+    }
+
+    private HttpClient Secured(params string[] capabilities) =>
+        _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("RBAC:Enabled", "true");
+            builder.ConfigureTestServices(services =>
+            {
+                foreach (var d in services.Where(s => s.ServiceType == typeof(TestController.Api.Security.IRemoteCapabilityResolver)).ToList())
+                    services.Remove(d);
+                services.AddSingleton<TestController.Api.Security.IRemoteCapabilityResolver>(
+                    new StubCapabilityResolver(capabilities.ToHashSet(StringComparer.Ordinal)));
+            });
+        }).CreateClient();
+
+    // ?????????????????????????????????????????????????????????????????
+    // Write guard: replacing or importing pipelines is Administrator-only
+    // ?????????????????????????????????????????????????????????????????
+
+    [Fact]
+    public async Task SaveWatchList_Should_Return403AndLeaveTheFile_When_DefaultMode()
+    {
+        var before = File.ReadAllText(_factory.WatchListFilePath);
+        var json = await (await _client.GetAsync("/api/watchlist")).Content.ReadAsStringAsync();
+
+        var response = await _client.PutAsync("/api/watchlist", new StringContent(json, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("Default mode", await response.Content.ReadAsStringAsync());
+        Assert.Equal(before, File.ReadAllText(_factory.WatchListFilePath));
+    }
+
+    [Fact]
+    public async Task ImportWatchItems_Should_Return403AndImportNothing_When_DefaultMode()
+    {
+        var response = await _client.PostAsync("/api/watchlist/import", new StringContent(ImportXml, Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.DoesNotContain("Smuggled", File.ReadAllText(_factory.WatchListFilePath));
+    }
+
+    [Fact]
+    public async Task ImportWatchItems_Should_Return403_When_DefaultModeCallerClaimsToBeWpf()
+    {
+        // X-Source is caller-supplied, so it must not open the endpoint.
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/watchlist/import")
+        {
+            Content = new StringContent(ImportXml, Encoding.UTF8, "application/xml"),
+        };
+        request.Headers.Add("X-Source", "WPF");
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SaveWatchList_Should_Return403_When_SecuredCallerLacksPipelineAuthor()
+    {
+        var engineer = Secured("Pipeline_View", "Pipeline_Trigger");
+        var json = await (await engineer.GetAsync("/api/watchlist")).Content.ReadAsStringAsync();
+
+        var response = await engineer.PutAsync("/api/watchlist", new StringContent(json, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("Pipeline_Author", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ImportWatchItems_Should_Return403_When_SecuredCallerLacksPipelineAuthor()
+    {
+        var response = await Secured("Pipeline_View", "Pipeline_Trigger")
+            .PostAsync("/api/watchlist/import", new StringContent(ImportXml, Encoding.UTF8, "application/xml"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.DoesNotContain("Smuggled", File.ReadAllText(_factory.WatchListFilePath));
     }
 
     // ?????????????????????????????????????????????????????????????????
@@ -68,7 +165,7 @@ public class WatchListEndpointsTests : IClassFixture<TestWebAppFactory>
 
         // PUT it back
         var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var putResponse = await _client.PutAsync("/api/watchlist", content);
+        var putResponse = await _admin.PutAsync("/api/watchlist", content);
 
         Assert.Equal(HttpStatusCode.OK, putResponse.StatusCode);
     }
@@ -81,7 +178,7 @@ public class WatchListEndpointsTests : IClassFixture<TestWebAppFactory>
     public async Task ImportWatchItems_Should_ReturnBadRequest_When_EmptyBody()
     {
         var content = new StringContent("", Encoding.UTF8, "application/xml");
-        var response = await _client.PostAsync("/api/watchlist/import", content);
+        var response = await _admin.PostAsync("/api/watchlist/import", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -100,7 +197,7 @@ public class WatchListEndpointsTests : IClassFixture<TestWebAppFactory>
             """;
 
         var content = new StringContent(xml, Encoding.UTF8, "application/xml");
-        var response = await _client.PostAsync("/api/watchlist/import", content);
+        var response = await _admin.PostAsync("/api/watchlist/import", content);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -119,7 +216,7 @@ public class WatchListEndpointsTests : IClassFixture<TestWebAppFactory>
             """;
 
         var content = new StringContent(xml, Encoding.UTF8, "application/xml");
-        var response = await _client.PostAsync("/api/watchlist/import", content);
+        var response = await _admin.PostAsync("/api/watchlist/import", content);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         Assert.True(json.TryGetProperty("added", out var added));
@@ -131,7 +228,7 @@ public class WatchListEndpointsTests : IClassFixture<TestWebAppFactory>
     {
         var xml = "<WatchList></WatchList>";
         var content = new StringContent(xml, Encoding.UTF8, "application/xml");
-        var response = await _client.PostAsync("/api/watchlist/import", content);
+        var response = await _admin.PostAsync("/api/watchlist/import", content);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();

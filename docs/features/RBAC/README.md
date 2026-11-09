@@ -2,9 +2,9 @@
 feature: RBAC
 status: Implemented
 owner: Vinodkumar Javvadi
-code: [TestControllerGrpc.Core/Authorization/Permission.cs, TestController.Persistence/Authorization/AuthorizationService.cs, TestController.Api/Interceptors/SessionAuthInterceptor.cs, TestControllerGrpc.Core/Locking/LockRegistry.cs, TestController.WebClient/src/lib/capabilities.ts]
-tests: [TestControllerGrpc.Tests/Rbac, TestController.WebApi.Tests/Rbac]
-last-verified: 2026-11-08
+code: [TestControllerGrpc.Core/Authorization/Permission.cs, TestController.Persistence/Authorization/AuthorizationService.cs, TestController.Api/Interceptors/SessionAuthInterceptor.cs, TestController.Api/Security/PermissionGuard.cs, TestControllerGrpc.Core/Locking/LockRegistry.cs, TestController.WebClient/src/lib/capabilities.ts]
+tests: [TestControllerGrpc.Tests/Rbac, TestController.WebApi.Tests/Rbac, TestController.WebApi.Tests/WatchListEndpointsTests.cs]
+last-verified: 2026-11-09
 ---
 
 # RBAC: users, roles, permissions, pipeline locks
@@ -19,6 +19,7 @@ last-verified: 2026-11-08
 - Switch mode with `RBAC:Enabled` (or the WPF security mode screen in the ADMIN tab). Secured mode shows a login screen in WPF and the web client.
 - Administrators manage users, pipeline assignments and the audit viewer from the WPF **ADMIN** tab.
 - REST: `/api/auth/*`, `/api/security/capabilities`, `/api/audit`, `/api/locks`, `/api/notifications/mutes`.
+- WatchList writes on the web tier (`PUT /api/watchlist`, `POST /api/watchlist/import`) replace pipelines wholesale, so they need `Pipeline_Author` and are refused for **every** caller in Default mode (`X-Source` is not trusted). Minimal-API endpoints use `.RequirePermission(permission, denyInDefaultMode)` from `TestController.Api/Security/PermissionGuard.cs`. The web Import button is disabled with the same reason.
 
 ## Config / files
 - `RBAC` section in `appsettings.json` (`RBAC:Enabled`), `Locks` section for lock timeouts.
