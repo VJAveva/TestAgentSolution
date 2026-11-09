@@ -211,6 +211,10 @@ P7 Run additions - Run from here to end (engine), Show resolved command, Open la
                (pre-flight, locks, auth) and logs "partial run: <path>"; RunInfoText masks secrets; Stop replaces run items
                while the pipeline runs (rule 5) and checks Pipeline_Cancel per pipeline.
 P8 Web v1 - menu from the provider via API: Run, pre-flight, view, resolved command. No web editing yet.
+               DONE 2026-11-09: POST /api/watchlist/node-menu (NodeMenuProvider.Build filtered to WebIds; enabled
+               state from RbacGate Pipeline_Trigger / Pipeline_Cancel on the server) and POST /api/watchlist/resolved-command
+               (TokenDisplay masking + SecurityRedactor), served by both hosts. Web right-click menu (nodeMenuStore +
+               NodeContextMenu) reuses the existing trigger, node-run, pre-flight and cancel endpoints and their checks.
 
 Tests for every acceptance item in section 5, red-proofed. Build/test -c Release; report controller,
 WebApi and WebClient counts. Respect the Ui ratchets.

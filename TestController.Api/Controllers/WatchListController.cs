@@ -2,6 +2,8 @@ using System.IO;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TestController.Api.Security;
+using TestControllerGrpc.Authorization;
+using TestControllerGrpc.Menus;
 using TestControllerGrpc.Models;
 using TestControllerGrpc.Services;
 
@@ -141,6 +143,91 @@ public class WatchListController : ControllerBase
     // This payload is rendered verbatim in the web trigger dialog, so credentials must never leave the server.
     private static bool IsSecretParameter(string key) =>
         SecretKeyFragments.Any(fragment => key.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>A node by pipeline tag and structural path (path omitted = the WatchItem itself). Body, not route: tags hold spaces.</summary>
+    public sealed record NodeRequest(string? WatchItemTag, string? NodePath);
+
+    /// <summary>
+    /// POST /api/watchlist/node-menu - the web context menu, built by the same NodeMenuProvider as WPF and
+    /// limited to <see cref="NodeMenuProvider.WebIds"/>. Enabled states are decided here, server-side.
+    /// </summary>
+    [HttpPost("node-menu")]
+    public async Task<IActionResult> GetNodeMenu([FromBody] NodeRequest? request)
+    {
+        if (!TryLocate(request, allowWatchItem: true, out var watchItem, out var resolved, out var error)) return error;
+
+        var ct = HttpContext.RequestAborted;
+        var canRun = await RbacGate.IsAuthorizedAsync(HttpContext, Permission.Pipeline_Trigger, watchItem.Tag, ct);
+        var running = _sessionManager.HasActiveExecution(watchItem.Tag);
+        var kind = resolved?.Kind switch
+        {
+            null => NodeKinds.WatchItem,
+            RunnableNodeKind.Event => NodeKinds.Event,
+            RunnableNodeKind.Group => NodeKinds.ActionGroup,
+            RunnableNodeKind.Action => NodeKinds.Action,
+            _ => NodeKinds.Ref,
+        };
+        var context = new NodeMenuContext
+        {
+            NodeKind = kind,
+            InTemplateCall = kind == NodeKinds.Ref,
+            IsTemplateCallRoot = kind == NodeKinds.Ref,
+            IsEnabled = watchItem.IsEnabled,
+            RunBlockedReason = canRun ? null : "You do not have permission to run this pipeline.",
+            IsPipelineRunning = running,
+            CanStop = running && await RbacGate.IsAuthorizedAsync(HttpContext, Permission.Pipeline_Cancel, watchItem.Tag, ct),
+        };
+
+        var items = NodeMenuProvider.Build(context)
+            .Where(i => NodeMenuProvider.WebIds.Contains(i.Id))
+            .Select(i => new { id = i.Id, label = i.Label, group = i.Group.ToString(), isEnabled = i.IsEnabled, toolTip = i.ToolTip })
+            .ToList();
+        return Ok(new { items });
+    }
+
+    /// <summary>POST /api/watchlist/resolved-command - an action's command with tokens resolved and secrets masked.</summary>
+    [HttpPost("resolved-command")]
+    public IActionResult GetResolvedCommand([FromBody] NodeRequest? request)
+    {
+        if (!TryLocate(request, allowWatchItem: false, out var watchItem, out var resolved, out var error)) return error;
+        if (resolved!.Node is not ActionConfig action)
+            return BadRequest(ApiErrorFactory.BadRequest("Only an Action has a command."));
+
+        var ctx = new PipelineExecutionContext { WatchItemTag = watchItem.Tag };
+        ParameterResolver.LoadForWatchItem(ctx, watchItem);
+        string Show(string? raw) => TokenDisplay.Resolve(raw,
+            name => ctx.Parameters.TryGetValue(name, out var v) ? (v, TokenLayer.Unknown) : null).Text;
+
+        return Ok(new { text = RunInfoText.ResolvedCommand(Show(action.AgentName), Show(action.Command), Show(action.Parameters)) });
+    }
+
+    private bool TryLocate(NodeRequest? request, bool allowWatchItem,
+        out WatchItemConfig watchItem, out ResolvedNode? node, out IActionResult error)
+    {
+        watchItem = null!;
+        node = null;
+        error = null!;
+        if (string.IsNullOrWhiteSpace(request?.WatchItemTag))
+        {
+            error = BadRequest(ApiErrorFactory.BadRequest("watchItemTag is required."));
+            return false;
+        }
+        var found = _vocabMonitor.CurrentConfig?.WatchItems
+            .FirstOrDefault(w => string.Equals(w.Tag, request.WatchItemTag, StringComparison.OrdinalIgnoreCase));
+        if (found is null)
+        {
+            error = NotFound(ApiErrorFactory.InvalidTag(request.WatchItemTag));
+            return false;
+        }
+        watchItem = found;
+        if (string.IsNullOrEmpty(request.NodePath) && allowWatchItem) return true;
+        if (!NodeAddressing.TryResolve(found, request.NodePath, out node, out var reason))
+        {
+            error = BadRequest(ApiErrorFactory.BadRequest(reason));
+            return false;
+        }
+        return true;
+    }
 
     /// <summary>GET /api/watchlist/tree — hierarchical PlanNode tree with action-type badges and aggregate counts.</summary>
     [HttpGet("tree")]

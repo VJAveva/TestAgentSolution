@@ -251,7 +251,7 @@ ASP.NET controllers and SignalR hub used identically by both hosts:
 | File | Routes / Purpose |
 |------|-----------------|
 | `ExecutionController.cs` | `POST trigger/{tag}`, `GET sessions`, `GET locks`, `GET can-trigger/{tag}`, `POST cancel`, `POST force-release/{agent}`, `GET reconnect`, `GET {sessionId}/recent-logs`, `GET my-sessions` |
-| `WatchListController.cs` | `GET /api/watchlist`, `GET /api/watchlist/{tag}/parameters` |
+| `WatchListController.cs` | `GET /api/watchlist`, `GET /api/watchlist/{tag}/parameters`, `POST /api/watchlist/node-menu`, `POST /api/watchlist/resolved-command` |
 | `AgentsController.cs` | `GET /api/agents`, agent status |
 | `HealthController.cs` | `GET /api/health`, `GET /api/health/diagnostics` (includes agentLocks section), `GET /api/health/logs`, `GET /api/health/log-files` |
 | `ResultsController.cs` | `GET /api/results/builds`, `GET /api/results/builds/{id}`, trend data |
@@ -425,7 +425,7 @@ All routes served from `TestController.Api` controllers:
 | **Execution** | `POST trigger/{tag}`, `GET status`, `GET sessions`, `GET {sessionId}`, `POST cancel`, `POST {sessionId}/cancel`, `POST retry/{sessionId}` |
 | **Locking** | `GET locks`, `GET can-trigger/{tag}`, `POST force-release/{agent}`, `POST force-release-all` |
 | **Session** | `GET reconnect`, `GET {sessionId}/recent-logs`, `GET my-sessions` |
-| **WatchList** | `GET /api/watchlist`, `GET /api/watchlist/{tag}/parameters` |
+| **WatchList** | `GET /api/watchlist`, `GET /api/watchlist/{tag}/parameters`, `POST /api/watchlist/node-menu`, `POST /api/watchlist/resolved-command` |
 | **Agents** | `GET /api/agents` |
 | **Health** | `GET /api/health`, `GET /api/health/diagnostics`, `GET /api/health/logs`, `GET /api/health/log-files` |
 | **Results** | `GET /api/results/builds`, `GET /api/results/builds/{id}` |

@@ -16,6 +16,8 @@ import DisabledTriggerButton from '../common/DisabledTriggerButton';
 import TriggerDialog from '../execution/TriggerDialog';
 import NodeRunDialog from './NodeRunDialog';
 import LockConflictModal from '../dialogs/LockConflictModal';
+import NodeContextMenu from './NodeContextMenu';
+import { useNodeMenuStore, nodeAddress } from '../../stores/nodeMenuStore';
 
 /** Node kinds that can be run on their own. Mirrors RunnableNodeKind in Core. */
 const RUNNABLE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>(['Event', 'ActionGroup', 'Action', 'Ref']);
@@ -255,6 +257,8 @@ export default function WatchListTree() {
           onRan={() => setNodeRunTarget(null)}
         />
       )}
+
+      <NodeContextMenu onTriggerRequest={setTriggerTarget} onNodeRunRequest={setNodeRunTarget} />
     </div>
   );
 }
@@ -263,6 +267,7 @@ type PipelineState = 'triggerable' | 'viewOnly' | 'disabled' | 'locked';
 
 const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverrideRequest, onNodeRunRequest }: { node: TreeNode; onTriggerRequest: (tag: string) => void; onOverrideRequest: (lock: PipelineLockDto) => void; onNodeRunRequest: (node: TreeNode) => void }) {
   const selectNode = useWatchListStore(s => s.selectNode);
+  const openMenu = useNodeMenuStore(s => s.open);
   const toggleExpand = useWatchListStore(s => s.toggleExpand);
   const selectedNode = useWatchListStore(s => s.selectedNode);
   const status = useWatchListStore(s => (node.tag ? s.nodeStatus[node.tag.toLowerCase()] : undefined) ?? 'Idle');
@@ -330,6 +335,12 @@ const TreeNodeRow = memo(function TreeNodeRow({ node, onTriggerRequest, onOverri
         ${rowOpacity}`}
       style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
       onClick={() => selectNode(node)}
+      onContextMenu={(e) => {
+        if (!nodeAddress(node)) return;
+        e.preventDefault();
+        selectNode(node);
+        void openMenu(node, e.clientX, e.clientY);
+      }}
     >
       {/* Expand/collapse toggle */}
       {hasChildren ? (

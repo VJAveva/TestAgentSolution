@@ -125,6 +125,13 @@ public static class NodeMenuProvider
         NodeMenuIds.WrapInGroup, NodeMenuIds.Ungroup,
     };
 
+    /// <summary>The items the web client offers (P8, read-only v1): run, pre-flight, stop and the resolved command.</summary>
+    public static readonly IReadOnlySet<string> WebIds = new HashSet<string>
+    {
+        NodeMenuIds.TriggerAllEvents, NodeMenuIds.CheckOnly, NodeMenuIds.TriggerEvent, NodeMenuIds.ExecuteGroup,
+        NodeMenuIds.ExecuteAction, NodeMenuIds.ShowResolvedCommand, NodeMenuIds.Stop,
+    };
+
     private static NodeMenuItem BlockEdit(NodeMenuItem item, string reason) => EditIds.Contains(item.Id)
         ? item with { IsEnabled = false, ToolTip = reason, Children = item.Children.Select(ch => BlockEdit(ch, reason)).ToList() }
         : item;
