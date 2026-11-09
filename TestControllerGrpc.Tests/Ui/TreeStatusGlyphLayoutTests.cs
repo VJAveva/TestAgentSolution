@@ -125,50 +125,5 @@ public sealed class TreeStatusGlyphLayoutTests
 
     // ── STA host ─────────────────────────────────────────────────────
 
-    /// <remarks>
-    /// One Application per process is a hard WPF rule, so every case runs on a single STA thread and
-    /// reuses <see cref="Application.Current"/> if some other test got there first.
-    /// </remarks>
-    private static T Sta<T>(Func<T> body)
-    {
-        Exception? error = null;
-        T result = default!;
-
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                var app = Application.Current ?? new Application();
-                if (app.Resources.MergedDictionaries.Count == 0)
-                    foreach (var path in new[]
-                    {
-                        "Themes/DarkTheme.xaml",
-                        "Views/Styles/DesignTokens.xaml",
-                        "Views/Styles/Typography.xaml",
-                        "Views/Styles/ControlStyles.xaml",
-                        "Views/Styles/ExecutionDashboardStyles.xaml",
-                        "Views/Styles/SpecTokens.xaml",
-                        "Views/Styles/TreeViewSpec.xaml",
-                    })
-                    {
-                        app.Resources.MergedDictionaries.Add(new ResourceDictionary
-                        {
-                            Source = new Uri(
-                                $"pack://application:,,,/TestControllerGrpc;component/{path}",
-                                UriKind.Absolute),
-                        });
-                    }
-
-                result = body();
-            }
-            catch (Exception ex) { error = ex; }
-        });
-
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        if (error is not null) throw new Xunit.Sdk.XunitException(error.ToString());
-        return result;
-    }
+    private static T Sta<T>(Func<T> body) => WpfTestHost.Run(body);
 }

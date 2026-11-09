@@ -110,6 +110,69 @@ public sealed class ResourceReferenceIntegrityTests
             string.Join(Environment.NewLine, broken.Select(r => $"    {r.File}:{r.Line} {r.Key}")));
     }
 
+    /// <summary>
+    /// A separate Window does not see MainWindow.Resources: "defined somewhere in the app" is not enough.
+    /// PipelineBuilderWindow used MainWindow's SmBtn and crashed on open (2026-11-09).
+    /// </summary>
+    [Fact]
+    public void StaticResource_Should_ResolveInsideItsOwnWindow_When_TheViewIsASeparateWindow()
+    {
+        var appWide = AppWideKeys();
+        var broken = new List<string>();
+
+        foreach (var file in AllXaml().Where(IsWindow))
+        {
+            var text = File.ReadAllText(file);
+            var own = KeysIn(text);
+            foreach (var merged in MergedDictionaryFiles(text, file))
+                own.UnionWith(KeysIn(File.ReadAllText(merged)));
+
+            var lines = text.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+                foreach (Match m in Regex.Matches(lines[i], @"\{StaticResource\s+([A-Za-z_][A-Za-z0-9_]*)\s*\}"))
+                    if (!appWide.Contains(m.Groups[1].Value) && !own.Contains(m.Groups[1].Value))
+                        broken.Add($"    {Path.GetFileName(file)}:{i + 1} {m.Groups[1].Value}");
+        }
+
+        Assert.True(broken.Count == 0,
+            $"{broken.Count} StaticResource reference(s) are defined only in ANOTHER window and throw when this one opens:" +
+            Environment.NewLine + string.Join(Environment.NewLine, broken));
+    }
+
+    private static bool IsWindow(string file) =>
+        Regex.IsMatch(File.ReadAllText(file), @"^\s*(<\?xml[^>]*>\s*)?(<!--.*?-->\s*)*<Window\b", RegexOptions.Singleline);
+
+    private static HashSet<string> KeysIn(string xaml) =>
+        Regex.Matches(xaml, "x:Key=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>App.xaml, the dictionaries it merges, and keys injected from code-behind.</summary>
+    private static HashSet<string> AppWideKeys()
+    {
+        var appXaml = Path.Combine(RepoRoot(), "TestControllerGrpc", "App.xaml");
+        var text = File.ReadAllText(appXaml);
+        var keys = KeysIn(text);
+        foreach (var merged in MergedDictionaryFiles(text, appXaml))
+            keys.UnionWith(KeysIn(File.ReadAllText(merged)));
+        foreach (var file in AllCSharp())
+            foreach (Match m in Regex.Matches(File.ReadAllText(file), "Resources\\[\\s*\"([^\"]+)\"\\s*\\]"))
+                keys.Add(m.Groups[1].Value);
+        return keys;
+    }
+
+    private static IEnumerable<string> MergedDictionaryFiles(string xaml, string owner)
+    {
+        var project = Path.Combine(RepoRoot(), "TestControllerGrpc");
+        foreach (Match m in Regex.Matches(xaml, "<ResourceDictionary\\s+Source=\"([^\"]+)\""))
+        {
+            var source = Regex.Replace(m.Groups[1].Value, @"^(pack://application:,,,)?/?(TestControllerGrpc;component/)?", "")
+                .Replace('/', Path.DirectorySeparatorChar);
+            var candidates = new[] { Path.Combine(Path.GetDirectoryName(owner)!, source), Path.Combine(project, source) };
+            var found = candidates.FirstOrDefault(File.Exists);
+            Assert.True(found is not null, $"{Path.GetFileName(owner)} merges '{m.Groups[1].Value}', which was not found.");
+            yield return found!;
+        }
+    }
+
     [Fact]
     public void KnownUnresolvedList_Should_NotContainKeysThatNowResolve()
     {

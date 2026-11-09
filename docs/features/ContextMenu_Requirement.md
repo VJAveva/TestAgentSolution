@@ -180,6 +180,9 @@ P1 Quick fix - right-click selects the node under the mouse (walk the visual tre
                mirrored children get Edit template (minimal: opens the Library tab, selects the template; full
                2.8.1 is P6), Execute Group/Action, Delete template call... (removes only this pipeline's Ref) and
                Move on the Ref itself. No undo until P3. Run on the Ref node itself waits for P7.
+               FIX 2026-11-09 (found on JVGR22): a right-click in the indent LEFT of a row is not on any row, so P1
+               treated it as empty space and showed the root menu. Rows are now matched by height at any X
+               (TreeHitTest.RowAt); only space below the last row is empty space.
 P2 NodeMenuProvider in Core (rule 12) - pure function, table-driven tests per node type.
                DONE 2026-11-09: TestControllerGrpc.Core/Menus (NodeMenuProvider, NodeMenuIds, NodeMenuContext).
                MainWindow.ContextMenus.cs only describes the node and renders; NodeKinds moved to Core. Same items as

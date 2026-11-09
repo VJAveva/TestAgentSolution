@@ -405,7 +405,7 @@ public partial class MainWindow : Window
         if (sender is not TreeView tree || e.OriginalSource is not DependencyObject src) return;
         if (TreeHitTest.IsInScrollBar(src)) return;
 
-        var item = TreeHitTest.ContainerAt(src);
+        var item = TreeHitTest.RowAt(tree, e.GetPosition(tree)) ?? TreeHitTest.ContainerAt(src);
         if (item is not null)
         {
             item.IsSelected = true;

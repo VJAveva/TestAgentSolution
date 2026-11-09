@@ -80,51 +80,7 @@
             <sys:String>RunCommand</sys:String><sys:String>RunRemoteCommand</sys:String><sys:String>SendMail</sys:String>
         </x:Array>
 
-        <!-- ── Base Styles ── -->
-        <Style TargetType="Button" x:Key="Btn">
-            <Setter Property="Background" Value="{DynamicResource Accent}" />
-            <Setter Property="Foreground" Value="{DynamicResource TreeBadgeFg}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="12,5" />
-            <Setter Property="Cursor" Value="Hand" />
-            <!-- Transparent 1px border rather than 0: hover and focus can then recolour it without
-                 resizing the button. -->
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Margin" Value="3" />
-            <Setter Property="FontSize" Value="{StaticResource FontSize11}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="5" Padding="{TemplateBinding Padding}"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Opacity" Value="0.75" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="Button" x:Key="SmBtn" BasedOn="{StaticResource Btn}">
-            <Setter Property="FontSize" Value="{StaticResource FontSize10}" /><Setter Property="Padding" Value="8,4" /><Setter Property="Margin" Value="3" />
-        </Style>
+        <!-- ── Base Styles ── Btn and SmBtn live in Views/Styles/ControlStyles.xaml so dialogs can use them. -->
         <!-- Matches SmBtn's corner radius so toggles sitting in the same bar don't read as square. -->
         <Style TargetType="ToggleButton" x:Key="PillToggle">
             <Setter Property="Background" Value="{DynamicResource BtnBg}" />

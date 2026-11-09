@@ -191,17 +191,5 @@ public class TemplateCallMenuTests : IDisposable
         });
     }
 
-    private static void RunSta(Action body)
-    {
-        Exception? error = null;
-        var thread = new Thread(() =>
-        {
-            try { body(); }
-            catch (Exception ex) { error = ex; }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (error is not null) throw new Xunit.Sdk.XunitException(error.ToString());
-    }
+    private static void RunSta(Action body) => TestControllerGrpc.Tests.Ui.WpfTestHost.Run(body);
 }
