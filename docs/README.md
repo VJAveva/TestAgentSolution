@@ -94,6 +94,11 @@ Notes:
 - [Regression tab — UI implementation spec](features/CodeChurn/RegressionTab-UI-Spec.md) - RegressionTab-UI-Spec.md - Draft
 - [WebClient Parity Architecture — Regression / ADO Feature](features/CodeChurn/WebClient-Parity-Architecture.md) - WebClient-Parity-Architecture.md - Draft
 
+### ContextMenu
+
+- [Context-aware right-click menu](features/ContextMenu/README.md) - README.md - Current
+- [Requirement — Context-aware right-click menu in the WatchList tree](features/ContextMenu/ContextMenu_Requirement.md) - ContextMenu_Requirement.md - Draft
+
 ### Docs
 
 - [Documentation tooling](features/Docs/README.md) - README.md - Current
@@ -171,6 +176,11 @@ Notes:
 - [Impact Index Storage Relocation — Copilot Prompt Pack](features/Impact/prompts/ImpactIndex-Storage-CopilotPrompts.md) - prompts/ImpactIndex-Storage-CopilotPrompts.md - Draft
 - [Regression Selection Algorithm](features/Impact/Regression-Selection-Algorithm.md) - Regression-Selection-Algorithm.md - Draft
 - [WAND Dynamic Pruning — Action Plan](features/Impact/WAND-Retrieval-Action-Plan.md) - WAND-Retrieval-Action-Plan.md - Draft
+
+### Installer
+
+- [Installer and team setup guide](features/Installer/README.md) - README.md - Current
+- [Installer + Setup Guide — approach and Copilot prompts](features/Installer/prompts/Prompt_Installer_SetupGuide.md) - prompts/Prompt_Installer_SetupGuide.md - Draft
 
 ### PipelineBuilder
 
