@@ -133,6 +133,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
             if (success)
             {
+                IsSecuredMode = true;
                 StatusMessage = "Switched to Secured mode. Existing users reactivated.";
                 _logger.Info("RBAC", "System switched to Secured mode (reactivation)");
                 RequestClose?.Invoke(true);
@@ -178,6 +179,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
             if (success)
             {
+                IsSecuredMode = true;
                 StatusMessage = "Switched to Secured mode.";
                 _logger.Info("RBAC", "System switched to Secured mode");
                 IsWizardOpen = false;
@@ -228,6 +230,7 @@ public sealed partial class SecurityModeViewModel : ObservableObject
 
             if (success)
             {
+                IsSecuredMode = false;
                 StatusMessage = "Switched to Default mode.";
                 _logger.Info("RBAC", "System switched to Default mode");
                 IsDisableDialogOpen = false;

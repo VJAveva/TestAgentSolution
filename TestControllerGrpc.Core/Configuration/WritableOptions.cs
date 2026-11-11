@@ -19,13 +19,17 @@ public sealed class WritableOptions<T> : IWritableOptions<T> where T : class, ne
     private readonly IOptionsMonitor<T> _options;
     private readonly string _section;
     private readonly string _filePath;
+    private readonly Action? _afterWrite;
     private readonly object _lock = new();
 
-    public WritableOptions(IOptionsMonitor<T> options, string section, string filePath)
+    /// <param name="afterWrite">Reloads configuration so <see cref="Value"/> reflects the write at once,
+    /// instead of whenever (if ever) the file watcher notices it.</param>
+    public WritableOptions(IOptionsMonitor<T> options, string section, string filePath, Action? afterWrite = null)
     {
         _options = options;
         _section = section;
         _filePath = filePath;
+        _afterWrite = afterWrite;
     }
 
     public T Value => _options.CurrentValue;
@@ -55,5 +59,7 @@ public sealed class WritableOptions<T> : IWritableOptions<T> where T : class, ne
             var output = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_filePath, output);
         }
+
+        _afterWrite?.Invoke();
     }
 }

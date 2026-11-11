@@ -33,6 +33,21 @@ public static class RbacFeatureExtensions
     /// Registers RBAC services. Only the primary host (WPF Controller) should open the SQLite database.
     /// The standalone WebApi must pass <paramref name="isPrimaryHost"/> = false to avoid DB access.
     /// </summary>
+    /// <summary>
+    /// Reloads <paramref name="configuration"/> and every configuration it chains. The embedded API host wraps the
+    /// WPF host's configuration, and a chained provider's own Load is a no-op, so only reloading the inner root
+    /// makes both containers see a mode switch.
+    /// </summary>
+    internal static void ReloadConfiguration(IConfiguration configuration)
+    {
+        if (configuration is IConfigurationBuilder builder)
+            foreach (var chained in builder.Sources.OfType<ChainedConfigurationSource>())
+                if (chained.Configuration is not null)
+                    ReloadConfiguration(chained.Configuration);
+
+        (configuration as IConfigurationRoot)?.Reload();
+    }
+
     public static IServiceCollection AddRbacFeature(this IServiceCollection services, IConfiguration configuration, bool isPrimaryHost = true)
     {
         // Configuration (always needed — both hosts read RbacOptions to know if mode is secured)
@@ -44,7 +59,8 @@ public static class RbacFeatureExtensions
             new WritableOptions<RbacOptions>(
                 sp.GetRequiredService<IOptionsMonitor<RbacOptions>>(),
                 RbacOptions.SectionName,
-                appSettingsPath));
+                appSettingsPath,
+                () => ReloadConfiguration(configuration)));
 
         // SystemModeBroadcaster: SignalR-only, no DB access — safe for both hosts
         services.AddSingleton<Hubs.SystemModeBroadcaster>();
