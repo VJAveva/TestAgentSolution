@@ -31,8 +31,13 @@ namespace TestControllerGrpc.ViewModels;
 /// </summary>
 public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 {
-    private readonly string _originalXml;
-    private readonly WatchListConfig? _validationContext;
+    private string _originalXml;
+    private readonly WatchListConfig? _libraryContext;
+
+    /// <summary>The WatchList the checks run against; in a session it also holds the templates open in other tabs.</summary>
+    private WatchListConfig? ValidationContext => ContextProvider?.Invoke() ?? _libraryContext;
+
+    public Func<WatchListConfig?>? ContextProvider { get; set; }
     private readonly IReadOnlyCollection<string>? _knownAgents;
     private readonly IPreflightFileSystem? _fileSystem;
     private readonly IReadOnlyCollection<XmlEditorAgent>? _agentStatuses;
@@ -101,7 +106,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         IReadOnlyCollection<XmlEditorAgent>? agentStatuses = null)
     {
         _originalXml = initialXml;
-        _validationContext = validationContext;
+        _libraryContext = validationContext;
         _knownAgents = knownAgents;
         _fileSystem = fileSystem;
         _agentStatuses = agentStatuses;
@@ -118,8 +123,9 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     {
         var version = Interlocked.Increment(ref _analysisVersion);
         var xml = XmlText;
+        var context = ValidationContext;
         var analysis = await Task.Run(() => WatchListXmlEditorAnalyzer.Analyze(
-            xml, _documentKind, _validationContext, _knownAgents, _fileSystem));
+            xml, _documentKind, context, _knownAgents, _fileSystem));
         if (version != Volatile.Read(ref _analysisVersion)) return;
         ShowErrors(ToValidationErrors(analysis));
     }
@@ -133,16 +139,16 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
     public string? GetQuickFixResult(XmlEditorQuickFix fix) =>
         WatchListXmlEditorAnalyzer.ApplyQuickFix(
-            XmlText, _documentKind, fix, _validationContext);
+            XmlText, _documentKind, fix, ValidationContext);
 
     public IReadOnlyList<XmlEditorCompletion> GetValueCompletions(string attributeName, bool insideEvent) =>
         WatchListXmlEditorAnalyzer.GetValueCompletions(
             XmlText, _documentKind, attributeName, insideEvent,
-            _validationContext, _agentStatuses);
+            ValidationContext, _agentStatuses);
 
     public IReadOnlyList<XmlEditorCompletion> GetTokenCompletions() =>
         WatchListXmlEditorAnalyzer.GetTokenCompletions(
-            XmlText, _documentKind, _validationContext);
+            XmlText, _documentKind, ValidationContext);
 
     public IReadOnlyList<XmlEditorCompletion> GetElementCompletions() =>
         WatchListXmlEditorAnalyzer.GetElementCompletions(_documentKind);
@@ -152,7 +158,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
     public string? GetHoverText(int offset) =>
         WatchListXmlEditorAnalyzer.GetHoverText(
-            XmlText, _documentKind, offset, _validationContext, _agentStatuses);
+            XmlText, _documentKind, offset, ValidationContext, _agentStatuses);
 
     private static string? RootTag(string xml)
     {
@@ -164,9 +170,12 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     {
         try
         {
-            return XDocument.Parse(xml).Root?.Name.LocalName == "WatchList"
-                ? XmlEditorDocumentKind.WatchList
-                : XmlEditorDocumentKind.WatchItem;
+            return XDocument.Parse(xml).Root?.Name.LocalName switch
+            {
+                "WatchList" => XmlEditorDocumentKind.WatchList,
+                "Templates" => XmlEditorDocumentKind.Templates,
+                _ => XmlEditorDocumentKind.WatchItem,
+            };
         }
         catch (XmlException)
         {
@@ -190,6 +199,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     {
         UpdateSummary();
         _structureDirty = true;
+        OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
     private void UpdateSummary()
@@ -227,6 +237,15 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
+        if (!CheckReadyToSave()) return;
+        DialogAccepted = true;
+        ResultXml = XmlText;
+        RequestClose?.Invoke();
+    }
+
+    /// <summary>Validates for saving (errors block, warnings do not) and confirms a pipeline rename.</summary>
+    public bool CheckReadyToSave()
+    {
         var errors = RunFullValidation(XmlText);
         var blockingErrors = errors.Count(error => error.Severity == "Error");
         ShowErrors(errors, navigate: blockingErrors > 0);
@@ -235,7 +254,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             StatusMessage = $"Cannot save {blockingErrors} validation error(s)";
             StatusSeverity = "Error";
             IsXmlValid = false;
-            return;
+            return false;
         }
 
         if (_documentKind == XmlEditorDocumentKind.WatchItem
@@ -246,12 +265,9 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         {
             StatusMessage = "Save cancelled - Tag rename not confirmed";
             StatusSeverity = "Info";
-            return;
+            return false;
         }
-
-        DialogAccepted = true;
-        ResultXml = XmlText;
-        RequestClose?.Invoke();
+        return true;
     }
 
     [RelayCommand]
@@ -513,7 +529,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     private List<ValidationErrorViewModel> RunFullValidation(string xml)
     {
         var analysis = WatchListXmlEditorAnalyzer.Analyze(
-            xml, _documentKind, _validationContext, _knownAgents, _fileSystem);
+            xml, _documentKind, ValidationContext, _knownAgents, _fileSystem);
         return ToValidationErrors(analysis);
     }
 

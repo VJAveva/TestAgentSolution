@@ -52,10 +52,18 @@ public sealed partial class MainViewModel
 
         var editorAgents = GetXmlEditorAgents();
         var editorVm = new WatchItemXmlEditorViewModel(
-            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
-        editorVm.WindowTitle = $"Pipeline Editor - {oldWi.Tag}";
+            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents)
+        {
+            TabTitle = $"Pipeline: {oldWi.Tag}",
+        };
+        var session = new PipelineEditorSessionViewModel(editorVm, _config, editorAgents)
+        {
+            WindowTitle = $"Pipeline Editor - {oldWi.Tag}",
+            TemplateEditBlocked = () => EditBlockedReason(Editing.EditTarget.Template),
+            LatestSavedXml = tab => LatestSavedXml(tab, oldWi.Tag),
+        };
 
-        var editorWindow = new Views.RawXmlEditorWindow(editorVm);
+        var editorWindow = new Views.RawXmlEditorWindow(session);
 
         // Set owner to main window for CenterOwner positioning. FindOwnerWindow
         // returns only a window that has actually been shown, preventing the WPF
@@ -65,12 +73,22 @@ public sealed partial class MainViewModel
             editorWindow.Owner = mainWindow;
 
         var result = editorWindow.ShowDialog();
-        if (result == true && editorVm.DialogAccepted)
+        if (result == true && session.DialogAccepted)
         {
-            using var edit = BeginEdit($"Edit XML ({oldWi.Tag})");
+            if (session.TemplateResults.Count > 0 && !EnsureCanEdit(Editing.EditTarget.Template)) return;
+            using var edit = BeginEdit($"Edit pipeline ({oldWi.Tag})");
             try
             {
-                var parsed = WatchListXmlParser.DeserializeWatchItem(editorVm.ResultXml);
+                if (session.TemplateResults.Count > 0) ApplyTemplateChanges(session.TemplateResults);
+                if (session.PipelineResultXml is null)
+                {
+                    RebuildAllTrees();
+                    IsDirty = true;
+                    RunValidation();
+                    return;
+                }
+
+                var parsed = WatchListXmlParser.DeserializeWatchItem(session.PipelineResultXml);
                 if (parsed is null)
                 {
                     XmlEditorStatus = "Error: Root element must be <WatchItem>.";
@@ -82,8 +100,9 @@ public sealed partial class MainViewModel
                 var idx = _config.WatchItems.IndexOf(oldWi);
                 if (idx >= 0) _config.WatchItems[idx] = parsed;
 
-                // Replace in tree
-                if (WatchListRoot is not null)
+                // Replace in tree; template changes also change every pipeline's Ref rows, so rebuild those.
+                if (session.TemplateResults.Count > 0) RebuildAllTrees();
+                else if (WatchListRoot is not null)
                 {
                     var treeIdx = WatchListRoot.Children.IndexOf(SelectedNode);
                     if (treeIdx >= 0)
@@ -128,20 +147,27 @@ public sealed partial class MainViewModel
 
         var editorAgents = GetXmlEditorAgents();
         var editorVm = new WatchItemXmlEditorViewModel(
-            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
-        editorVm.WindowTitle = "WatchList Editor - Full";
+            xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents)
+        {
+            TabTitle = "WatchList",
+        };
+        var session = new PipelineEditorSessionViewModel(editorVm, _config, editorAgents)
+        {
+            WindowTitle = "WatchList Editor - Full",
+            LatestSavedXml = _ => WatchListXmlParser.SerializeWatchList(_config),
+        };
 
-        var editorWindow = new Views.RawXmlEditorWindow(editorVm);
+        var editorWindow = new Views.RawXmlEditorWindow(session);
         if (FindOwnerWindow() is { } mainWindow && !ReferenceEquals(mainWindow, editorWindow))
             editorWindow.Owner = mainWindow;
 
         var result = editorWindow.ShowDialog();
-        if (result == true && editorVm.DialogAccepted)
+        if (result == true && session.DialogAccepted && session.PipelineResultXml is { } resultXml)
         {
             using var edit = BeginEdit("Edit WatchList XML");
             try
             {
-                var newConfig = WatchListXmlParser.DeserializeWatchList(editorVm.ResultXml);
+                var newConfig = WatchListXmlParser.DeserializeWatchList(resultXml);
                 if (newConfig is null)
                 {
                     AddLog("XML editor: Root element must be <WatchList>.", LogSeverity.Error);
@@ -188,6 +214,34 @@ public sealed partial class MainViewModel
                 AddLog($"? WatchList XML apply failed: {ex.Message}", LogSeverity.Error);
             }
         }
+    }
+
+    /// <summary>The saved XML a Pipeline Editor tab was opened from, as it is now; null when it no longer exists.</summary>
+    private string? LatestSavedXml(WatchItemXmlEditorViewModel tab, string pipelineTag)
+    {
+        if (!tab.IsTemplateTab)
+            return _config.WatchItems.FirstOrDefault(w => string.Equals(w.Tag, pipelineTag, StringComparison.OrdinalIgnoreCase))
+                is { } item ? WatchListXmlParser.SerializeWatchItem(item) : null;
+        return _config.Templates.FirstOrDefault(t => string.Equals(t.ID, tab.TemplateOriginalId, StringComparison.OrdinalIgnoreCase))
+            is { } template ? PipelineEditor.PipelineTemplateEdits.TemplateDocument(template) : null;
+    }
+
+    /// <summary>Writes template tabs into the Library: replaced by their original ID, or added when new.</summary>
+    private void ApplyTemplateChanges(IReadOnlyList<PipelineEditorTemplateChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            if (WatchListXmlParser.DeserializeTemplateList(change.Xml)?.FirstOrDefault() is not { } template) continue;
+            var index = change.OriginalId is null ? -1
+                : _config.Templates.FindIndex(t => string.Equals(t.ID, change.OriginalId, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0) _config.Templates[index] = template;
+            else _config.Templates.Add(template);
+            AddLog($"Template '{template.ID}' {(index >= 0 ? "updated" : "created")} in the Pipeline Editor (unsaved)", LogSeverity.Success);
+        }
+        TemplateRoots.Clear();
+        TemplateRoots.Add(TreeNodeViewModel.FromTemplateList(_config.Templates));
+        RebuildTemplateIds();
+        _executor.LoadTemplates(_config.Templates);
     }
 
     private IReadOnlyCollection<XmlEditorAgent> GetXmlEditorAgents() =>

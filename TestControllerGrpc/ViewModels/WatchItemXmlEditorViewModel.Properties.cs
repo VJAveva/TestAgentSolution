@@ -96,8 +96,12 @@ public sealed partial class WatchItemXmlEditorViewModel
 
     private void LoadProperties(PipelineStructureNode? node)
     {
-        SelectedNodeTitle = node is null ? "" : $"{node.Kind}: {node.Name}";
-        if (node is null || _map?.Find(node.Path) is not { } mapNode)
+        SelectedNodeTitle = node is null ? "" : $"{node.Kind}: {node.Name}" + (node.IsFromTemplate ? " (from template)" : "");
+
+        // A template step shown under a Ref is read from the template's own text.
+        var source = node?.IsFromTemplate == true ? TemplateDocumentFor(node.TemplateId) : XmlText;
+        var sourceMap = node?.IsFromTemplate == true && source is not null ? PipelineXmlMap.TryBuild(source) : _map;
+        if (node is null || source is null || sourceMap?.Find(node.TemplatePath ?? node.Path) is not { } mapNode)
         {
             _fieldsPath = null;
             SelectedFields.Clear();
@@ -107,7 +111,7 @@ public sealed partial class WatchItemXmlEditorViewModel
             return;
         }
 
-        var attributes = PipelineXmlText.Attributes(XmlText, mapNode.Start)
+        var attributes = PipelineXmlText.Attributes(source, mapNode.Start)
             .GroupBy(a => a.Name).ToDictionary(g => g.Key, g => g.First().Value);
         var specs = PipelineNodeForms.For(node.Kind, name => attributes.GetValueOrDefault(name));
 
@@ -131,14 +135,16 @@ public sealed partial class WatchItemXmlEditorViewModel
             var shown = PipelineNodeForms.DisplayValue(field.Spec, stored);
             var redacted = SecurityRedactor.Redact(shown) ?? "";
             var reason = field.Spec.ReadOnlyReason
-                ?? (redacted != shown ? "Contains a credential - not shown. Edit it in the XML or move it to SecretEnv." : null);
+                ?? (redacted != shown ? "Contains a credential - not shown. Edit it in the XML or move it to SecretEnv." : null)
+                ?? (node.IsFromTemplate ? TemplateBlockedReason(node) : ReadOnlyReason);
             field.Load(redacted, reason);
             LoadTokens(field, redacted);
         }
 
-        SelectedNodeInfo = node.Kind == NodeKinds.Ref ? UsageText(attributes.GetValueOrDefault("TemplateID")) : "";
-        SelectedNodeNote = PipelineXmlEdits.TryParse(XmlText) is { } document
-            && PipelinePaths.Resolve(document, node.Path)?.Element("Comment")?.Value is { Length: > 0 } note
+        SelectedNodeInfo = node.Kind == NodeKinds.Ref ? UsageText(attributes.GetValueOrDefault("TemplateID"))
+            : node.IsFromTemplate ? TemplateBlockedReason(node) : "";
+        SelectedNodeNote = PipelineXmlEdits.TryParse(source) is { } document
+            && PipelinePaths.Resolve(document, node.TemplatePath ?? node.Path)?.Element("Comment")?.Value is { Length: > 0 } note
                 ? note
                 : "";
         UpdateFieldErrors();
@@ -146,7 +152,7 @@ public sealed partial class WatchItemXmlEditorViewModel
 
     private void CommitField(PipelineFieldViewModel field)
     {
-        if (_fieldsPath is not { } path || SelectedStructureNode is not { } node) return;
+        if (IsReadOnly || _fieldsPath is not { } path || SelectedStructureNode is not { IsFromTemplate: false } node) return;
 
         var value = field.IsMultiLine ? field.Value?.Replace("\r\n", "\n", StringComparison.Ordinal) : field.Value;
         var result = field.Attribute == "Skip"
@@ -166,8 +172,8 @@ public sealed partial class WatchItemXmlEditorViewModel
 
     private string UsageText(string? templateId)
     {
-        if (string.IsNullOrWhiteSpace(templateId) || _validationContext is null) return "";
-        var users = TemplateUsage.PipelinesReferencing(_validationContext, templateId);
+        if (string.IsNullOrWhiteSpace(templateId) || ValidationContext is null) return "";
+        var users = TemplateUsage.PipelinesReferencing(ValidationContext, templateId);
         return $"Template '{templateId}' is used by {users.Count} pipeline{(users.Count == 1 ? "" : "s")}"
                + (users.Count == 0 ? "." : $": {string.Join(", ", users)}.");
     }

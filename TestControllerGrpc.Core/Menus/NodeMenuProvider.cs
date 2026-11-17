@@ -140,6 +140,7 @@ public static class NodeMenuProvider
     {
         NodeMenuIds.Duplicate, NodeMenuIds.MoveUp, NodeMenuIds.MoveDown, NodeMenuIds.Skip, NodeMenuIds.Include,
         NodeMenuIds.ExecutionType, NodeMenuIds.ExecutionSequential, NodeMenuIds.ExecutionParallel, NodeMenuIds.Delete,
+        NodeMenuIds.EditTemplate, NodeMenuIds.DeleteTemplateCall, NodeMenuIds.SaveAsTemplate,
     };
 
     private static NodeMenuItem BlockEdit(NodeMenuItem item, string reason) => EditIds.Contains(item.Id)

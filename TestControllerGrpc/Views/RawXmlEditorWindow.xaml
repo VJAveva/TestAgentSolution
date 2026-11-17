@@ -52,6 +52,16 @@
         <!-- Structure tree item: kind badge, name, skipped pill, error / warning counts -->
         <HierarchicalDataTemplate x:Key="StructureTreeTemplate" DataType="{x:Type vm:PipelineStructureNode}" ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal" Margin="0,1">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsFromTemplate}" Value="True">
+                                <Setter Property="Opacity" Value="0.6" />
+                                <Setter Property="ToolTip" Value="From the template - use Edit template to change it" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
                 <Border CornerRadius="3" Padding="3,1" Margin="0,0,4,0" MinWidth="30"
                         Background="{DynamicResource AccGreen}">
                     <TextBlock Text="{Binding KindBadge}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
@@ -106,7 +116,7 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
-                            Command="{Binding ValidateCommand}" ToolTip="Validate WatchItem XML structure and rules">
+                            Command="{Binding SelectedTab.ValidateCommand}" ToolTip="Validate WatchItem XML structure and rules">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x2713;" FontSize="{StaticResource FontSize12}" Margin="0,0,4,0" />
                             <TextBlock Text="Validate" />
@@ -114,12 +124,14 @@
                     </Button>
                     <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                            IsEnabled="{Binding SelectedTab.CanEdit}"
                             Click="BrowseParameterFile_Click" ToolTip="Browse for a file under Parameters">
                         <TextBlock Text="Browse Parameter File" />
                     </Button>
                     <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource MauveBtnBg}" Foreground="{DynamicResource AccMauve}"
-                            Command="{Binding AutoFormatCommand}" ToolTip="Auto-format and indent WatchItem XML">
+                            IsEnabled="{Binding SelectedTab.CanEdit}"
+                            Command="{Binding SelectedTab.AutoFormatCommand}" ToolTip="Auto-format and indent WatchItem XML">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x27F3;" FontSize="{StaticResource FontSize12}" Margin="0,0,4,0" />
                             <TextBlock Text="Format" />
@@ -127,7 +139,8 @@
                     </Button>
                     <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                            Command="{Binding AutoFixCommand}" ToolTip="Auto-fix missing defaults and normalize booleans">
+                            IsEnabled="{Binding SelectedTab.CanEdit}"
+                            Command="{Binding SelectedTab.AutoFixCommand}" ToolTip="Auto-fix missing defaults and normalize booleans">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x1F527;" FontSize="{StaticResource FontSize12}" FontFamily="Segoe UI Emoji" Margin="0,0,4,0" />
                             <TextBlock Text="Auto Fix" />
@@ -138,7 +151,7 @@
 
                     <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource YellowBtnBg}" Foreground="{DynamicResource AccYellow}"
-                            Command="{Binding RevertCommand}" ToolTip="Revert to original XML">
+                            Command="{Binding SelectedTab.RevertCommand}" ToolTip="Revert to original XML">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x21BA;" FontSize="{StaticResource FontSize12}" Margin="0,0,4,0" />
                             <TextBlock Text="Revert" />
@@ -152,8 +165,8 @@
                                    Foreground="{DynamicResource TextS}"
                                    VerticalAlignment="Center" Margin="0,0,4,0" />
                         <ComboBox x:Name="FontSizeCombo" Width="55"
-                                  ItemsSource="{Binding AvailableFontSizes}"
-                                  SelectedItem="{Binding EditorFontSize}"
+                                  ItemsSource="{Binding SelectedTab.AvailableFontSizes}"
+                                  SelectedItem="{Binding SelectedTab.EditorFontSize}"
                                   Background="{DynamicResource BgCard}"
                                   Foreground="{DynamicResource TextP}"
                                   BorderBrush="{DynamicResource Bdr}"
@@ -179,7 +192,41 @@
         <!-- ??????????????????????????????????????????????????????? -->
         <Border Grid.Row="1" Background="{DynamicResource BgCard}" Padding="10,6"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel>
+            <!-- Tabs: the pipeline and every template opened from it; a dot marks unsaved changes -->
+            <ListBox ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                     AutomationProperties.Name="Editor tabs"
+                     Background="Transparent" BorderThickness="0" Margin="0,0,0,6"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:WatchItemXmlEditorViewModel}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x25CF; " Foreground="{DynamicResource AccYellow}" FontSize="{StaticResource FontSize10}"
+                                       ToolTip="Unsaved changes"
+                                       Visibility="{Binding HasUnsavedChanges, Converter={StaticResource BoolVis}}" />
+                            <TextBlock Text="{Binding TabTitle}" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextP}" VerticalAlignment="Center" />
+                            <Button Content="&#x2715;" Margin="6,0,0,0" Padding="4,0" Background="Transparent" BorderThickness="0"
+                                    Foreground="{DynamicResource TextS}" FontSize="{StaticResource FontSize9}"
+                                    ToolTip="Close tab" AutomationProperties.Name="Close tab"
+                                    Visibility="{Binding IsTemplateTab, Converter={StaticResource BoolVis}}"
+                                    Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType={x:Type ListBox}}}"
+                                    CommandParameter="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <Border Background="{DynamicResource StatusWarningBg}" CornerRadius="4" Padding="8,4" Margin="0,0,0,6"
+                    Visibility="{Binding SelectedTab.Banner, Converter={StaticResource NonEmptyVis}}">
+                <TextBlock Text="{Binding SelectedTab.Banner}" TextWrapping="Wrap" FontSize="{StaticResource FontSize10}"
+                           Foreground="{DynamicResource StatusWarningFg}" />
+            </Border>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DataContext="{Binding SelectedTab}">
                 <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
                         Background="{DynamicResource WatchRootBg}">
                     <TextBlock FontSize="{StaticResource FontSize9}" FontWeight="Bold" Foreground="{DynamicResource AccGreen}">
@@ -201,12 +248,13 @@
                 <TextBlock Text="{Binding WatchItemSummary}" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"
                            VerticalAlignment="Center" />
             </StackPanel>
+            </StackPanel>
         </Border>
 
         <!-- ??????????????????????????????????????????????????????? -->
         <!-- ROW 2: Editor + Optional Preview                       -->
         <!-- ??????????????????????????????????????????????????????? -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="2" DataContext="{Binding SelectedTab}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280" MinWidth="160" />
                 <ColumnDefinition Width="Auto" />
@@ -252,6 +300,8 @@
                               Margin="4" Padding="0,4"
                               ItemTemplate="{StaticResource StructureTreeTemplate}"
                               SelectedItemChanged="StructureTree_SelectedItemChanged"
+                              MouseDoubleClick="StructureTree_MouseDoubleClick"
+                              KeyDown="StructureTree_KeyDown"
                               ContextMenuOpening="StructureTree_ContextMenuOpening">
                         <TreeView.ContextMenu>
                             <ContextMenu />
@@ -427,7 +477,7 @@
         <!-- ??????????????????????????????????????????????????????? -->
         <!-- ROW 3: Error Panel (collapsible)                       -->
         <!-- ??????????????????????????????????????????????????????? -->
-        <Border Grid.Row="3" MaxHeight="180"
+        <Border Grid.Row="3" MaxHeight="180" DataContext="{Binding SelectedTab}"
                 Visibility="{Binding IsErrorPanelVisible, Converter={StaticResource BoolVis}}"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
             <DockPanel Background="{DynamicResource BgPanel}">
@@ -526,7 +576,7 @@
         <!-- ??????????????????????????????????????????????????????? -->
         <!-- ROW 4: Status Bar                                      -->
         <!-- ??????????????????????????????????????????????????????? -->
-        <Border Grid.Row="4" Padding="10,6"
+        <Border Grid.Row="4" Padding="10,6" DataContext="{Binding SelectedTab}"
                 BorderBrush="{DynamicResource Bdr}" BorderThickness="0,1,0,0">
             <Border.Style>
                 <Style TargetType="Border">

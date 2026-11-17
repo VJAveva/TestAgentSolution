@@ -431,8 +431,11 @@ public static class WatchListXmlEditorAnalyzer
         fileSystem ??= new PreflightFileSystem();
         var issues = WatchListValidator.Analyze(config, knownAgents, fileSystem);
         if (kind == XmlEditorDocumentKind.Templates)
-            issues = issues.Where(issue => issue.NodePath.StartsWith("Template[", StringComparison.Ordinal)
+        {
+            var editedIds = document.Root!.Elements("Template").Select(t => (string?)t.Attribute("ID") ?? "").ToArray();
+            issues = issues.Where(issue => editedIds.Any(id => issue.NodePath.StartsWith($"Template[{id}]", StringComparison.Ordinal))
                 || issue.Message.Contains("Ref references unknown template", StringComparison.Ordinal)).ToArray();
+        }
         var diagnostics = issues.Select(issue =>
         {
             var element = FindElement(document, issue.NodePath);
@@ -546,10 +549,12 @@ public static class WatchListXmlEditorAnalyzer
             case XmlEditorDocumentKind.Templates:
                 var templates = WatchListXmlParser.DeserializeTemplateList(xml);
                 if (templates is null) return null;
+                // A document holding some templates still Refs the others, so keep the rest of the library visible.
+                var edited = templates.Select(t => t.ID).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 return new WatchListConfig
                 {
                     GlobalVariablesFile = context?.GlobalVariablesFile ?? "",
-                    Templates = templates,
+                    Templates = [.. templates, .. (context?.Templates ?? []).Where(t => !edited.Contains(t.ID))],
                     WatchItems = context?.WatchItems ?? [],
                     XmlSourceDocument = new XDocument(document),
                 };

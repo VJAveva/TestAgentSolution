@@ -37,8 +37,10 @@ Companion to [PipelineEditor_Requirement.md](PipelineEditor_Requirement.md). Wri
 5. **Server-side check (acceptance 9).** The WPF editor writes the local file, so its gate is `EnsureCanEdit`
    (P4) at open and at save. A server rejection only applies to REST writes (`PUT /api/watchlist`, Pipeline_Author).
    The web stays view-only (section 10).
-6. **Changed by someone else (acceptance 12):** compare `NodeAddressing.RevisionOf` of the opened pipeline with the
-   live model at Save; the WatchList hot-reloads from disk, so this also catches edits made outside the app.
+6. **Changed by someone else (acceptance 12):** at Save, compare the serialized XML each tab was opened from with
+   the live model's XML now. (Changed in Part 3: `NodeAddressing.RevisionOf` fingerprints only the tree shape, so it
+   misses an agent or command change.) The WatchList hot-reloads from disk, so this also catches edits made outside
+   the app. Nothing is overwritten: the user reloads the latest version or keeps editing.
 7. **Auto Fix and today's quick fixes re-serialise the whole document**, which drops comments and formatting.
    Part 5 moves them onto the same XDocument edit helper.
 8. **Smoke test (acceptance 15):** window smoke tests were deferred by the user (BACKLOG P3). Covered by view-model

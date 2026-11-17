@@ -21,30 +21,30 @@ namespace TestControllerGrpc.Views;
 
 public partial class RawXmlEditorWindow : Window
 {
-    private readonly WatchItemXmlEditorViewModel _vm;
+    private readonly PipelineEditorSessionViewModel _session;
+    private WatchItemXmlEditorViewModel _vm;
+    private readonly Dictionary<WatchItemXmlEditorViewModel, TextDocument> _documents = new();
     private FoldingManager? _foldingManager;
     private XmlFoldingStrategy? _foldingStrategy;
     private CompletionWindow? _completionWindow;
     private readonly DispatcherTimer _diagnosticsTimer;
     private XmlDiagnosticBackgroundRenderer? _diagnosticRenderer;
 
-    public RawXmlEditorWindow(WatchItemXmlEditorViewModel viewModel)
+    public RawXmlEditorWindow(PipelineEditorSessionViewModel session)
     {
         InitializeComponent();
-        _vm = viewModel;
-        DataContext = _vm;
+        _session = session;
+        _vm = session.SelectedTab;
+        DataContext = _session;
 
-        // Wire close request
-        _vm.RequestClose += () => DialogResult = _vm.DialogAccepted;
+        _session.RequestClose += () => DialogResult = _session.DialogAccepted;
+        _session.Confirm = message => Dialogs.ThemedMessageBox.Show(
+            message, "Pipeline Editor", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        _session.ConfirmReload = message => Dialogs.ThemedMessageBox.Show(
+            message, "Changed since you opened it", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        _session.PropertyChanged += OnSessionPropertyChanged;
         Closing += OnWindowClosing;
-        _vm.ConfirmTagRename ??= (oldTag, newTag) => Dialogs.ThemedMessageBox.Show(
-            $"Renaming pipeline '{oldTag}' to '{newTag}' will unassign every engineer assigned to '{oldTag}', " +
-            $"and a pipelines['{oldTag}'] override in its parameter file will stop applying.\n\nContinue?",
-            "Pipeline Tag Rename", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
-        // Wire error navigation
-        _vm.NavigateToError += NavigateToLine;
-        _vm.QuickFixRequested += ApplyQuickFix;
         _diagnosticsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         _diagnosticsTimer.Tick += async (_, _) =>
         {
@@ -54,9 +54,6 @@ public partial class RawXmlEditorWindow : Window
             await _vm.RefreshDiagnosticsAsync();
         };
 
-        // Wire preview visibility changes
-        _vm.PropertyChanged += OnViewModelPropertyChanged;
-
         // Set up AvalonEdit
         ConfigureEditor();
         ApplyThemeColors();
@@ -64,10 +61,6 @@ public partial class RawXmlEditorWindow : Window
             () => _vm.ValidationErrors,
             severity => TryFindResource(severity == "Error" ? "LogErrorBrush" : "LogWarnBrush") as Brush);
         XmlEditor.TextArea.TextView.BackgroundRenderers.Add(_diagnosticRenderer);
-        _vm.ValidationErrors.CollectionChanged += OnDiagnosticsChanged;
-
-        // Load initial text
-        XmlEditor.Text = _vm.XmlText;
 
         // Two-way sync: editor ? ViewModel
         XmlEditor.TextChanged += (_, _) =>
@@ -85,7 +78,6 @@ public partial class RawXmlEditorWindow : Window
             UpdateCursorPosition();
             _vm.SyncSelectionToCaret(XmlEditor.CaretOffset);
         };
-        _vm.NavigateToOffset += NavigateToOffset;
         XmlEditor.MouseHover += OnEditorMouseHover;
         XmlEditor.MouseHoverStopped += OnEditorMouseHoverStopped;
 
@@ -101,14 +93,58 @@ public partial class RawXmlEditorWindow : Window
             new RelayCommand(() => DecreaseFontSize_Click(null, null!)),
             new KeyGesture(Key.OemMinus, ModifierKeys.Control)));
 
-        // Initial folding
-        SetupFolding();
+        _foldingStrategy = new XmlFoldingStrategy();
+        Attach(_vm);
+    }
+
+    private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(PipelineEditorSessionViewModel.SelectedTab)
+            || _session.SelectedTab is not { } tab || ReferenceEquals(tab, _vm)) return;
+        Detach(_vm);
+        _vm = tab;
+        Attach(tab);
+    }
+
+    // Each tab keeps its own document, so its undo history survives switching tabs.
+    private void Attach(WatchItemXmlEditorViewModel tab)
+    {
+        if (!_documents.TryGetValue(tab, out var document))
+            _documents[tab] = document = new TextDocument(tab.XmlText);
+        if (_foldingManager is not null) FoldingManager.Uninstall(_foldingManager);
+        XmlEditor.Document = document;
+        XmlEditor.IsReadOnly = tab.IsReadOnly;
+        _foldingManager = FoldingManager.Install(XmlEditor.TextArea);
+        UpdateFolding();
+
+        tab.ConfirmTagRename ??= (oldTag, newTag) => Dialogs.ThemedMessageBox.Show(
+            $"Renaming pipeline '{oldTag}' to '{newTag}' will unassign every engineer assigned to '{oldTag}', " +
+            $"and a pipelines['{oldTag}'] override in its parameter file will stop applying.\n\nContinue?",
+            "Pipeline Tag Rename", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        tab.NavigateToError += NavigateToLine;
+        tab.QuickFixRequested += ApplyQuickFix;
+        tab.NavigateToOffset += NavigateToOffset;
+        tab.PropertyChanged += OnViewModelPropertyChanged;
+        tab.ValidationErrors.CollectionChanged += OnDiagnosticsChanged;
+        XmlEditor.TextArea.TextView.InvalidateVisual();
+        _diagnosticsTimer.Stop();
         _diagnosticsTimer.Start();
+    }
+
+    private void Detach(WatchItemXmlEditorViewModel tab)
+    {
+        _completionWindow?.Close();
+        TokenPopup.IsOpen = false;
+        tab.NavigateToError -= NavigateToLine;
+        tab.QuickFixRequested -= ApplyQuickFix;
+        tab.NavigateToOffset -= NavigateToOffset;
+        tab.PropertyChanged -= OnViewModelPropertyChanged;
+        tab.ValidationErrors.CollectionChanged -= OnDiagnosticsChanged;
     }
 
     private void OnWindowClosing(object? sender, CancelEventArgs e)
     {
-        if (!_vm.HasUnsavedChanges) return;
+        if (!_session.HasUnsavedChanges) return;
         var answer = Dialogs.ThemedMessageBox.Show(
             "You have unsaved XML changes. Discard them and close?",
             "Unsaved Changes", MessageBoxButton.YesNo, MessageBoxImage.Warning);
@@ -248,13 +284,6 @@ public partial class RawXmlEditorWindow : Window
     // ???????????????????????????????????????????????????????????????
     // CODE FOLDING
     // ???????????????????????????????????????????????????????????????
-
-    private void SetupFolding()
-    {
-        _foldingManager = FoldingManager.Install(XmlEditor.TextArea);
-        _foldingStrategy = new XmlFoldingStrategy();
-        UpdateFolding();
-    }
 
     private void UpdateFolding()
     {
@@ -547,17 +576,46 @@ public partial class RawXmlEditorWindow : Window
 
         menuItem.Click += (_, _) =>
         {
-            string? reason = null;
+            string? input = null;
             if (item.Id == TestControllerGrpc.Menus.NodeMenuIds.Skip)
             {
                 var dialog = new Dialogs.SkipReasonDialog(node.Name, null) { Owner = this };
                 if (dialog.ShowDialog() != true) return;
-                reason = dialog.Reason;
+                input = dialog.Reason;
             }
-            _vm.RunStructureCommand(item.Id, node, reason);
+            else if (item.Id == TestControllerGrpc.Menus.NodeMenuIds.SaveAsTemplate)
+            {
+                var dialog = new Dialogs.TemplateNameDialog(node.Name) { Owner = this };
+                if (dialog.ShowDialog() != true) return;
+                input = dialog.TemplateName;
+            }
+            else if (item.Id == PipelineEditorMenuIds.CopyTemplateHere
+                     && Dialogs.ThemedMessageBox.Show(
+                         $"This pipeline will no longer follow changes to template '{node.Name}'.\n\nCopy its steps here?",
+                         "Copy for this pipeline only", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+            _vm.RunStructureCommand(item.Id, node, input);
             XmlEditor.Focus();
         };
         return menuItem;
+    }
+
+    // Requirement 4.2: double-click or Enter on a template call (or a step under it) opens Edit template.
+    private void StructureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e) => EditSelectedTemplate(e);
+
+    private void StructureTree_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) EditSelectedTemplate(e);
+    }
+
+    private void EditSelectedTemplate(RoutedEventArgs e)
+    {
+        if (_vm.SelectedStructureNode is not { } node || node.Kind != TestControllerGrpc.Models.NodeKinds.Ref && !node.IsFromTemplate)
+            return;
+        _vm.RunStructureCommand(TestControllerGrpc.Menus.NodeMenuIds.EditTemplate, node);
+        e.Handled = true;
     }
 
     // Setting TextEditor.Text clears the undo stack and resets the caret, so Format/Auto-fix/Revert go through the document.
@@ -626,14 +684,12 @@ public partial class RawXmlEditorWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _diagnosticsTimer.Stop();
-        _vm.QuickFixRequested -= ApplyQuickFix;
-        _vm.NavigateToOffset -= NavigateToOffset;
+        Detach(_vm);
+        _session.PropertyChanged -= OnSessionPropertyChanged;
         XmlEditor.MouseHover -= OnEditorMouseHover;
         XmlEditor.MouseHoverStopped -= OnEditorMouseHoverStopped;
-        _vm.ValidationErrors.CollectionChanged -= OnDiagnosticsChanged;
         if (_diagnosticRenderer is not null)
             XmlEditor.TextArea.TextView.BackgroundRenderers.Remove(_diagnosticRenderer);
-        _vm.PropertyChanged -= OnViewModelPropertyChanged;
         if (_foldingManager is not null)
         {
             FoldingManager.Uninstall(_foldingManager);
