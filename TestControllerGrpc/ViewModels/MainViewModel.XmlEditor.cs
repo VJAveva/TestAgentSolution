@@ -85,6 +85,7 @@ public sealed partial class MainViewModel
                     RebuildAllTrees();
                     IsDirty = true;
                     RunValidation();
+                    XmlEditorStatus = AppliedMessage($"{session.TemplateResults.Count} template(s)");
                     return;
                 }
 
@@ -118,7 +119,9 @@ public sealed partial class MainViewModel
                 _watcherManager.ApplyDiff(_config.WatchItems);
                 IsDirty = true;
                 RunValidation();
-                XmlEditorStatus = "Applied - press Save (Ctrl+S) to write WatchList.xml.";
+                XmlEditorStatus = AppliedMessage(session.TemplateResults.Count > 0
+                    ? $"pipeline '{parsed.Tag}' and {session.TemplateResults.Count} template(s)"
+                    : $"pipeline '{parsed.Tag}'");
                 IsXmlEditorOpen = false;
                 AddLog($"WatchItem updated via XML editor: {parsed.Tag} (unsaved)", LogSeverity.Success);
             }
@@ -215,6 +218,9 @@ public sealed partial class MainViewModel
             }
         }
     }
+
+    private static string AppliedMessage(string what) =>
+        $"Applied {what} at {DateTime.Now:HH:mm:ss} - press Save (Ctrl+S) to write WatchList.xml (the previous file is kept as a timestamped backup).";
 
     /// <summary>The saved XML a Pipeline Editor tab was opened from, as it is now; null when it no longer exists.</summary>
     private string? LatestSavedXml(WatchItemXmlEditorViewModel tab, string pipelineTag)

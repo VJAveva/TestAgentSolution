@@ -160,8 +160,8 @@ public class WatchItemXmlEditorViewModelTests
         var ids = vm.StructureMenuFor(vm.StructureRoots[0].Children[0].Children[1]).Select(i => i.Id).ToList();
 
         Assert.Contains(TestControllerGrpc.Menus.NodeMenuIds.MoveUp, ids);
-        Assert.All(ids, id => Assert.Contains(id, TestControllerGrpc.Menus.NodeMenuProvider.PipelineEditorIds));
-        Assert.DoesNotContain(TestControllerGrpc.Menus.NodeMenuIds.ExecuteAction, ids);
+        Assert.DoesNotContain(ids, id => TestControllerGrpc.Menus.NodeMenuProvider.WebIds.Contains(id)
+            || id == TestControllerGrpc.Menus.NodeMenuIds.RunFromHere);
     }
 
     [Fact]

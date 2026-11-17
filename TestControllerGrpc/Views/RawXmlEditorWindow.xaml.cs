@@ -42,6 +42,7 @@ public partial class RawXmlEditorWindow : Window
             message, "Pipeline Editor", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
         _session.ConfirmReload = message => Dialogs.ThemedMessageBox.Show(
             message, "Changed since you opened it", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        _session.ShowChanges = (title, changes) => new Dialogs.WhatChangedWindow(title, changes) { Owner = this }.ShowDialog();
         _session.PropertyChanged += OnSessionPropertyChanged;
         Closing += OnWindowClosing;
 
@@ -95,7 +96,26 @@ public partial class RawXmlEditorWindow : Window
 
         _foldingStrategy = new XmlFoldingStrategy();
         Attach(_vm);
+        RestoreLayout();
     }
+
+    private readonly PipelineEditorLayoutStore _layoutStore = new();
+
+    private void RestoreLayout()
+    {
+        if (_layoutStore.Load() is not { } layout) return;
+        Width = layout.Width;
+        Height = layout.Height;
+        StructureColumn.Width = new GridLength(layout.StructureWidth);
+        PropertiesColumn.Width = new GridLength(layout.PropertiesWidth);
+        _vm.EditorFontSize = layout.FontSize;
+        _vm.WordWrap = layout.WordWrap;
+        if (Enum.TryParse<EditorPaneView>(layout.View, out var view)) _vm.EditorView = view;
+    }
+
+    private void SaveLayout() =>
+        _layoutStore.Save(new PipelineEditorLayout(_vm.EditorView.ToString(), _vm.WordWrap, _vm.EditorFontSize,
+            StructureColumn.ActualWidth, PropertiesColumn.ActualWidth, ActualWidth, ActualHeight));
 
     private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -121,6 +141,8 @@ public partial class RawXmlEditorWindow : Window
             $"Renaming pipeline '{oldTag}' to '{newTag}' will unassign every engineer assigned to '{oldTag}', " +
             $"and a pipelines['{oldTag}'] override in its parameter file will stop applying.\n\nContinue?",
             "Pipeline Tag Rename", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        tab.ConfirmRevert ??= () => Dialogs.ThemedMessageBox.Show(
+            $"Discard every unsaved change in {tab.TabTitle}?", "Revert", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
         tab.NavigateToError += NavigateToLine;
         tab.QuickFixRequested += ApplyQuickFix;
         tab.NavigateToOffset += NavigateToOffset;
@@ -574,32 +596,79 @@ public partial class RawXmlEditorWindow : Window
             return menuItem;
         }
 
-        menuItem.Click += (_, _) =>
+        menuItem.Click += (_, _) => RunNodeCommand(item.Id, node);
+        return menuItem;
+    }
+
+    private void QuickAction_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is TestControllerGrpc.Menus.NodeMenuItem item
+            && _vm.SelectedStructureNode is { } node)
+            RunNodeCommand(item.Id, node);
+    }
+
+    // Menu items and quick-action buttons ask the same questions before changing the XML.
+    private void RunNodeCommand(string id, PipelineStructureNode node)
+    {
+        string? input = null;
+        switch (id)
         {
-            string? input = null;
-            if (item.Id == TestControllerGrpc.Menus.NodeMenuIds.Skip)
+            case TestControllerGrpc.Menus.NodeMenuIds.Skip:
             {
                 var dialog = new Dialogs.SkipReasonDialog(node.Name, null) { Owner = this };
                 if (dialog.ShowDialog() != true) return;
                 input = dialog.Reason;
+                break;
             }
-            else if (item.Id == TestControllerGrpc.Menus.NodeMenuIds.SaveAsTemplate)
+            case TestControllerGrpc.Menus.NodeMenuIds.SaveAsTemplate:
             {
                 var dialog = new Dialogs.TemplateNameDialog(node.Name) { Owner = this };
                 if (dialog.ShowDialog() != true) return;
                 input = dialog.TemplateName;
+                break;
             }
-            else if (item.Id == PipelineEditorMenuIds.CopyTemplateHere
-                     && Dialogs.ThemedMessageBox.Show(
-                         $"This pipeline will no longer follow changes to template '{node.Name}'.\n\nCopy its steps here?",
-                         "Copy for this pipeline only", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            case PipelineEditorMenuIds.CopyTemplateHere:
+                if (Dialogs.ThemedMessageBox.Show(
+                        $"This pipeline will no longer follow changes to template '{node.Name}'.\n\nCopy its steps here?",
+                        "Copy for this pipeline only", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                    return;
+                break;
+            case PipelineEditorMenuIds.ChangeAgent:
             {
-                return;
+                var dialog = new Dialogs.ChooseAgentDialog(node.Name, _vm.AgentChoices) { Owner = this };
+                if (dialog.ShowDialog() != true) return;
+                input = dialog.AgentName;
+                break;
             }
-            _vm.RunStructureCommand(item.Id, node, input);
-            XmlEditor.Focus();
-        };
-        return menuItem;
+            case PipelineEditorMenuIds.ApplyToAgents:
+            {
+                var dialog = new Dialogs.ApplyToAgentsDialog(
+                    _vm.AgentChoices.Select(a => new AgentChoice(a.Name, a.Status)), node.Name) { Owner = this };
+                if (dialog.ShowDialog() != true) return;
+                input = string.Join(";", dialog.SelectedAgentNames);
+                break;
+            }
+            case PipelineEditorMenuIds.OpenParameterFile:
+                OpenFile(_vm.SelectedFields.FirstOrDefault(f => f.Attribute == "ParameterFile")?.Value);
+                return;
+        }
+        _vm.RunStructureCommand(id, node, input);
+        if (_vm.IsXmlView) XmlEditor.Focus();
+    }
+
+    private void OpenParameterFile_Click(object sender, RoutedEventArgs e) => OpenFile(_vm.ParameterFilePath);
+
+    private void OpenFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException)
+        {
+            MessageBox.Show(this, ex.Message, "Could not open the parameter file", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // The form edits the XML document, so its undo history is the XML editor's (one step per change).
@@ -692,6 +761,7 @@ public partial class RawXmlEditorWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _diagnosticsTimer.Stop();
+        SaveLayout();
         Detach(_vm);
         _session.PropertyChanged -= OnSessionPropertyChanged;
         XmlEditor.MouseHover -= OnEditorMouseHover;

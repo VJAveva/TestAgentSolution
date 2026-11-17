@@ -189,12 +189,8 @@
                     </Button>
                     <Button Style="{StaticResource EditorBtn}"
                             Background="{DynamicResource GreenBtnBg}" Foreground="{DynamicResource AccGreen}"
-                            IsEnabled="{Binding SelectedTab.CanEdit}"
-                            Command="{Binding SelectedTab.AutoFixCommand}" ToolTip="Auto-fix missing defaults and normalize booleans">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F527;" FontSize="{StaticResource FontSize12}" FontFamily="Segoe UI Emoji" Margin="0,0,4,0" />
-                            <TextBlock Text="Auto Fix" />
-                        </StackPanel>
+                            Command="{Binding WhatChangedCommand}" ToolTip="Before and after, side by side, for every changed pipeline and template">
+                        <TextBlock Text="What changed" />
                     </Button>
 
                     <Border Width="1" Background="{DynamicResource Bdr}" Margin="6,4" />
@@ -306,11 +302,11 @@
         <!-- ??????????????????????????????????????????????????????? -->
         <Grid Grid.Row="2" DataContext="{Binding SelectedTab}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" MinWidth="160" />
+                <ColumnDefinition x:Name="StructureColumn" Width="280" MinWidth="160" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="300" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="260" MinWidth="160" />
+                <ColumnDefinition x:Name="PropertiesColumn" Width="260" MinWidth="160" />
             </Grid.ColumnDefinitions>
 
             <!-- Structure: the pipeline as a tree; selection is shared with the XML caret -->
@@ -381,14 +377,18 @@
                         <RadioButton Content="Form" GroupName="EditorView" Margin="0,0,12,0"
                                      IsChecked="{Binding IsFormView}" Foreground="{DynamicResource TextP}"
                                      FontSize="{StaticResource FontSize10}" AutomationProperties.Name="Form view" />
-                        <RadioButton Content="XML" GroupName="EditorView" Margin="0,0,16,0"
+                        <RadioButton Content="XML" GroupName="EditorView" Margin="0,0,12,0"
                                      IsChecked="{Binding IsXmlView}"
                                      Foreground="{DynamicResource TextP}"
                                      FontSize="{StaticResource FontSize10}" AutomationProperties.Name="XML view" />
+                        <RadioButton Content="Parameters" GroupName="EditorView" Margin="0,0,16,0"
+                                     IsChecked="{Binding IsParametersView}"
+                                     Foreground="{DynamicResource TextP}"
+                                     FontSize="{StaticResource FontSize10}" AutomationProperties.Name="Parameters view" />
                         <CheckBox Content="Wrap long lines" IsChecked="{Binding WordWrap}"
                                   Foreground="{DynamicResource TextS}" FontSize="{StaticResource FontSize10}"
                                   AutomationProperties.Name="Wrap long lines"
-                                  Visibility="{Binding IsFormView, Converter={StaticResource InverseBoolVis}}" />
+                                  Visibility="{Binding IsXmlView, Converter={StaticResource BoolVis}}" />
                     </StackPanel>
                 </Border>
                 <Grid>
@@ -434,7 +434,31 @@
                         VerticalScrollBarVisibility="Auto"
                         Padding="4"
                         BorderThickness="0"
-                        Visibility="{Binding IsFormView, Converter={StaticResource InverseBoolVis}}" />
+                        Visibility="{Binding IsXmlView, Converter={StaticResource BoolVis}}" />
+
+                    <!-- Parameters: read-only token table for this pipeline (values are changed in the parameter file) -->
+                    <DockPanel Visibility="{Binding IsParametersView, Converter={StaticResource BoolVis}}"
+                               Background="{DynamicResource BgPanel}">
+                        <DockPanel DockPanel.Dock="Top" Margin="8,6">
+                            <Button DockPanel.Dock="Right" Content="Open parameter file" Padding="10,3"
+                                    Click="OpenParameterFile_Click" AutomationProperties.Name="Open parameter file"
+                                    IsEnabled="{Binding HasParameterFile}" />
+                            <TextBlock Text="{Binding ParametersMessage}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextS}" />
+                        </DockPanel>
+                        <DataGrid ItemsSource="{Binding ParameterRows}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  Background="Transparent" BorderThickness="0" FontSize="{StaticResource FontSize10}"
+                                  AutomationProperties.Name="Pipeline parameters">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Token" Binding="{Binding Token}" Width="180" />
+                                <DataGridTextColumn Header="Value now" Binding="{Binding Value}" Width="*" />
+                                <DataGridTextColumn Header="Comes from" Binding="{Binding Source}" Width="100" />
+                                <DataGridTextColumn Header="Used by" Binding="{Binding UsedBy}" Width="*" />
+                                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="90" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
                 </Grid>
             </DockPanel>
 
@@ -457,6 +481,25 @@
                     </Border>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
                         <StackPanel>
+                            <!-- Quick actions on the selected node; each is one Ctrl+Z step -->
+                            <ItemsControl ItemsSource="{Binding SelectedNodeActions}" Margin="0,0,0,6">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding Label}" Margin="0,0,4,4" Padding="8,2"
+                                                IsEnabled="{Binding IsEnabled}" ToolTip="{Binding ToolTip}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                FontSize="{StaticResource FontSize10}"
+                                                Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                                                AutomationProperties.Name="{Binding Label}"
+                                                Click="QuickAction_Click" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <TextBlock Text="{Binding SelectedNodeInfo}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextS}" Margin="0,0,0,6"
                                        Visibility="{Binding SelectedNodeInfo, Converter={StaticResource NonEmptyVis}}" />

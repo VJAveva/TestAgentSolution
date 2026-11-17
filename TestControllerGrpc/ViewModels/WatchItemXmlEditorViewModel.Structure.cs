@@ -315,6 +315,7 @@ public sealed partial class WatchItemXmlEditorViewModel
 
         if (id == PipelineEditorMenuIds.CopyTemplateHere) return CopyTemplateHere(node);
         if (id == NodeMenuIds.SaveAsTemplate) return SaveGroupAsTemplate(node, input);
+        if (RunQuickAction(id, node, input) is { } handled) return handled;
 
         var result = id switch
         {

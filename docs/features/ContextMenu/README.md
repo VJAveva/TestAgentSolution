@@ -14,6 +14,8 @@ last-verified: 2026-11-17
 - One menu definition (`NodeMenuProvider` in Core) drives the WPF trees, the web tree and the Pipeline Editor's structure tree (subsets `WebIds`, `PipelineEditorIds`; the editor offers no run items).
 - Every edit goes through one undoable path (Ctrl+Z / Ctrl+Y) and is checked against `Pipeline_Edit` / `Template_Edit`.
 - Run additions: Run from here to end, Show resolved command (secrets masked), Open last output, Stop.
+- Save group as template (admin) moves the whole group into a new Library template and leaves a template call in
+  its place, the same as the Pipeline Editor (one undo step).
 
 ## How to use
 - WPF: right-click any node in the WatchList or Library tree. Keys: F2, Ctrl+D, Ctrl+C/V, Alt+Up/Down, F5, Enter (Edit template), Ctrl+Z/Y.

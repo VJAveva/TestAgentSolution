@@ -345,166 +345,9 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AutoFix()
-    {
-        try
-        {
-            var doc = XDocument.Parse(XmlText);
-            var root = doc.Root;
-            var watchItems = root?.Name.LocalName switch
-            {
-                "WatchItem" => new[] { root },
-                "WatchList" => root.Elements("WatchItem").ToArray(),
-                _ => null,
-            };
-            if (root is null || watchItems is null)
-            {
-                StatusMessage = "Cannot auto-fix - Root must be <WatchItem> or <WatchList>";
-                StatusSeverity = "Error";
-                return;
-            }
-
-            var fixCount = 0;
-
-            foreach (var watchItem in watchItems)
-            {
-                if (watchItem.Attribute("Filter") is null)
-                {
-                    watchItem.SetAttributeValue("Filter", "*.*");
-                    fixCount++;
-                }
-
-                foreach (var ev in watchItem.Elements("Event"))
-                {
-                    if (ev.Attribute("Type") is null)
-                    {
-                        ev.SetAttributeValue("Type", "Renamed");
-                        fixCount++;
-                    }
-                    if (ev.Attribute("ExecutionType") is null)
-                    {
-                        ev.SetAttributeValue("ExecutionType", "Sequential");
-                        fixCount++;
-                    }
-                    fixCount += FixActionNodes(ev.Descendants());
-                }
-            }
-
-            if (root.Element("Templates") is { } templates)
-                fixCount += FixActionNodes(templates.Descendants());
-
-            // Re-serialize with formatting
-            var settings = new XmlWriterSettings
-            {
-                Indent = true,
-                IndentChars = "  ",
-                NewLineChars = "\n",
-                NewLineHandling = NewLineHandling.Replace,
-                OmitXmlDeclaration = true,
-                Encoding = Encoding.UTF8,
-            };
-
-            using var sw = new StringWriter();
-            using (var xw = XmlWriter.Create(sw, settings))
-            {
-                doc.WriteTo(xw);
-            }
-
-            XmlText = sw.ToString();
-
-            if (fixCount > 0)
-            {
-                StatusMessage = $"? Auto-fixed {fixCount} issue(s) and reformatted";
-                StatusSeverity = "Success";
-            }
-            else
-            {
-                StatusMessage = "No issues to fix � XML reformatted";
-                StatusSeverity = "Info";
-            }
-
-            // Re-validate after fix
-            var remaining = RunFullValidation(XmlText);
-            if (remaining.Count > 0)
-            {
-                ShowErrors(remaining);
-                var remainingErrors = remaining.Count(error => error.Severity == "Error");
-                var withQuickFix = remaining.Count(error => error.QuickFixes.Count > 0);
-                StatusMessage += $" ({remainingErrors} error(s), {remaining.Count - remainingErrors} warning(s) need manual edits"
-                    + (withQuickFix > 0 ? $"; {withQuickFix} have a one-click fix in the error panel)" : ")");
-                if (remainingErrors > 0)
-                {
-                    IsXmlValid = false;
-                    StatusSeverity = "Error";
-                }
-            }
-            else
-            {
-                IsXmlValid = true;
-                ErrorLine = -1;
-                ErrorPosition = -1;
-                ValidationErrors.Clear();
-                IsErrorPanelVisible = false;
-            }
-        }
-        catch (XmlException ex)
-        {
-            StatusMessage = $"? Cannot auto-fix � XML is malformed: Line {ex.LineNumber}: {ex.Message}";
-            StatusSeverity = "Error";
-            NavigateToError?.Invoke(ex.LineNumber, ex.LinePosition);
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"? Cannot auto-fix � {ex.Message}";
-            StatusSeverity = "Error";
-        }
-    }
-
-    private static int FixActionNodes(IEnumerable<XElement> nodes)
-    {
-        var fixCount = 0;
-        foreach (var el in nodes)
-        {
-            switch (el.Name.LocalName)
-            {
-                case "ActionGroup":
-                    if (el.Attribute("ExecutionType") is null)
-                    {
-                        el.SetAttributeValue("ExecutionType", "Sequential");
-                        fixCount++;
-                    }
-                    fixCount += NormalizeBoolAttr(el, "FailAndContinue");
-                    break;
-
-                case "Action":
-                    fixCount += NormalizeBoolAttr(el, "FailAndContinue");
-                    fixCount += NormalizeBoolAttr(el, "IsReboot");
-                    break;
-            }
-        }
-        return fixCount;
-    }
-
-    /// <summary>Normalize True/False ? true/false for a boolean attribute. Returns 1 if fixed, 0 otherwise.</summary>
-    private static int NormalizeBoolAttr(XElement el, string attrName)
-    {
-        if (el.Attribute(attrName) is not { } attr) return 0;
-        if (string.Equals(attr.Value, "True", StringComparison.Ordinal))
-        {
-            attr.Value = "true";
-            return 1;
-        }
-        if (string.Equals(attr.Value, "False", StringComparison.Ordinal))
-        {
-            attr.Value = "false";
-            return 1;
-        }
-        return 0;
-    }
-
-    [RelayCommand]
     private void Revert()
     {
+        if (XmlText != _originalXml && ConfirmRevert?.Invoke() == false) return;
         XmlText = _originalXml;
         IsXmlValid = true;
         ErrorLine = -1;
@@ -544,6 +387,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         ValidationErrors.Clear();
         foreach (var e in errors)
             ValidationErrors.Add(e);
+        AddImpactProblems(errors);
 
         IsErrorPanelVisible = errors.Count > 0;
         IsXmlValid = errors.All(error => error.Severity != "Error");

@@ -62,7 +62,8 @@ public static class NodeEdits
         var baseId = string.IsNullOrWhiteSpace(group.Tag) ? "NewTemplate" : group.Tag.Trim();
         var id = baseId;
         for (var n = 2; taken.Contains(id); n++) id = $"{baseId}_{n}";
-        return new TemplateConfig { ID = id, Children = group.Children.Select(Clone).ToList() };
+        // The whole group is the template's step, so its name, execution type and continue-on-failure travel with it.
+        return new TemplateConfig { ID = id, Children = [Clone(group)] };
     }
 
     private static void Retag(IActionNode node, string suffix)

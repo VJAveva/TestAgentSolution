@@ -459,8 +459,41 @@ public static class WatchListXmlEditorAnalyzer
                 issue.Severity, issue.Severity == WatchIssueSeverity.Error ? "Validation" : "Advisory",
                 issue.Message, issue.NodePath, QuickFixes(issue, element, config));
         }).ToList();
+        diagnostics.AddRange(NumericAttributeDiagnostics(document));
 
         return new XmlEditorAnalysis(diagnostics, config);
+    }
+
+    private static readonly string[] WholeNumberAttributes =
+        ["Timeout", "PollInterval", "MaxRetries", "RetryDelaySeconds", "CompletionPollIntervalSeconds"];
+
+    // The parser reads anything else as the default (0 = no timeout), so a typo would silently change behaviour.
+    private static IEnumerable<XmlEditorDiagnostic> NumericAttributeDiagnostics(XDocument document)
+    {
+        foreach (var element in document.Descendants("Action"))
+        {
+            foreach (var name in WholeNumberAttributes)
+            {
+                if (element.Attribute(name) is not { } attribute) continue;
+                var value = attribute.Value.Trim();
+                if (value.Length == 0 || value.Contains('[') || int.TryParse(value, out _)) continue;
+                var location = (IXmlLineInfo)attribute;
+                var (line, column) = location.HasLineInfo() ? (location.LineNumber, location.LinePosition) : (1, 1);
+                yield return new XmlEditorDiagnostic(line, column, name.Length, WatchIssueSeverity.Error, "Validation",
+                    $"{name} must be a whole number (got '{value}'); anything else is read as the default.", "", []);
+            }
+        }
+    }
+
+    /// <summary>Profiles of one parameter file (the Initialize node's own), for the Profile dropdown.</summary>
+    public static IReadOnlyList<XmlEditorCompletion> GetProfiles(string? parameterFile)
+    {
+        if (string.IsNullOrWhiteSpace(parameterFile)
+            || !ParameterResolver.TryReadJsonConfig(parameterFile, out var parsed, out _))
+            return [];
+        return parsed!.Profiles.Keys.OrderBy(profile => profile, StringComparer.OrdinalIgnoreCase)
+            .Select(profile => new XmlEditorCompletion(profile, $"Profile in {Path.GetFileName(parameterFile)}"))
+            .ToArray();
     }
 
     public static string? ApplyQuickFix(
@@ -469,6 +502,9 @@ public static class WatchListXmlEditorAnalyzer
         XmlEditorQuickFix fix,
         WatchListConfig? context = null)
     {
+        if (fix.Kind == XmlEditorQuickFixKind.OpenParameterFileGlobal) return null;
+        if (TryApplyQuickFixToText(xml, kind, fix) is { } spliced) return spliced;
+
         var document = XDocument.Parse(xml, LoadOptions.PreserveWhitespace);
         var config = ParseDocument(document, kind, context)
             ?? throw new InvalidOperationException("The XML root does not match the editor document type.");
@@ -693,6 +729,94 @@ public static class WatchListXmlEditorAnalyzer
                 if (node is ActionGroupConfig group)
                     foreach (var child in Walk(group.Children)) yield return child;
             }
+        }
+    }
+
+    /// <summary>
+    /// Applies a quick fix by changing only the affected elements' text, so comments and formatting elsewhere survive.
+    /// Null when the element cannot be located by position (the caller then falls back to rewriting the document).
+    /// </summary>
+    private static string? TryApplyQuickFixToText(string xml, XmlEditorDocumentKind kind, XmlEditorQuickFix fix)
+    {
+        XDocument document;
+        try { document = XDocument.Parse(xml, LoadOptions.SetLineInfo | LoadOptions.PreserveWhitespace); }
+        catch (XmlException) { return null; }
+        if (PipelineEditor.PipelineXmlMap.TryBuild(xml) is not { } map) return null;
+
+        // The element the fix targets, as an editor node (exact text span).
+        PipelineEditor.PipelineXmlNode? NodeOf(XElement? element) =>
+            element is IXmlLineInfo { } info && info.HasLineInfo()
+                ? map.All.FirstOrDefault(n => n.Start == OffsetAt(xml, info.LineNumber, info.LinePosition) - 1)
+                : null;
+        string Attr(PipelineEditor.PipelineXmlNode node, string name) =>
+            PipelineEditor.PipelineXmlText.Attributes(xml, node.Start).FirstOrDefault(a => a.Name == name)?.Value ?? "";
+
+        switch (fix.Kind)
+        {
+            case XmlEditorQuickFixKind.SetProfile:
+                return NodeOf(FindElement(document, fix.NodePath)) is { Kind: NodeKinds.Initialize } init
+                    ? PipelineEditor.PipelineXmlText.SetAttribute(xml, init.Start, "Profile", fix.Value)
+                    : null;
+
+            case XmlEditorQuickFixKind.ReplaceBracketedText:
+            {
+                if (NodeOf(FindElement(document, fix.NodePath)) is not { Kind: NodeKinds.Action } action) return null;
+                var replacement = fix.Value.Equals("[PASS]", StringComparison.OrdinalIgnoreCase) ? "PASS:" : fix.Value.Trim('[', ']');
+                var text = xml;
+                foreach (var name in new[] { "Command", "Parameters" })
+                {
+                    var value = Attr(action, name);
+                    if (value.Contains(fix.Value, StringComparison.Ordinal))
+                        text = PipelineEditor.PipelineXmlText.SetAttribute(text, action.Start, name,
+                            value.Replace(fix.Value, replacement, StringComparison.Ordinal));
+                }
+                return text;
+            }
+
+            case XmlEditorQuickFixKind.MoveCredentialsToSecretEnv:
+            {
+                if (NodeOf(FindElement(document, fix.NodePath)) is not { Kind: NodeKinds.Action } action) return null;
+                var model = new ActionConfig
+                {
+                    Command = Attr(action, "Command"), Parameters = Attr(action, "Parameters"),
+                    SecretEnv = Attr(action, "SecretEnv"), Type = Enum.TryParse<ActionType>(Attr(action, "Type"), out var t) ? t : ActionType.RunCommand,
+                };
+                if (!InlineCredentialFinder.MoveToSecretEnvironment(model)) return null;
+                var text = xml;
+                foreach (var (name, value) in new[] { ("Command", model.Command), ("Parameters", model.Parameters), ("SecretEnv", model.SecretEnv) })
+                    text = PipelineEditor.PipelineXmlText.SetAttribute(text, action.Start, name, string.IsNullOrEmpty(value) ? null : value);
+                return text;
+            }
+
+            case XmlEditorQuickFixKind.RemoveStepsUsingToken:
+            {
+                // Delete from the end so earlier offsets stay valid.
+                var text = xml;
+                foreach (var action in map.All.Where(n => n.Kind == NodeKinds.Action
+                             && (Attr(n, "Command").Contains(fix.Value, StringComparison.OrdinalIgnoreCase)
+                                 || Attr(n, "Parameters").Contains(fix.Value, StringComparison.OrdinalIgnoreCase)))
+                             .OrderByDescending(n => n.Start))
+                {
+                    var (start, end) = PipelineEditor.PipelineXmlText.LineBlock(text, action.Start, action.End);
+                    text = text.Remove(start, end - start);
+                }
+                return text;
+            }
+
+            case XmlEditorQuickFixKind.CreateMissingTemplate:
+            {
+                if (kind == XmlEditorDocumentKind.WatchItem) return null;
+                if (document.Descendants("Template").Any(t => string.Equals((string?)t.Attribute("ID"), fix.Value, StringComparison.OrdinalIgnoreCase)))
+                    return xml;
+                var templates = kind == XmlEditorDocumentKind.Templates ? map.Roots.LastOrDefault() : map.All.LastOrDefault(n => n.Kind == NodeKinds.Template);
+                if (templates is null) return null;
+                var indent = PipelineEditor.PipelineXmlText.IndentOf(xml, templates.Start);
+                var element = $"<Template ID=\"{PipelineEditor.PipelineXmlText.Escape(fix.Value, '"')}\" />";
+                return xml.Insert(templates.End, PipelineEditor.PipelineXmlText.NewLineOf(xml) + indent + element);
+            }
+
+            default:
+                return null;
         }
     }
 

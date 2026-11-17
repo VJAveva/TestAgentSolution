@@ -105,6 +105,7 @@ public sealed partial class WatchItemXmlEditorViewModel
         {
             _fieldsPath = null;
             SelectedFields.Clear();
+            SelectedNodeActions.Clear();
             SelectedNodeProblems.Clear();
             SelectedNodeInfo = "";
             SelectedNodeNote = "";
@@ -122,7 +123,7 @@ public sealed partial class WatchItemXmlEditorViewModel
             foreach (var spec in specs)
             {
                 var field = new PipelineFieldViewModel(spec, CommitField);
-                foreach (var choice in ChoicesFor(spec, node.Kind))
+                foreach (var choice in ChoicesFor(spec, node.Kind, attributes))
                     field.Choices.Add(choice);
                 SelectedFields.Add(field);
             }
@@ -143,6 +144,9 @@ public sealed partial class WatchItemXmlEditorViewModel
 
         SelectedNodeInfo = node.Kind == NodeKinds.Ref ? UsageText(attributes.GetValueOrDefault("TemplateID"))
             : node.IsFromTemplate ? TemplateBlockedReason(node) : "";
+        SelectedNodeActions.Clear();
+        foreach (var action in QuickActionsFor(node, attributes))
+            SelectedNodeActions.Add(action);
         SelectedNodeNote = PipelineXmlEdits.TryParse(source) is { } document
             && PipelinePaths.Resolve(document, node.TemplatePath ?? node.Path)?.Element("Comment")?.Value is { Length: > 0 } note
                 ? note
@@ -164,10 +168,12 @@ public sealed partial class WatchItemXmlEditorViewModel
         ApplyEditResult(result, $"{node.Name}: {field.Label}");
     }
 
-    private IEnumerable<PipelineChoice> ChoicesFor(PipelineFieldSpec spec, string kind) =>
+    private IEnumerable<PipelineChoice> ChoicesFor(PipelineFieldSpec spec, string kind, IReadOnlyDictionary<string, string> attributes) =>
         spec.Kind != PipelineFieldKind.Choice
             ? []
-            : GetValueCompletions(spec.Attribute, insideEvent: kind == NodeKinds.Event)
+            : (spec.Attribute == "Profile"
+                ? WatchListXmlEditorAnalyzer.GetProfiles(attributes.GetValueOrDefault("ParameterFile"))
+                : GetValueCompletions(spec.Attribute, insideEvent: kind == NodeKinds.Event))
                 .Select(c => new PipelineChoice(c.Text, c.Description.Replace("Agent status: ", "", StringComparison.Ordinal)));
 
     private string UsageText(string? templateId)

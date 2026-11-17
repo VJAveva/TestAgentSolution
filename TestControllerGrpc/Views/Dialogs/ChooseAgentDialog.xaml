@@ -1,0 +1,34 @@
+<Window x:Class="TestControllerGrpc.Views.Dialogs.ChooseAgentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Change agent"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" SizeToContent="Height" Width="440"
+        Background="{DynamicResource WindowBg}">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="NodeLabel" Grid.Row="0" FontSize="{StaticResource FontSize15}" FontWeight="SemiBold"
+                   TextWrapping="Wrap" Foreground="{DynamicResource TextDefaultBrush}" Margin="0,0,0,10" />
+
+        <ComboBox x:Name="AgentBox" Grid.Row="1" DisplayMemberPath="Display" FontSize="{StaticResource FontSize11}"
+                  SelectionChanged="AgentBox_SelectionChanged"
+                  AutomationProperties.Name="Agent" />
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancel" IsCancel="True" MinWidth="88" Padding="12,6" Margin="0,0,8,0"
+                    Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextDefaultBrush}"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                    AutomationProperties.Name="Cancel" />
+            <Button x:Name="OkButton" Content="Change agent" IsDefault="True" IsEnabled="False" MinWidth="88" Padding="12,6"
+                    Click="OnOk" Cursor="Hand"
+                    Background="{DynamicResource AccentBtnBg}" Foreground="{DynamicResource Accent}"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                    AutomationProperties.Name="Change agent" />
+        </StackPanel>
+    </Grid>
+</Window>

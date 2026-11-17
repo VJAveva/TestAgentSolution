@@ -53,7 +53,9 @@ public class NodeEditsTests
         var template = NodeEdits.GroupAsTemplate(group, ["G", "G_2"]);
 
         Assert.Equal("G_3", template.ID);
-        Assert.Single(template.Children);
+        var step = Assert.IsType<ActionGroupConfig>(Assert.Single(template.Children));
+        Assert.Equal(group.Tag, step.Tag);
+        Assert.NotSame(group, step);
     }
 
     [Fact]

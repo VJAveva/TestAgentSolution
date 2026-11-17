@@ -10,6 +10,13 @@ namespace TestControllerGrpc.ViewModels;
 public static class PipelineEditorMenuIds
 {
     public const string CopyTemplateHere = "CopyTemplateHere";
+    public const string AddStep = "AddStep";
+    public const string AddRestartAfter = "AddRestartAfter";
+    public const string AddWaitAfter = "AddWaitAfter";
+    public const string ChangeAgent = "ChangeAgent";
+    public const string ApplyToAgents = "ApplyToAgents";
+    public const string OpenParameterFile = "OpenParameterFile";
+    public const string ReloadParameterFile = "ReloadParameterFile";
 }
 
 // PipelineEditor_Requirement.md Part 3 (section 4): templates on this screen.
@@ -52,15 +59,32 @@ public sealed partial class WatchItemXmlEditorViewModel
     /// <summary>Shows save-blocking problems in pipelines that use the edited template.</summary>
     public void ShowImpactProblems(IReadOnlyList<TemplateImpactProblem> problems)
     {
-        foreach (var problem in problems)
-            ValidationErrors.Add(new ValidationErrorViewModel
+        _impactProblems = problems;
+        _impactXml = XmlText;
+        var rows = new List<ValidationErrorViewModel>(ValidationErrors);
+        rows.RemoveAll(r => r.ErrorType == "Impact");
+        ShowErrors(rows);
+        StatusMessage = $"Save blocked: this change breaks {problems.Select(p => p.Pipeline).Distinct().Count()} pipeline(s) that use the template.";
+        StatusSeverity = "Error";
+    }
+
+    private IReadOnlyList<TemplateImpactProblem> _impactProblems = [];
+    private string? _impactXml;
+
+    // Kept until the template text changes, so the background check does not wipe them.
+    private void AddImpactProblems(List<ValidationErrorViewModel> errors)
+    {
+        if (_impactProblems.Count == 0 || _impactXml != XmlText) return;
+        foreach (var problem in _impactProblems)
+        {
+            var row = new ValidationErrorViewModel
             {
                 Line = 1, Column = 1, Severity = "Error", ErrorType = "Impact",
                 Message = $"Pipeline '{problem.Pipeline}': {problem.Message}", NodeLabel = problem.Pipeline,
-            });
-        IsErrorPanelVisible = ValidationErrors.Count > 0;
-        StatusMessage = $"Save blocked: this change breaks {problems.Select(p => p.Pipeline).Distinct().Count()} pipeline(s) that use the template.";
-        StatusSeverity = "Error";
+            };
+            errors.Add(row);
+            ValidationErrors.Add(row);
+        }
     }
 
     private string? TemplateDocumentFor(string? templateId)
@@ -126,28 +150,35 @@ public sealed partial class WatchItemXmlEditorViewModel
             || PipelineXmlMap.TryBuild(document) is not { Roots: [{ Kind: NodeKinds.Template } template, ..] })
             return;
         foreach (var step in template.Children)
-            call.Children.Add(TemplateRow(step, call, templateId!, call.Path, document));
+            call.Children.Add(TemplateRow(step, call, templateId!, call.Path, document, [templateId!]));
     }
 
-    private static PipelineStructureNode TemplateRow(
-        PipelineXmlNode node, PipelineStructureNode parent, string templateId, string refPath, string document)
+    // Nested calls expand too; the visited set stops a template that (indirectly) calls itself.
+    private PipelineStructureNode TemplateRow(
+        PipelineXmlNode node, PipelineStructureNode parent, string templateId, string prefix, string document, HashSet<string> visited)
     {
-        var row = new PipelineStructureNode(node, null, templateId, $"{refPath}|{node.Path}")
+        var row = new PipelineStructureNode(node, null, templateId, $"{prefix}|{node.Path}")
         {
             Parent = parent,
             Summary = StepSummary(document, node),
+            IsExpanded = node.Kind != NodeKinds.Ref,
         };
         foreach (var child in node.Children)
-            row.Children.Add(TemplateRow(child, row, templateId, refPath, document));
+            row.Children.Add(TemplateRow(child, row, templateId, prefix, document, visited));
+
+        var nestedId = node.Kind == NodeKinds.Ref
+            ? PipelineXmlText.Attributes(document, node.Start).FirstOrDefault(a => a.Name == "TemplateID")?.Value
+            : null;
+        if (nestedId is not null && !visited.Contains(nestedId) && TemplateDocumentFor(nestedId) is { } nested
+            && PipelineXmlMap.TryBuild(nested) is { Roots: [{ Kind: NodeKinds.Template } nestedTemplate, ..] })
+        {
+            var inner = new HashSet<string>(visited, StringComparer.OrdinalIgnoreCase) { nestedId };
+            foreach (var step in nestedTemplate.Children)
+                row.Children.Add(TemplateRow(step, row, nestedId, row.Path, nested, inner));
+        }
         return row;
     }
 
     private string TemplateBlockedReason(PipelineStructureNode node) =>
         $"Step of template '{node.TemplateId}'. Use Edit template to change it.";
-
-    private IEnumerable<NodeMenuItem> EditorOnlyItems(PipelineStructureNode node) =>
-        node.Kind == NodeKinds.Ref && !node.IsFromTemplate
-            ? [new NodeMenuItem(PipelineEditorMenuIds.CopyTemplateHere, "Copy for this pipeline only\u2026", NodeMenuGroup.Copy)
-                with { IsEnabled = CanEdit, ToolTip = ReadOnlyReason }]
-            : [];
 }

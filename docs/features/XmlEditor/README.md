@@ -14,6 +14,7 @@ last-verified: 2026-11-17
 - Typing assist (`XmlEditorTyping`) and quick fixes (`XmlEditorQuickFixApplier`) apply each edit as one undo step; the caret moves to an error only on explicit Validate or a blocked Save.
 - Apply/Save writes back to `WatchList.xml`; an unsaved-close prompt and a Tag-rename confirmation guard against losing work.
 - The window is now the Pipeline Editor (structure tree, forms); see [../PipelineEditor/README.md](../PipelineEditor/README.md). This README covers the XML pane.
+- Quick fixes change only the affected steps (comments and formatting kept); the whole-document Auto Fix button is gone. Non-numeric Timeout / PollInterval / retry values are reported as errors.
 
 ## How to use
 - WPF: open a WatchItem's XML from the tree, edit, **Validate**, then **Apply** or **Save**.

@@ -106,13 +106,16 @@ public sealed partial class MainViewModel
     public void SaveGroupAsTemplate(TreeNodeViewModel node)
     {
         if (node.ModelObject is not ActionGroupConfig group || node.IsRefExpansion) return;
-        if (!EnsureCanEdit(EditTarget.Template)) return;
+        if (!EnsureCanEdit(EditTarget.Template) || !EnsureCanEdit(node)) return;
+        if (!TryLocate(node, out var list, out var index) || node.Parent is not { } parent) return;
         TemplateConfig template;
         using (BeginEdit("Save group as template"))
         {
             template = NodeEdits.GroupAsTemplate(group, _config.Templates.Select(t => t.ID));
             _config.Templates.Add(template);
+            list[index] = new RefConfig { TemplateID = template.ID };
         }
+        RefreshChildren(parent, index);
         if (TemplateListRoot is { } root)
         {
             var row = TreeNodeViewModel.FromTemplate(template, TreeNodeViewModel.TemplateIndex(_config.Templates));

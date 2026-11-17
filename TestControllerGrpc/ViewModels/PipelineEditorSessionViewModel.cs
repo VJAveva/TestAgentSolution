@@ -54,6 +54,28 @@ public sealed partial class PipelineEditorSessionViewModel : ObservableObject
     /// <summary>Yes/no question to the user (what Save will write, discard a tab); false cancels.</summary>
     public Func<string, bool>? Confirm { get; set; }
 
+    /// <summary>Shows side-by-side comparisons (What changed, or yours vs. the latest saved version).</summary>
+    public Action<string, IReadOnlyList<PipelineChange>>? ShowChanges { get; set; }
+
+    /// <summary>Before / after for every changed tab; secrets masked. A template created here is compared with nothing.</summary>
+    public IReadOnlyList<PipelineChange> Changes() =>
+        Tabs.Where(IsChanged)
+            .Select(t => PipelineDiff.Compare(Describe(t).TrimStart('-', ' '), t.IsTemplateTab && t.TemplateOriginalId is null ? "" : t.OriginalXml, t.XmlText))
+            .ToList();
+
+    [RelayCommand]
+    private void WhatChanged()
+    {
+        var changes = Changes();
+        if (changes.Count == 0)
+        {
+            SelectedTab.StatusMessage = "No changes since the editor opened.";
+            SelectedTab.StatusSeverity = "Info";
+            return;
+        }
+        ShowChanges?.Invoke("What changed", changes);
+    }
+
     public event Action? RequestClose;
     public bool DialogAccepted { get; private set; }
     public string? PipelineResultXml { get; private set; }
@@ -124,6 +146,8 @@ public sealed partial class PipelineEditorSessionViewModel : ObservableObject
             var message = $"{tab.TabTitle} was changed by someone else (or WatchList.xml was reloaded) since you opened it.";
             tab.StatusMessage = message + " Nothing was saved.";
             tab.StatusSeverity = "Error";
+            ShowChanges?.Invoke("Changed since you opened it",
+                [PipelineDiff.Compare($"{tab.TabTitle}: latest saved (left) and yours (right)", latest, tab.XmlText)]);
             if (ConfirmReload?.Invoke(message + "\n\nYes = load the latest version (your changes to it are dropped).\nNo = keep editing.") == true)
                 tab.Reload(latest);
             return;
