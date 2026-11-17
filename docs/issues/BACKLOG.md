@@ -44,3 +44,5 @@ Format: phase | file:line | one-line description.
 | PE3 | TestControllerGrpc.Core/Editing/NodeEdits.cs:59 (GroupAsTemplate) | The main tree's Save group as template copies only the group's children and leaves the group in place; the Pipeline Editor moves the whole group (keeps its execution type) and leaves a Ref. The two should agree. |
 | PE3 | TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Templates.cs (AddTemplateSteps) | A template call inside a template step is shown but not expanded further (no nested expansion). |
 | PE3 | TestControllerGrpc/Views/TemplateXmlEditorWindow.xaml | The old Template XML Editor window still exists (decision 4: retire it once Part 3 is accepted). |
+| PE4 | TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.FormView.cs | The chosen view (Form / XML), wrap setting, pane widths and font size are not remembered between sessions (section 1 asks for per-user layout). |
+| PE4 | TestControllerGrpc/Views/RawXmlEditorWindow.xaml (FormView) | Step cards are read-only summaries; editing happens in Properties. Cards cannot be reordered by dragging (out of scope in section 10). |

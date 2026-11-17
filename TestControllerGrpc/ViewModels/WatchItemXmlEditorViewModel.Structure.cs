@@ -36,6 +36,10 @@ public sealed partial class PipelineStructureNode : ObservableObject
     public string? TemplatePath { get; }
     public bool IsFromTemplate => TemplatePath is not null;
 
+    /// <summary>One line for the Form view's step card: agent, command, timeout and similar (credentials redacted).</summary>
+    public string Summary { get; init; } = "";
+    public bool HasSummary => Summary.Length > 0;
+
     /// <summary>Status of the step's agent when it cannot take work now (offline, not registered...); null otherwise.</summary>
     public string? AgentStatus { get; }
     public bool IsAgentUnavailable => AgentStatus is not null;
@@ -133,7 +137,12 @@ public sealed partial class WatchItemXmlEditorViewModel
         _structureDirty = false;
         _map = PipelineXmlMap.TryBuild(XmlText);
         OnPropertyChanged(nameof(IsStructureAvailable));
-        if (_map is null) return;
+        if (_map is null)
+        {
+            ShowXmlNotWellFormed();
+            return;
+        }
+        FormUnavailableMessage = "";
 
         var collapsed = Flatten(StructureRoots).Where(n => !n.IsExpanded).Select(n => n.Path).ToHashSet();
         var expandedCalls = Flatten(StructureRoots).Where(n => n.IsExpanded && n.Kind == NodeKinds.Ref).Select(n => n.Path).ToHashSet();
@@ -165,6 +174,7 @@ public sealed partial class WatchItemXmlEditorViewModel
         {
             Parent = parent,
             IsExpanded = node.Kind == NodeKinds.Ref ? expandedCalls.Contains(node.Path) : !collapsed.Contains(node.Path),
+            Summary = StepSummary(XmlText, node),
         };
         foreach (var child in node.Children)
             row.Children.Add(ToStructure(child, row, collapsed, expandedCalls));

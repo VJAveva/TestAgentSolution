@@ -537,7 +537,7 @@ public partial class RawXmlEditorWindow : Window
     // Same rules as the main tree's menu (NodeMenuProvider), limited to the editor's items; built when it opens.
     private void StructureTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        var menu = StructureTree.ContextMenu;
+        var menu = ((FrameworkElement)sender).ContextMenu;
         menu.Items.Clear();
         if (_vm.SelectedStructureNode is not { } node)
         {
@@ -600,6 +600,14 @@ public partial class RawXmlEditorWindow : Window
             XmlEditor.Focus();
         };
         return menuItem;
+    }
+
+    // The form edits the XML document, so its undo history is the XML editor's (one step per change).
+    private void FormView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (e.Key == Key.Z) e.Handled = XmlEditor.Undo();
+        else if (e.Key == Key.Y) e.Handled = XmlEditor.Redo();
     }
 
     // Requirement 4.2: double-click or Enter on a template call (or a step under it) opens Edit template.

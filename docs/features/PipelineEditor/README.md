@@ -2,7 +2,7 @@
 feature: PipelineEditor
 status: In progress
 owner: Vinodkumar Javvadi
-code: [TestControllerGrpc.Core/PipelineEditor, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Structure.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Properties.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Templates.cs, TestControllerGrpc/ViewModels/PipelineEditorSessionViewModel.cs, TestControllerGrpc/Views/RawXmlEditorWindow.xaml, TestControllerGrpc/Views/Dialogs/TemplateNameDialog.xaml]
+code: [TestControllerGrpc.Core/PipelineEditor, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Structure.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Properties.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.Templates.cs, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.FormView.cs, TestControllerGrpc/ViewModels/PipelineEditorSessionViewModel.cs, TestControllerGrpc/Views/RawXmlEditorWindow.xaml, TestControllerGrpc/Views/Dialogs/TemplateNameDialog.xaml]
 tests: [TestControllerGrpc.Tests/PipelineEditor, TestControllerGrpc.Tests/ViewModels/WatchItemXmlEditorViewModelTests.cs]
 last-verified: 2026-11-17
 ---
@@ -10,7 +10,11 @@ last-verified: 2026-11-17
 # Pipeline Editor
 
 ## What it does
-- Edits one pipeline (WatchItem) or the whole WatchList in three panes: Structure tree, XML, Properties.
+- Edits one pipeline (WatchItem) or the whole WatchList in three panes: Structure tree, editor, Properties.
+- The editor pane has two views of the same text: **Form** (default) shows the pipeline as step cards in order
+  (name, agent, command, timeout), nested by group; **XML** is the full editor with folding, checks, completion
+  and an optional long-line wrap. Switching never loses edits. While the XML is not well-formed the form shows
+  "Fix the XML error on line N to use the form" and every field is read-only until it is fixed.
 - The tree, the XML caret and Properties always show the same node; Problems jump to the node at fault.
 - Right-click in the tree gives the same menu rules as the main tree (move, duplicate, delete, skip / include,
   execution type). Every change is one undo step in the editor; only the edited node's text changes, so XML
@@ -48,7 +52,7 @@ dotnet test TestControllerGrpc.Tests -c Release --filter "FullyQualifiedName~Pip
 ## Known gaps
 - Secrets: SecretEnv shows names only, Password is masked, and a field whose value looks like a credential is
   shown redacted and read-only (edit it in the XML or move it to SecretEnv).
-- Parts 4-5 of the requirement are not built yet (form view, parameters tab, What changed / Compare).
+- Part 5 of the requirement is not built yet (parameters tab, quick actions, What changed / Compare).
   See [PipelineEditor_ActionPlan.md](PipelineEditor_ActionPlan.md).
 
 ## Links

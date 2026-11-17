@@ -257,6 +257,54 @@ public class WatchItemXmlEditorViewModelTests
         Assert.Equal(evt.SubtreeErrorCount, evt.ErrorCount);
     }
 
+    [Fact]
+    public void StepCard_Should_SummariseAgentCommandAndTimeout_When_ActionIsShownInTheFormView()
+    {
+        var vm = new WatchItemXmlEditorViewModel(
+            Steps.Replace("Command=\"a.bat\"", "AgentName=\"node1\" Command=\"a.bat\" Timeout=\"600\""),
+            fileSystem: new AlwaysExistsFileSystem());
+
+        var card = vm.StructureRoots[0].Children[0].Children[0];
+
+        Assert.True(vm.IsFormView);
+        Assert.Equal("node1   |   a.bat   |   timeout 600s", card.Summary);
+    }
+
+    [Fact]
+    public void Form_Should_BeReadOnlyWithTheLine_When_TheXmlIsBroken_AndRecover_When_Fixed()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps, fileSystem: new AlwaysExistsFileSystem());
+        vm.SelectPath("e0/c0");
+
+        vm.XmlText = Steps.Replace("</Event>", "</Evnt>");
+        vm.RefreshStructure();
+
+        Assert.False(vm.IsStructureAvailable);
+        Assert.Contains("line 5", vm.FormUnavailableMessage);
+        Assert.All(vm.SelectedFields, f => Assert.True(f.IsReadOnly));
+
+        vm.XmlText = Steps;
+        vm.RefreshStructure();
+
+        Assert.Equal("", vm.FormUnavailableMessage);
+        Assert.False(vm.SelectedFields.Single(f => f.Attribute == "Command").IsReadOnly);
+    }
+
+    [Fact]
+    public void SwitchingToXmlView_Should_KeepTheTextAndShowTheSelectedNode_When_AStepIsSelected()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps, fileSystem: new AlwaysExistsFileSystem());
+        vm.SelectPath("e0/c1");
+        int? offset = null;
+        vm.NavigateToOffset += o => offset = o;
+
+        vm.IsXmlView = true;
+
+        Assert.False(vm.IsFormView);
+        Assert.Equal(Steps, vm.XmlText);
+        Assert.Equal(Steps.IndexOf("<Action Tag=\"B\"", StringComparison.Ordinal), offset);
+    }
+
     private sealed class AlwaysExistsFileSystem : IPreflightFileSystem
     {
         public PathAccess CheckFile(string path) => PathAccess.Exists;

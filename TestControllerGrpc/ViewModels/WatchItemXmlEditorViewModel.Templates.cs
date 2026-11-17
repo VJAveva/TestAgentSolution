@@ -126,14 +126,19 @@ public sealed partial class WatchItemXmlEditorViewModel
             || PipelineXmlMap.TryBuild(document) is not { Roots: [{ Kind: NodeKinds.Template } template, ..] })
             return;
         foreach (var step in template.Children)
-            call.Children.Add(TemplateRow(step, call, templateId!, call.Path));
+            call.Children.Add(TemplateRow(step, call, templateId!, call.Path, document));
     }
 
-    private static PipelineStructureNode TemplateRow(PipelineXmlNode node, PipelineStructureNode parent, string templateId, string refPath)
+    private static PipelineStructureNode TemplateRow(
+        PipelineXmlNode node, PipelineStructureNode parent, string templateId, string refPath, string document)
     {
-        var row = new PipelineStructureNode(node, null, templateId, $"{refPath}|{node.Path}") { Parent = parent };
+        var row = new PipelineStructureNode(node, null, templateId, $"{refPath}|{node.Path}")
+        {
+            Parent = parent,
+            Summary = StepSummary(document, node),
+        };
         foreach (var child in node.Children)
-            row.Children.Add(TemplateRow(child, row, templateId, refPath));
+            row.Children.Add(TemplateRow(child, row, templateId, refPath, document));
         return row;
     }
 

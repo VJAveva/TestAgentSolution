@@ -89,6 +89,56 @@
                 </Border>
             </StackPanel>
         </HierarchicalDataTemplate>
+        <!-- Form view step card: kind, name and badges on the first line, agent / command / timeout on the second -->
+        <HierarchicalDataTemplate x:Key="StepCardTemplate" DataType="{x:Type vm:PipelineStructureNode}" ItemsSource="{Binding Children}">
+            <Border Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1"
+                    CornerRadius="6" Padding="10,6" Margin="0,2" MinWidth="320">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsFromTemplate}" Value="True">
+                                <Setter Property="Opacity" Value="0.6" />
+                                <Setter Property="ToolTip" Value="From the template - use Edit template to change it" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Border CornerRadius="3" Padding="3,1" Margin="0,0,6,0" MinWidth="30" Background="{DynamicResource AccGreen}">
+                            <TextBlock Text="{Binding KindBadge}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                                       Foreground="{DynamicResource TreeBadgeFg}" HorizontalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="{Binding Name}" FontSize="{StaticResource FontSize11}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextP}" VerticalAlignment="Center" />
+                        <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource PillSkipBg}"
+                                Visibility="{Binding IsSkipped, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="Skipped" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextP}" />
+                        </Border>
+                        <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource StatusFailedBg}"
+                                Visibility="{Binding IsAgentUnavailable, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="{Binding AgentStatus}" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource StatusFailedFg}" />
+                        </Border>
+                        <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource StatusFailedBg}"
+                                ToolTip="Errors" Visibility="{Binding ErrorCount, Converter={StaticResource CountVis}}">
+                            <TextBlock Text="{Binding ErrorCount}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                                       Foreground="{DynamicResource StatusFailedFg}" />
+                        </Border>
+                        <Border CornerRadius="3" Padding="4,0" Margin="4,0,0,0" Background="{DynamicResource StatusWarningBg}"
+                                ToolTip="Warnings" Visibility="{Binding WarningCount, Converter={StaticResource CountVis}}">
+                            <TextBlock Text="{Binding WarningCount}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                                       Foreground="{DynamicResource StatusWarningFg}" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Summary}" FontSize="{StaticResource FontSize10}" FontFamily="Consolas"
+                               Foreground="{DynamicResource TextS}" TextWrapping="Wrap" Margin="0,3,0,0"
+                               Visibility="{Binding HasSummary, Converter={StaticResource BoolVis}}" />
+                </StackPanel>
+            </Border>
+        </HierarchicalDataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -323,18 +373,70 @@
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext" />
 
-            <!-- AvalonEdit XML Editor -->
-            <avalonedit:TextEditor
-                Grid.Column="2"
-                x:Name="XmlEditor"
-                FontFamily="Consolas"
-                FontSize="{Binding EditorFontSize}"
-                ShowLineNumbers="True"
-                WordWrap="False"
-                HorizontalScrollBarVisibility="Auto"
-                VerticalScrollBarVisibility="Auto"
-                Padding="4"
-                BorderThickness="0" />
+            <!-- Editor pane: Form view (step cards) or XML view of the same text; switching never loses edits -->
+            <DockPanel Grid.Column="2">
+                <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="8,4"
+                        BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="Form" GroupName="EditorView" Margin="0,0,12,0"
+                                     IsChecked="{Binding IsFormView}" Foreground="{DynamicResource TextP}"
+                                     FontSize="{StaticResource FontSize10}" AutomationProperties.Name="Form view" />
+                        <RadioButton Content="XML" GroupName="EditorView" Margin="0,0,16,0"
+                                     IsChecked="{Binding IsXmlView}"
+                                     Foreground="{DynamicResource TextP}"
+                                     FontSize="{StaticResource FontSize10}" AutomationProperties.Name="XML view" />
+                        <CheckBox Content="Wrap long lines" IsChecked="{Binding WordWrap}"
+                                  Foreground="{DynamicResource TextS}" FontSize="{StaticResource FontSize10}"
+                                  AutomationProperties.Name="Wrap long lines"
+                                  Visibility="{Binding IsFormView, Converter={StaticResource InverseBoolVis}}" />
+                    </StackPanel>
+                </Border>
+                <Grid>
+                    <DockPanel Visibility="{Binding IsFormView, Converter={StaticResource BoolVis}}"
+                               Background="{DynamicResource BgPanel}">
+                        <Border DockPanel.Dock="Top" Background="{DynamicResource StatusFailedBg}" Padding="8,4"
+                                Visibility="{Binding FormUnavailableMessage, Converter={StaticResource NonEmptyVis}}">
+                            <TextBlock Text="{Binding FormUnavailableMessage}" TextWrapping="Wrap"
+                                       FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource StatusFailedFg}" />
+                        </Border>
+                        <TreeView x:Name="FormView" ItemsSource="{Binding StructureRoots}"
+                                  AutomationProperties.Name="Pipeline steps"
+                                  Background="Transparent" BorderThickness="0" Padding="6"
+                                  ItemTemplate="{StaticResource StepCardTemplate}"
+                                  IsEnabled="{Binding IsStructureAvailable}"
+                                  SelectedItemChanged="StructureTree_SelectedItemChanged"
+                                  MouseDoubleClick="StructureTree_MouseDoubleClick"
+                                  KeyDown="StructureTree_KeyDown"
+                                  PreviewKeyDown="FormView_PreviewKeyDown"
+                                  ContextMenuOpening="StructureTree_ContextMenuOpening">
+                            <TreeView.ContextMenu>
+                                <ContextMenu />
+                            </TreeView.ContextMenu>
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                    <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolVis}}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                    <Setter Property="Padding" Value="0,2" />
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                        </TreeView>
+                    </DockPanel>
+
+                    <avalonedit:TextEditor
+                        x:Name="XmlEditor"
+                        FontFamily="Consolas"
+                        FontSize="{Binding EditorFontSize}"
+                        WordWrap="{Binding WordWrap}"
+                        ShowLineNumbers="True"
+                        HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto"
+                        Padding="4"
+                        BorderThickness="0"
+                        Visibility="{Binding IsFormView, Converter={StaticResource InverseBoolVis}}" />
+                </Grid>
+            </DockPanel>
 
             <GridSplitter Grid.Column="3" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
