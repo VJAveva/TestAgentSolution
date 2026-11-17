@@ -12,18 +12,7 @@ using TestControllerGrpc.Services;
 namespace TestControllerGrpc.ViewModels;
 
 /// <summary>
-/// Represents a node in the WatchItem structure preview tree.
-/// </summary>
-public sealed partial class WatchItemPreviewNode : ObservableObject
-{
-    [ObservableProperty] private string _displayText = "";
-    [ObservableProperty] private string _nodeIcon = "";
-    [ObservableProperty] private bool _isExpanded = true;
-    public ObservableCollection<WatchItemPreviewNode> Children { get; } = new();
-}
-
-/// <summary>
-/// ViewModel for the standalone WatchItem XML Editor window.
+/// ViewModel for the Pipeline Editor window (PipelineEditor_Requirement.md).
 /// Provides structure-aware XML editing with validation, auto-format, auto-fix,
 /// error panel, IntelliSense, and structure preview for WatchItem XML files.
 ///
@@ -51,7 +40,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     private int _analysisVersion;
 
     [ObservableProperty] private string _xmlText = "";
-    [ObservableProperty] private string _windowTitle = "WatchItem XML Editor";
+    [ObservableProperty] private string _windowTitle = "Pipeline Editor";
     [ObservableProperty] private string _statusMessage = "";
     [ObservableProperty] private string _statusSeverity = "Info"; // Info, Success, Error
     [ObservableProperty] private bool _isXmlValid = true;
@@ -84,9 +73,6 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     }
 
     // Structure preview
-    [ObservableProperty] private bool _isPreviewVisible;
-    public ObservableCollection<WatchItemPreviewNode> PreviewRoots { get; } = new();
-
     /// <summary>Set to true when the user clicks Save and validation passes.</summary>
     public bool DialogAccepted { get; private set; }
 
@@ -125,6 +111,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         StatusMessage = "Ready";
         StatusSeverity = "Info";
         UpdateSummary();
+        RebuildStructure();
     }
 
     public async Task RefreshDiagnosticsAsync()
@@ -199,7 +186,11 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             QuickFixes = d.QuickFixes,
         }).ToList();
 
-    partial void OnXmlTextChanged(string value) => UpdateSummary();
+    partial void OnXmlTextChanged(string value)
+    {
+        UpdateSummary();
+        RebuildStructure();
+    }
 
     private void UpdateSummary()
     {
@@ -213,10 +204,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
             var path = doc.Attribute("Path")?.Value ?? "";
             var filter = doc.Attribute("Filter")?.Value ?? "";
-            WatchItemSummary = $"{EventCount} event(s), {TotalActionCount} action(s) � {path}{filter}";
-
-            if (IsPreviewVisible)
-                RebuildPreview(doc);
+            WatchItemSummary = $"{EventCount} event(s), {TotalActionCount} action(s) - {path}{filter}";
         }
         catch
         {
@@ -512,25 +500,6 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void TogglePreview()
-    {
-        IsPreviewVisible = !IsPreviewVisible;
-        if (IsPreviewVisible)
-        {
-            try
-            {
-                var doc = XElement.Parse(XmlText);
-                RebuildPreview(doc);
-            }
-            catch
-            {
-                PreviewRoots.Clear();
-                PreviewRoots.Add(new WatchItemPreviewNode { DisplayText = "Invalid XML", NodeIcon = "!" });
-            }
-        }
-    }
-
-    [RelayCommand]
     private void NavigateToValidationError(ValidationErrorViewModel? error)
     {
         if (error is null) return;
@@ -749,6 +718,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
         IsErrorPanelVisible = errors.Count > 0;
         IsXmlValid = errors.All(error => error.Severity != "Error");
+        ApplyProblemsToStructure();
 
         var firstError = errors.FirstOrDefault(error => error.Severity == "Error") ?? errors.FirstOrDefault();
         if (firstError is not null)
@@ -760,105 +730,4 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         }
     }
 
-    // ???????????????????????????????????????????????????????????????
-    // STRUCTURE PREVIEW
-    // ???????????????????????????????????????????????????????????????
-
-    private void RebuildPreview(XElement root)
-    {
-        PreviewRoots.Clear();
-        var tag = root.Attribute("Tag")?.Value ?? "WatchItem";
-        var path = root.Attribute("Path")?.Value ?? "";
-        var filter = root.Attribute("Filter")?.Value ?? "";
-        var rootNode = new WatchItemPreviewNode
-        {
-            DisplayText = $"{tag}  ({path}{filter})",
-            NodeIcon = "W",
-        };
-
-        foreach (var eventEl in root.Elements("Event"))
-        {
-            var evType = eventEl.Attribute("Type")?.Value ?? "?";
-            var execType = eventEl.Attribute("ExecutionType")?.Value ?? "?";
-            var evNode = new WatchItemPreviewNode
-            {
-                DisplayText = $"Event: {evType} ({execType})",
-                NodeIcon = "E",
-            };
-            BuildPreviewChildren(eventEl, evNode);
-            rootNode.Children.Add(evNode);
-        }
-
-        PreviewRoots.Add(rootNode);
-    }
-
-    private static void BuildPreviewChildren(XElement parent, WatchItemPreviewNode parentNode)
-    {
-        foreach (var el in parent.Elements())
-        {
-            var name = el.Name.LocalName;
-            var node = name switch
-            {
-                "ActionGroup" => new WatchItemPreviewNode
-                {
-                    DisplayText = $"[{el.Attribute("ExecutionType")?.Value ?? "Seq"}] {el.Attribute("Tag")?.Value ?? ""}",
-                    NodeIcon = el.Attribute("ExecutionType")?.Value == "Parallel" ? "||" : ">>",
-                },
-                "Action" => new WatchItemPreviewNode
-                {
-                    DisplayText = FormatActionPreview(el),
-                    NodeIcon = ResolveActionIcon(el),
-                },
-                "Initialize" => new WatchItemPreviewNode
-                {
-                    DisplayText = $"Initialize: {el.Attribute("ParameterFile")?.Value ?? ""}",
-                    NodeIcon = "i",
-                },
-                "Ref" => new WatchItemPreviewNode
-                {
-                    DisplayText = $"Ref > {el.Attribute("TemplateID")?.Value ?? ""}",
-                    NodeIcon = ">",
-                },
-                _ => new WatchItemPreviewNode
-                {
-                    DisplayText = $"<{name}>",
-                    NodeIcon = "?",
-                },
-            };
-
-            if (name == "ActionGroup")
-                BuildPreviewChildren(el, node);
-
-            parentNode.Children.Add(node);
-        }
-    }
-
-    private static string FormatActionPreview(XElement el)
-    {
-        var type = el.Attribute("Type")?.Value ?? "?";
-        return type switch
-        {
-            "RunRemoteCommand" => $"{el.Attribute("AgentName")?.Value}: {el.Attribute("Command")?.Value}",
-            "SendMail" => $"Mail > {el.Attribute("To")?.Value}: {el.Attribute("Title")?.Value}",
-            _ => $"{el.Attribute("Command")?.Value} {el.Attribute("Parameters")?.Value}",
-        };
-    }
-
-    private static string ResolveActionIcon(XElement el)
-    {
-        var type = el.Attribute("Type")?.Value ?? "";
-        if (type == "SendMail") return "M";
-        if (type == "RunRemoteCommand") return "R";
-        var cmd = el.Attribute("Command")?.Value ?? "";
-        try
-        {
-            var ext = Path.GetExtension(cmd.Trim().Trim('"')).ToLowerInvariant();
-            return ext switch
-            {
-                ".exe" => "X", ".bat" or ".cmd" => "B", ".ps1" => "P", ".msi" => "I",
-                _ => "A"
-            };
-        }
-        catch (ArgumentException) { return "A"; }
-    }
 }

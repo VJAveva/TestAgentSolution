@@ -105,6 +105,78 @@ public class WatchItemXmlEditorViewModelTests
         Assert.Equal(1, navigations);
     }
 
+    private const string Steps =
+        "<WatchItem Tag=\"P\" Path=\"C:\\\" Filter=\"t.txt\">\n" +
+        "  <Event Type=\"Renamed\" ExecutionType=\"Sequential\">\n" +
+        "    <Action Tag=\"A\" Command=\"a.bat\" />\n" +
+        "    <Action Tag=\"B\" Command=\"b.bat\" />\n" +
+        "  </Event>\n" +
+        "</WatchItem>";
+
+    [Fact]
+    public void SyncSelectionToCaret_Should_SelectTheNodeWithoutNavigating_When_CaretMoves()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps, fileSystem: new AlwaysExistsFileSystem());
+        var navigations = 0;
+        vm.NavigateToOffset += _ => navigations++;
+
+        vm.SyncSelectionToCaret(Steps.IndexOf("b.bat", StringComparison.Ordinal));
+
+        Assert.Equal("e0/c1", vm.SelectedStructureNode?.Path);
+        Assert.Contains(vm.SelectedProperties, row => row is { Name: "Command", Value: "b.bat" });
+        Assert.Equal(0, navigations);
+    }
+
+    [Fact]
+    public void SelectedStructureNode_Should_MoveTheCaretToTheNode_When_PickedInTheTree()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps, fileSystem: new AlwaysExistsFileSystem());
+        int? offset = null;
+        vm.NavigateToOffset += o => offset = o;
+
+        vm.SelectedStructureNode = vm.StructureRoots[0].Children[0].Children[1];
+
+        Assert.Equal(Steps.IndexOf("<Action Tag=\"B\"", StringComparison.Ordinal), offset);
+    }
+
+    [Fact]
+    public void Validate_Should_PutTheProblemOnItsNode_When_TagIsEmpty()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Original.Replace("Tag=\"Old\"", "Tag=\"\""),
+            fileSystem: new AlwaysExistsFileSystem());
+
+        vm.ValidateCommand.Execute(null);
+
+        Assert.True(vm.StructureRoots[0].ErrorCount > 0);
+        Assert.All(vm.ValidationErrors.Where(e => e.Line == 1), e => Assert.Equal("", e.NodePath));
+    }
+
+    [Fact]
+    public void StructureMenuFor_Should_OfferNoRunItems_When_NodeIsAnAction()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps, fileSystem: new AlwaysExistsFileSystem());
+
+        var ids = vm.StructureMenuFor(vm.StructureRoots[0].Children[0].Children[1]).Select(i => i.Id).ToList();
+
+        Assert.Contains(TestControllerGrpc.Menus.NodeMenuIds.MoveUp, ids);
+        Assert.All(ids, id => Assert.Contains(id, TestControllerGrpc.Menus.NodeMenuProvider.PipelineEditorIds));
+        Assert.DoesNotContain(TestControllerGrpc.Menus.NodeMenuIds.ExecuteAction, ids);
+    }
+
+    [Fact]
+    public void RunStructureCommand_Should_EditTheXmlAndKeepTheNodeSelected_When_MovedUp()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps, fileSystem: new AlwaysExistsFileSystem());
+
+        var changed = vm.RunStructureCommand(TestControllerGrpc.Menus.NodeMenuIds.MoveUp,
+            vm.StructureRoots[0].Children[0].Children[1]);
+
+        Assert.True(changed);
+        Assert.True(vm.XmlText.IndexOf("Tag=\"B\"", StringComparison.Ordinal) < vm.XmlText.IndexOf("Tag=\"A\"", StringComparison.Ordinal));
+        Assert.Equal("B", vm.SelectedStructureNode?.Name);
+        Assert.True(vm.HasUnsavedChanges);
+    }
+
     private sealed class AlwaysExistsFileSystem : IPreflightFileSystem
     {
         public PathAccess CheckFile(string path) => PathAccess.Exists;

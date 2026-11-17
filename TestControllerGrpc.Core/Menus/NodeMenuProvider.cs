@@ -132,6 +132,16 @@ public static class NodeMenuProvider
         NodeMenuIds.ExecuteAction, NodeMenuIds.ShowResolvedCommand, NodeMenuIds.Stop,
     };
 
+    /// <summary>
+    /// The items the Pipeline Editor offers on its structure tree. No run items: the editor holds unsaved changes,
+    /// so a run from there would run the saved pipeline, not what is on screen.
+    /// </summary>
+    public static readonly IReadOnlySet<string> PipelineEditorIds = new HashSet<string>
+    {
+        NodeMenuIds.Duplicate, NodeMenuIds.MoveUp, NodeMenuIds.MoveDown, NodeMenuIds.Skip, NodeMenuIds.Include,
+        NodeMenuIds.ExecutionType, NodeMenuIds.ExecutionSequential, NodeMenuIds.ExecutionParallel, NodeMenuIds.Delete,
+    };
+
     private static NodeMenuItem BlockEdit(NodeMenuItem item, string reason) => EditIds.Contains(item.Id)
         ? item with { IsEnabled = false, ToolTip = reason, Children = item.Children.Select(ch => BlockEdit(ch, reason)).ToList() }
         : item;

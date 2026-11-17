@@ -10,6 +10,7 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <vm:IntToVisibilityConverter x:Key="CountVis" />
 
         <Style x:Key="EditorBtn" TargetType="Button">
             <Setter Property="Padding" Value="12,6" />
@@ -46,16 +47,30 @@
             </Setter>
         </Style>
 
-        <!-- Preview tree item template -->
-        <HierarchicalDataTemplate x:Key="PreviewTreeTemplate" DataType="{x:Type vm:WatchItemPreviewNode}" ItemsSource="{Binding Children}">
+        <!-- Structure tree item: kind badge, name, skipped pill, error / warning counts -->
+        <HierarchicalDataTemplate x:Key="StructureTreeTemplate" DataType="{x:Type vm:PipelineStructureNode}" ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal" Margin="0,1">
-                <Border CornerRadius="3" Padding="3,1" Margin="0,0,4,0" MinWidth="18" HorizontalAlignment="Center"
+                <Border CornerRadius="3" Padding="3,1" Margin="0,0,4,0" MinWidth="30"
                         Background="{DynamicResource AccGreen}">
-                    <TextBlock Text="{Binding NodeIcon}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                    <TextBlock Text="{Binding KindBadge}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
                                Foreground="{DynamicResource TreeBadgeFg}" HorizontalAlignment="Center" />
                 </Border>
-                <TextBlock Text="{Binding DisplayText}" FontSize="{StaticResource FontSize10}" VerticalAlignment="Center"
+                <TextBlock Text="{Binding Name}" FontSize="{StaticResource FontSize10}" VerticalAlignment="Center"
                            Foreground="{DynamicResource TextP}" TextTrimming="CharacterEllipsis" />
+                <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource PillSkipBg}"
+                        Visibility="{Binding IsSkipped, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="Skipped" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextP}" />
+                </Border>
+                <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource StatusFailedBg}"
+                        ToolTip="Errors on this node" Visibility="{Binding ErrorCount, Converter={StaticResource CountVis}}">
+                    <TextBlock Text="{Binding ErrorCount}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                               Foreground="{DynamicResource StatusFailedFg}" />
+                </Border>
+                <Border CornerRadius="3" Padding="4,0" Margin="4,0,0,0" Background="{DynamicResource StatusWarningBg}"
+                        ToolTip="Warnings on this node" Visibility="{Binding WarningCount, Converter={StaticResource CountVis}}">
+                    <TextBlock Text="{Binding WarningCount}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                               Foreground="{DynamicResource StatusWarningFg}" />
+                </Border>
             </StackPanel>
         </HierarchicalDataTemplate>
     </Window.Resources>
@@ -78,7 +93,7 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="&#x1F4DD;" FontSize="{StaticResource FontSize16}" FontFamily="Segoe UI Emoji" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <TextBlock Text="WatchItem XML Editor" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
+                    <TextBlock Text="Pipeline Editor" FontSize="{StaticResource FontSize14}" FontWeight="Bold"
                                Foreground="{DynamicResource AccPeach}" VerticalAlignment="Center" />
                 </StackPanel>
 
@@ -121,17 +136,6 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x21BA;" FontSize="{StaticResource FontSize12}" Margin="0,0,4,0" />
                             <TextBlock Text="Revert" />
-                        </StackPanel>
-                    </Button>
-
-                    <Border Width="1" Background="{DynamicResource Bdr}" Margin="6,4" />
-
-                    <Button Style="{StaticResource EditorBtn}"
-                            Background="{DynamicResource WatchRootBg}" Foreground="{DynamicResource AccGreen}"
-                            Command="{Binding TogglePreviewCommand}" ToolTip="Toggle structure preview panel">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F333;" FontSize="{StaticResource FontSize12}" FontFamily="Segoe UI Emoji" Margin="0,0,4,0" />
-                            <TextBlock Text="Preview" />
                         </StackPanel>
                     </Button>
 
@@ -198,14 +202,74 @@
         <!-- ??????????????????????????????????????????????????????? -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="280" MinWidth="160" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition x:Name="PreviewColumn" Width="0" />
+                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="260" MinWidth="160" />
             </Grid.ColumnDefinitions>
+
+            <!-- Structure: the pipeline as a tree; selection is shared with the XML caret -->
+            <Border Grid.Column="0" Background="{DynamicResource BgPanel}"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="8,5"
+                            BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
+                        <StackPanel>
+                            <TextBlock Text="Structure" FontSize="{StaticResource FontSize10}" FontWeight="Bold"
+                                       Foreground="{DynamicResource AccGreen}" />
+                            <TextBox Margin="0,4,0,0" Padding="4,2" FontSize="{StaticResource FontSize10}"
+                                     Text="{Binding StructureFilter, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"
+                                     BorderBrush="{DynamicResource Bdr}"
+                                     ToolTip="Search by name, agent or command"
+                                     AutomationProperties.Name="Search structure" />
+                            <TextBlock Margin="0,4,0,0" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AccYellow}"
+                                       Text="XML is not well-formed - the tree shows the last good state.">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStructureAvailable}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <TreeView x:Name="StructureTree" ItemsSource="{Binding StructureRoots}"
+                              AutomationProperties.Name="Pipeline structure"
+                              Background="Transparent" BorderThickness="0"
+                              Margin="4" Padding="0,4"
+                              ItemTemplate="{StaticResource StructureTreeTemplate}"
+                              SelectedItemChanged="StructureTree_SelectedItemChanged"
+                              ContextMenuOpening="StructureTree_ContextMenuOpening">
+                        <TreeView.ContextMenu>
+                            <ContextMenu />
+                        </TreeView.ContextMenu>
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolVis}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextP}" />
+                                <Setter Property="Padding" Value="2,2" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                    </TreeView>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="4" Background="{DynamicResource BgSurface}"
+                          HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext" />
 
             <!-- AvalonEdit XML Editor -->
             <avalonedit:TextEditor
-                Grid.Column="0"
+                Grid.Column="2"
                 x:Name="XmlEditor"
                 FontFamily="Consolas"
                 FontSize="{Binding EditorFontSize}"
@@ -216,34 +280,37 @@
                 Padding="4"
                 BorderThickness="0" />
 
-            <!-- Splitter (only visible with preview) -->
-            <GridSplitter Grid.Column="1" Width="4" Background="{DynamicResource BgSurface}"
+            <GridSplitter Grid.Column="3" Width="4" Background="{DynamicResource BgSurface}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                          ResizeBehavior="PreviousAndNext"
-                          Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolVis}}" />
+                          ResizeBehavior="PreviousAndNext" />
 
-            <!-- Structure Preview Panel -->
-            <Border Grid.Column="2" Background="{DynamicResource BgPanel}"
-                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1,0,0,0"
-                    Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolVis}}">
+            <!-- Properties of the selected node (read-only in Part 1; secret values masked) -->
+            <Border Grid.Column="4" Background="{DynamicResource BgPanel}"
+                    BorderBrush="{DynamicResource Bdr}" BorderThickness="1,0,0,0">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="{DynamicResource BgCard}" Padding="8,5"
                             BorderBrush="{DynamicResource Bdr}" BorderThickness="0,0,0,1">
-                        <TextBlock Text="Structure Preview" FontSize="{StaticResource FontSize10}" FontWeight="Bold"
-                                   Foreground="{DynamicResource AccGreen}" />
+                        <StackPanel>
+                            <TextBlock Text="Properties" FontSize="{StaticResource FontSize10}" FontWeight="Bold"
+                                       Foreground="{DynamicResource AccGreen}" />
+                            <TextBlock Text="{Binding SelectedNodeTitle}" FontSize="{StaticResource FontSize9}"
+                                       Foreground="{DynamicResource TextS}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
                     </Border>
-                    <TreeView ItemsSource="{Binding PreviewRoots}" AutomationProperties.Name="WatchList preview tree"
-                              Background="Transparent" BorderThickness="0"
-                              Margin="4" Padding="0,4"
-                              ItemTemplate="{StaticResource PreviewTreeTemplate}">
-                        <TreeView.ItemContainerStyle>
-                            <Style TargetType="TreeViewItem">
-                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                                <Setter Property="Foreground" Value="{DynamicResource TextP}" />
-                                <Setter Property="Padding" Value="2,2" />
-                            </Style>
-                        </TreeView.ItemContainerStyle>
-                    </TreeView>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
+                        <ItemsControl ItemsSource="{Binding SelectedProperties}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,6">
+                                        <TextBlock Text="{Binding Name}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextS}" />
+                                        <TextBlock Text="{Binding Value}" FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextP}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
         </Grid>
@@ -321,6 +388,7 @@
                         <DataGridTextColumn Header="Line" Binding="{Binding Line}" Width="50" />
                         <DataGridTextColumn Header="Col" Binding="{Binding Column}" Width="45" />
                         <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="75" />
+                        <DataGridTextColumn Header="Node" Binding="{Binding NodeLabel}" Width="140" />
                         <DataGridTextColumn Header="Rule" Binding="{Binding ErrorType}" Width="85" />
                         <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
                         <DataGridTemplateColumn Header="Quick fix" Width="220">

@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -76,8 +77,13 @@ public partial class RawXmlEditorWindow : Window
             _diagnosticsTimer.Start();
         };
 
-        // Track cursor position in status bar
-        XmlEditor.TextArea.Caret.PositionChanged += (_, _) => UpdateCursorPosition();
+        // Track cursor position in status bar; the structure tree follows the caret
+        XmlEditor.TextArea.Caret.PositionChanged += (_, _) =>
+        {
+            UpdateCursorPosition();
+            _vm.SyncSelectionToCaret(XmlEditor.CaretOffset);
+        };
+        _vm.NavigateToOffset += NavigateToOffset;
         XmlEditor.MouseHover += OnEditorMouseHover;
         XmlEditor.MouseHoverStopped += OnEditorMouseHoverStopped;
 
@@ -396,10 +402,76 @@ public partial class RawXmlEditorWindow : Window
             if (XmlEditor.Text != _vm.XmlText)
                 ReplaceTextUndoable(_vm.XmlText);
         }
-        else if (e.PropertyName == nameof(WatchItemXmlEditorViewModel.IsPreviewVisible))
+    }
+
+    private void NavigateToOffset(int offset)
+    {
+        if (offset < 0 || offset > XmlEditor.Document.TextLength) return;
+        XmlEditor.TextArea.ClearSelection();
+        XmlEditor.CaretOffset = offset;
+        XmlEditor.ScrollToLine(XmlEditor.Document.GetLineByOffset(offset).LineNumber);
+        XmlEditor.TextArea.Caret.BringCaretToView();
+    }
+
+    private void StructureTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is PipelineStructureNode node)
+            _vm.SelectedStructureNode = node;
+    }
+
+    // Same rules as the main tree's menu (NodeMenuProvider), limited to the editor's items; built when it opens.
+    private void StructureTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var menu = StructureTree.ContextMenu;
+        menu.Items.Clear();
+        if (_vm.SelectedStructureNode is not { } node)
         {
-            PreviewColumn.Width = _vm.IsPreviewVisible ? new GridLength(280) : new GridLength(0);
+            e.Handled = true;
+            return;
         }
+
+        TestControllerGrpc.Menus.NodeMenuGroup? lastGroup = null;
+        foreach (var item in _vm.StructureMenuFor(node))
+        {
+            if (lastGroup is not null && item.Group != lastGroup)
+                menu.Items.Add(new Separator());
+            lastGroup = item.Group;
+            menu.Items.Add(ToMenuItem(item, node));
+        }
+        if (menu.Items.Count == 0) e.Handled = true;
+    }
+
+    private MenuItem ToMenuItem(TestControllerGrpc.Menus.NodeMenuItem item, PipelineStructureNode node)
+    {
+        var menuItem = new MenuItem
+        {
+            Header = item.Label,
+            IsEnabled = item.IsEnabled,
+            IsCheckable = item.IsChecked is not null,
+            IsChecked = item.IsChecked == true,
+            ToolTip = item.ToolTip,
+        };
+        ToolTipService.SetShowOnDisabled(menuItem, true);
+        if (item.Children.Count > 0)
+        {
+            foreach (var child in item.Children)
+                menuItem.Items.Add(ToMenuItem(child, node));
+            return menuItem;
+        }
+
+        menuItem.Click += (_, _) =>
+        {
+            string? reason = null;
+            if (item.Id == TestControllerGrpc.Menus.NodeMenuIds.Skip)
+            {
+                var dialog = new Dialogs.SkipReasonDialog(node.Name, null) { Owner = this };
+                if (dialog.ShowDialog() != true) return;
+                reason = dialog.Reason;
+            }
+            _vm.RunStructureCommand(item.Id, node, reason);
+            XmlEditor.Focus();
+        };
+        return menuItem;
     }
 
     // Setting TextEditor.Text clears the undo stack and resets the caret, so Format/Auto-fix/Revert go through the document.
@@ -469,6 +541,7 @@ public partial class RawXmlEditorWindow : Window
     {
         _diagnosticsTimer.Stop();
         _vm.QuickFixRequested -= ApplyQuickFix;
+        _vm.NavigateToOffset -= NavigateToOffset;
         XmlEditor.MouseHover -= OnEditorMouseHover;
         XmlEditor.MouseHoverStopped -= OnEditorMouseHoverStopped;
         _vm.ValidationErrors.CollectionChanged -= OnDiagnosticsChanged;

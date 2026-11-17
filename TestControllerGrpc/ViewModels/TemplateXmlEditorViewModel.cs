@@ -22,6 +22,10 @@ public sealed partial class ValidationErrorViewModel : ObservableObject
     [ObservableProperty] private string _errorType = "";
     [ObservableProperty] private string _message = "";
     [ObservableProperty] private string _severity = "Error";
+
+    /// <summary>Pipeline Editor: the node the problem belongs to (empty when it is not inside one).</summary>
+    [ObservableProperty] private string _nodeLabel = "";
+    public string? NodePath { get; set; }
     public IReadOnlyList<XmlEditorQuickFix> QuickFixes { get; set; } = [];
 }
 

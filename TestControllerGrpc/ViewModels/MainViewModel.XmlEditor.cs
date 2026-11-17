@@ -53,7 +53,7 @@ public sealed partial class MainViewModel
         var editorAgents = GetXmlEditorAgents();
         var editorVm = new WatchItemXmlEditorViewModel(
             xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
-        editorVm.WindowTitle = $"WatchItem XML Editor � {oldWi.Tag}";
+        editorVm.WindowTitle = $"Pipeline Editor - {oldWi.Tag}";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
 
@@ -129,7 +129,7 @@ public sealed partial class MainViewModel
         var editorAgents = GetXmlEditorAgents();
         var editorVm = new WatchItemXmlEditorViewModel(
             xml, _config, editorAgents.Select(agent => agent.Name).ToArray(), agentStatuses: editorAgents);
-        editorVm.WindowTitle = "WatchList XML Editor � Full";
+        editorVm.WindowTitle = "WatchList Editor - Full";
 
         var editorWindow = new Views.RawXmlEditorWindow(editorVm);
         if (FindOwnerWindow() is { } mainWindow && !ReferenceEquals(mainWindow, editorWindow))
