@@ -91,4 +91,37 @@ public class PipelineXmlEditsTests
         Assert.Null(PipelineXmlEdits.Delete(Xml, "e0/c9"));
         Assert.Null(PipelineXmlEdits.Move(Xml, "e0/c0", up: true));
     }
+
+    [Fact]
+    public void Move_Should_LeaveOtherTextByteIdentical_When_ElementsUseCompactEmptyTags()
+    {
+        const string compact = "<WatchItem Tag=\"P\">\r\n  <Event Type=\"Renamed\">\r\n    <Action Tag=\"A\"/>\r\n    <Action Tag=\"B\"/>\r\n  </Event>\r\n  <Event Type='Created'/>\r\n</WatchItem>";
+
+        var result = PipelineXmlEdits.Move(compact, "e0/c1", up: true)!;
+
+        Assert.Equal(compact.Replace("Tag=\"A\"", "Tag=\"X\"").Replace("Tag=\"B\"", "Tag=\"A\"").Replace("Tag=\"X\"", "Tag=\"B\""), result.Xml);
+    }
+
+    [Fact]
+    public void SetAttribute_Should_AddReplaceAndRemove_When_ValueChanges()
+    {
+        var added = PipelineXmlEdits.SetAttribute(Xml, "e0/c0", "AgentName", "node \"1\"")!;
+        Assert.Contains("<Action Tag=\"A\" AgentName=\"node &quot;1&quot;\" />", added.Xml);
+
+        var removed = PipelineXmlEdits.SetAttribute(added.Xml, "e0/c0", "AgentName", null)!;
+        Assert.Equal(Xml, removed.Xml);
+        Assert.Null(PipelineXmlEdits.SetAttribute(Xml, "e0/c0", "Tag", "A"));
+    }
+
+    [Fact]
+    public void Attributes_Should_DecodeCharacterReferences_When_ValueHoldsLineBreaks()
+    {
+        const string xml = "<Action Body=\"one&#xA;two &amp; three\" To='a@b'/>";
+
+        var attributes = PipelineXmlText.Attributes(xml, 0);
+
+        Assert.Equal("one\ntwo & three", attributes[0].Value);
+        Assert.Equal("a@b", attributes[1].Value);
+        Assert.Equal(xml, PipelineXmlText.SetAttribute(xml, 0, "Body", "one\ntwo & three"));
+    }
 }

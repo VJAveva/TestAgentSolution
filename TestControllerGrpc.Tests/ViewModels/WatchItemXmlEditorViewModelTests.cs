@@ -1,4 +1,5 @@
 using TestControllerGrpc.Core.Preflight;
+using TestControllerGrpc.Services;
 using TestControllerGrpc.ViewModels;
 
 namespace TestControllerGrpc.Tests.ViewModels;
@@ -123,7 +124,7 @@ public class WatchItemXmlEditorViewModelTests
         vm.SyncSelectionToCaret(Steps.IndexOf("b.bat", StringComparison.Ordinal));
 
         Assert.Equal("e0/c1", vm.SelectedStructureNode?.Path);
-        Assert.Contains(vm.SelectedProperties, row => row is { Name: "Command", Value: "b.bat" });
+        Assert.Contains(vm.SelectedFields, field => field is { Attribute: "Command", Value: "b.bat" });
         Assert.Equal(0, navigations);
     }
 
@@ -175,6 +176,85 @@ public class WatchItemXmlEditorViewModelTests
         Assert.True(vm.XmlText.IndexOf("Tag=\"B\"", StringComparison.Ordinal) < vm.XmlText.IndexOf("Tag=\"A\"", StringComparison.Ordinal));
         Assert.Equal("B", vm.SelectedStructureNode?.Name);
         Assert.True(vm.HasUnsavedChanges);
+    }
+
+    private const string Mail =
+        "<WatchItem Tag=\"P\" Path=\"C:\\\" Filter=\"t.txt\">\n" +
+        "  <Event Type=\"Renamed\" ExecutionType=\"Sequential\">\n" +
+        "    <Action Tag=\"Run\" Type=\"RunRemoteCommand\" AgentName=\"node1\" Command=\"[_Root]\\a.bat\" Password=\"hunter2\" />\n" +
+        "    <Action Tag=\"Mail\" Type=\"SendMail\" To=\"qa@x\" Title=\"Done\" />\n" +
+        "  </Event>\n" +
+        "</WatchItem>";
+
+    private static WatchItemXmlEditorViewModel CreateMail() =>
+        new(Mail, fileSystem: new AlwaysExistsFileSystem(),
+            agentStatuses: [new("node1", "Online"), new("node2", "Offline")]);
+
+    private static PipelineFieldViewModel Field(WatchItemXmlEditorViewModel vm, string attribute) =>
+        vm.SelectedFields.Single(f => f.Attribute == attribute);
+
+    [Fact]
+    public void FieldValue_Should_WriteTheAttributeIntoTheXml_When_AgentIsChanged()
+    {
+        var vm = CreateMail();
+        vm.SelectPath("e0/c0");
+
+        Field(vm, "AgentName").Value = "node2";
+
+        Assert.Contains("AgentName=\"node2\"", vm.XmlText);
+        Assert.Equal("e0/c0", vm.SelectedStructureNode?.Path);
+        Assert.Equal("Offline", vm.SelectedStructureNode?.AgentStatus);
+    }
+
+    [Fact]
+    public void Fields_Should_FollowTheXml_When_TheXmlIsEdited()
+    {
+        var vm = CreateMail();
+        vm.SelectPath("e0/c1");
+
+        vm.XmlText = Mail.Replace("Title=\"Done\"", "Title=\"Finished\"");
+        vm.RefreshStructure();
+
+        Assert.Equal("Finished", Field(vm, "Title").Value);
+    }
+
+    [Fact]
+    public void MailBody_Should_RoundTripLineBreaks_When_EditedInTheForm()
+    {
+        var vm = CreateMail();
+        vm.SelectPath("e0/c1");
+
+        Field(vm, "Body").Value = "Line one\r\nLine two";
+
+        Assert.Contains("Body=\"Line one&#xA;Line two\"", vm.XmlText);
+        Assert.Equal("Line one\nLine two", Field(vm, "Body").Value);
+    }
+
+    [Fact]
+    public void Fields_Should_NeverShowSecrets_When_ActionHasAPassword()
+    {
+        var vm = CreateMail();
+        vm.SelectPath("e0/c0");
+
+        var password = Field(vm, "Password");
+        Assert.True(password.IsReadOnly);
+        Assert.DoesNotContain(vm.SelectedFields, f => f.Value?.Contains("hunter2") == true);
+        Assert.Single(Field(vm, "Command").Tokens);
+    }
+
+    [Fact]
+    public void ErrorCount_Should_IncludeChildren_When_ParentIsCollapsed()
+    {
+        var vm = new WatchItemXmlEditorViewModel(Steps.Replace("Command=\"b.bat\"", "Command=\"\""),
+            fileSystem: new AlwaysExistsFileSystem());
+        vm.ValidateCommand.Execute(null);
+        var evt = vm.StructureRoots[0].Children[0];
+        var own = evt.ErrorCount;
+
+        evt.IsExpanded = false;
+
+        Assert.True(evt.SubtreeErrorCount > own);
+        Assert.Equal(evt.SubtreeErrorCount, evt.ErrorCount);
     }
 
     private sealed class AlwaysExistsFileSystem : IPreflightFileSystem

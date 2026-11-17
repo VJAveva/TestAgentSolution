@@ -11,6 +11,8 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
         <vm:IntToVisibilityConverter x:Key="CountVis" />
+        <vm:InverseBoolToVisibilityConverter x:Key="InverseBoolVis" />
+        <vm:NonEmptyToVisibilityConverter x:Key="NonEmptyVis" />
 
         <Style x:Key="EditorBtn" TargetType="Button">
             <Setter Property="Padding" Value="12,6" />
@@ -60,6 +62,10 @@
                 <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource PillSkipBg}"
                         Visibility="{Binding IsSkipped, Converter={StaticResource BoolVis}}">
                     <TextBlock Text="Skipped" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextP}" />
+                </Border>
+                <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource StatusFailedBg}"
+                        ToolTip="{Binding AgentStatus}" Visibility="{Binding IsAgentUnavailable, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="{Binding AgentStatus}" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource StatusFailedFg}" />
                 </Border>
                 <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="{DynamicResource StatusFailedBg}"
                         ToolTip="Errors on this node" Visibility="{Binding ErrorCount, Converter={StaticResource CountVis}}">
@@ -284,7 +290,7 @@
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext" />
 
-            <!-- Properties of the selected node (read-only in Part 1; secret values masked) -->
+            <!-- Properties: a form per node type; each field change is one edit of the XML (Ctrl+Z undoes it) -->
             <Border Grid.Column="4" Background="{DynamicResource BgPanel}"
                     BorderBrush="{DynamicResource Bdr}" BorderThickness="1,0,0,0">
                 <DockPanel>
@@ -298,21 +304,124 @@
                         </StackPanel>
                     </Border>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,4">
-                        <ItemsControl ItemsSource="{Binding SelectedProperties}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="0,0,0,6">
-                                        <TextBlock Text="{Binding Name}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
-                                                   Foreground="{DynamicResource TextS}" />
-                                        <TextBlock Text="{Binding Value}" FontSize="{StaticResource FontSize10}" TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource TextP}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <StackPanel>
+                            <TextBlock Text="{Binding SelectedNodeInfo}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextS}" Margin="0,0,0,6"
+                                       Visibility="{Binding SelectedNodeInfo, Converter={StaticResource NonEmptyVis}}" />
+                            <TextBlock FontSize="{StaticResource FontSize9}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Foreground="{DynamicResource TextS}" FontStyle="Italic"
+                                       Visibility="{Binding SelectedNodeNote, Converter={StaticResource NonEmptyVis}}">
+                                <Run Text="Note: " /><Run Text="{Binding SelectedNodeNote, Mode=OneWay}" />
+                            </TextBlock>
+                            <ItemsControl ItemsSource="{Binding SelectedNodeProblems}" Margin="0,0,0,6">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource AccRed}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding SelectedFields}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:PipelineFieldViewModel}">
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="{Binding Label}" FontSize="{StaticResource FontSize9}" FontWeight="Bold"
+                                                       Foreground="{DynamicResource TextS}"
+                                                       Visibility="{Binding IsBool, Converter={StaticResource InverseBoolVis}}" />
+                                            <DockPanel Visibility="{Binding IsTextBox, Converter={StaticResource BoolVis}}">
+                                                <Button DockPanel.Dock="Right" Content="..." Margin="4,0,0,0" Padding="6,0"
+                                                        Click="BrowseField_Click" ToolTip="Browse"
+                                                        AutomationProperties.Name="Browse"
+                                                        Visibility="{Binding CanBrowse, Converter={StaticResource BoolVis}}" />
+                                                <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}"
+                                                         IsReadOnly="{Binding IsReadOnly}"
+                                                         AcceptsReturn="{Binding IsMultiLine}"
+                                                         TextWrapping="Wrap" MaxHeight="140"
+                                                         VerticalScrollBarVisibility="Auto"
+                                                         Padding="4,2" FontSize="{StaticResource FontSize10}"
+                                                         Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextP}"
+                                                         BorderBrush="{DynamicResource Bdr}"
+                                                         AutomationProperties.Name="{Binding Label}"
+                                                         TextChanged="FieldText_TextChanged"
+                                                         PreviewKeyDown="FieldText_PreviewKeyDown" />
+                                            </DockPanel>
+                                            <ComboBox ItemsSource="{Binding Choices}" DisplayMemberPath="Display" SelectedValuePath="Value"
+                                                      SelectedValue="{Binding Value, Mode=TwoWay}"
+                                                      FontSize="{StaticResource FontSize10}"
+                                                      AutomationProperties.Name="{Binding Label}"
+                                                      Visibility="{Binding IsChoice, Converter={StaticResource BoolVis}}" />
+                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding BoolValue}"
+                                                      Foreground="{DynamicResource TextP}" FontSize="{StaticResource FontSize10}"
+                                                      AutomationProperties.Name="{Binding Label}"
+                                                      Visibility="{Binding IsBool, Converter={StaticResource BoolVis}}" />
+                                            <TextBlock Text="{Binding Hint}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextS}"
+                                                       Visibility="{Binding Hint, Converter={StaticResource NonEmptyVis}}" />
+                                            <TextBlock Text="{Binding ReadOnlyReason}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource AccYellow}"
+                                                       Visibility="{Binding ReadOnlyReason, Converter={StaticResource NonEmptyVis}}" />
+                                            <TextBlock Text="{Binding Error}" FontSize="{StaticResource FontSize9}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource AccRed}"
+                                                       Visibility="{Binding Error, Converter={StaticResource NonEmptyVis}}" />
+                                            <ItemsControl ItemsSource="{Binding Tokens}" Focusable="False">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border CornerRadius="3" Padding="4,0" Margin="0,2,4,0"
+                                                                ToolTip="{Binding Description}">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBtnBg}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsResolved}" Value="False">
+                                                                            <Setter Property="Background" Value="{DynamicResource StatusFailedBg}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="{Binding Token}" FontSize="{StaticResource FontSize9}"
+                                                                       FontFamily="Consolas" Foreground="{DynamicResource TextP}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
             </Border>
+
+            <!-- Token list for "[_" in a form field; it never takes focus, so the field does not commit half-typed text -->
+            <Popup x:Name="TokenPopup" StaysOpen="False" Placement="Bottom" AllowsTransparency="True">
+                <Border Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource Bdr}" BorderThickness="1">
+                    <ListBox x:Name="TokenList" MaxHeight="220" MinWidth="260" Focusable="False"
+                             Background="Transparent" Foreground="{DynamicResource TextP}" BorderThickness="0"
+                             AutomationProperties.Name="Tokens"
+                             MouseLeftButtonUp="TokenList_MouseLeftButtonUp">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Focusable" Value="False" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Text}" FontFamily="Consolas" FontSize="{StaticResource FontSize10}" />
+                                    <TextBlock Text="{Binding Description}" FontSize="{StaticResource FontSize9}"
+                                               Foreground="{DynamicResource TextS}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </Popup>
         </Grid>
 
         <!-- ??????????????????????????????????????????????????????? -->

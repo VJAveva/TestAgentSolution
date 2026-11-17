@@ -20,6 +20,7 @@ public sealed record PipelineXmlNode(
     int End,
     bool IsSkipped,
     string SearchText,
+    string? Agent,
     IReadOnlyList<PipelineXmlNode> Children);
 
 /// <summary>
@@ -80,7 +81,7 @@ public sealed class PipelineXmlMap
             var search = string.Join(" ", new[] { "Tag", "AgentName", "Command", "TemplateID", "Type", "ID" }
                 .Select(a => element.Attribute(a)?.Value).Where(v => !string.IsNullOrEmpty(v)));
             return new PipelineXmlNode(path, KindOf(element), NameOf(element), LineOf(lineStarts, start), start, end,
-                skipped, search, children);
+                skipped, search, element.Attribute("AgentName")?.Value, children);
         }
 
         IReadOnlyList<PipelineXmlNode> Steps(XElement parent, string parentPath) =>
@@ -131,11 +132,11 @@ public sealed class PipelineXmlMap
         _all.Where(n => n.Start <= offset && offset < n.End).MaxBy(n => n.Start);
 
     /// <summary>Node for a diagnostic position (1-based line and column, as the analyzer reports them).</summary>
-    public PipelineXmlNode? NodeAt(int line, int column)
-    {
-        if (line < 1 || line > _lineStarts.Length) return null;
-        return NodeAt(_lineStarts[line - 1] + Math.Max(0, column - 1));
-    }
+    public PipelineXmlNode? NodeAt(int line, int column) => OffsetOf(line, column) is { } offset ? NodeAt(offset) : null;
+
+    /// <summary>Text offset of a 1-based line and column; null when the line does not exist.</summary>
+    public int? OffsetOf(int line, int column) =>
+        line < 1 || line > _lineStarts.Length ? null : _lineStarts[line - 1] + Math.Max(0, column - 1);
 
     public IReadOnlyList<PipelineXmlNode> All => _all;
 
@@ -181,7 +182,7 @@ public sealed class PipelineXmlMap
                 // Line info points at the name, one past '<'.
                 var start = lineStarts[info.LineNumber - 1] + info.LinePosition - 2;
                 if (reader.IsEmptyElement)
-                    spans.Add((start, TagEnd(xml, start)));
+                    spans.Add((start, PipelineXmlText.StartTagEnd(xml, start)));
                 else
                 {
                     open.Push(spans.Count);
@@ -196,20 +197,6 @@ public sealed class PipelineXmlMap
             }
         }
         return spans;
-    }
-
-    /// <summary>Offset past the '&gt;' that ends the tag starting at <paramref name="start"/>; quoted values may hold '&gt;'.</summary>
-    private static int TagEnd(string xml, int start)
-    {
-        char? quote = null;
-        for (var i = start; i < xml.Length; i++)
-        {
-            var c = xml[i];
-            if (quote is not null) { if (c == quote) quote = null; }
-            else if (c is '"' or '\'') quote = c;
-            else if (c == '>') return i + 1;
-        }
-        return xml.Length;
     }
 
     private static int[] LineStarts(string xml)

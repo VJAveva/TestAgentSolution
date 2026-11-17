@@ -49,6 +49,8 @@ public partial class RawXmlEditorWindow : Window
         _diagnosticsTimer.Tick += async (_, _) =>
         {
             _diagnosticsTimer.Stop();
+            _vm.RefreshStructure();
+            _vm.SyncSelectionToCaret(XmlEditor.CaretOffset);
             await _vm.RefreshDiagnosticsAsync();
         };
 
@@ -417,6 +419,90 @@ public partial class RawXmlEditorWindow : Window
     {
         if (e.NewValue is PipelineStructureNode node)
             _vm.SelectedStructureNode = node;
+    }
+
+    private void BrowseField_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not PipelineFieldViewModel field) return;
+        string? chosen;
+        if (field.Kind == TestControllerGrpc.PipelineEditor.PipelineFieldKind.Folder)
+        {
+            var folder = new Microsoft.Win32.OpenFolderDialog { Title = field.Label };
+            if (Directory.Exists(field.Value)) folder.InitialDirectory = field.Value;
+            chosen = folder.ShowDialog(this) == true ? folder.FolderName : null;
+        }
+        else
+        {
+            var parametersDirectory = Path.Combine(AppContext.BaseDirectory, "Parameters");
+            var file = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Parameter Files|*.json;*.txt|All Files|*.*",
+                Title = field.Label,
+                InitialDirectory = Directory.Exists(parametersDirectory) ? parametersDirectory : Environment.CurrentDirectory,
+            };
+            chosen = file.ShowDialog(this) == true ? file.FileName : null;
+        }
+        if (chosen is not null) field.Value = chosen;
+    }
+
+    private TextBox? _tokenTarget;
+
+    // Typing "[_" in a form field opens the token list (same list as the XML completion).
+    private void FieldText_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox { IsReadOnly: false } box) return;
+        var caret = box.CaretIndex;
+        if (caret < 2 || box.Text.Substring(caret - 2, 2) != "[_")
+        {
+            if (ReferenceEquals(_tokenTarget, box)) TokenPopup.IsOpen = false;
+            return;
+        }
+        var tokens = _vm.GetTokenCompletions();
+        if (tokens.Count == 0) return;
+        TokenList.ItemsSource = tokens;
+        TokenList.SelectedIndex = 0;
+        _tokenTarget = box;
+        TokenPopup.PlacementTarget = box;
+        TokenPopup.IsOpen = true;
+    }
+
+    private void FieldText_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!TokenPopup.IsOpen || !ReferenceEquals(sender, _tokenTarget)) return;
+        switch (e.Key)
+        {
+            case Key.Down:
+                TokenList.SelectedIndex = Math.Min(TokenList.SelectedIndex + 1, TokenList.Items.Count - 1);
+                TokenList.ScrollIntoView(TokenList.SelectedItem);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                TokenList.SelectedIndex = Math.Max(TokenList.SelectedIndex - 1, 0);
+                TokenList.ScrollIntoView(TokenList.SelectedItem);
+                e.Handled = true;
+                break;
+            case Key.Enter or Key.Tab:
+                InsertSelectedToken();
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                TokenPopup.IsOpen = false;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void TokenList_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => InsertSelectedToken();
+
+    private void InsertSelectedToken()
+    {
+        TokenPopup.IsOpen = false;
+        if (_tokenTarget is not { } box || TokenList.SelectedItem is not XmlEditorCompletion token) return;
+        var caret = box.CaretIndex;
+        if (caret < 2) return;
+        box.Text = box.Text[..(caret - 2)] + token.Text + box.Text[caret..];
+        box.CaretIndex = caret - 2 + token.Text.Length;
+        box.Focus();
     }
 
     // Same rules as the main tree's menu (NodeMenuProvider), limited to the editor's items; built when it opens.

@@ -4,14 +4,14 @@ status: In progress
 owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Menus, TestControllerGrpc.Core/Editing, TestControllerGrpc/Views/MainWindow.ContextMenus.cs, TestController.Api/Controllers/WatchListController.cs, TestController.WebClient/src/components/watchlist/NodeContextMenu.tsx]
 tests: [TestControllerGrpc.Tests/Menus, TestControllerGrpc.Tests/Editing, TestController.WebApi.Tests/WatchListNodeMenuTests.cs]
-last-verified: 2026-11-10
+last-verified: 2026-11-17
 ---
 
 # Context-aware right-click menu
 
 ## What it does
 - Right-click on a pipeline or Library node shows only the actions that make sense for that node: run, add, edit, move, skip, delete.
-- One menu definition (`NodeMenuProvider` in Core) drives both the WPF trees and the web tree.
+- One menu definition (`NodeMenuProvider` in Core) drives the WPF trees, the web tree and the Pipeline Editor's structure tree (subsets `WebIds`, `PipelineEditorIds`; the editor offers no run items).
 - Every edit goes through one undoable path (Ctrl+Z / Ctrl+Y) and is checked against `Pipeline_Edit` / `Template_Edit`.
 - Run additions: Run from here to end, Show resolved command (secrets masked), Open last output, Stop.
 

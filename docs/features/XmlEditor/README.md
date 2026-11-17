@@ -4,7 +4,7 @@ status: Implemented
 owner: Vinodkumar Javvadi
 code: [TestControllerGrpc/Views/RawXmlEditorWindow.xaml, TestControllerGrpc/ViewModels/WatchItemXmlEditorViewModel.cs, TestControllerGrpc.Core/Services/WatchListXmlEditorAnalyzer.cs, TestControllerGrpc/Services/XmlEditorTyping.cs, TestControllerGrpc/Services/XmlEditorQuickFixApplier.cs]
 tests: [TestControllerGrpc.Tests/ViewModels/WatchItemXmlEditorViewModelTests.cs, TestControllerGrpc.Tests/Services/WatchListXmlEditorAnalyzerTests.cs, TestControllerGrpc.Tests/Services/XmlEditorTypingTests.cs, TestControllerGrpc.Tests/Ui/XmlHighlightingTests.cs]
-last-verified: 2026-11-08
+last-verified: 2026-11-17
 ---
 
 # WatchList XML editor
@@ -13,6 +13,7 @@ last-verified: 2026-11-08
 - Edits a WatchItem's XML directly in WPF with syntax highlighting, background validation and quick fixes.
 - Typing assist (`XmlEditorTyping`) and quick fixes (`XmlEditorQuickFixApplier`) apply each edit as one undo step; the caret moves to an error only on explicit Validate or a blocked Save.
 - Apply/Save writes back to `WatchList.xml`; an unsaved-close prompt and a Tag-rename confirmation guard against losing work.
+- The window is now the Pipeline Editor (structure tree, forms); see [../PipelineEditor/README.md](../PipelineEditor/README.md). This README covers the XML pane.
 
 ## How to use
 - WPF: open a WatchItem's XML from the tree, edit, **Validate**, then **Apply** or **Save**.

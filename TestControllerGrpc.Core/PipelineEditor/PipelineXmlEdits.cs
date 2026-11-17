@@ -9,81 +9,89 @@ namespace TestControllerGrpc.PipelineEditor;
 public sealed record PipelineXmlEditResult(string Xml, string SelectPath);
 
 /// <summary>
-/// Structural edits on the editor's XML text. Edits the <see cref="XDocument"/> with whitespace preserved, so XML
-/// comments, notes and formatting survive; a null result means the edit does not apply (the text is unchanged).
+/// Structural and attribute edits on the editor's XML text. Each edit splices only the characters of the nodes
+/// involved, so everything else (comments, notes, formatting, line endings) is unchanged. A null result means the
+/// edit does not apply.
 /// </summary>
 public static class PipelineXmlEdits
 {
     public static PipelineXmlEditResult? Delete(string xml, string path) =>
-        Edit(xml, path, (element, _) =>
+        Edit(xml, path, (map, node) =>
         {
-            if (!IsStepOrBranch(element) || path.Length == 0) return null;
-            RemoveWithIndent(element);
-            return PipelinePaths.Parent(path) ?? "";
+            if (path.Length == 0 || !IsStepOrBranch(node.Kind)) return null;
+            var (start, end) = PipelineXmlText.LineBlock(xml, node.Start, node.End);
+            return (xml.Remove(start, end - start), PipelinePaths.Parent(path) ?? "");
         });
 
+    /// <summary>Swaps the node with its previous / next sibling of the same kind; the text between them stays put.</summary>
     public static PipelineXmlEditResult? Move(string xml, string path, bool up) =>
-        Edit(xml, path, (element, _) =>
+        Edit(xml, path, (map, node) =>
         {
-            var siblings = SiblingsOf(element);
-            var index = siblings.IndexOf(element);
+            var siblings = SiblingsOf(map, node);
+            var index = siblings.IndexOf(node);
             var target = up ? index - 1 : index + 1;
             if (index < 0 || target < 0 || target >= siblings.Count) return null;
 
-            // Moving down is moving the next sibling up, so only one direction needs whitespace handling.
-            var (moving, anchor) = up ? (element, siblings[target]) : (siblings[target], element);
-            var indent = moving.PreviousNode as XText;
-            moving.Remove();
-            indent?.Remove();
-            anchor.AddBeforeSelf(moving);
-            if (indent is not null) anchor.AddBeforeSelf(new XText(indent.Value));
-            return SiblingPath(path, target);
+            var (first, second) = up ? (siblings[target], node) : (node, siblings[target]);
+            var text = xml[..first.Start] + xml[second.Start..second.End] + xml[first.End..second.Start]
+                + xml[first.Start..first.End] + xml[second.End..];
+            return (text, SiblingPath(path, target));
         });
 
     public static PipelineXmlEditResult? Duplicate(string xml, string path) =>
-        Edit(xml, path, (element, _) =>
+        Edit(xml, path, (map, node) =>
         {
-            if (!IsStep(element)) return null;
-            var copy = new XElement(element);
-            element.AddAfterSelf(copy);
-            if (element.PreviousNode is XText indent && string.IsNullOrWhiteSpace(indent.Value))
-                element.AddAfterSelf(new XText(indent.Value));
-            return SiblingPath(path, SiblingsOf(element).IndexOf(element) + 1);
+            if (!IsStep(node.Kind)) return null;
+            var copy = xml[node.Start..node.End];
+            var indent = PipelineXmlText.IndentOf(xml, node.Start);
+            var (_, blockEnd) = PipelineXmlText.LineBlock(xml, node.Start, node.End);
+            var text = blockEnd > node.End
+                ? xml.Insert(node.End, PipelineXmlText.NewLineOf(xml) + indent + copy)
+                : xml.Insert(node.End, copy);
+            return (text, SiblingPath(path, SiblingsOf(map, node).IndexOf(node) + 1));
         });
 
     /// <summary>Skip or include a node. Skip writes the same attributes the WatchList parser reads.</summary>
     public static PipelineXmlEditResult? SetSkip(string xml, string path, bool skip, string? reason, string? user, DateTimeOffset now) =>
-        Edit(xml, path, (element, _) =>
+        Edit(xml, path, (_, node) =>
         {
-            if (element.Name.LocalName is not ("WatchItem" or "Event" or "ActionGroup" or "Action")) return null;
+            if (node.Kind is not (NodeKinds.WatchItem or NodeKinds.Event or NodeKinds.ActionGroup or NodeKinds.Action))
+                return null;
+            var text = xml;
+            void Set(string name, string? value) => text = PipelineXmlText.SetAttribute(text, node.Start, name, value);
             if (!skip)
             {
-                element.Attribute("Skip")?.Remove();
-                element.Attribute("SkipReason")?.Remove();
-                element.Attribute("SkippedBy")?.Remove();
-                element.Attribute("SkippedAtUtc")?.Remove();
-                return path;
+                Set("Skip", null);
+                Set("SkipReason", null);
+                Set("SkippedBy", null);
+                Set("SkippedAtUtc", null);
             }
-            element.SetAttributeValue("Skip", "true");
-            element.SetAttributeValue("SkipReason", string.IsNullOrWhiteSpace(reason) ? null : reason.Trim());
-            element.SetAttributeValue("SkippedBy", string.IsNullOrWhiteSpace(user) ? null : user);
-            element.SetAttributeValue("SkippedAtUtc", now.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
-            return path;
+            else
+            {
+                Set("Skip", "true");
+                Set("SkipReason", string.IsNullOrWhiteSpace(reason) ? null : reason.Trim());
+                Set("SkippedBy", string.IsNullOrWhiteSpace(user) ? null : user);
+                Set("SkippedAtUtc", now.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+            }
+            return (text, path);
         });
 
     public static PipelineXmlEditResult? SetExecutionType(string xml, string path, ExecutionMode mode) =>
-        Edit(xml, path, (element, _) =>
-        {
-            if (element.Name.LocalName is not ("Event" or "ActionGroup")) return null;
-            element.SetAttributeValue("ExecutionType", mode.ToString());
-            return path;
-        });
+        Edit(xml, path, (_, node) => node.Kind is NodeKinds.Event or NodeKinds.ActionGroup
+            ? (PipelineXmlText.SetAttribute(xml, node.Start, "ExecutionType", mode.ToString()), path)
+            : null);
 
-    /// <summary>True when the node has a step sibling in that direction (drives Move Up / Move Down).</summary>
-    public static bool CanMove(XElement element, bool up)
+    /// <summary>Sets one attribute; a null or empty value removes it.</summary>
+    public static PipelineXmlEditResult? SetAttribute(string xml, string path, string name, string? value) =>
+        Edit(xml, path, (_, node) =>
+            (PipelineXmlText.SetAttribute(xml, node.Start, name, string.IsNullOrEmpty(value) ? null : value), path));
+
+    /// <summary>True when the node has a sibling of its kind in that direction (drives Move Up / Move Down).</summary>
+    public static bool CanMove(PipelineXmlMap map, string path, bool up)
     {
-        var siblings = SiblingsOf(element);
-        var index = siblings.IndexOf(element);
+        if (map.Find(path) is not { } node) return false;
+        var siblings = SiblingsOf(map, node);
+        var index = siblings.IndexOf(node);
         return index >= 0 && (up ? index > 0 : index < siblings.Count - 1);
     }
 
@@ -94,49 +102,26 @@ public static class PipelineXmlEdits
         catch (XmlException) { return null; }
     }
 
-    private static PipelineXmlEditResult? Edit(string xml, string path, Func<XElement, XDocument, string?> change)
+    private static PipelineXmlEditResult? Edit(
+        string xml, string path, Func<PipelineXmlMap, PipelineXmlNode, (string Xml, string Select)?> change)
     {
-        var document = TryParse(xml);
-        if (document is null || PipelinePaths.Resolve(document, path) is not { } element) return null;
-        var select = change(element, document);
-        if (select is null) return null;
-        var text = Serialize(document);
-        return text == xml ? null : new PipelineXmlEditResult(text, select);
+        if (PipelineXmlMap.TryBuild(xml) is not { } map || map.Find(path) is not { } node) return null;
+        if (change(map, node) is not { } result || result.Xml == xml) return null;
+        return new PipelineXmlEditResult(result.Xml, result.Select);
     }
 
-    // NewLineHandling.None: XNode.ToString turns every "\n" into "\r\n", which would rewrite every line of an LF file.
-    private static string Serialize(XDocument document)
+    private static List<PipelineXmlNode> SiblingsOf(PipelineXmlMap map, PipelineXmlNode node)
     {
-        var builder = new System.Text.StringBuilder();
-        if (document.Declaration is not null) builder.Append(document.Declaration);
-        var settings = new XmlWriterSettings
-        {
-            OmitXmlDeclaration = true,
-            NewLineHandling = NewLineHandling.None,
-            ConformanceLevel = ConformanceLevel.Fragment,
-        };
-        using (var writer = XmlWriter.Create(builder, settings))
-        {
-            foreach (var node in document.Nodes())
-                node.WriteTo(writer);
-        }
-        return builder.ToString();
+        var parentPath = PipelinePaths.Parent(node.Path);
+        var candidates = parentPath is null ? [] : map.Find(parentPath)?.Children ?? map.Roots;
+        return candidates.Where(c => IsStep(node.Kind) ? IsStep(c.Kind) : c.Kind == node.Kind).ToList();
     }
 
-    private static List<XElement> SiblingsOf(XElement element) => element.Name.LocalName switch
-    {
-        "Event" => element.Parent?.Elements("Event").ToList() ?? [],
-        "WatchItem" => element.Parent?.Elements("WatchItem").ToList() ?? [],
-        "Template" => element.Parent?.Elements("Template").ToList() ?? [],
-        _ when element.Parent is { } parent => PipelineXmlMap.StepChildren(parent).ToList(),
-        _ => [],
-    };
+    private static bool IsStep(string kind) =>
+        kind is NodeKinds.ActionGroup or NodeKinds.Action or NodeKinds.Initialize or NodeKinds.Ref;
 
-    private static bool IsStep(XElement element) =>
-        element.Name.LocalName is "ActionGroup" or "Action" or "Initialize" or "Ref";
-
-    private static bool IsStepOrBranch(XElement element) =>
-        IsStep(element) || element.Name.LocalName is "Event" or "WatchItem" or "Template";
+    private static bool IsStepOrBranch(string kind) =>
+        IsStep(kind) || kind is NodeKinds.Event or NodeKinds.WatchItem or NodeKinds.Template;
 
     private static string SiblingPath(string path, int index)
     {
@@ -144,12 +129,5 @@ public static class PipelineXmlEdits
         var segment = slash >= 0 ? path[(slash + 1)..] : path;
         var renamed = $"{segment[0]}{index}";
         return slash >= 0 ? $"{path[..slash]}/{renamed}" : renamed;
-    }
-
-    private static void RemoveWithIndent(XElement element)
-    {
-        if (element.PreviousNode is XText indent && string.IsNullOrWhiteSpace(indent.Value))
-            indent.Remove();
-        element.Remove();
     }
 }

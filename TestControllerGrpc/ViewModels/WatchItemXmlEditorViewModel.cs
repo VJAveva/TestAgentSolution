@@ -189,7 +189,7 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
     partial void OnXmlTextChanged(string value)
     {
         UpdateSummary();
-        RebuildStructure();
+        _structureDirty = true;
     }
 
     private void UpdateSummary()
@@ -517,193 +517,6 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
         return ToValidationErrors(analysis);
     }
 
-    private List<ValidationErrorViewModel> RunLegacyValidation(string xml)
-    {
-        var errors = new List<ValidationErrorViewModel>();
-
-        if (string.IsNullOrWhiteSpace(xml))
-        {
-            errors.Add(new ValidationErrorViewModel
-            {
-                Line = 1, Column = 1,
-                ErrorType = "Empty", Message = "XML text is empty."
-            });
-            return errors;
-        }
-
-        // A. XML Well-Formed check
-        XElement root;
-        try
-        {
-            root = XElement.Parse(xml, LoadOptions.SetLineInfo);
-        }
-        catch (XmlException ex)
-        {
-            errors.Add(new ValidationErrorViewModel
-            {
-                Line = ex.LineNumber, Column = ex.LinePosition,
-                ErrorType = "Syntax", Message = ex.Message
-            });
-            return errors;
-        }
-
-        // B. Root must be <WatchItem>
-        if (root.Name.LocalName != "WatchItem")
-        {
-            var li = (IXmlLineInfo)root;
-            errors.Add(new ValidationErrorViewModel
-            {
-                Line = li.HasLineInfo() ? li.LineNumber : 1,
-                Column = li.HasLineInfo() ? li.LinePosition : 1,
-                ErrorType = "Structure", Message = "Root element must be <WatchItem>."
-            });
-            return errors;
-        }
-
-        // C. WatchItem must have Path attribute
-        if (root.Attribute("Path") is null || string.IsNullOrWhiteSpace(root.Attribute("Path")?.Value))
-        {
-            var li = (IXmlLineInfo)root;
-            errors.Add(new ValidationErrorViewModel
-            {
-                Line = li.HasLineInfo() ? li.LineNumber : 1,
-                Column = li.HasLineInfo() ? li.LinePosition : 1,
-                ErrorType = "Attribute", Message = "<WatchItem> missing required attribute: Path"
-            });
-        }
-
-        // D. Validate each Event
-        foreach (var eventEl in root.Elements())
-        {
-            var eli = (IXmlLineInfo)eventEl;
-            var eLine = eli.HasLineInfo() ? eli.LineNumber : 1;
-            var eCol = eli.HasLineInfo() ? eli.LinePosition : 1;
-
-            if (eventEl.Name.LocalName != "Event")
-            {
-                errors.Add(new ValidationErrorViewModel
-                {
-                    Line = eLine, Column = eCol,
-                    ErrorType = "Structure",
-                    Message = $"Unexpected element <{eventEl.Name.LocalName}> under <WatchItem>. Expected <Event>."
-                });
-                continue;
-            }
-
-            // Event must have Type
-            if (eventEl.Attribute("Type") is null || string.IsNullOrWhiteSpace(eventEl.Attribute("Type")?.Value))
-            {
-                errors.Add(new ValidationErrorViewModel
-                {
-                    Line = eLine, Column = eCol,
-                    ErrorType = "Attribute", Message = "<Event> missing required attribute: Type"
-                });
-            }
-            else
-            {
-                var eventType = eventEl.Attribute("Type")!.Value;
-                if (eventType is not ("Renamed" or "Created" or "Changed"))
-                {
-                    errors.Add(new ValidationErrorViewModel
-                    {
-                        Line = eLine, Column = eCol,
-                        ErrorType = "Value",
-                        Message = $"<Event> Type=\"{eventType}\" is invalid. Expected: Renamed, Created, or Changed."
-                    });
-                }
-            }
-
-            // Event must have ExecutionType
-            if (eventEl.Attribute("ExecutionType") is null || string.IsNullOrWhiteSpace(eventEl.Attribute("ExecutionType")?.Value))
-            {
-                errors.Add(new ValidationErrorViewModel
-                {
-                    Line = eLine, Column = eCol,
-                    ErrorType = "Attribute", Message = "<Event> missing required attribute: ExecutionType"
-                });
-            }
-
-            // Validate Event children recursively
-            ValidateActionChildren(eventEl, errors);
-        }
-
-        return errors;
-    }
-
-    private static void ValidateActionChildren(XElement parent, List<ValidationErrorViewModel> errors)
-    {
-        foreach (var el in parent.Elements())
-        {
-            var li = (IXmlLineInfo)el;
-            var line = li.HasLineInfo() ? li.LineNumber : 1;
-            var col = li.HasLineInfo() ? li.LinePosition : 1;
-            var name = el.Name.LocalName;
-
-            switch (name)
-            {
-                case "ActionGroup":
-                    RequireAttr(el, "ExecutionType", errors, line, col);
-                    ValidateActionChildren(el, errors);
-                    break;
-
-                case "Action":
-                    var actionType = el.Attribute("Type")?.Value ?? "";
-                    if (string.IsNullOrWhiteSpace(actionType))
-                    {
-                        errors.Add(new ValidationErrorViewModel
-                        {
-                            Line = line, Column = col,
-                            ErrorType = "Attribute", Message = "<Action> missing required attribute: Type"
-                        });
-                    }
-                    else if (actionType == "RunRemoteCommand")
-                    {
-                        RequireAttr(el, "AgentName", errors, line, col);
-                        RequireAttr(el, "Command", errors, line, col);
-                        RequireAttr(el, "Timeout", errors, line, col);
-                    }
-                    else if (actionType == "SendMail")
-                    {
-                        RequireAttr(el, "From", errors, line, col);
-                        RequireAttr(el, "To", errors, line, col);
-                        RequireAttr(el, "Title", errors, line, col);
-                    }
-                    break;
-
-                case "Initialize":
-                    RequireAttr(el, "ParameterFile", errors, line, col);
-                    break;
-
-                case "Ref":
-                    RequireAttr(el, "TemplateID", errors, line, col);
-                    break;
-
-                default:
-                    errors.Add(new ValidationErrorViewModel
-                    {
-                        Line = line, Column = col,
-                        ErrorType = "Structure",
-                        Message = $"Unexpected element <{name}>. Expected ActionGroup, Action, Initialize, or Ref."
-                    });
-                    break;
-            }
-        }
-    }
-
-    private static void RequireAttr(XElement el, string attrName,
-        List<ValidationErrorViewModel> errors, int line, int col)
-    {
-        if (el.Attribute(attrName) is null || string.IsNullOrWhiteSpace(el.Attribute(attrName)?.Value))
-        {
-            errors.Add(new ValidationErrorViewModel
-            {
-                Line = line, Column = col,
-                ErrorType = "Attribute",
-                Message = $"<{el.Name.LocalName}> missing required attribute: {attrName}"
-            });
-        }
-    }
-
     // ???????????????????????????????????????????????????????????????
     // ERROR PANEL
     // ???????????????????????????????????????????????????????????????
@@ -718,7 +531,8 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
 
         IsErrorPanelVisible = errors.Count > 0;
         IsXmlValid = errors.All(error => error.Severity != "Error");
-        ApplyProblemsToStructure();
+        if (_structureDirty) RebuildStructure();
+        else ApplyProblemsToStructure();
 
         var firstError = errors.FirstOrDefault(error => error.Severity == "Error") ?? errors.FirstOrDefault();
         if (firstError is not null)
