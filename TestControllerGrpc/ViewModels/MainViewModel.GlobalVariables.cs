@@ -47,10 +47,11 @@ public sealed partial class MainViewModel
             onBuildSelected: (buildNumber, dropLocation) =>
             {
                 // Propagate to ALL WatchItem parameter files
-                PropagateGlobalBuildToAllParameterFiles(buildNumber, dropLocation);
+                var notChanged = PropagateGlobalBuildToAllParameterFiles(buildNumber, dropLocation);
 
                 // Refresh tokens and tree immediately so the treeview shows updated values
                 LoadTokensFromConfig(_config);
+                return notChanged;
             });
 
         if (FindOwnerWindow() is { } mainWindow
@@ -70,11 +71,15 @@ public sealed partial class MainViewModel
     /// Initialize parameter files, AND to the global variables file.
     /// Only scans each file and updates _BuildNumber + _DropLocation in-place.
     /// All other parameters in each file are preserved untouched.
+    /// Returns the pipelines left unchanged because their own "pipelines" entry sets the build.
     /// </summary>
-    private void PropagateGlobalBuildToAllParameterFiles(string buildNumber, string dropLocation)
+    private IReadOnlyList<string> PropagateGlobalBuildToAllParameterFiles(string buildNumber, string dropLocation)
     {
         int updatedCount = 0;
         var updatedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Read before writing: a pipeline entry outranks GlobalVars, so these keep their own build.
+        var ownBuild = ParameterResolver.PipelinesWithOwnBuild(_config.WatchItems);
+        var ownBuildSet = new HashSet<string>(ownBuild, StringComparer.OrdinalIgnoreCase);
 
         // 1) Update the global variables file (in-place, only two keys)
         if (!string.IsNullOrWhiteSpace(_config.GlobalVariablesFile))
@@ -116,6 +121,7 @@ public sealed partial class MainViewModel
         //    the correct per-pipeline build number and drop location.
         foreach (var wi in _config.WatchItems)
         {
+            if (ownBuildSet.Contains(wi.Tag)) continue;
             wi.LastBuildNumber = buildNumber;
             wi.LastDropLocation = dropLocation;
         }
@@ -123,7 +129,7 @@ public sealed partial class MainViewModel
         {
             foreach (var child in WatchListRoot.Children)
             {
-                if (child.NodeKind == NodeKinds.WatchItem)
+                if (child.NodeKind == NodeKinds.WatchItem && !ownBuildSet.Contains(child.Tag))
                 {
                     child.LastBuildNumber = buildNumber;
                     child.LastDropLocation = dropLocation;
@@ -135,6 +141,9 @@ public sealed partial class MainViewModel
         LoadTokensFromConfig(_config);
 
         AddLog($"Global build set: {buildNumber} → updated {updatedCount} parameter file(s)", LogSeverity.Success);
+        if (ownBuild.Count > 0)
+            AddLog($"Global build not applied to {ownBuild.Count} pipeline(s) with their own build: {string.Join(", ", ownBuild)}", LogSeverity.Info);
+        return ownBuild;
     }
 
     /// <summary>Collects all ParameterFile paths from Initialize nodes in the subtree.</summary>

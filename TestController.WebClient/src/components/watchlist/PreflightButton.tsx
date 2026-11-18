@@ -5,7 +5,7 @@ import { apiFetch } from '../../lib/api';
 export interface PreflightCheckDto {
   group: string;
   name: string;
-  status: 'Pass' | 'Warn' | 'Fail';
+  status: 'Pass' | 'Warn' | 'Fail' | 'Info';
   detail: string;
   fixHint?: string | null;
 }
@@ -31,11 +31,12 @@ const GROUP_ORDER = [
   'Disk',
 ];
 
-const STATUS_RANK: Record<PreflightCheckDto['status'], number> = { Fail: 0, Warn: 1, Pass: 2 };
+const STATUS_RANK: Record<PreflightCheckDto['status'], number> = { Fail: 0, Warn: 1, Info: 2, Pass: 3 };
 
 const STATUS_STYLE: Record<PreflightCheckDto['status'], string> = {
   Fail: 'border-acc-red/40 text-acc-red',
   Warn: 'border-acc-yellow/40 text-acc-yellow',
+  Info: 'border-bdr text-text-muted',
   Pass: 'border-acc-green/40 text-acc-green',
 };
 

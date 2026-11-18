@@ -166,8 +166,27 @@ public sealed class PreflightRunner
         }
 
         RecordTokens(ctx, report);
+        ReportGlobalVarsOverriddenByPipeline(ctx, pipeline.Tag, report);
         if (!parameterSourceFailed)
             CheckUnresolvedTokens(request, ctx, report);
+    }
+
+    /// <summary>A pipeline entry outranks GlobalVars; say so, so a shared build that "didn't apply" is explained.</summary>
+    internal static void ReportGlobalVarsOverriddenByPipeline(PipelineExecutionContext ctx, string pipelineTag, PreflightReport report)
+    {
+        var keys = ctx.ShadowedParameters
+            .Where(s => s.Key.StartsWith('_')
+                        && s.LosingRank == (int)ParameterRank.GlobalVars
+                        && s.WinningRank == (int)ParameterRank.PipelinePin)
+            .Select(s => s.Key)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var key in keys)
+        {
+            report.Checks.Add(new PreflightCheck(PreflightGroups.Settings, $"GlobalVars {key}", PreflightStatus.Info,
+                $"GlobalVars {key} ignored: pipeline '{pipelineTag}' sets its own value"));
+        }
     }
 
     private void CheckPipelinesEntry(InitializeConfig init, WatchItemConfig pipeline, PreflightReport report)
@@ -184,8 +203,9 @@ public sealed class PreflightRunner
             return;
         }
 
+        // Not a problem: most pipelines take every value from the profile and GlobalVars.
         report.Checks.Add(new PreflightCheck(PreflightGroups.Settings, $"Pipelines entry '{pipeline.Tag}'",
-            PreflightStatus.Warn,
+            PreflightStatus.Info,
             $"No 'pipelines' entry is keyed '{pipeline.Tag}' in '{Path.GetFileName(init.ParameterFile)}'.",
             $"Add a \"{pipeline.Tag}\" block under \"pipelines\" if this pipeline needs its own build pin."));
     }
@@ -207,6 +227,7 @@ public sealed class PreflightRunner
     {
         ParameterRank.Global => "Global",
         ParameterRank.ParameterFile => "Profile",
+        ParameterRank.GlobalVars => "GlobalVars",
         ParameterRank.PipelinePin => "Pipeline",
         ParameterRank.TriggerFile => "Trigger",
         ParameterRank.RunOverride => "Run override",

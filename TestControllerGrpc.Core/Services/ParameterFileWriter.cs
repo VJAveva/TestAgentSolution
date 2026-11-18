@@ -33,11 +33,13 @@ public static class ParameterFileWriter
         AllowTrailingCommas = true,
     };
 
+    // By name, not by range: GlobalVars (30) sits below the pipeline entry (35), so ranges would mix them up.
     public static ParameterLayer LayerFromRank(int rank) => rank switch
     {
+        (int)ParameterRank.PipelinePin => ParameterLayer.Pipeline,
+        (int)ParameterRank.GlobalVars => ParameterLayer.GlobalVariables,
         <= (int)ParameterRank.Global => ParameterLayer.Global,
         <= (int)ParameterRank.ParameterFile => ParameterLayer.Profile,
-        <= (int)ParameterRank.PipelinePin => ParameterLayer.Pipeline,
         _ => ParameterLayer.GlobalVariables,
     };
 

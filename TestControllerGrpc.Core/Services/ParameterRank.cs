@@ -5,6 +5,7 @@ namespace TestControllerGrpc.Services;
 /// accident of execution order - Initialize nodes run last, so a parameter file always beat the
 /// trigger file. Rank makes precedence explicit and independent of when a source is read.
 /// Values are spaced so a new source can be slotted in without renumbering the rest.
+/// Order: Global 10 -> Profile 20 -> GlobalVars 30 -> Pipeline entry 35 -> Trigger 40 -> Run 50.
 /// </summary>
 public enum ParameterRank
 {
@@ -14,15 +15,17 @@ public enum ParameterRank
     /// <summary>An Initialize node's parameter file, or a named profile inside the JSON config.</summary>
     ParameterFile = 20,
 
-    /// <summary>A build pinned to one pipeline and persisted in the JSON config.</summary>
-    PipelinePin = 30,
-
     /// <summary>
     /// The shared <c>GlobalVariables.json</c>: one build selected once and used by every pipeline of
-    /// the matching release. Outranks a per-pipeline pin so setting it in one place actually takes
-    /// effect, but stays below the trigger file so a one-off run can still override it.
+    /// the matching release, unless that pipeline has its own entry.
     /// </summary>
-    GlobalVars = 35,
+    GlobalVars = 30,
+
+    /// <summary>
+    /// The pipeline's own entry in the "pipelines" section of the JSON config. Outranks GlobalVars so a
+    /// pipeline that deliberately pins a value keeps it when the shared build moves on.
+    /// </summary>
+    PipelinePin = 35,
 
     /// <summary>The trigger file that fired this run.</summary>
     TriggerFile = 40,

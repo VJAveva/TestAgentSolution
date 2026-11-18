@@ -345,6 +345,9 @@ public enum ActionType
 // =============================================================================
 // Runtime execution context — carries token parameters during pipeline run
 // =============================================================================
+/// <summary>A parameter value from <paramref name="LosingRank"/> that a <paramref name="WinningRank"/> source overrode.</summary>
+public sealed record ShadowedParameter(string Key, int LosingRank, int WinningRank);
+
 public sealed class PipelineExecutionContext
 {
     public string WatchItemPath { get; set; } = "";
@@ -368,6 +371,9 @@ public sealed class PipelineExecutionContext
     /// pipeline survives the Initialize node that runs later in the same pipeline.
     /// </summary>
     public Dictionary<string, int> ParameterRanks { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Values a higher-ranked source replaced or kept out, so pre-flight can say what was ignored.</summary>
+    public List<ShadowedParameter> ShadowedParameters { get; } = [];
 
     public CancellationToken CancellationToken { get; set; }
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;

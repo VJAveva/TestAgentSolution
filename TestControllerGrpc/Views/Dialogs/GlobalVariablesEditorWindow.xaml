@@ -81,14 +81,18 @@
             </Grid>
         </Border>
 
-        <!-- Row 1: Apply button -->
-        <Border Grid.Row="1" Margin="0,0,0,8">
+        <!-- Row 1: Apply button, then the pipelines it left alone -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,8">
             <Button Content="⚡ Apply Build to All Pipelines" Style="{StaticResource GvBtn}"
                     Click="ApplyToAll_Click" HorizontalAlignment="Left"
                     Background="{DynamicResource Accent}" Foreground="White" FontWeight="SemiBold"
                     IsEnabled="{Binding HasBuildSelected}"
-                    ToolTip="Updates _BuildNumber and _DropLocation in ALL WatchItem parameter files"/>
-        </Border>
+                    ToolTip="Updates _BuildNumber and _DropLocation in ALL WatchItem parameter files. Pipelines with their own build entry keep it."/>
+            <TextBlock Text="{Binding NotChangedText}" Foreground="{DynamicResource TextS}"
+                       FontSize="{StaticResource FontSize10}" TextWrapping="Wrap" Margin="4,6,0,0"
+                       AutomationProperties.Name="Pipelines not changed"
+                       Visibility="{Binding HasNotChanged, Converter={StaticResource BoolToVis}}"/>
+        </StackPanel>
 
         <!-- Row 2: Global variables file path -->
         <Border Grid.Row="2" Background="{DynamicResource BgCard}" CornerRadius="6" Padding="10,8" Margin="0,0,0,8">

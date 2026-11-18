@@ -20,6 +20,8 @@ public sealed class PreflightStatusBrushConverter : IValueConverter
             (PreflightStatus.Fail, true) => "FailedBadgeBg",
             (PreflightStatus.Warn, false) => "AccYellow",
             (PreflightStatus.Warn, true) => "YellowBtnBg",
+            (PreflightStatus.Info, false) => "TextS",
+            (PreflightStatus.Info, true) => "CancelledBadgeBg",
             (_, false) => "AccGreen",
             (_, true) => "SuccessBadgeBg",
         };

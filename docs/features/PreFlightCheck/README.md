@@ -4,7 +4,7 @@ status: Implemented
 owner: Vinodkumar Javvadi
 code: [TestControllerGrpc.Core/Preflight, TestController.Api/Controllers/PreflightController.cs, TestController.WebApi/Endpoints/PreflightEndpoints.cs, TestControllerGrpc/Views/Dialogs/PreflightDialog.xaml, TestControllerGrpc/ViewModels/MainViewModel.Preflight.cs]
 tests: [TestControllerGrpc.Tests/Preflight, TestControllerGrpc.Tests/ViewModels/PreflightDialogViewModelTests.cs, TestControllerGrpc.Tests/Features/FeatureUsagePreflightTests.cs]
-last-verified: 2026-11-08
+last-verified: 2026-11-18
 ---
 
 # Pre-flight check
@@ -15,7 +15,8 @@ last-verified: 2026-11-08
 - **Controller files**: watch folder, scripts, `WASSmokeTest.dll`.
 - **Install sources** and **Agents**: online, idle, not locked, not in maintenance.
 - **Structure** and **Disk**.
-- A failure blocks the run; a warning asks.
+- A failure blocks the run; a warning asks; **Info** is a neutral note that never blocks (WPF dialog, result email and web client).
+- Info lines: `GlobalVars <key> ignored: pipeline '<name>' sets its own value`, and a pipeline with no `pipelines` entry.
 
 ## How to use
 - WPF: run a pipeline or node; the pre-flight dialog opens when there is anything to report.

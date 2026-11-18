@@ -1,11 +1,16 @@
 namespace TestControllerGrpc.Core.Preflight;
 
-/// <summary>Outcome of one check. Error blocks the run; Warn asks; Pass is informational.</summary>
+/// <summary>
+/// Outcome of one check. Fail blocks the run; Warn asks; Pass and Info never block. Info is a
+/// neutral note (e.g. a GlobalVars value a pipeline entry overrides). Appended last so the
+/// existing numeric values are unchanged.
+/// </summary>
 public enum PreflightStatus
 {
     Pass,
     Warn,
     Fail,
+    Info,
 }
 
 /// <summary>What is about to run, which decides how much of the pipeline is checked.</summary>
@@ -75,7 +80,8 @@ public sealed class PreflightReport
     public int CountOf(PreflightStatus status) => Checks.Count(c => c.Status == status);
 
     public string Summary =>
-        $"{CountOf(PreflightStatus.Fail)} failed, {CountOf(PreflightStatus.Warn)} warnings, {CountOf(PreflightStatus.Pass)} passed";
+        $"{CountOf(PreflightStatus.Fail)} failed, {CountOf(PreflightStatus.Warn)} warnings, {CountOf(PreflightStatus.Pass)} passed"
+        + (CountOf(PreflightStatus.Info) > 0 ? $", {CountOf(PreflightStatus.Info)} info" : "");
 
     /// <summary>Plain text for the log, the dialog and the [_EmailCheck] mail.</summary>
     public string ToPlainText()
@@ -96,7 +102,8 @@ public sealed class PreflightReport
                      {
                          PreflightStatus.Fail => 0,
                          PreflightStatus.Warn => 1,
-                         _ => 2,
+                         PreflightStatus.Info => 2,
+                         _ => 3,
                      }))
             {
                 sb.AppendLine($"  [{Label(check.Status)}] {check.Name}: {check.Detail}");
@@ -120,6 +127,7 @@ public sealed class PreflightReport
     {
         PreflightStatus.Fail => "FAIL",
         PreflightStatus.Warn => "WARN",
+        PreflightStatus.Info => "INFO",
         _ => "PASS",
     };
 }

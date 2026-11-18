@@ -387,7 +387,7 @@ public class PreflightRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_Should_Warn_When_ThePipelinesEntryIsMissing()
+    public void Run_Should_Info_When_ThePipelinesEntryIsMissing()
     {
         SeedHealthyDisk();
         var file = WriteParameterFile(c => c.Pipelines.Remove("Sanity"));
@@ -396,8 +396,8 @@ public class PreflightRunnerTests : IDisposable
 
         var check = Find(report, PreflightGroups.Settings, "Pipelines entry");
         Assert.NotNull(check);
-        Assert.Equal(PreflightStatus.Warn, check!.Status);
-        Assert.True(report.CanRun, "A missing pipelines entry warns; it must not block.");
+        Assert.Equal(PreflightStatus.Info, check!.Status);
+        Assert.True(report.CanRun, "A missing pipelines entry must not block.");
     }
 
     // ── 4. Agents ───────────────────────────────────────────────────

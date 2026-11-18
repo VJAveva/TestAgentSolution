@@ -19,10 +19,11 @@ public partial class GlobalVariablesEditorWindow : Window, INotifyPropertyChange
     private readonly ObservableCollection<ParameterEntryViewModel> _entries;
     private readonly string _initialBrowsePath;
     private readonly Action<string> _onFilePathChanged;
-    private readonly Action<string, string>? _onBuildSelected;
+    private readonly Func<string, string, IReadOnlyList<string>>? _onBuildSelected;
 
     private string _filePath = "";
     private string _status = "";
+    private string _notChangedText = "";
     private string _dropLocation = "";
     private string _buildNumber = "";
     private bool _hasBuildSelected;
@@ -38,6 +39,15 @@ public partial class GlobalVariablesEditorWindow : Window, INotifyPropertyChange
         get => _status;
         private set { _status = value; RaisePropertyChanged(); }
     }
+
+    /// <summary>Pipelines the last Apply left alone because their own entry sets the build.</summary>
+    public string NotChangedText
+    {
+        get => _notChangedText;
+        private set { _notChangedText = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(HasNotChanged)); }
+    }
+
+    public bool HasNotChanged => !string.IsNullOrEmpty(_notChangedText);
 
     public string DropLocation
     {
@@ -66,13 +76,13 @@ public partial class GlobalVariablesEditorWindow : Window, INotifyPropertyChange
     /// <param name="entries">Loaded entries collection.</param>
     /// <param name="initialBrowsePath">Initial directory for the Drop Location browse dialog.</param>
     /// <param name="onFilePathChanged">Callback when global variables file path changes.</param>
-    /// <param name="onBuildSelected">Callback to propagate build to all parameter files (buildNumber, dropLocation).</param>
+    /// <param name="onBuildSelected">Callback to propagate build to all parameter files (buildNumber, dropLocation); returns the pipelines it left unchanged.</param>
     public GlobalVariablesEditorWindow(
         string filePath,
         ObservableCollection<ParameterEntryViewModel> entries,
         string initialBrowsePath,
         Action<string> onFilePathChanged,
-        Action<string, string>? onBuildSelected = null)
+        Func<string, string, IReadOnlyList<string>>? onBuildSelected = null)
     {
         _entries = entries;
         _initialBrowsePath = initialBrowsePath;
@@ -160,10 +170,17 @@ public partial class GlobalVariablesEditorWindow : Window, INotifyPropertyChange
 
         // Propagate ONLY _BuildNumber and _DropLocation to all parameter files (in-place update)
         // Does NOT rewrite or delete other parameters in the files
-        _onBuildSelected?.Invoke(BuildNumber, DropLocation);
+        var notChanged = _onBuildSelected?.Invoke(BuildNumber, DropLocation) ?? [];
+        NotChangedText = FormatNotChanged(notChanged);
 
-        Status = $"✓ Build '{BuildNumber}' applied to all pipelines";
+        Status = notChanged.Count == 0
+            ? $"✓ Build '{BuildNumber}' applied to all pipelines"
+            : $"✓ Build '{BuildNumber}' applied; {notChanged.Count} pipeline(s) not changed";
     }
+
+    /// <summary>One line per pipeline that keeps its own build; empty when there are none.</summary>
+    internal static string FormatNotChanged(IReadOnlyList<string> pipelines) =>
+        string.Join(Environment.NewLine, pipelines.Select(p => $"{p} — not changed: has its own build"));
 
     /// <summary>Browse for the global variables .txt file.</summary>
     private void BrowseFile_Click(object sender, RoutedEventArgs e)

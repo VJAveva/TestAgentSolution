@@ -18,15 +18,17 @@ public sealed record PreflightCheckRow(
     {
         PreflightStatus.Fail => "FAIL",
         PreflightStatus.Warn => "WARN",
+        PreflightStatus.Info => "INFO",
         _ => "PASS",
     };
 
-    /// <summary>Failures first, then warnings, then passes.</summary>
+    /// <summary>Failures first, then warnings, then info notes, then passes.</summary>
     public int SortKey => Status switch
     {
         PreflightStatus.Fail => 0,
         PreflightStatus.Warn => 1,
-        _ => 2,
+        PreflightStatus.Info => 2,
+        _ => 3,
     };
 
     public bool HasFixHint => !string.IsNullOrWhiteSpace(FixHint);
@@ -75,6 +77,7 @@ public sealed partial class PreflightDialogViewModel : ObservableObject
     [ObservableProperty] private int _failedCount;
     [ObservableProperty] private int _warnCount;
     [ObservableProperty] private int _passCount;
+    [ObservableProperty] private int _infoCount;
     [ObservableProperty] private bool _canRun;
     [ObservableProperty] private string _runText = "Run";
     [ObservableProperty] private string _reportText = "";
@@ -105,6 +108,7 @@ public sealed partial class PreflightDialogViewModel : ObservableObject
         FailedCount = report.CountOf(PreflightStatus.Fail);
         WarnCount = report.CountOf(PreflightStatus.Warn);
         PassCount = report.CountOf(PreflightStatus.Pass);
+        InfoCount = report.CountOf(PreflightStatus.Info);
 
         Checks.Clear();
         foreach (var c in report.Checks
@@ -138,6 +142,7 @@ public sealed partial class PreflightDialogViewModel : ObservableObject
 
         BannerDetail =
             $"{FailedCount} failed \u00b7 {WarnCount} warning{(WarnCount == 1 ? "" : "s")} \u00b7 {PassCount} passed"
+            + (InfoCount > 0 ? $" \u00b7 {InfoCount} info" : "")
             + $" \u00b7 checked by {CheckedBy} in {report.Elapsed.TotalSeconds:F1} s";
 
         // Land on the tab that needs attention, not on a wall of passes.

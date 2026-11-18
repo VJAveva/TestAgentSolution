@@ -161,13 +161,22 @@ public class GlobalVariablesLayerTests : IDisposable
     // ── precedence ──────────────────────────────────────────────────────
 
     [Fact]
-    public void GlobalBuild_Should_OutrankPipelinePin_When_ReleaseMatches()
+    public void PipelineEntry_Should_OutrankGlobalBuild_When_ReleaseMatches()
     {
-        var config = Write("pinned-config.json", $$"""
+        var ctx = Context(GlobalVariables("SP2023R2SP2"));
+
+        ParameterResolver.TryLoadInitializeSource(ctx, PinnedConfig(), profile: null, Tag);
+
+        Assert.Equal("PINNED-TO-PIPELINE", ctx.Parameters["_BuildNumber"]);
+    }
+
+    [Fact]
+    public void GlobalBuild_Should_BeUsed_When_PipelineHasNoEntry()
+    {
+        var config = Write("no-entry-config.json", """
         {
           "version": 1,
-          "global":    { "_ReleaseName": "SP2023R2SP2", "_BuildNumber": "from-global" },
-          "pipelines": { "{{Tag}}": { "_BuildNumber": "PINNED-TO-PIPELINE" } }
+          "global": { "_ReleaseName": "SP2023R2SP2", "_BuildNumber": "from-global" }
         }
         """);
         var ctx = Context(GlobalVariables("SP2023R2SP2"));
@@ -176,6 +185,65 @@ public class GlobalVariablesLayerTests : IDisposable
 
         Assert.Equal("GLOBAL-BUILD", ctx.Parameters["_BuildNumber"]);
     }
+
+    [Fact]
+    public void TriggerBuild_Should_OutrankPipelineEntryAndGlobalBuild_When_AllSupplyIt()
+    {
+        var ctx = Context(GlobalVariables("SP2023R2SP2"));
+
+        ParameterResolver.TryLoadInitializeSource(ctx, PinnedConfig(), profile: null, Tag);
+        ParameterResolver.SetParameter(ctx, "_BuildNumber", "FROM-TRIGGER", ParameterRank.TriggerFile);
+
+        Assert.Equal("FROM-TRIGGER", ctx.Parameters["_BuildNumber"]);
+    }
+
+    [Fact]
+    public void Preflight_Should_AddInfoLine_When_PipelineEntryOverridesGlobalBuild()
+    {
+        var ctx = Context(GlobalVariables("SP2023R2SP2"));
+        ParameterResolver.TryLoadInitializeSource(ctx, PinnedConfig(), profile: null, Tag);
+        var report = new TestControllerGrpc.Core.Preflight.PreflightReport { Target = Tag, Scope = default };
+
+        TestControllerGrpc.Core.Preflight.PreflightRunner.ReportGlobalVarsOverriddenByPipeline(ctx, Tag, report);
+
+        var check = Assert.Single(report.Checks);
+        Assert.Equal(TestControllerGrpc.Core.Preflight.PreflightStatus.Info, check.Status);
+        Assert.Equal($"GlobalVars _BuildNumber ignored: pipeline '{Tag}' sets its own value", check.Detail);
+        Assert.True(report.CanRun);
+        Assert.False(report.HasWarnings);
+    }
+
+    [Fact]
+    public void Preflight_Should_AddNoInfoLine_When_GlobalBuildIsUsed()
+    {
+        var ctx = Context(GlobalVariables("SP2023R2SP2"));
+        ParameterResolver.TryLoadInitializeSource(ctx, ReleaseConfig("SP2023R2SP2"), "Sanity", Tag);
+        var report = new TestControllerGrpc.Core.Preflight.PreflightReport { Target = Tag, Scope = default };
+
+        TestControllerGrpc.Core.Preflight.PreflightRunner.ReportGlobalVarsOverriddenByPipeline(ctx, Tag, report);
+
+        Assert.Empty(report.Checks);
+    }
+
+    [Fact]
+    public void PipelinesWithOwnBuild_Should_ListOnlyPipelinesWhoseEntrySetsTheBuild()
+    {
+        var pinned = WatchItem(PinnedConfig());
+        var other = WatchItem(ReleaseConfig("SP2023R2SP2"));
+        other.Tag = "Other";
+
+        var tags = ParameterResolver.PipelinesWithOwnBuild([pinned, other]);
+
+        Assert.Equal([Tag], tags);
+    }
+
+    private string PinnedConfig() => Write("pinned-config.json", $$"""
+        {
+          "version": 1,
+          "global":    { "_ReleaseName": "SP2023R2SP2", "_BuildNumber": "from-global" },
+          "pipelines": { "{{Tag}}": { "_BuildNumber": "PINNED-TO-PIPELINE" } }
+        }
+        """);
 
     [Fact]
     public void TriggerBuild_Should_OutrankGlobalBuild_When_BothSupplyIt()

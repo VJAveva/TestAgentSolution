@@ -60,14 +60,18 @@ It does **not** loop over or rewrite the release `pipeline-config.json` files.
 
 Higher wins:
 
-```
-Release pipeline-config Global   (release paths, installers, fallback build)
-      -> Profile (Sanity / Warm / Single)
-      -> Pipeline pin
-      -> GlobalVariables.json     (only if _ReleaseName matches the pipeline's release)
-      -> Trigger file             (overrides the global build for a one-off)
-      -> Run override
-```
+| Rank | Layer | Notes |
+|---|---|---|
+| 10 | Release pipeline-config `global` | release paths, installers, fallback build |
+| 20 | Profile (Sanity / Warm / Single) | |
+| 30 | GlobalVariables.json | only if `_ReleaseName` matches the pipeline's release |
+| 35 | Pipeline entry (`pipelines.<tag>`) | wins over GlobalVariables.json for that pipeline only |
+| 40 | Trigger file | overrides both for a one-off |
+| 50 | Run override | |
+
+Changed 2026-11-18: the pipeline entry used to be 30 and GlobalVariables.json 35. Pre-flight now shows an
+Info line `GlobalVars _BuildNumber ignored: pipeline '<name>' sets its own value` when this happens, and
+"Apply Build to All Pipelines" leaves such pipelines unchanged and lists them as "not changed: has its own build".
 
 ## 7. Rules and constraints
 
@@ -98,6 +102,6 @@ their own, and any trigger build still wins.
   token display. This feature wires it into the run paths for the first time, through the shared loader
   funnel (not per call site). That is the real regression surface.
 - It is applied **after** Initialize (a pipeline's `_ReleaseName` is known only once its per-release config
-  loads). Rank 35 — not load order — decides precedence.
+  loads). Rank 30 — not load order — decides precedence.
 - Pre-existing bug found separately: the "SP2026R2 - WARM GR Setup" pipeline's Initialize points at a config
   file that does not exist; fix its `ParameterFile` to the renamed per-use-case config.

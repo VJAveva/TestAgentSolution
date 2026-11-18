@@ -11,7 +11,7 @@ argument-hint: 'Release (e.g. SP2026R2) and use case (e.g. WARM, Sanity)'
 - Schema: `docs/features/PreFlightCheck/pipeline-config.schema.json`
 - Live: `C:\TestControllerService\Parameters\<Release>\<Release>-<UseCase>-pipeline-config.json` (e.g. `SP2026R2\SP2026R2-WARM-pipeline-config.json`)
 - Constants: `C:\TestControllerService\Parameters\GlobalVariables.json` (sample: `docs/features/GlobalVariables/GlobalVariables.json`)
-- Loader: `ParameterResolver.LoadJsonConfig`. Precedence is by **rank**, not file order: Global 10 < Profile 20 < PipelinePin 30 < GlobalVars 35 < TriggerFile 40 < RunOverride 50.
+- Loader: `ParameterResolver.LoadJsonConfig`. Precedence is by **rank**, not file order: Global 10 < Profile 20 < GlobalVars 30 < PipelinePin (pipeline entry) 35 < TriggerFile 40 < RunOverride 50. A `pipelines` entry therefore keeps its own `_BuildNumber` when GlobalVariables.json moves on.
 
 ## Shape
 ```json

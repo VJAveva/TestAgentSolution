@@ -178,7 +178,12 @@ public static partial class ParameterResolver
         static void Apply(PipelineExecutionContext ctx, string key, string value, ParameterRank rank)
         {
             if (ctx.ParameterRanks.TryGetValue(key, out var winning) && winning > (int)rank)
+            {
+                ctx.ShadowedParameters.Add(new ShadowedParameter(key, (int)rank, winning));
                 return;
+            }
+            if (winning < (int)rank && ctx.ParameterRanks.ContainsKey(key))
+                ctx.ShadowedParameters.Add(new ShadowedParameter(key, winning, (int)rank));
 
             ctx.Parameters[key] = value;
             ctx.ParameterRanks[key] = (int)rank;
@@ -621,6 +626,29 @@ public static partial class ParameterResolver
                     Walk(group.Children, into);
             }
         }
+    }
+
+    /// <summary>
+    /// Tags of the pipelines whose own "pipelines" entry sets _BuildNumber or _DropLocation. That entry
+    /// outranks GlobalVars, so "Apply build to all pipelines" does not change what these pipelines run.
+    /// </summary>
+    public static IReadOnlyList<string> PipelinesWithOwnBuild(IEnumerable<WatchItemConfig> watchItems)
+    {
+        var tags = new List<string>();
+        foreach (var wi in watchItems)
+        {
+            if (string.IsNullOrWhiteSpace(wi.Tag)) continue;
+
+            var hasOwn = CollectInitializeNodes(wi)
+                .Where(init => IsLayeredConfig(init.ParameterFile))
+                .Select(init => ReadJsonConfig(init.ParameterFile))
+                .Any(cfg => cfg is not null
+                            && cfg.Pipelines.TryGetValue(wi.Tag, out var entry)
+                            && entry.Keys.Any(k => k.Equals("_BuildNumber", StringComparison.OrdinalIgnoreCase)
+                                                   || k.Equals("_DropLocation", StringComparison.OrdinalIgnoreCase)));
+            if (hasOwn) tags.Add(wi.Tag);
+        }
+        return tags;
     }
 
     /// <summary>

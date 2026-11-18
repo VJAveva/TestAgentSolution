@@ -1,5 +1,9 @@
 # Copilot Prompt — Global Variables (single-release build for all pipelines)
 
+> **Precedence superseded on 2026-11-18:** GlobalVars is now rank 30 and the pipeline entry (PipelinePin) 35,
+> so a pipeline's own entry wins. The current table is in `GlobalVariables_Requirement.md` §6. The ranks
+> below are the original design and are kept for history.
+
 > Mockup: `GlobalVariables_Dialog_Mockup.html`. Requirement: `GlobalVariables_Requirement.md`.
 > Read the real code first; reuse ParameterResolver, the Initialize flow, the WatchList model and the
 > existing Global Variables dialog. Show the design before coding. No fan-out: one file is the source of truth.
