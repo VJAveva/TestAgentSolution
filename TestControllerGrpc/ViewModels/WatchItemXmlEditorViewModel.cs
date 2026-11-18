@@ -333,13 +333,13 @@ public sealed partial class WatchItemXmlEditorViewModel : ObservableObject
             IsXmlValid = false;
             ErrorLine = ex.LineNumber;
             ErrorPosition = ex.LinePosition;
-            StatusMessage = $"? Cannot format � Line {ex.LineNumber}, Pos {ex.LinePosition}: {ex.Message}";
+            StatusMessage = $"? Cannot format - Line {ex.LineNumber}, Pos {ex.LinePosition}: {ex.Message}";
             StatusSeverity = "Error";
             NavigateToError?.Invoke(ex.LineNumber, ex.LinePosition);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"? Cannot format � {ex.Message}";
+            StatusMessage = $"? Cannot format - {ex.Message}";
             StatusSeverity = "Error";
         }
     }

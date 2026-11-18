@@ -933,7 +933,7 @@
                                             <Button Content="+ New run" FontSize="{StaticResource FontSize9}" FontWeight="SemiBold"
                                                     Background="Transparent" Foreground="{DynamicResource Accent}"
                                                     BorderThickness="0" Cursor="Hand" Padding="6,2" Margin="0,0,10,0"
-                                                    Command="{Binding TriggerAllWatchItemsCommand}"
+                                                    Command="{Binding TriggerAllWithConfirmCommand}"
                                                     ToolTip="Start a new execution run"/>
                                             <Button Content="Cancel all" FontSize="{StaticResource FontSize9}"
                                                     Background="Transparent" Foreground="{DynamicResource AccRed}"
@@ -1066,8 +1066,8 @@
                                                             <Button Content="↻" FontSize="{StaticResource FontSize12}" Padding="3,2"
                                                                     Background="Transparent" BorderThickness="0"
                                                                     Foreground="{DynamicResource TextMutedBrush}" Cursor="Hand"
-                                                                    Command="{Binding DataContext.TriggerAllWatchItemsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                    AutomationProperties.Name="Retry this pipeline" ToolTip="Retry this pipeline">
+                                                                    Command="{Binding DataContext.TriggerAllWithConfirmCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    AutomationProperties.Name="Run all pipelines again" ToolTip="Run all pipelines again (asks first)">
                                                                 <Button.Style>
                                                                     <Style TargetType="Button">
                                                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -1237,8 +1237,8 @@
                         </StackPanel>
 
                         <!-- Execute -->
-                        <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
-                                ToolTip="Execute All WatchItems (F5)" Height="28" Padding="8,2">
+                        <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWithConfirmCommand}"
+                                ToolTip="Execute All WatchItems (Ctrl+Shift+F5)" Height="28" Padding="8,2">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" FontSize="{StaticResource FontSize14}" Foreground="{DynamicResource AccGreen}" />
                                 <TextBlock Text="Run All" FontSize="{StaticResource FontSize9}" VerticalAlignment="Center" Margin="4,0,0,0" />
@@ -1641,8 +1641,8 @@
                                 <Border Background="{DynamicResource GroupBg}" CornerRadius="6" Padding="6,2" Margin="2,1">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWatchItemsCommand}"
-                                                    ToolTip="Execute all enabled WatchItems (F5)">
+                                            <Button Style="{StaticResource RibbonBtnGreen}" Command="{Binding TriggerAllWithConfirmCommand}"
+                                                    ToolTip="Execute all enabled WatchItems (Ctrl+Shift+F5)">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Style="{StaticResource RibbonIconText}" Text="&#xE768;" Foreground="{DynamicResource AccGreen}" />
                                                     <TextBlock Text="Execute All" FontSize="{StaticResource FontSize9}" HorizontalAlignment="Center" Margin="0,1,0,0" />

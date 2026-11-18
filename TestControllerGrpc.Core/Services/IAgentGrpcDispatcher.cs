@@ -32,7 +32,7 @@ public interface IAgentGrpcDispatcher : IDisposable
     /// </summary>
     Task<List<DiagnosticStep>> DiagnoseAgentAsync(string agentName, CancellationToken ct = default);
 
-    /// <summary>Quick ping � checks if GetState responds within 3 seconds.</summary>
+    /// <summary>Quick ping - checks if GetState responds within 3 seconds.</summary>
     Task<bool> PingAsync(string agentName, CancellationToken ct = default);
 
     /// <summary>Executes a RunRemoteCommand on the specified agent.</summary>

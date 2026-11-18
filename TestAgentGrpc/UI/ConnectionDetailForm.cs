@@ -197,7 +197,7 @@ public sealed class ConnectionDetailForm : Form
                 _                             => TextSecondary,
             };
 
-            _controllerAddressLabel.Text = _monitor.ControllerAddress ?? "—";
+            _controllerAddressLabel.Text = _monitor.ControllerAddress ?? "â€”";
             _registrationLabel.Text = _monitor.RegistrationTimestamp?.ToLocalTime().ToString("g") ?? "Never";
 
             var uptime = _monitor.UptimeSinceLastRecovery;
@@ -230,9 +230,9 @@ public sealed class ConnectionDetailForm : Form
                 CommunicationSeverity.Success => "?",
                 CommunicationSeverity.Warning => "?",
                 CommunicationSeverity.Error   => "?",
-                _                             => "·",
+                _                             => "Â·",
             };
-            var detail = e.Detail.Length > 120 ? $"{e.Detail[..117]}…" : e.Detail;
+            var detail = e.Detail.Length > 120 ? $"{e.Detail[..117]}â€¦" : e.Detail;
             var rowIdx = _logGrid.Rows.Add(timeStr, icon, e.Event, detail);
 
             var rowColor = e.Severity switch
@@ -255,7 +255,7 @@ public sealed class ConnectionDetailForm : Form
     private async void OnRunDiagnostic(object? sender, EventArgs e)
     {
         _diagButton.Enabled = false;
-        _diagButton.Text = "Running…";
+        _diagButton.Text = "Runningâ€¦";
         var results = new List<string>();
 
         try
@@ -368,7 +368,7 @@ public sealed class ConnectionDetailForm : Form
         var lines = new[]
         {
             $"Agent: {_agentSettings.AgentName} ({_agentSettings.GetResolvedEndpoint()})",
-            $"Controller: {_monitor.ControllerName ?? "—"} ({_monitor.ControllerAddress ?? "—"})",
+            $"Controller: {_monitor.ControllerName ?? "â€”"} ({_monitor.ControllerAddress ?? "â€”"})",
             $"Status: {_monitor.GetStatus()} | Registered: {(_monitor.RegistrationTimestamp?.ToLocalTime().ToString("g") ?? "Never")} | Uptime: {uptimeStr}",
             $"Heartbeats: {_monitor.TotalHeartbeatsSent} OK / {_monitor.TotalHeartbeatsFailed} Failed / Current streak: {_monitor.CurrentSuccessStreak}",
         };
@@ -436,7 +436,7 @@ public sealed class ConnectionDetailForm : Form
 
         var val = new Label
         {
-            Text = "—",
+            Text = "â€”",
             Font = FontMono,
             ForeColor = TextPrimary,
             Location = new Point(110, y),

@@ -31,10 +31,10 @@ public sealed record AuditEntry
 /// Persistent audit logging service.
 ///
 /// Writes JSON Lines (.jsonl) to a configurable directory with:
-///   � One file per day (audit_yyyy-MM-dd.jsonl)
-///   � Thread-safe non-blocking writes via <see cref="Channel{T}"/>
-///   � Automatic directory creation and old-file retention cleanup
-///   � Max file size rollover with numbered suffixes
+///   - One file per day (audit_yyyy-MM-dd.jsonl)
+///   - Thread-safe non-blocking writes via <see cref="Channel{T}"/>
+///   - Automatic directory creation and old-file retention cleanup
+///   - Max file size rollover with numbered suffixes
 /// </summary>
 public sealed class AuditLogger : IHostedService, IDisposable
 {
@@ -266,7 +266,7 @@ public sealed class AuditLogger : IHostedService, IDisposable
                 return rolloverPath;
         }
 
-        // Exhausted rollover slots � overwrite last
+        // Exhausted rollover slots - overwrite last
         return Path.Combine(_settings.LogDirectory, $"{baseName}_999.jsonl");
     }
 

@@ -100,7 +100,7 @@ public class ExecutionController : ControllerBase
         _maintenanceState = maintenanceState;
     }
 
-    /// <summary>GET /api/execution/sessions � list active sessions.</summary>
+    /// <summary>GET /api/execution/sessions - list active sessions.</summary>
     [HttpGet("sessions")]
     public IActionResult GetSessions()
     {
@@ -289,7 +289,7 @@ public class ExecutionController : ControllerBase
         return Ok(new { active, history });
     }
 
-    /// <summary>GET /api/execution/{sessionId} � detailed session info.</summary>
+    /// <summary>GET /api/execution/{sessionId} - detailed session info.</summary>
     [HttpGet("{sessionId}")]
     public IActionResult GetSession(string sessionId)
     {
@@ -299,7 +299,7 @@ public class ExecutionController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/execution/trigger/{watchItemTag}?eventType=Renamed � trigger a WatchItem.
+    /// POST /api/execution/trigger/{watchItemTag}?eventType=Renamed - trigger a WatchItem.
     /// Accepts an optional JSON body with build number, drop location, and custom parameters.
     /// Uses agent-level locking to prevent concurrent pipelines from sharing agents.
     /// </summary>
@@ -470,7 +470,7 @@ public class ExecutionController : ControllerBase
                         message = isRace
                             ? $"Another user just triggered '{newestConflict.WatchItemTag}' moments ago. " +
                               $"The agent was free when you opened the dialog but was claimed by {newestConflict.UserId} first."
-                            : $"Cannot start '{watchItemTag}' � {conflicts.Count} required agent(s) are locked by other sessions",
+                            : $"Cannot start '{watchItemTag}' - {conflicts.Count} required agent(s) are locked by other sessions",
                         conflicts = conflicts.Select(c => new
                         {
                             c.AgentName,
@@ -484,7 +484,7 @@ public class ExecutionController : ControllerBase
                         requiredAgents,
                         yourUserId = userId,
                         retryAdvice = isRace
-                            ? "Try again in a few seconds � or wait for the other pipeline to finish."
+                            ? "Try again in a few seconds - or wait for the other pipeline to finish."
                             : "Wait for the blocking pipeline to complete.",
                     });
                 }
@@ -576,7 +576,7 @@ public class ExecutionController : ControllerBase
         // Broadcast lock state to all clients
         BroadcastLockChange("Pipeline started");
 
-        // Fire and forget � ExecuteEventTrackedAsync handles session lifecycle
+        // Fire and forget - ExecuteEventTrackedAsync handles session lifecycle
         _ = Task.Run(async () =>
         {
             try
@@ -1111,7 +1111,7 @@ public class ExecutionController : ControllerBase
 
     // ?? Lock & availability endpoints ????????????????????????????????
 
-    /// <summary>GET /api/execution/locks � all current agent locks.</summary>
+    /// <summary>GET /api/execution/locks - all current agent locks.</summary>
     [HttpGet("locks")]
     public IActionResult GetLocks()
     {
@@ -1130,7 +1130,7 @@ public class ExecutionController : ControllerBase
         return Ok(new { locks, lockVersion = _lockManager.Version, timestamp = DateTime.UtcNow });
     }
 
-    /// <summary>GET /api/execution/can-trigger/{watchItemTag} � pre-flight availability check.</summary>
+    /// <summary>GET /api/execution/can-trigger/{watchItemTag} - pre-flight availability check.</summary>
     [HttpGet("can-trigger/{watchItemTag}")]
     public IActionResult CanTrigger(string watchItemTag)
     {
@@ -1165,7 +1165,7 @@ public class ExecutionController : ControllerBase
 
     // ?? Reconnection & session endpoints ?????????????????????????????
 
-    /// <summary>GET /api/execution/reconnect � returns user's active sessions for reconnection.</summary>
+    /// <summary>GET /api/execution/reconnect - returns user's active sessions for reconnection.</summary>
     [HttpGet("reconnect")]
     public IActionResult Reconnect()
     {
@@ -1190,7 +1190,7 @@ public class ExecutionController : ControllerBase
         return Ok(new { userId, activeSessions = active });
     }
 
-    /// <summary>GET /api/execution/{sessionId}/recent-logs � backfill logs after reconnect.</summary>
+    /// <summary>GET /api/execution/{sessionId}/recent-logs - backfill logs after reconnect.</summary>
     [HttpGet("{sessionId}/recent-logs")]
     public IActionResult GetRecentLogs(string sessionId, [FromQuery] int count = 200)
     {
@@ -1219,7 +1219,7 @@ public class ExecutionController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/execution/my-sessions � user's own sessions.</summary>
+    /// <summary>GET /api/execution/my-sessions - user's own sessions.</summary>
     [HttpGet("my-sessions")]
     public IActionResult GetMySessions()
     {

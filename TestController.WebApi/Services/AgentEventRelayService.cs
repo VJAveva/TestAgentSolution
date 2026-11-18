@@ -92,7 +92,7 @@ public sealed class AgentEventRelayService : BackgroundService
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Shutdown � expected
+            // Shutdown - expected
         }
         catch (Exception ex)
         {

@@ -63,7 +63,7 @@ public partial class App : Application
             _adapter = new FeedToVmAdapter(_feed, vm, _loggerFactory.CreateLogger<FeedToVmAdapter>());
             _adapter.Attach();
 
-            // ?? 6. Show window (reuses TestControllerGrpc’s ExecutionDashboardWindow) ??
+            // ?? 6. Show window (reuses TestControllerGrpcâ€™s ExecutionDashboardWindow) ??
             _window = new ExecutionDashboardWindow { DataContext = vm };
             _window.Closed += (_, _) => Shutdown();
             _window.Show();

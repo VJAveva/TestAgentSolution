@@ -276,7 +276,7 @@ public sealed class ControllerWebApiHost : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken ct)
     {
-        _logger.LogInformation("WebApi + SignalR server stopping�");
+        _logger.LogInformation("WebApi + SignalR server stopping...");
 
         // Dispose the notifier first to unsubscribe from all events
         if (_app is not null)

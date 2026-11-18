@@ -140,7 +140,7 @@ public static class SvgIconHelper
         }
         catch (InvalidOperationException)
         {
-            // Window not yet fully initialized — fall through to default
+            // Window not yet fully initialized â€” fall through to default
         }
 
         return 96.0;

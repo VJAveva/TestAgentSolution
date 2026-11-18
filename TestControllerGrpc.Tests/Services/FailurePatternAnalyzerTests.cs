@@ -141,6 +141,6 @@ public class FailurePatternAnalyzerTests
     public void GetCompactLabel_Should_ReturnDash_When_TestNotFound()
     {
         var label = _analyzer.GetCompactLabel("NonExistentTest");
-        Assert.Equal("—", label);
+        Assert.Equal("â€”", label);
     }
 }

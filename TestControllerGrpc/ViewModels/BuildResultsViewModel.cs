@@ -168,7 +168,7 @@ public partial class BuildResultsViewModel : ObservableObject
             return;
         }
 
-        StatusMessage = $"Analyzing failure pattern for '{testName}'�";
+        StatusMessage = $"Analyzing failure pattern for '{testName}'...";
         try
         {
             // Run TRX scan off the UI thread (network shares can take seconds).

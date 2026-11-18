@@ -9,9 +9,9 @@ namespace TestControllerGrpc.Services;
 /// <summary>
 /// Builds a merged execution log for a specific test case in a specific build,
 /// correlating data from three sources:
-///   1. TRX file — test framework events and step results
-///   2. Agent log file — agent stdout/stderr during the test
-///   3. Controller log file — gRPC events, progress updates
+///   1. TRX file â€” test framework events and step results
+///   2. Agent log file â€” agent stdout/stderr during the test
+///   3. Controller log file â€” gRPC events, progress updates
 ///
 /// All three are filtered to the test's time window (startTime ? endTime
 /// from the TRX) so the user sees only relevant lines.

@@ -54,7 +54,7 @@ public sealed class RangeObservableCollection<T> : ObservableCollection<T>
     /// Removes <paramref name="count"/> items from the beginning of the list
     /// in a single batch, firing one <see cref="NotifyCollectionChangedAction.Reset"/>.
     ///
-    /// Replaces the O(n�) pattern:
+    /// Replaces the O(n^2) pattern:
     /// <code>while (Count &gt; max) RemoveAt(0);</code>
     /// which fires n notifications and shifts items n times.
     /// </summary>

@@ -204,7 +204,7 @@ public class ActionPipelineExecutorTests
                 .Setup(d => d.ExecuteLocalCommandAsync(It.IsAny<ActionConfig>(), It.IsAny<PipelineExecutionContext>(), It.IsAny<CancellationToken>()))
                 .Returns<ActionConfig, PipelineExecutionContext, CancellationToken>((a, ctx, _) =>
                 {
-                    // Capture the resolved command � by this point Initialize should have run
+                    // Capture the resolved command - by this point Initialize should have run
                     capturedCommand = ParameterResolver.Resolve(a.Command, ctx);
                     return Task.FromResult(new ActionResult(true, 0, ""));
                 });
@@ -318,7 +318,7 @@ public class ActionPipelineExecutorTests
     [Fact]
     public async Task ExecuteEventAsync_Should_ReturnFalse_When_RefTemplateNotFound()
     {
-        // No templates loaded � Ref should fail
+        // No templates loaded - Ref should fail
         var evt = new EventConfig
         {
             Type = "Renamed",

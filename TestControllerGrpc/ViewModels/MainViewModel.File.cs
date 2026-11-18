@@ -61,7 +61,7 @@ public sealed partial class MainViewModel
 
             RefreshAllInitializeTokenScopes();
 
-            // Suppress the file-watcher reload � we're saving our own in-memory state
+            // Suppress the file-watcher reload - we're saving our own in-memory state
             _vocabMonitor.SuppressNextReload();
 
             WatchListXmlParser.Save(_config, VocabFilePath);
@@ -107,7 +107,7 @@ public sealed partial class MainViewModel
 
             if (_sessionManager.HasAnyActiveExecution)
             {
-                // DIFFERENTIAL reload � preserve running watchers
+                // DIFFERENTIAL reload - preserve running watchers
                 _config = config;
                 _executor.LoadTemplates(config.Templates);
                 _watcherManager.ApplyDiff(config.WatchItems);
@@ -125,18 +125,18 @@ public sealed partial class MainViewModel
                 });
 
                 IsDirty = false;
-                AddLog($"Refreshed (differential � {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
+                AddLog($"Refreshed (differential - {_sessionManager.ActiveExecutionCount} execution(s) preserved): {VocabFilePath}",
                     LogSeverity.Success);
             }
             else
             {
-                // FULL reload � no executions running
+                // FULL reload - no executions running
                 ApplyConfig(config);
                 IsDirty = false;
                 AddLog($"Refreshed: {VocabFilePath}", LogSeverity.Success);
             }
 
-            StatusMessage = $"Refreshed � {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
+            StatusMessage = $"Refreshed - {config.WatchItems.Count} watch {(config.WatchItems.Count == 1 ? "item" : "items")}, {config.Templates.Count} {(config.Templates.Count == 1 ? "template" : "templates")}";
         }
         catch (Exception ex)
         {

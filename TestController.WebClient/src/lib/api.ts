@@ -80,13 +80,13 @@ export async function apiFetch<T>(
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('text/html') && path.startsWith('/api')) {
       console.error(
-        `[API] [${correlationId}] ROUTE NOT FOUND � got HTML instead of JSON. ` +
+        `[API] [${correlationId}] ROUTE NOT FOUND - got HTML instead of JSON. ` +
         `Endpoint ${path} may not be registered. Check IIS SPA rewrite rules.`
       );
       throw {
         status: 404,
         error: 'Route not found',
-        detail: `${path} returned HTML � endpoint not registered`,
+        detail: `${path} returned HTML - endpoint not registered`,
         correlationId,
       };
     }

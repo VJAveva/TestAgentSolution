@@ -64,7 +64,7 @@ public class ScalabilityFixTests
             }
         }, cts.Token);
 
-        // Reader thread — should never throw
+        // Reader thread â€” should never throw
         var reader = Task.Run(() =>
         {
             while (!cts.Token.IsCancellationRequested)
@@ -132,7 +132,7 @@ public class ScalabilityFixTests
 
         // Publish should return in well under 100ms (handler takes 500ms)
         Assert.True(sw.ElapsedMilliseconds < 100,
-            $"Publish took {sw.ElapsedMilliseconds}ms — should be nearly instant");
+            $"Publish took {sw.ElapsedMilliseconds}ms â€” should be nearly instant");
 
         // Handler should still eventually complete
         Assert.True(handlerStarted.Wait(TimeSpan.FromSeconds(2)), "Handler was never started");
@@ -224,7 +224,7 @@ public class ScalabilityFixTests
             Outcome = ActionOutcome.Success,
         });
 
-        // ActionResults should be IReadOnlyCollection — no Add method exposed
+        // ActionResults should be IReadOnlyCollection â€” no Add method exposed
         IReadOnlyCollection<ActionExecutionResult> results = session.ActionResults;
         Assert.Single(results);
     }

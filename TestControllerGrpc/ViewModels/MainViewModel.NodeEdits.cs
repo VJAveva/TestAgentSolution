@@ -162,14 +162,16 @@ public sealed partial class MainViewModel
         command.Execute(null);
     }
 
-    /// <summary>Ctrl+Shift+F5: Trigger All, always after a confirm (rule 10).</summary>
-    [RelayCommand]
+    /// <summary>Trigger All from every entry point (key, ribbon, dashboard), always after a confirm (rule 10).</summary>
+    [RelayCommand(CanExecute = nameof(CanTriggerAllWatchItems))]
     private void TriggerAllWithConfirm()
     {
         if (!TriggerAllWatchItemsCommand.CanExecute(null)) return;
-        var count = _config.WatchItems.Count(w => w.IsEnabled);
-        if (Views.Dialogs.ThemedMessageBox.Show($"Run all {count} enabled pipelines now?", "Trigger All",
-                System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
+        var enabled = _config.WatchItems.Where(w => w.IsEnabled).Select(w => w.Tag).ToList();
+        if (Views.Dialogs.ThemedMessageBox.Show(
+                $"Run all {enabled.Count} enabled pipelines now?{Environment.NewLine}{Environment.NewLine}{string.Join(Environment.NewLine, enabled)}",
+                "Trigger All", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning)
+            != System.Windows.MessageBoxResult.Yes) return;
         TriggerAllWatchItemsCommand.Execute(null);
     }
 }

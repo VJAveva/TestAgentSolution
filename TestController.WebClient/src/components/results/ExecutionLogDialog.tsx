@@ -80,7 +80,7 @@ export default function ExecutionLogDialog({ build, testName, stepIndex, onClose
             {/* Context strip */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 px-5 py-3 bg-white/5 border-b border-bdr text-xs">
               <div><div className="text-[10px] text-text-muted uppercase">Build</div><div className="font-bold">{report.buildName}</div></div>
-              <div><div className="text-[10px] text-text-muted uppercase">Agent</div><div className="font-bold">{report.agent || '�'}</div></div>
+              <div><div className="text-[10px] text-text-muted uppercase">Agent</div><div className="font-bold">{report.agent || '\u2014'}</div></div>
               <div><div className="text-[10px] text-text-muted uppercase">Outcome</div>
                 <div className={`font-bold ${report.outcome === 'Passed' ? 'text-green-400' : report.outcome === 'Failed' ? 'text-red-400' : ''}`}>
                   {report.outcome}
@@ -90,7 +90,7 @@ export default function ExecutionLogDialog({ build, testName, stepIndex, onClose
               <div><div className="text-[10px] text-text-muted uppercase">Started</div><div className="text-[11px]">{report.startTime}</div></div>
               <div><div className="text-[10px] text-text-muted uppercase">Failed step</div>
                 <div className="font-bold text-red-400">
-                  {report.failedStepIndex >= 0 ? `Step #${report.failedStepIndex}` : '�'}
+                  {report.failedStepIndex >= 0 ? `Step #${report.failedStepIndex}` : '\u2014'}
                 </div>
               </div>
             </div>
@@ -110,7 +110,7 @@ export default function ExecutionLogDialog({ build, testName, stepIndex, onClose
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Filter messages�"
+                placeholder="Filter messages..."
                 className="ml-auto px-2 py-1 bg-bg border border-bdr rounded text-xs w-64 text-text-primary"
               />
             </div>

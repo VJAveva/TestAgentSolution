@@ -28,7 +28,7 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex) when (ex is System.IO.FileNotFoundException || ex is System.IO.DirectoryNotFoundException)
         {
-            // Network path unreachable � retry without InitialDirectory
+            // Network path unreachable - retry without InitialDirectory
             AddLog($"Initial directory unreachable ({basePath}), opening default location. Error: {ex.Message}", LogSeverity.Warning);
             dlg = new OpenFolderDialog { Title = "Select Build Folder" };
             if (dlg.ShowDialog() != true) return;
@@ -109,7 +109,7 @@ public sealed partial class MainViewModel
                     }
                 }
 
-                // Add keys if not found � default to comma (canonical format)
+                // Add keys if not found - default to comma (canonical format)
                 var delimiter = lines.Any(l => l.Contains(',')) ? "," : ",";
                 if (!bnFound) lines.Add($"_BuildNumber{delimiter}{folderName}");
                 if (!dlFound) lines.Add($"_DropLocation{delimiter}{selectedPath}");
@@ -154,7 +154,7 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// Recursively searches the subtree to find the first Initialize node's ParameterFile path.
-    /// Works at any nesting depth (WatchItem ? Event ? ActionGroup ? � ? Initialize).
+    /// Works at any nesting depth (WatchItem ? Event ? ActionGroup ? - ? Initialize).
     /// </summary>
     /// <summary>
     /// Every Initialize ParameterFile in the subtree, in declaration order, at any nesting depth
@@ -241,7 +241,7 @@ public sealed partial class MainViewModel
                     }
                 }
 
-                // Add keys if not found � detect existing delimiter style
+                // Add keys if not found - detect existing delimiter style
                 var delimiter = lines.Any(l => l.Contains(',')) ? "," : ",";
                 if (!bnFound) lines.Add($"{bnKey}{delimiter}{folderName}");
                 if (!dlFound) lines.Add($"{dlKey}{delimiter}{selectedPath}");

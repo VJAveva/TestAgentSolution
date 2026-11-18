@@ -182,7 +182,7 @@ public class ConcurrentSessionTests
 
         await Task.WhenAll(task1, task2);
 
-        // Session 1 was cancelled — should have fewer commands
+        // Session 1 was cancelled â€” should have fewer commands
         Assert.True(session1Commands.Count < 2);
         // Session 2 completed normally
         Assert.Equal(2, session2Commands.Count);

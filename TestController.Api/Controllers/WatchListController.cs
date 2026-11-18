@@ -41,7 +41,7 @@ public class WatchListController : ControllerBase
                     filePath = config?.FilePath ?? "",
                     warning = config == null
                         ? "WatchList is not loaded. Check if WatchList.xml path is configured."
-                        : "WatchList is empty � no WatchItems defined.",
+                        : "WatchList is empty - no WatchItems defined.",
                 });
             }
 
@@ -58,7 +58,7 @@ public class WatchListController : ControllerBase
         }
     }
 
-    /// <summary>GET /api/watchlist/{tag}/status � execution status of a WatchItem.</summary>
+    /// <summary>GET /api/watchlist/{tag}/status - execution status of a WatchItem.</summary>
     [HttpGet("{tag}/status")]
     public IActionResult GetStatus(string tag)
     {
@@ -81,7 +81,7 @@ public class WatchListController : ControllerBase
         });
     }
 
-    /// <summary>GET /api/watchlist/{tag}/parameters � current Variables.txt values.</summary>
+    /// <summary>GET /api/watchlist/{tag}/parameters - current Variables.txt values.</summary>
     [HttpGet("{tag}/parameters")]
     public IActionResult GetParameters(string tag)
     {

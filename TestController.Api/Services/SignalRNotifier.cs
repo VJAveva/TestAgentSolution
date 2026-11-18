@@ -11,10 +11,10 @@ namespace TestController.Api.Services;
 /// to a single <see cref="ControllerHub"/> via <see cref="IHubContext{THub}"/>.
 ///
 /// Subscribes to:
-///   � C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
-///   � C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
-///   � C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
-///   � <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
+///   - C# events on <see cref="IActionPipelineExecutor"/> (LogEntry, NodeProgress, NodeFailed)
+///   - C# events on <see cref="IAgentGrpcDispatcher"/> (OutputReceived, StatusChanged)
+///   - C# events on <see cref="IVocabularyMonitor"/> (ConfigReloaded)
+///   - <see cref="IEventAggregator"/> events (AgentRegistered, AgentUnregistered,
 ///     AgentHeartbeat, ExecutionStarted, ExecutionCompleted)
 ///
 /// Includes heartbeat throttling: coalesces rapid heartbeats into a single
@@ -108,7 +108,7 @@ public sealed class SignalRNotifier : IRealtimeNotifier, IDisposable
         _subExecutionStarted = _events.Subscribe<ExecutionStartedEvent>(OnExecutionStarted);
         _subExecutionCompleted = _events.Subscribe<ExecutionCompletedEvent>(OnExecutionCompleted);
         _subLocksChanged = _events.Subscribe<AgentLocksChangedEvent>(e => _ = NotifyAgentLocksChanged(e));
-        // ? These carry SessionId � fixes "Pipeline view not updating" because
+        // ? These carry SessionId - fixes "Pipeline view not updating" because
         //   the WebClient looks up the card by sessionId on every ActionProgress.
         _subNodeProgress = _events.Subscribe<NodeProgressEvent>(OnNodeProgressEvent);
         _subAgentOutput = _events.Subscribe<AgentOutputEvent>(OnAgentOutputEvent);

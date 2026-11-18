@@ -89,7 +89,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger-all � trigger all WatchItems.</summary>
+    /// <summary>POST /api/execution/trigger-all - trigger all WatchItems.</summary>
     private static IResult TriggerAll(
         WatchListFileService fileService,
         ExecutionSessionManager sessionManager,
@@ -137,7 +137,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger/{tag} � trigger specific WatchItem.</summary>
+    /// <summary>POST /api/execution/trigger/{tag} - trigger specific WatchItem.</summary>
     private static IResult TriggerByTag(
         string tag,
         WatchListFileService fileService,
@@ -183,7 +183,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} � trigger specific event.</summary>
+    /// <summary>POST /api/execution/trigger-event/{tag}/{eventIndex} - trigger specific event.</summary>
     private static IResult TriggerEvent(
         string tag,
         int eventIndex,
@@ -231,7 +231,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/cancel � cancel all running executions.</summary>
+    /// <summary>POST /api/execution/cancel - cancel all running executions.</summary>
     private static IResult CancelAll(
         ExecutionSessionManager sessionManager,
         IRealtimeNotifier notifier)
@@ -251,7 +251,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>POST /api/execution/cancel/{sessionId} � cancel a specific session.</summary>
+    /// <summary>POST /api/execution/cancel/{sessionId} - cancel a specific session.</summary>
     private static IResult CancelBySession(
         string sessionId,
         ExecutionSessionManager sessionManager,
@@ -435,7 +435,7 @@ public static class ExecutionEndpoints
         }
     }
 
-    /// <summary>GET /api/execution/status � current execution state overview.</summary>
+    /// <summary>GET /api/execution/status - current execution state overview.</summary>
     private static IResult GetStatus(ExecutionSessionManager sessionManager)
     {
         return Results.Ok(new
@@ -445,7 +445,7 @@ public static class ExecutionEndpoints
         });
     }
 
-    /// <summary>GET /api/execution/sessions � active sessions with per-session detail.</summary>
+    /// <summary>GET /api/execution/sessions - active sessions with per-session detail.</summary>
     private static IResult GetSessions(ExecutionSessionManager sessionManager)
     {
         var active = sessionManager.GetActiveSessions();

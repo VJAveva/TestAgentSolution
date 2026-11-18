@@ -37,7 +37,7 @@ public sealed partial class MainViewModel
             }
             catch
             {
-                // Invalid regex � fall back to plain text
+                // Invalid regex - fall back to plain text
                 _searchRegex = null;
             }
         }
@@ -83,7 +83,7 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(HasActiveLogFilters));
     }
 
-    /// <summary>Pure filter predicate � no field access, fully parameterized for thread safety.</summary>
+    /// <summary>Pure filter predicate - no field access, fully parameterized for thread safety.</summary>
     private static bool PassesFilter(LogEntryViewModel entry,
         bool hasTagFilter, bool hasAgentFilter, bool hasSessionFilter,
         bool hasSearchFilter, bool hasSeverityFilter,
@@ -427,7 +427,7 @@ public sealed partial class MainViewModel
 
             if (lastError is not null)
             {
-                // Signal the view to scroll � uses the existing auto-scroll mechanism
+                // Signal the view to scroll - uses the existing auto-scroll mechanism
                 // by temporarily ensuring the item is the last visible entry
                 ScrollToLogEntry?.Invoke(lastError);
             }

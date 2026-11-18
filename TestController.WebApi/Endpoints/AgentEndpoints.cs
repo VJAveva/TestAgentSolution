@@ -118,7 +118,7 @@ public static class AgentEndpoints
         });
     }
 
-    /// <summary>DELETE /api/agents/{name} � unregister an agent.</summary>
+    /// <summary>DELETE /api/agents/{name} - unregister an agent.</summary>
     private static IResult UnregisterAgent(string name, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
         if (!registry.TryGet(name, out var entry))
@@ -129,7 +129,7 @@ public static class AgentEndpoints
         return Results.Ok(new { message = $"Agent '{name}' unregistered." });
     }
 
-    /// <summary>POST /api/agents/{name}/test � test connectivity via GetState.</summary>
+    /// <summary>POST /api/agents/{name}/test - test connectivity via GetState.</summary>
     private static async Task<IResult> TestAgent(
         string name,
         HttpContext ctx,
@@ -180,7 +180,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>POST /api/agents/{name}/diagnose � run 6-step diagnostic.</summary>
+    /// <summary>POST /api/agents/{name}/diagnose - run 6-step diagnostic.</summary>
     private static async Task<IResult> DiagnoseAgent(
         string name,
         HttpContext ctx,
@@ -282,7 +282,7 @@ public static class AgentEndpoints
         return Results.Ok(new { name, steps, summary = $"{passed}/{steps.Count} diagnostic steps passed" });
     }
 
-    /// <summary>GET /api/agents/{name}/snapshot � get agent snapshot via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/snapshot - get agent snapshot via gRPC.</summary>
     private static async Task<IResult> GetAgentSnapshot(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
@@ -321,7 +321,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>GET /api/agents/{name}/health � get connection health via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/health - get connection health via gRPC.</summary>
     private static async Task<IResult> GetAgentHealth(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {
@@ -355,7 +355,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>GET /api/agents/{name}/history?max=20&filter= � get execution history via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/history?max=20&filter= - get execution history via gRPC.</summary>
     private static async Task<IResult> GetAgentHistory(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {        if (!AgentScopeAuthorization.IsAuthorizedForAgent(context.User, name))
@@ -395,7 +395,7 @@ public static class AgentEndpoints
         }
     }
 
-    /// <summary>GET /api/agents/{name}/audit?from=&to=&filter=&max= � get audit log via gRPC.</summary>
+    /// <summary>GET /api/agents/{name}/audit?from=&to=&filter=&max= - get audit log via gRPC.</summary>
     private static async Task<IResult> GetAgentAudit(
         string name, HttpContext context, AgentRegistry registry, AgentGrpcClientManager grpcManager)
     {        if (!AgentScopeAuthorization.IsAuthorizedForAgent(context.User, name))

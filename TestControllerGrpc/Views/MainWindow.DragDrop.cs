@@ -74,11 +74,18 @@ public partial class MainWindow : Window
         // Validate: must be in the same Event subtree
         if (!IsInSameEventSubtree(draggedNode, targetNode)) return;
 
-        // Validate: target must be a valid drop parent or sibling
-        if (IsValidDropTarget(draggedNode, targetNode))
+        // Validate: target must be a valid drop parent or sibling, and the move must be allowed (same rule as the drop).
+        if (IsValidDropTarget(draggedNode, targetNode) && IsMoveAllowed(draggedNode, targetNode))
             e.Effects = DragDropEffects.Move;
 
         e.Handled = true;
+    }
+
+    private bool IsMoveAllowed(TreeNodeViewModel dragged, TreeNodeViewModel target)
+    {
+        var newParent = target.NodeKind is "Event" or "ActionGroup" ? target : target.Parent;
+        return _vm.EditBlockedReasonFor(dragged, structural: true) is null
+               && _vm.EditBlockedReasonFor(newParent) is null;
     }
 
     private void OnTreeDrop(object sender, DragEventArgs e)
@@ -98,13 +105,13 @@ public partial class MainWindow : Window
 
         if (targetNode.NodeKind is "Event" or "ActionGroup")
         {
-            // Drop INTO a container � append at end
+            // Drop INTO a container - append at end
             newParent = targetNode;
             insertIndex = newParent.Children.Count;
         }
         else
         {
-            // Drop NEXT TO a sibling � insert after the target
+            // Drop NEXT TO a sibling - insert after the target
             newParent = targetNode.Parent!;
             insertIndex = newParent.Children.IndexOf(targetNode) + 1;
         }

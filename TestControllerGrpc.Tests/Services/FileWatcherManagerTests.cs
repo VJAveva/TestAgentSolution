@@ -251,7 +251,7 @@ public class FileWatcherManagerTests : IDisposable
         };
         _manager.ApplyConfig(config);
 
-        // Apply diff with same item � watcher count should remain 1
+        // Apply diff with same item - watcher count should remain 1
         _manager.ApplyDiff(
         [
             new WatchItemConfig { Tag = "Stable", Path = dir, Filter = "*.txt", IsEnabled = true,

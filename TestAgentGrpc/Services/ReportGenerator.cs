@@ -93,7 +93,7 @@ public static class ReportGenerator
 
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'/>");
-        sb.AppendLine($"<title>Execution Report — {Esc(agentName)}</title>");
+        sb.AppendLine($"<title>Execution Report â€” {Esc(agentName)}</title>");
         sb.AppendLine("<style>");
         sb.AppendLine("""
             body { background:#1a1a2e; color:#e0e0e0; font-family:'Segoe UI',sans-serif; margin:20px; }
@@ -111,7 +111,7 @@ public static class ReportGenerator
             .footer { margin-top:24px; color:#607d8b; font-size:11px; }
         """);
         sb.AppendLine("</style></head><body>");
-        sb.AppendLine($"<h1>Execution Report — {Esc(agentName)}</h1>");
+        sb.AppendLine($"<h1>Execution Report â€” {Esc(agentName)}</h1>");
 
         // Summary cards
         sb.AppendLine("<div class='cards'>");
@@ -124,10 +124,10 @@ public static class ReportGenerator
         sb.AppendLine("<table><thead><tr><th>Time</th><th>Command</th><th>Args</th><th>Exit</th><th>Duration</th><th>Outcome</th><th>Stdout</th><th>Stderr</th></tr></thead><tbody>");
         foreach (var r in records)
         {
-            var started = r.Started?.ToDateTime().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—";
+            var started = r.Started?.ToDateTime().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "â€”";
             var duration = (r.Finished is not null && r.Started is not null)
                 ? (r.Finished.ToDateTime() - r.Started.ToDateTime()).ToString(@"hh\:mm\:ss")
-                : "—";
+                : "â€”";
             var outcome = r.Outcome switch
             {
                 ExecutionOutcome.OutcomeSuccess    => "<span class='ok'>? Success</span>",
@@ -192,15 +192,15 @@ public static class ReportGenerator
         foreach (var (agentName, records) in agentRecords.OrderBy(kv => kv.Key))
         {
             var agSuccess = records.Count(r => r.Outcome == ExecutionOutcome.OutcomeSuccess);
-            sb.AppendLine($"<h2>{Esc(agentName)} — {records.Count} executions ({agSuccess} ok)</h2>");
+            sb.AppendLine($"<h2>{Esc(agentName)} â€” {records.Count} executions ({agSuccess} ok)</h2>");
             sb.AppendLine("<table><thead><tr><th>Time</th><th>Command</th><th>Args</th><th>Exit</th><th>Duration</th><th>Outcome</th></tr></thead><tbody>");
 
             foreach (var r in records)
             {
-                var started = r.Started?.ToDateTime().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—";
+                var started = r.Started?.ToDateTime().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "â€”";
                 var duration = (r.Finished is not null && r.Started is not null)
                     ? (r.Finished.ToDateTime() - r.Started.ToDateTime()).ToString(@"hh\:mm\:ss")
-                    : "—";
+                    : "â€”";
                 var outcome = r.Outcome switch
                 {
                     ExecutionOutcome.OutcomeSuccess    => "<span class='ok'>? Success</span>",

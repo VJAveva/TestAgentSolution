@@ -59,7 +59,7 @@ public sealed partial class FailureAnalysisVM : ObservableObject
     public string ToClipboardText()
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Failure Pattern Analysis — {TestCaseName}");
+        sb.AppendLine($"Failure Pattern Analysis â€” {TestCaseName}");
         sb.AppendLine(new string('=', 60));
         sb.AppendLine($"Pattern   : {PatternLabel}");
         sb.AppendLine($"Confidence: {ConfidenceText}");
@@ -81,7 +81,7 @@ public sealed partial class FailureAnalysisVM : ObservableObject
         {
             BuildName = r.BuildName;
             Outcome = r.Outcome;
-            ToolTipText = $"{r.BuildName} — {r.Outcome} ({r.BuildDate:yyyy-MM-dd HH:mm})";
+            ToolTipText = $"{r.BuildName} â€” {r.Outcome} ({r.BuildDate:yyyy-MM-dd HH:mm})";
             (OutcomeBrush, OutcomeChar) = r.Outcome switch
             {
                 "Passed" => (new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)), "\u2713"),
@@ -103,10 +103,10 @@ public sealed partial class FailureAnalysisVM : ObservableObject
         public SignatureRow(FailureSignature s)
         {
             BuildName = s.BuildName;
-            FailedStepName = string.IsNullOrEmpty(s.FailedStepName) ? "—" : s.FailedStepName;
-            ErrorType = string.IsNullOrEmpty(s.ErrorType) ? "—" : s.ErrorType;
+            FailedStepName = string.IsNullOrEmpty(s.FailedStepName) ? "â€”" : s.FailedStepName;
+            ErrorType = string.IsNullOrEmpty(s.ErrorType) ? "â€”" : s.ErrorType;
             NormalizedMessage = s.NormalizedMessage;
-            Agent = string.IsNullOrEmpty(s.Agent) ? "—" : s.Agent;
+            Agent = string.IsNullOrEmpty(s.Agent) ? "â€”" : s.Agent;
         }
 
         public string BuildName { get; }

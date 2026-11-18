@@ -439,7 +439,7 @@ public class AgentLockManagerTests : IDisposable
 
         Assert.True(File.Exists(path), "Lock file should exist");
 
-        // Recreate — should restore
+        // Recreate â€” should restore
         var mgr2 = new AgentLockManager(path);
         var locks = mgr2.GetAllLocks();
 

@@ -137,7 +137,7 @@ public sealed class LogBufferService : IDisposable
             _filteredTarget.AddRange(matching);
     }
 
-    /// <summary>Timer callback � drains the channel in batches on the UI thread.</summary>
+    /// <summary>Timer callback - drains the channel in batches on the UI thread.</summary>
     private void OnFlush(object? sender, EventArgs e)
     {
         using var _perf = TestControllerGrpc.Diagnostics.UiPerfDiagnostics.Measure("LogBufferService.Flush");

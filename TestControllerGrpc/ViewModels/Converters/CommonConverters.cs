@@ -8,7 +8,7 @@ namespace TestControllerGrpc.ViewModels;
 
 /// <summary>
 /// Converts an ActionType string to Visibility for conditional field display.
-/// Usage: ConverterParameter="RunCommand|RunRemoteCommand" � shows when current type matches any.
+/// Usage: ConverterParameter="RunCommand|RunRemoteCommand" - shows when current type matches any.
 /// </summary>
 public sealed class ActionTypeFieldVisibilityConverter : IValueConverter
 {
@@ -29,7 +29,7 @@ public sealed class ActionTypeFieldVisibilityConverter : IValueConverter
 
 /// <summary>
 /// Converts an ActiveEditingContext string to Visibility.
-/// Usage: ConverterParameter=WatchList � shows only when context matches.
+/// Usage: ConverterParameter=WatchList - shows only when context matches.
 /// </summary>
 public sealed class EditingContextToVisibilityConverter : IValueConverter
 {
@@ -88,7 +88,7 @@ public sealed class NodeKindToIconBgConverter : IValueConverter
 
 /// <summary>
 /// Converts a NodeKind string to Visibility.
-/// Usage: ConverterParameter=Action � shows panel only when NodeKind matches.
+/// Usage: ConverterParameter=Action - shows panel only when NodeKind matches.
 /// </summary>
 public sealed class NodeKindToVisibilityConverter : IValueConverter
 {

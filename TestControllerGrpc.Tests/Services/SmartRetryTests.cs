@@ -173,7 +173,7 @@ public class SmartRetryTests
 
         await _executor.ExecuteGroupAsync(group, CreateContext(), CancellationToken.None);
 
-        // Should only execute once — exit code 99 doesn't match filter
+        // Should only execute once â€” exit code 99 doesn't match filter
         Assert.Equal(1, callCount);
     }
 

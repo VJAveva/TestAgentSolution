@@ -558,8 +558,8 @@ public sealed partial class MainViewModel
     {
         if (_sessionManager.HasAnyActiveExecution)
         {
-            // Differential reload � only update changed watchers, don't tear down running pipelines
-            AddLog("Hot-reload (differential � executions active)");
+            // Differential reload - only update changed watchers, don't tear down running pipelines
+            AddLog("Hot-reload (differential - executions active)");
             _watcherManager.ApplyDiff(config.WatchItems);
             _config = config;
             _executor.LoadTemplates(config.Templates);

@@ -12,9 +12,9 @@ namespace TestControllerGrpc.Services;
 ///
 /// Concrete executors:
 /// <list type="bullet">
-///   <item><c>TestControllerGrpc.Services.ActionPipelineExecutor</c> (WPF host) �
+///   <item><c>TestControllerGrpc.Services.ActionPipelineExecutor</c> (WPF host) -
 ///     adds Polly resilience, smart retry, TRX parsing and SendMail.</item>
-///   <item><c>TestController.WebApi.Services.StandalonePipelineExecutor</c> (WebApi host) �
+///   <item><c>TestController.WebApi.Services.StandalonePipelineExecutor</c> (WebApi host) -
 ///     simple Local/Remote dispatch via <c>IAgentGrpcDispatcher</c>.</item>
 /// </list>
 /// Methods are <c>protected virtual</c> where useful overrides are plausible
@@ -430,7 +430,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
             if (!parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping � FailAndContinue=false");
+                Log("Pipeline", "Stopping - FailAndContinue=false");
                 return false;
             }
         }
@@ -491,7 +491,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found � skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found - skipping");
             return false;
         }
 
@@ -538,7 +538,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
 
             if (!parentFailAndContinue)
             {
-                Log("Pipeline", "Stopping � FailAndContinue=false");
+                Log("Pipeline", "Stopping - FailAndContinue=false");
                 return false;
             }
         }
@@ -672,7 +672,7 @@ public abstract class PipelineExecutorBase : IActionPipelineExecutor
     {
         if (!_templates.TryGetValue(refNode.TemplateID, out var template))
         {
-            Log("Ref", $"Template '{refNode.TemplateID}' not found � skipping");
+            Log("Ref", $"Template '{refNode.TemplateID}' not found - skipping");
             return false;
         }
 

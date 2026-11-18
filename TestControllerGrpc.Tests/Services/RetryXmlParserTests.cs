@@ -205,8 +205,8 @@ public class RetryXmlParserTests : IDisposable
                             Type = ActionType.RunCommand,
                             Command = "cmd.exe",
                             MaxRetries = 2,
-                            RetryDelaySeconds = 10,  // default — should be omitted
-                            RetryBackoff = "Exponential",  // default — should be omitted
+                            RetryDelaySeconds = 10,  // default â€” should be omitted
+                            RetryBackoff = "Exponential",  // default â€” should be omitted
                         }
                     ]
                 }

@@ -8,7 +8,7 @@ namespace TestControllerGrpc.Services;
 /// Structured application logger that writes to:
 ///   1. An in-memory ring buffer (for UI display and recent query)
 ///   2. Component-specific daily rolling file (e.g. controller_2026-04-25.log)
-///   3. Shared daily rolling file (app_2026-04-25.log) � all components in one place
+///   3. Shared daily rolling file (app_2026-04-25.log) - all components in one place
 ///   4. Errors-only daily rolling file (errors_2026-04-25.log)
 ///
 /// All files land in the same directory so a single folder contains

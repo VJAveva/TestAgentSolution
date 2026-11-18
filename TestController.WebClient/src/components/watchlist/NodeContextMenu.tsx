@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNodeMenuStore, type NodeMenuItemDto } from '../../stores/nodeMenuStore';
 import { apiFetch, apiErrorMessage } from '../../lib/api';
 import { useExecution } from '../../hooks/useExecution';
 import type { TreeNode } from '../../types/api';
+import { clampToViewport } from './menuPosition';
 
 /**
  * Right-click menu for a WatchList row (ContextMenu_Requirement.md P8, read-only v1). The server decides the
@@ -16,6 +17,15 @@ export default function NodeContextMenu({ onTriggerRequest, onNodeRunRequest }: 
   const { node, x, y, items, loading, error, close, showResolvedCommand, showInfo, infoTitle, infoText, closeInfo } =
     useNodeMenuStore();
   const { cancelSession, fetchSessions } = useExecution();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  // Re-measured when the items arrive: the menu grows after "Loading", and must stay fully on screen.
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    setPos(clampToViewport(x, y, el.offsetWidth, el.offsetHeight, window.innerWidth, window.innerHeight));
+  }, [x, y, items, loading, error]);
 
   useEffect(() => {
     if (!node) return;
@@ -66,9 +76,10 @@ export default function NodeContextMenu({ onTriggerRequest, onNodeRunRequest }: 
     <>
       {node && (
         <div
+          ref={menuRef}
           role="menu"
           className="fixed z-50 min-w-[12rem] rounded border border-bdr bg-bg-secondary py-1 text-xs shadow-lg"
-          style={{ left: x, top: y }}
+          style={{ left: pos.left, top: pos.top }}
           onClick={e => e.stopPropagation()}
         >
           {loading && <p className="px-3 py-1 text-text-muted">Loading…</p>}

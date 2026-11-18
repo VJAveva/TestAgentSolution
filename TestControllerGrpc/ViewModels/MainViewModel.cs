@@ -116,6 +116,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TriggerEventCommand.NotifyCanExecuteChanged();
         TriggerWatchItemCommand.NotifyCanExecuteChanged();
         TriggerAllWatchItemsCommand.NotifyCanExecuteChanged();
+        TriggerAllWithConfirmCommand.NotifyCanExecuteChanged();
         ExecuteGroupCommand.NotifyCanExecuteChanged();
         ExecuteSingleActionCommand.NotifyCanExecuteChanged();
         ExecuteTemplateCommand.NotifyCanExecuteChanged();

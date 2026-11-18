@@ -10,10 +10,10 @@ namespace TestControllerGrpc.Services;
 /// 100% for historical builds. Only the latest (actively-writing) build folder
 /// will ever need re-parsing.
 ///
-/// Thread-safe via ConcurrentDictionary. No background timer — cache is populated
+/// Thread-safe via ConcurrentDictionary. No background timer â€” cache is populated
 /// lazily on first request and invalidated only when folder modification time changes.
 ///
-/// Used by ResultsController.GetBuilds() to reduce latency from O(N×M) TRX parsing
+/// Used by ResultsController.GetBuilds() to reduce latency from O(NÃ—M) TRX parsing
 /// per request to O(1) dictionary lookups.
 /// </summary>
 public sealed class CachedBuildResultsProvider
@@ -153,7 +153,7 @@ public sealed class CachedBuildResultsProvider
         }
 
         // Cache miss: parse TRX files
-        _appLogger.Info("BuildResultsCache", $"Cache MISS for {folderName} — parsing TRX files");
+        _appLogger.Info("BuildResultsCache", $"Cache MISS for {folderName} â€” parsing TRX files");
         try
         {
             var node = _parser.ParseBuildFolder(folderPath);

@@ -126,7 +126,7 @@ public sealed class FailurePatternAnalyzer
                 $"Test has failed {consecutiveFailures} consecutive times " +
                 $"with identical error signature. " +
                 $"Last passing build: {lastPass?.BuildName ?? "unknown"}. " +
-                "Likely a code regression — review commits between " +
+                "Likely a code regression â€” review commits between " +
                 "last pass and first fail.",
 
             FailurePattern.CascadingFailures =>
@@ -138,7 +138,7 @@ public sealed class FailurePatternAnalyzer
             FailurePattern.FlakyTest =>
                 $"Test alternates between pass and fail " +
                 $"({totalFailed} of {history.Count} failed). " +
-                "Likely a flaky test — investigate timing dependencies " +
+                "Likely a flaky test â€” investigate timing dependencies " +
                 "or shared state.",
 
             FailurePattern.ChronicFailure =>
@@ -152,7 +152,7 @@ public sealed class FailurePatternAnalyzer
             FailurePattern.NewFailure =>
                 $"Test failed in the most recent build ({history[0].BuildName}) " +
                 $"but passed in {history.Count - 1} prior builds in the window. " +
-                "Likely a NEW regression — re-run to confirm and inspect the latest changes.",
+                "Likely a NEW regression â€” re-run to confirm and inspect the latest changes.",
 
             _ => "No significant failure pattern detected.",
         };
@@ -216,7 +216,7 @@ public sealed class FailurePatternAnalyzer
             FailurePattern.ChronicFailure => "CHRONIC FAILURE",
             FailurePattern.Resolved => "RESOLVED",
             FailurePattern.NewFailure => "NEW FAILURE",
-            _ => "—",
+            _ => "â€”",
         };
     }
 
@@ -420,7 +420,7 @@ public sealed class FailurePatternAnalyzer
                 "Verify the test is still valid and the feature under test hasn't been redesigned.",
 
             FailurePattern.Resolved =>
-                "No action needed — the test is currently passing.",
+                "No action needed â€” the test is currently passing.",
 
             _ => "",
         };

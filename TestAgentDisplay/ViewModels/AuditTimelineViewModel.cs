@@ -9,7 +9,7 @@ using TestAgentGrpc;
 namespace TestAgentDisplay.ViewModels;
 
 /// <summary>
-/// ViewModel for the unified audit timeline — merges events from all
+/// ViewModel for the unified audit timeline â€” merges events from all
 /// connected agents into a single sorted view.
 /// </summary>
 public sealed partial class AuditTimelineViewModel : ObservableObject, IDisposable
@@ -62,7 +62,7 @@ public sealed partial class AuditTimelineViewModel : ObservableObject, IDisposab
     private async Task RefreshAsync()
     {
         IsLoading = true;
-        StatusText = "Loading…";
+        StatusText = "Loadingâ€¦";
 
         try
         {
@@ -206,7 +206,7 @@ public sealed partial class TimelineEntryVM : ObservableObject
     public DateTime Timestamp { get; init; }
     public string TimestampText { get; init; } = "";
     public string AgentName { get; init; } = "";
-    public string Icon { get; init; } = "·";
+    public string Icon { get; init; } = "Â·";
     public string EventType { get; init; } = "";
     public string Summary { get; init; } = "";
     public string DetailText { get; init; } = "";
@@ -227,7 +227,7 @@ public sealed partial class TimelineEntryVM : ObservableObject
 
         var summary = e.Event;
         if (!string.IsNullOrEmpty(e.Command))
-            summary += $" — {e.Command}";
+            summary += $" â€” {e.Command}";
         if (e.ExitCode != 0)
             summary += $" (exit {e.ExitCode})";
         if (e.DurationMs > 0)
@@ -263,9 +263,9 @@ public sealed partial class TimelineEntryVM : ObservableObject
 
         var summary = eventType;
         if (!string.IsNullOrEmpty(evt.Command))
-            summary += $" — {evt.Command}";
+            summary += $" â€” {evt.Command}";
         if (!string.IsNullOrEmpty(evt.Detail))
-            summary += $" — {evt.Detail}";
+            summary += $" â€” {evt.Detail}";
 
         return new TimelineEntryVM
         {
@@ -305,7 +305,7 @@ public sealed partial class TimelineEntryVM : ObservableObject
             _ when eventType.Contains("Queued") => "?",
             _ when eventType.Contains("StateChanged") => "?",
             _ when eventType.Contains("Heartbeat") => "?",
-            _ => "·",
+            _ => "Â·",
         };
 
         Brush sevBrush;

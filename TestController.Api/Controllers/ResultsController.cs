@@ -46,7 +46,7 @@ public class ResultsController : ControllerBase
     private string Corr => HttpContext.Items["CorrelationId"] as string ?? "";
 
     /// <summary>
-    /// GET /api/results/builds � list available builds.
+    /// GET /api/results/builds - list available builds.
     /// </summary>
     [HttpGet("builds")]
     public IActionResult GetBuilds([FromQuery] int? limit, [FromQuery] string? health,
@@ -99,7 +99,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/builds/{buildNumber} � parsed build results.
+    /// GET /api/results/builds/{buildNumber} - parsed build results.
     /// </summary>
     [HttpGet("builds/{buildNumber}")]
     public IActionResult GetBuild(string buildNumber)
@@ -130,7 +130,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/builds/{buildNumber}/detail � full build detail with all test results.
+    /// GET /api/results/builds/{buildNumber}/detail - full build detail with all test results.
     /// </summary>
     [HttpGet("builds/{buildNumber}/detail")]
     public IActionResult GetBuildDetail(
@@ -249,7 +249,7 @@ public class ResultsController : ControllerBase
         }
     }
 
-    /// <summary>GET /api/results/trends � pass rate trends.</summary>
+    /// <summary>GET /api/results/trends - pass rate trends.</summary>
     [HttpGet("trends")]
     public IActionResult GetTrends()
     {
@@ -258,7 +258,7 @@ public class ResultsController : ControllerBase
         return Ok(trend);
     }
 
-    /// <summary>GET /api/results/flaky?builds=5 � flaky test detection.</summary>
+    /// <summary>GET /api/results/flaky?builds=5 - flaky test detection.</summary>
     [HttpGet("flaky")]
     public IActionResult GetFlakyTests([FromQuery] int builds = 5)
     {
@@ -267,7 +267,7 @@ public class ResultsController : ControllerBase
         return Ok(alerts);
     }
 
-    /// <summary>GET /api/results/alerts � consecutive failure alerts.</summary>
+    /// <summary>GET /api/results/alerts - consecutive failure alerts.</summary>
     [HttpGet("alerts")]
     public IActionResult GetAlerts()
     {
@@ -277,7 +277,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/analyze/{testName}?builds=10 � failure pattern analysis for a specific test.
+    /// GET /api/results/analyze/{testName}?builds=10 - failure pattern analysis for a specific test.
     /// </summary>
     [HttpGet("analyze/{testName}")]
     public IActionResult AnalyzeTest(string testName, [FromQuery] int builds = 10)
@@ -323,7 +323,7 @@ public class ResultsController : ControllerBase
                     outcome = h.Outcome,
                     duration = h.Duration,
                     errorMessage = h.ErrorMessage.Length > 200
-                        ? h.ErrorMessage[..200] + "�" : h.ErrorMessage,
+                        ? h.ErrorMessage[..200] + "..." : h.ErrorMessage,
                     agent = h.Agent,
                 }),
                 correlationId = corr,
@@ -338,7 +338,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/test/{testName}/compact-label � short pattern badge label
+    /// GET /api/results/test/{testName}/compact-label - short pattern badge label
     /// (e.g. "REGRESSION (4x)") suitable for the QA email "Pattern" column.
     /// </summary>
     [HttpGet("test/{testName}/compact-label")]
@@ -427,7 +427,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/results/invalidate/{buildNumber} � force re-parse of a specific build.
+    /// POST /api/results/invalidate/{buildNumber} - force re-parse of a specific build.
     /// </summary>
     [HttpPost("invalidate/{buildNumber}")]    public IActionResult InvalidateBuild(string buildNumber)
     {
@@ -446,7 +446,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/results/invalidate � clear the entire results cache.
+    /// POST /api/results/invalidate - clear the entire results cache.
     /// </summary>
     [HttpPost("invalidate")]
     public IActionResult InvalidateAll()
@@ -456,7 +456,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/cache-stats � cache diagnostics.
+    /// GET /api/results/cache-stats - cache diagnostics.
     /// </summary>
     [HttpGet("cache-stats")]
     public IActionResult GetCacheStats()
@@ -465,7 +465,7 @@ public class ResultsController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/results/health � diagnostic endpoint that confirms the
+    /// GET /api/results/health - diagnostic endpoint that confirms the
     /// Results subsystem is configured correctly. Use this from production
     /// to quickly tell the difference between "API not reachable",
     /// "wrong path configured", and "path empty/no builds".

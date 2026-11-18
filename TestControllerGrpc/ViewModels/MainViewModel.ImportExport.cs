@@ -56,7 +56,7 @@ public sealed partial class MainViewModel
                     // Skip items that are currently executing
                     if (_sessionManager.HasActiveExecution(item.Tag))
                     {
-                        AddLog($"? Skipped '{item.Tag}' � currently executing", LogSeverity.Warning);
+                        AddLog($"? Skipped '{item.Tag}' - currently executing", LogSeverity.Warning);
                         skipped++;
                         continue;
                     }
@@ -86,7 +86,7 @@ public sealed partial class MainViewModel
             // Update executor templates
             _executor.LoadTemplates(_config.Templates);
 
-            // INCREMENTAL tree update � insert new nodes, update replaced nodes
+            // INCREMENTAL tree update - insert new nodes, update replaced nodes
             // WITHOUT destroying existing TreeNodeViewModels (preserves execution status)
             Application.Current?.Dispatcher.InvokeAsync(() =>
             {
@@ -117,12 +117,12 @@ public sealed partial class MainViewModel
                         }
                         else if (existingNode is null)
                         {
-                            // Brand new item � append to tree
+                            // Brand new item - append to tree
                             var newNode = TreeNodeViewModel.FromWatchItem(item);
                             newNode.Parent = WatchListRoot;
                             WatchListRoot.Children.Add(newNode);
                         }
-                        // else: item is currently executing � already skipped above,
+                        // else: item is currently executing - already skipped above,
                         // node stays as-is with its execution status
                     }
 

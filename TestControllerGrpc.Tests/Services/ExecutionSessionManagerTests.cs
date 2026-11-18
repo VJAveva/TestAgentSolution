@@ -73,7 +73,7 @@ public class ExecutionSessionManagerTests
             new List<IActionNode>(),
             "pre-created-id");
 
-        // Must be the SAME object — not a new one that overwrites UserId/Source/LockedAgents
+        // Must be the SAME object â€” not a new one that overwrites UserId/Source/LockedAgents
         Assert.Same(first, second);
         Assert.Equal("Vinod", second.UserId);
         Assert.Equal("WebClient", second.Source);
@@ -283,6 +283,6 @@ public class ExecutionSessionManagerTests
         Assert.Equal("\u2717", new ActionExecutionResult { Outcome = ActionOutcome.Failed }.StatusIcon);   // ?
         Assert.Equal("\u2298", new ActionExecutionResult { Outcome = ActionOutcome.Terminated }.StatusIcon); // ?
         Assert.Equal("\u23F1", new ActionExecutionResult { Outcome = ActionOutcome.TimedOut }.StatusIcon); // ?
-        Assert.Equal("\u2026", new ActionExecutionResult { Outcome = ActionOutcome.Unknown }.StatusIcon);  // …
+        Assert.Equal("\u2026", new ActionExecutionResult { Outcome = ActionOutcome.Unknown }.StatusIcon);  // â€¦
     }
 }

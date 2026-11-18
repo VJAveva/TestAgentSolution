@@ -43,7 +43,7 @@ public sealed partial class ExecutionLogViewerVM : ObservableObject
     public string StackTrace { get; }
 
     public string FailedStepDisplay =>
-        FailedStepIndex >= 0 ? $"Step #{FailedStepIndex}" : "—";
+        FailedStepIndex >= 0 ? $"Step #{FailedStepIndex}" : "â€”";
 
     public string TimelineCountText =>
         $"{FilteredTimeline.Count} of {AllTimeline.Count} lines";

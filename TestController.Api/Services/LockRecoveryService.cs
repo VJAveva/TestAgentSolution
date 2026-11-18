@@ -106,14 +106,14 @@ public sealed class LockRecoveryService : BackgroundService
                 if (isBusy)
                 {
                     _logger.LogInformation(
-                        "[LockRecovery] {Agent}: BUSY � lock validated (session: {Session}, pipeline: {Pipeline})",
+                        "[LockRecovery] {Agent}: BUSY - lock validated (session: {Session}, pipeline: {Pipeline})",
                         agentLock.AgentName, agentLock.SessionId, agentLock.WatchItemTag);
                     validated++;
                 }
                 else
                 {
                     _logger.LogWarning(
-                        "[LockRecovery] {Agent}: FREE but lock exists � removing stale lock (was: {Pipeline} by {User})",
+                        "[LockRecovery] {Agent}: FREE but lock exists - removing stale lock (was: {Pipeline} by {User})",
                         agentLock.AgentName, agentLock.WatchItemTag, agentLock.UserId);
                     _lockManager.ForceRelease(agentLock.AgentName);
                     staleRemoved++;
@@ -121,9 +121,9 @@ public sealed class LockRecoveryService : BackgroundService
             }
             catch (Exception ex)
             {
-                // Agent unreachable � keep lock (conservative: assume still busy)
+                // Agent unreachable - keep lock (conservative: assume still busy)
                 _logger.LogWarning(
-                    "[LockRecovery] {Agent}: UNREACHABLE ({Error}) � keeping lock",
+                    "[LockRecovery] {Agent}: UNREACHABLE ({Error}) - keeping lock",
                     agentLock.AgentName, ex.Message);
                 validated++;
             }
@@ -160,18 +160,18 @@ public sealed class LockRecoveryService : BackgroundService
                 if (await IsAgentBusy(orphan.AgentName, ct))
                 {
                     _logger.LogWarning(
-                        "[LockRecovery] Orphan {Agent}: still BUSY � keeping lock",
+                        "[LockRecovery] Orphan {Agent}: still BUSY - keeping lock",
                         orphan.AgentName);
                     continue;
                 }
             }
             catch
             {
-                continue; // Unreachable � keep lock
+                continue; // Unreachable - keep lock
             }
 
             _logger.LogWarning(
-                "[LockRecovery] Orphan {Agent}: FREE and session {Session} gone � removing",
+                "[LockRecovery] Orphan {Agent}: FREE and session {Session} gone - removing",
                 orphan.AgentName, orphan.SessionId);
             _lockManager.ForceRelease(orphan.AgentName);
             cleaned++;

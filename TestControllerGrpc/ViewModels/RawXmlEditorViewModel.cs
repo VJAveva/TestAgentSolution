@@ -51,7 +51,7 @@ public sealed partial class RawXmlEditorViewModel : ObservableObject
             IsXmlValid = false;
             ErrorLine = line;
             ErrorPosition = pos;
-            StatusMessage = $"Cannot save — {errorMsg}";
+            StatusMessage = $"Cannot save â€” {errorMsg}";
             StatusSeverity = "Error";
             NavigateToError?.Invoke(line, pos);
             return;
@@ -64,7 +64,7 @@ public sealed partial class RawXmlEditorViewModel : ObservableObject
             if (el.Name.LocalName != "WatchItem")
             {
                 IsXmlValid = false;
-                StatusMessage = "Cannot save — Root element must be <WatchItem>.";
+                StatusMessage = "Cannot save â€” Root element must be <WatchItem>.";
                 StatusSeverity = "Error";
                 return;
             }
@@ -72,7 +72,7 @@ public sealed partial class RawXmlEditorViewModel : ObservableObject
         catch (Exception ex)
         {
             IsXmlValid = false;
-            StatusMessage = $"Cannot save — {ex.Message}";
+            StatusMessage = $"Cannot save â€” {ex.Message}";
             StatusSeverity = "Error";
             return;
         }
@@ -146,13 +146,13 @@ public sealed partial class RawXmlEditorViewModel : ObservableObject
             IsXmlValid = false;
             ErrorLine = ex.LineNumber;
             ErrorPosition = ex.LinePosition;
-            StatusMessage = $"? Cannot format — Line {ex.LineNumber}, Pos {ex.LinePosition}: {ex.Message}";
+            StatusMessage = $"? Cannot format â€” Line {ex.LineNumber}, Pos {ex.LinePosition}: {ex.Message}";
             StatusSeverity = "Error";
             NavigateToError?.Invoke(ex.LineNumber, ex.LinePosition);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"? Cannot format — {ex.Message}";
+            StatusMessage = $"? Cannot format â€” {ex.Message}";
             StatusSeverity = "Error";
         }
     }

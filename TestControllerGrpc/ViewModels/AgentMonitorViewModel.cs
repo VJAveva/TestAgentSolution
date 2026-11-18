@@ -12,7 +12,7 @@ using System.Windows;
 namespace TestControllerGrpc.ViewModels;
 
 /// <summary>
-/// ViewModel for the Agent Monitor window � connects to a single agent's
+/// ViewModel for the Agent Monitor window - connects to a single agent's
 /// <c>SubscribeAgentEvents</c> gRPC stream and displays live execution activity.
 /// </summary>
 public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposable
@@ -112,7 +112,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
             }
             catch
             {
-                // Snapshot not available � proceed to streaming
+                // Snapshot not available - proceed to streaming
             }
 
             // Load recent execution history so the monitor shows past activities
@@ -158,7 +158,7 @@ public sealed partial class AgentMonitorViewModel : ObservableObject, IDisposabl
             }
             catch
             {
-                // History not available � proceed with live streaming only
+                // History not available - proceed with live streaming only
             }
 
             // Stream reconnect loop

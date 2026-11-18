@@ -4,7 +4,7 @@ namespace TestControllerGrpc.Services;
 
 /// <summary>
 /// Loosely-coupled pub/sub event bus that replaces static events.
-/// Subscribers receive an <see cref="IDisposable"/> token — disposing it
+/// Subscribers receive an <see cref="IDisposable"/> token â€” disposing it
 /// removes the subscription, eliminating the memory leak risk inherent
 /// in static event handlers.
 /// </summary>

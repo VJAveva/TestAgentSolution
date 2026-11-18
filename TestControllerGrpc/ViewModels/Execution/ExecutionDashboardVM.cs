@@ -217,7 +217,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // P2-1: agent-attributed lines now carry entry.AgentName, so strict
         // equality filters them correctly. Session-scoped lines (executor
         // emissions, lifecycle messages) legitimately have no agent and must
-        // remain visible under any agent selection � keep the empty-matches-all
+        // remain visible under any agent selection - keep the empty-matches-all
         // rule.
         if (!string.IsNullOrEmpty(SelectedAgentName) &&
             !string.IsNullOrEmpty(entry.AgentName) &&
@@ -671,7 +671,7 @@ public partial class ExecutionDashboardVM : ObservableObject, IDisposable
         // P2-2: Passed/Failed totals span all retained cards (Running +
         // Completed within the MaxSessionCards window) so the KPI strip
         // doesn't snap to zero the moment the last session finishes.
-        // OverallProgressPercent stays Running-only � averaging completed
+        // OverallProgressPercent stays Running-only - averaging completed
         // cards (always 100%) would mask in-flight progress.
         TotalPassedActions = real.Sum(s => s.PassedActions);
         TotalFailedActions = real.Sum(s => s.FailedActions);

@@ -175,10 +175,10 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
 
     /// <summary>
     /// Sends a notification email via SMTP with support for:
-    ///   � Comma-separated attachment paths ? copied to LargeFilesShare and linked in body
-    ///   � Comma-separated embed file paths ? inlined as HTML body content
-    ///   � Files exceeding 500 KB are also redirected to LargeFilesShare as links
-    ///   � [ResultsEmail] token in Body ? auto-generates HTML email from parsed .trx results
+    ///   - Comma-separated attachment paths ? copied to LargeFilesShare and linked in body
+    ///   - Comma-separated embed file paths ? inlined as HTML body content
+    ///   - Files exceeding 500 KB are also redirected to LargeFilesShare as links
+    ///   - [ResultsEmail] token in Body ? auto-generates HTML email from parsed .trx results
     /// </summary>
     private ActionResult ExecuteSendMail(ActionConfig resolved, PipelineExecutionContext ctx)
     {
@@ -273,12 +273,12 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                         catch (Exception ex)
                         {
                             _logger.LogWarning(ex, "SendMail: Failed to copy attachment to share");
-                            body += Environment.NewLine + $"Failed to copy attachment: {att} � {ex.Message}";
+                            body += Environment.NewLine + $"Failed to copy attachment: {att} - {ex.Message}";
                         }
                     }
                     else
                     {
-                        // No LargeFilesShare configured � attach directly
+                        // No LargeFilesShare configured - attach directly
                         message.Attachments.Add(new Attachment(att));
                         Log("SendMail", $"Attached: {att}");
                     }
@@ -316,7 +316,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                         catch (Exception ex)
                         {
                             _logger.LogWarning(ex, "SendMail: Failed to copy embed to share");
-                            embeddedBody += Environment.NewLine + $"Failed to copy embed: {em} � {ex.Message}";
+                            embeddedBody += Environment.NewLine + $"Failed to copy embed: {em} - {ex.Message}";
                         }
                         continue;
                     }
@@ -339,7 +339,7 @@ public sealed class ActionPipelineExecutor : PipelineExecutorBase
                     }
                     else
                     {
-                        // Plain embedded content � wrap everything in HTML
+                        // Plain embedded content - wrap everything in HTML
                         body = $"<html><body>{embeddedBody}<br /><div style='white-space:pre-wrap'>{body}</div></body></html>";
                     }
 

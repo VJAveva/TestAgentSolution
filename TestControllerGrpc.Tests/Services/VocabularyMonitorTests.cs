@@ -240,7 +240,7 @@ public class VocabularyMonitorTests : IDisposable
             lastConfig = config;
         };
 
-        // Rapid-fire changes — only the last one should survive after debounce
+        // Rapid-fire changes â€” only the last one should survive after debounce
         for (int i = 0; i < 5; i++)
         {
             File.WriteAllText(path, $"""

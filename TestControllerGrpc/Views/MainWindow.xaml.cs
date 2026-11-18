@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     // ?? Drag-and-drop state ??????????????????????????????????????
     private Point _dragStartPoint;
     private TreeNodeViewModel? _draggedNode;
-    #pragma warning disable CS0414 // assigned but never read � used for drag-and-drop state tracking
+    #pragma warning disable CS0414 // assigned but never read - used for drag-and-drop state tracking
         private bool _isDragging;
     #pragma warning restore CS0414
 

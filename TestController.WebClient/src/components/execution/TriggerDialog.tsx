@@ -140,7 +140,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
           )}
           {/* Agent availability check */}
           {checkingAgents && (
-            <div className="text-text-muted text-xs animate-pulse">Checking agent availability�</div>
+            <div className="text-text-muted text-xs animate-pulse">Checking agent availability...</div>
           )}
           {canTrigger && (
             <div className={`rounded-lg p-3 border ${
@@ -151,7 +151,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
               <div className="flex items-center gap-2 mb-1">
                 <span className={`w-2 h-2 rounded-full ${hasConflicts ? 'bg-acc-red' : 'bg-acc-green'}`} />
                 <span className={`text-xs font-semibold ${hasConflicts ? 'text-acc-red' : 'text-acc-green'}`}>
-                  {hasConflicts ? 'Agents Not Available' : 'All Agents Free � Ready'}
+                  {hasConflicts ? 'Agents Not Available' : 'All Agents Free - Ready'}
                 </span>
               </div>
               {canTrigger.requiredAgents.length > 0 && (
@@ -169,7 +169,7 @@ export default function TriggerDialog({ watchItemTag, isOpen, onClose, onTrigger
               {hasConflicts && canTrigger.conflicts.map(c => (
                 <div key={c.agentName} className="flex items-center justify-between py-1 border-t border-red-800/20 text-[11px] mt-1">
                   <span><span className="font-mono text-acc-red font-bold">{c.agentName}</span> <span className="text-text-muted">locked by</span> <span className="text-amber-300">{c.lockedBy}</span></span>
-                  <span className="text-text-muted">{c.pipeline} � <span className="font-mono">{c.duration}</span></span>
+                  <span className="text-text-muted">{c.pipeline} - <span className="font-mono">{c.duration}</span></span>
                 </div>
               ))}
             </div>

@@ -14,7 +14,7 @@ namespace TestControllerGrpc.Services;
 ///   - Only the session owner or WPF admin can release locks
 ///   - Lock state is persisted to disk and restored on startup
 ///
-/// DESIGN DECISION � SESSION-LEVEL LOCKING:
+/// DESIGN DECISION - SESSION-LEVEL LOCKING:
 ///   Locks are released at the SESSION level, never at the action level.
 ///   Even when one agent finishes early in a parallel pipeline, it stays
 ///   locked until the entire session completes. This prevents another
@@ -212,7 +212,7 @@ public sealed class AgentLockManager
     }
 
     /// <summary>
-    /// Detects orphaned locks � locks whose session is no longer active.
+    /// Detects orphaned locks - locks whose session is no longer active.
     /// </summary>
     public IReadOnlyList<AgentLock> FindOrphanedLocks(
         Func<string, bool> isSessionActive)

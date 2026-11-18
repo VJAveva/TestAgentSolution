@@ -22,7 +22,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void ApplyXmlEditor()
     {
-        // Kept for backward compatibility � delegates to the window flow
+        // Kept for backward compatibility - delegates to the window flow
         if (SelectedNode?.NodeKind != NodeKinds.WatchItem) return;
         OpenRawXmlEditorWindow();
     }

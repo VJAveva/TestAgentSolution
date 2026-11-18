@@ -215,8 +215,8 @@ public sealed partial class MainViewModel
             if (!locked)
             {
                 var conflictMsg = string.Join("\n",
-                    conflicts.Select(c => $"  {c.AgentName} � locked by {c.UserId} ({c.WatchItemTag})"));
-                AddLog($"Cannot start '{tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                    conflicts.Select(c => $"  {c.AgentName} - locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{tag}' - agents are busy:\n{conflictMsg}", LogSeverity.Warning);
                 _lockRegistry.TryRelease(tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
@@ -378,8 +378,8 @@ public sealed partial class MainViewModel
             if (!locked)
             {
                 var conflictMsg = string.Join("\n",
-                    conflicts.Select(c => $"  {c.AgentName} � locked by {c.UserId} ({c.WatchItemTag})"));
-                AddLog($"Cannot start '{wi.Tag}' � agents are busy:\n{conflictMsg}", LogSeverity.Warning);
+                    conflicts.Select(c => $"  {c.AgentName} - locked by {c.UserId} ({c.WatchItemTag})"));
+                AddLog($"Cannot start '{wi.Tag}' - agents are busy:\n{conflictMsg}", LogSeverity.Warning);
                 _lockRegistry.TryRelease(wi.Tag, pipelineToken);
                 Application.Current?.Dispatcher.InvokeAsync(() => ActiveSessions.Remove(session));
                 return;
@@ -519,8 +519,8 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Cancel a specific pipeline session.
     /// Phase 1.12: funnels through <c>CancelSessionRequestEvent</c> so every
-    /// cancel request � from the tree context menu, the multi-session
-    /// dashboard, or any future caller � flows through the single handler
+    /// cancel request - from the tree context menu, the multi-session
+    /// dashboard, or any future caller - flows through the single handler
     /// in <c>MainViewModel.cs</c> that owns the <c>PipelineSession</c> CTS.
     /// </summary>
     [RelayCommand]
@@ -565,7 +565,7 @@ public sealed partial class MainViewModel
                 node?.SetStatusRecursive("Running");
             }
         }
-        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) � parallel");
+        AddLog($"Triggered ALL WatchItems ({enabledItems.Count} enabled items) - parallel");
 
         var tasks = enabledItems.Select(async wi =>
         {
@@ -857,7 +857,7 @@ public sealed partial class MainViewModel
         {
             groupNode.SetFailed(ex.Message);
             groupNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} � {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] ActionGroup failed: {ag.Tag} - {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
@@ -1135,7 +1135,7 @@ public sealed partial class MainViewModel
         var actionNode = node;
         actionNode.ExecutionStatus = "Running";
         actionNode.PropagateStatusUp();
-        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} � {action.Command}");
+        AddLog($"[{session.SessionId}] Triggered Action: {action.Type} - {action.Command}");
 
         _events.Publish(new ExecutionStartedEvent(session.SessionId, tag, $"Action:{action.ResolvedTag}", "WPF"));
 
@@ -1161,7 +1161,7 @@ public sealed partial class MainViewModel
         {
             actionNode.SetFailed(ex.Message);
             actionNode.PropagateStatusUp();
-            AddLog($"[{session.SessionId}] Action failed: {action.Command} � {ex.Message}", LogSeverity.Error);
+            AddLog($"[{session.SessionId}] Action failed: {action.Command} - {ex.Message}", LogSeverity.Error);
             ScrollLogToLastError();
             _events.Publish(new ExecutionCompletedEvent(session.SessionId, tag, "Failed", 0, 0, 0));
         }
