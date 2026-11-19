@@ -464,6 +464,23 @@ public sealed partial class MainViewModel
         return FindWatchItemNode(WatchListRoot, pipelineTag) ?? WatchListRoot;
     }
 
+    /// <summary>
+    /// A finished run must not leave spinners behind: steps it never reached have no progress event. Skipped while
+    /// the pipeline still has a run in progress (a second run, or a run started from another host).
+    /// </summary>
+    private void SettleTreeAfterRun(string? watchItemTag)
+    {
+        if (string.IsNullOrWhiteSpace(watchItemTag)) return;
+        if (IsWatchItemRunning(watchItemTag) || _sessionManager.HasActiveExecution(watchItemTag)) return;
+
+        var scope = FindWatchItemNode(WatchListRoot, watchItemTag)
+                    ?? TemplateListRoot?.Children.FirstOrDefault(t => string.Equals(t.Tag, watchItemTag, StringComparison.OrdinalIgnoreCase));
+        if (scope is null || scope.SettleAfterRun() == 0) return;
+
+        scope.PropagateStatusUp();
+        AddLog($"Run of '{watchItemTag}' ended; steps it never reached are marked Not run.");
+    }
+
     internal static TreeNodeViewModel? FindWatchItemNode(TreeNodeViewModel? node, string tag)
     {
         if (node is null) return null;

@@ -429,11 +429,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // Subscribe to lock changes for admin display refresh
         _subscriptions.Add(events.Subscribe<AgentLocksChangedEvent>(_ =>
             Application.Current?.Dispatcher.InvokeAsync(RefreshLockDisplay)));
-        _subscriptions.Add(events.Subscribe<ExecutionCompletedEvent>(_ =>
+        _subscriptions.Add(events.Subscribe<ExecutionCompletedEvent>(e =>
             Application.Current?.Dispatcher.InvokeAsync(() =>
             {
                 RefreshLockDisplay();
                 RefreshTokenDisplay();
+                SettleTreeAfterRun(e.WatchItemTag);
             })));
 
         // Issue #3: Immediately add new sessions to the filter dropdown

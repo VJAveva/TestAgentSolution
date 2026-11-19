@@ -148,6 +148,9 @@
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
                                 <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="NotRun">
+                                <Setter Property="Fill" Value="{DynamicResource StatusGray}" />
+                            </DataTrigger>
                             <!-- Pulse animation for Running -->
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="Running">
                                 <DataTrigger.EnterActions>
@@ -195,6 +198,9 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding ExecutionStatus}" Value="Cancelled">
                                 <Setter Property="Text" Value="&#x2014;" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ExecutionStatus}" Value="NotRun">
+                                <Setter Property="Text" Value="&#x25CB;" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -690,6 +696,23 @@
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding ExecutionStatus}" Value="Skipped">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <!-- Not run: the run ended before reaching this step. Grey ring, with the reason in the row tooltip. -->
+                <TextBlock Text="&#x25CB;" FontWeight="Bold"
+                           FontSize="{StaticResource FontSize12}"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           ToolTip="{Binding StatusTooltip}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ExecutionStatus}" Value="NotRun">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>

@@ -331,7 +331,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _showPermissionIndicator;
 
     // ── Execution status ────────────────────────────────────────────
-    // Values: "Idle", "Running", "Success", "Failed", "PartialFailure", "Cancelled"
+    // Values: "Idle", "Running", "Success", "Failed", "PartialFailure", "Cancelled", "Skipped", "NotRun"
     [ObservableProperty] private string _executionStatus = "Idle";
     [ObservableProperty] private string _statusSymbol = "";
     [ObservableProperty] private string _statusColor = "Transparent";
@@ -393,6 +393,12 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                     : $"Skipped: {SkipReason}";
                 FailureMessage = "";
                 break;
+            case "NotRun":
+                StatusSymbol = "\u25CB";  // ○
+                StatusColor = "#FF9399B2"; // Gray
+                StatusTooltip = "Not run - the run ended before this step was reached (an earlier step failed or stopped it).";
+                FailureMessage = "";
+                break;
             default: // Idle
                 StatusSymbol = "";
                 StatusColor = "Transparent";
@@ -441,6 +447,23 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public void ResetStatus() => SetStatusRecursive("Idle");
 
     /// <summary>
+    /// After a run ends: a subtree is painted "Running" up front, and a step that was never reached (stop on
+    /// first failure) gets no progress event, so it would spin forever. Leaves still "Running" become "NotRun";
+    /// containers still "Running" are recomputed from their children. Final states are never touched.
+    /// </summary>
+    /// <returns>How many nodes changed.</returns>
+    public int SettleAfterRun()
+    {
+        var changed = 0;
+        foreach (var c in Children) changed += c.SettleAfterRun();
+        if (ExecutionStatus != "Running") return changed;
+
+        var settled = Children.Count == 0 ? "NotRun" : ComputeAggregatedStatus(this);
+        ExecutionStatus = settled == "Running" ? "NotRun" : settled;
+        return changed + 1;
+    }
+
+    /// <summary>
     /// Propagate aggregated status upward from this node to root.
     /// Priority: Failed > Running > Success > Idle.
     /// Also auto-expands parent nodes when a child fails.
@@ -473,6 +496,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         var hasSuccess = false;
         var hasCancelled = false;
         var hasSkipped = false;
+        var hasNotRun = false;
 
         foreach (var child in parent.Children)
         {
@@ -483,6 +507,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 case "Success": hasSuccess = true; break;
                 case "Cancelled": hasCancelled = true; break;
                 case "Skipped": hasSkipped = true; break;
+                case "NotRun": hasNotRun = true; break;
             }
         }
 
@@ -491,7 +516,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         if (hasFailed) return "Failed";
         if (hasCancelled && hasSuccess) return "PartialFailure";
         if (hasCancelled) return "Cancelled";
+        // A group that finished some steps but never reached the rest did not complete.
+        if (hasNotRun && hasSuccess) return "PartialFailure";
         if (hasSuccess) return "Success";
+        if (hasNotRun) return "NotRun";
         // Only when nothing ran: a skipped sibling must never downgrade a successful group, but without
         // this a skipped group would be reset to Idle by its own children propagating up.
         if (hasSkipped) return "Skipped";
