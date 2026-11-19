@@ -46,6 +46,9 @@ public partial class RevertMachineViewModel : ObservableObject
     public void Initialize(string agentName)
     {
         AgentName = agentName;
+        // vCloud keeps one snapshot per VM and a revert always uses it; the name is a label, so default it
+        // to the node instead of leaving a blank field that blocks Confirm.
+        if (string.IsNullOrWhiteSpace(SnapshotName)) SnapshotName = agentName;
         _ = LoadPrecheckAsync(agentName);
     }
 

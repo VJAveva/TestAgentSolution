@@ -45,7 +45,8 @@
                      FontSize="{StaticResource FontSize11}" Padding="8"
                      Background="{DynamicResource FieldBg}"
                      Foreground="{DynamicResource TextDefaultBrush}"
-                     BorderBrush="{DynamicResource Bdr}"  AutomationProperties.Name="Snapshot name" />
+                     BorderBrush="{DynamicResource Bdr}"  AutomationProperties.Name="Snapshot name"
+                     ToolTip="vCloud keeps one snapshot per VM; a revert always uses it. This name is recorded in history." />
         </StackPanel>
 
         <!-- Options (R10) -->

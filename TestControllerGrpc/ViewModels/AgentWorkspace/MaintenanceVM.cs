@@ -15,6 +15,7 @@ public partial class MaintenanceVM : ObservableObject, IDisposable
     private readonly IFleetMaintenanceService? _service;
     private readonly IMaintenanceOperationStore? _store;
     private readonly Dispatcher _uiDispatcher;
+    private readonly DispatcherTimer _elapsedTimer;
     private bool _disposed;
 
     public ObservableCollection<MaintenanceOpVM> ActiveOperations { get; } = new();
@@ -43,6 +44,10 @@ public partial class MaintenanceVM : ObservableObject, IDisposable
         _service = service;
         _store = store;
         _uiDispatcher = uiDispatcher;
+
+        // A revert sits in one phase for minutes with no progress event, so the clock must tick on its own.
+        _elapsedTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => TickElapsed(), uiDispatcher);
+        _elapsedTimer.Start();
 
         if (_service is not null)
         {
@@ -115,10 +120,17 @@ public partial class MaintenanceVM : ObservableObject, IDisposable
     [RelayCommand]
     private async Task RefreshHistory() => await LoadHistoryAsync();
 
+    private void TickElapsed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var op in ActiveOperations) op.Tick(now);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        _elapsedTimer.Stop();
         if (_service is not null)
         {
             _service.ProgressChanged -= OnProgress;
@@ -146,6 +158,7 @@ public partial class MaintenanceOpVM : ObservableObject
         ResultText = op.State.ToString();
         LogPath = op.LogPath ?? "";
         IsActive = isActive;
+        StartedUtc = op.StartedUtc;
 
         _stateText = op.State.ToString();
         _phaseText = op.Phase.ToString();
@@ -165,6 +178,10 @@ public partial class MaintenanceOpVM : ObservableObject
     public string ResultText { get; }
     public string LogPath { get; }
     public bool IsActive { get; }
+    public DateTimeOffset StartedUtc { get; }
+
+    /// <summary>The provenance strip (triggered from, by, reason, snapshot, script, linked run) is opt-in per card.</summary>
+    [ObservableProperty] private bool _isDetailsExpanded;
 
     [ObservableProperty] private string _stateText;
     [ObservableProperty] private string _phaseText;
@@ -183,6 +200,12 @@ public partial class MaintenanceOpVM : ObservableObject
         Message = p.Message;
         Elapsed = FormatSpan(p.Elapsed);
         OnPropertyChanged(nameof(ProgressPercent));
+    }
+
+    public void Tick(DateTimeOffset now)
+    {
+        var span = now - StartedUtc;
+        Elapsed = FormatSpan(span < TimeSpan.Zero ? TimeSpan.Zero : span);
     }
 
     private static string FormatSpan(TimeSpan t)

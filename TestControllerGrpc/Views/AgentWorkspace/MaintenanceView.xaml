@@ -73,6 +73,35 @@
             <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextS}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Link-style toggle: the default ToggleButton chrome renders as a white system button in the dark theme. -->
+        <Style x:Key="DetailsToggle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSize9}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Content" Value="Details &#x25B8;"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent" Padding="6,1">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Content" Value="Details &#x25BE;"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <DockPanel>
@@ -93,26 +122,123 @@
             </DockPanel>
         </Border>
 
-        <Grid>
+        <!-- Three stacked sections. In progress grows with its cards up to 45% of the pane and then scrolls;
+             Windows updates and History share the rest through the splitter, and each scrolls on its own, so
+             no section can push another off screen. Row sizes are managed in code-behind (UpdateSectionRows). -->
+        <Grid x:Name="SectionsGrid" Margin="8,8,8,8">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition x:Name="ActiveRow" Height="Auto"/>
+                <RowDefinition x:Name="UpdatesRow" Height="*" MinHeight="0"/>
+                <RowDefinition x:Name="SplitterRow" Height="6"/>
+                <RowDefinition x:Name="HistoryRow" Height="*" MinHeight="90"/>
             </Grid.RowDefinitions>
 
-            <!-- R19: Windows updates rollup + per-node grid -->
-            <Expander Grid.Row="0" IsExpanded="True" Margin="10,8,10,0"
+            <!-- 1. In progress (R7 + R14) -->
+            <DockPanel Grid.Row="0" Margin="0,0,0,8"
+                       Visibility="{Binding HasActive, Converter={StaticResource BoolVis}}">
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Margin="0,0,0,4">
+                    <Run Text="IN PROGRESS"/>
+                    <Run Text="("/><Run Text="{Binding ActiveCount, Mode=OneWay}"/><Run Text=")"/>
+                </TextBlock>
+                <ScrollViewer x:Name="ActiveScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              AutomationProperties.Name="Maintenance operations in progress">
+                    <ItemsControl ItemsSource="{Binding ActiveOperations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:MaintenanceOpVM}">
+                                <!-- Compact card: header, message, progress, step. Provenance is behind Details. -->
+                                <Border Margin="0,0,4,6" Padding="10,8" CornerRadius="6"
+                                        Background="{DynamicResource StatusMaintenanceBg}" BorderBrush="{DynamicResource StatusMaintenanceFg}" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <ToggleButton DockPanel.Dock="Right" Style="{StaticResource DetailsToggle}"
+                                                          IsChecked="{Binding IsDetailsExpanded, Mode=TwoWay}"
+                                                          AutomationProperties.Name="Show operation details"
+                                                          ToolTip="Who triggered it, why, snapshot, script and linked run"/>
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Elapsed}" FontSize="{StaticResource FontSize10}" Margin="8,0,4,0"
+                                                       VerticalAlignment="Center" Foreground="{DynamicResource TextS}" FontFamily="Consolas"
+                                                       ToolTip="Time since the operation started"/>
+                                            <TextBlock FontSize="{StaticResource FontSize11}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                                <Run Text="{Binding NodeId, Mode=OneWay}" FontFamily="Consolas"/>
+                                                <Run Text=" · "/>
+                                                <Run Text="{Binding KindText, Mode=OneWay}"/>
+                                                <Run Text=" · "/>
+                                                <Run Text="{Binding StateText, Mode=OneWay}" Foreground="{DynamicResource StatusMaintenanceFg}"/>
+                                            </TextBlock>
+                                        </DockPanel>
+
+                                        <TextBlock Text="{Binding Message}" FontSize="{StaticResource FontSize10}" Margin="0,4,0,4"
+                                                   Foreground="{DynamicResource TextS}" TextWrapping="Wrap" MaxHeight="48"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}"/>
+
+                                        <ProgressBar Height="4" Minimum="0" Maximum="100"
+                                                     Value="{Binding ProgressPercent, Mode=OneWay}"
+                                                     Foreground="{DynamicResource StatusMaintenanceFg}" Background="{DynamicResource Bdr}" BorderThickness="0"/>
+                                        <TextBlock Margin="0,3,0,0" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}">
+                                            <Run Text="Step"/><Run Text="{Binding StepNumber, Mode=OneWay}"/>
+                                            <Run Text="of"/><Run Text="{Binding StepCount, Mode=OneWay}"/>
+                                            <Run Text=" · "/><Run Text="{Binding PhaseText, Mode=OneWay}"/>
+                                        </TextBlock>
+
+                                        <!-- R14: provenance strip, on demand -->
+                                        <Border Margin="0,6,0,0" Padding="8,6" CornerRadius="4" Background="{DynamicResource BgPanel}"
+                                                Visibility="{Binding IsDetailsExpanded, Converter={StaticResource BoolVis}}">
+                                            <WrapPanel>
+                                                <StackPanel Margin="0,0,18,4">
+                                                    <TextBlock Text="Triggered from" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                                    <TextBlock Text="{Binding TriggerSourceText}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,18,4">
+                                                    <TextBlock Text="By" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                                    <TextBlock Text="{Binding TriggeredBy}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,18,4">
+                                                    <TextBlock Text="Reason" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                                    <TextBlock Text="{Binding Reason}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,18,4"
+                                                            ToolTip="vCloud keeps one snapshot per VM; a revert always uses it">
+                                                    <TextBlock Text="Snapshot" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                                    <TextBlock Text="{Binding SnapshotName}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,18,4">
+                                                    <TextBlock Text="Script" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                                    <TextBlock Text="{Binding ScriptPath}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="220" ToolTip="{Binding ScriptPath}"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,0,4">
+                                                    <TextBlock Text="Linked run" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
+                                                    <TextBlock Text="{Binding LinkedRun}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
+                                                </StackPanel>
+                                            </WrapPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+
+            <!-- 2. Windows updates (R19): KPI + filter stay put, the grid scrolls in the remaining height. -->
+            <Expander x:Name="UpdatesExpander" Grid.Row="1" IsExpanded="True"
                       Foreground="{DynamicResource TextP}"
+                      Expanded="OnUpdatesExpanderToggled" Collapsed="OnUpdatesExpanderToggled"
+                      IsVisibleChanged="OnUpdatesExpanderVisibleChanged"
                       Visibility="{Binding HasUpdates, Converter={StaticResource BoolVis}}">
                 <Expander.Header>
                     <TextBlock Text="Windows updates" FontSize="{StaticResource FontSize10}" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextP}"/>
                 </Expander.Header>
-                <StackPanel Margin="0,6,0,0">
+                <Grid Margin="0,6,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
                     <!-- One wrapping row holding two groups: the cards, then the filter + action cluster.
                          This was a DockPanel, which gives docked children their width FIRST and leaves the
                          cards the remainder - in a narrow pane that collapsed them into a single column. -->
-                    <WrapPanel>
+                    <WrapPanel Grid.Row="0">
                         <!-- ItemWidth keeps every card the same width so wrapped rows line up as columns. -->
                         <WrapPanel ItemWidth="112" VerticalAlignment="Top">
                             <Border Style="{StaticResource UpdateKpiCard}"
@@ -182,7 +308,8 @@
                         </StackPanel>
                     </WrapPanel>
 
-                    <DataGrid ItemsSource="{Binding Updates.FilteredRows}" MaxHeight="420"
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Updates.FilteredRows}"
+                              VerticalScrollBarVisibility="Auto"
                               AutoGenerateColumns="False" IsReadOnly="True"
                               HeadersVisibility="Column"
                               Background="Transparent" BorderThickness="0" FontSize="{StaticResource FontSize9}"
@@ -236,78 +363,24 @@
                             </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
-                </StackPanel>
+                </Grid>
             </Expander>
 
-            <!-- R7 + R14: Active operations with live phase, progress and provenance -->
-            <ItemsControl Grid.Row="1" ItemsSource="{Binding ActiveOperations}" Margin="8,8,8,0">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:MaintenanceOpVM}">
-                        <Border Margin="0,0,0,8" Padding="12" CornerRadius="6"
-                                Background="{DynamicResource StatusMaintenanceBg}" BorderBrush="{DynamicResource StatusMaintenanceFg}" BorderThickness="1">
-                            <StackPanel>
-                                <DockPanel>
-                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Elapsed}" FontSize="{StaticResource FontSize10}"
-                                               VerticalAlignment="Center" Foreground="{DynamicResource TextS}"/>
-                                    <TextBlock FontSize="{StaticResource FontSize12}" FontWeight="SemiBold" Foreground="{DynamicResource TextP}">
-                                        <Run Text="{Binding NodeId, Mode=OneWay}" FontFamily="Consolas"/>
-                                        <Run Text=" · "/>
-                                        <Run Text="{Binding KindText, Mode=OneWay}"/>
-                                        <Run Text=" · "/>
-                                        <Run Text="{Binding StateText, Mode=OneWay}" Foreground="{DynamicResource StatusMaintenanceFg}"/>
-                                    </TextBlock>
-                                </DockPanel>
-
-                                <TextBlock Text="{Binding Message}" FontSize="{StaticResource FontSize10}" Margin="0,5,0,5"
-                                           Foreground="{DynamicResource TextS}" TextWrapping="Wrap"/>
-
-                                <ProgressBar Height="4" Minimum="0" Maximum="100"
-                                             Value="{Binding ProgressPercent, Mode=OneWay}"
-                                             Foreground="{DynamicResource StatusMaintenanceFg}" Background="{DynamicResource Bdr}" BorderThickness="0"/>
-                                <TextBlock Margin="0,3,0,0" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}">
-                                    <Run Text="Step"/><Run Text="{Binding StepNumber, Mode=OneWay}"/>
-                                    <Run Text="of"/><Run Text="{Binding StepCount, Mode=OneWay}"/>
-                                    <Run Text=" · "/><Run Text="{Binding PhaseText, Mode=OneWay}"/>
-                                </TextBlock>
-
-                                <!-- R14: provenance strip -->
-                                <Border Margin="0,8,0,0" Padding="8" CornerRadius="4" Background="{DynamicResource BgPanel}">
-                                    <WrapPanel>
-                                        <StackPanel Margin="0,0,18,4">
-                                            <TextBlock Text="Triggered from" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding TriggerSourceText}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,18,4">
-                                            <TextBlock Text="By" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding TriggeredBy}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,18,4">
-                                            <TextBlock Text="Reason" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding Reason}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,18,4">
-                                            <TextBlock Text="Snapshot" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding SnapshotName}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,18,4">
-                                            <TextBlock Text="Script" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding ScriptPath}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="220"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,0,4">
-                                            <TextBlock Text="Linked run" FontSize="{StaticResource FontSize9}" Foreground="{DynamicResource TextS}"/>
-                                            <TextBlock Text="{Binding LinkedRun}" FontSize="{StaticResource FontSize10}" Foreground="{DynamicResource TextP}"/>
-                                        </StackPanel>
-                                    </WrapPanel>
-                                </Border>
-                            </StackPanel>
+            <GridSplitter x:Name="SectionSplitter" Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="Transparent" Cursor="SizeNS"
+                          AutomationProperties.Name="Resize Windows updates and history"
+                          ToolTip="Drag to share space between Windows updates and history">
+                <GridSplitter.Template>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="Transparent">
+                            <Border Height="1" VerticalAlignment="Center" Background="{DynamicResource Bdr}"/>
                         </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
 
-            <!-- R11: completed-operation history -->
-            <DockPanel Grid.Row="2" Margin="8">
+            <!-- 3. R11: completed-operation history -->
+            <DockPanel Grid.Row="3" Margin="0,4,0,0">
                 <!-- Labelled: without it the second grid's header reads as another header row of the one above. -->
                 <TextBlock DockPanel.Dock="Top" Text="HISTORY" FontSize="{StaticResource FontSize9}"
                            FontWeight="SemiBold" Foreground="{DynamicResource TextS}" Margin="0,0,0,4"/>
@@ -315,7 +388,9 @@
                           IsReadOnly="True" CanUserAddRows="False"
                           HeadersVisibility="Column" Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource TextP}"
-                          HorizontalScrollBarVisibility="Auto" FontSize="{StaticResource FontSize10}">
+                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                          AutomationProperties.Name="Maintenance history"
+                          FontSize="{StaticResource FontSize10}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Agent" Binding="{Binding NodeId, Mode=OneWay}" Width="120"/>
                     <DataGridTextColumn Header="Operation" Binding="{Binding KindText, Mode=OneWay}" Width="90"/>
